@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.1 — Car arrow
+
+- **Fix:** the power flow's car shows ↓ while discharging (down into the
+  house below it) and ↑ while charging.
+
 ## 0.11.0 — Who started it, and Quick hold on the Schedule tab
 
 - **Feature:** when the charger starts or stops without this add-on
@@ -15,6 +20,10 @@
   charger stop, not from when the add-on next looked.
 - **Change:** Quick hold is on the Schedule tab, with the holds that are
   on (✕ to end one early). The Overview's Car card still shows them.
+- **Change:** the Car SoC chart shades the whole height behind the line
+  for charging (green), discharging (blue) and unplugged (hatched), shows
+  the limits as dashed lines, and the SoC line breaks while the car is
+  unplugged.
 
 ## 0.10.0 — Quick holds, SoC chart and limit bounds
 

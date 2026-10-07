@@ -62,8 +62,9 @@ virtual battery and the recent starts and stops.
 The **Power** card's diagram shows where the power is going: solar,
 the grid, the home battery, the house and the car, with dots moving along
 each flow (faster for more power). As in the Power Flow Card Plus, the
-grid shows ← sent to the grid and → taken from it, and the home battery
-and the car ↓ in and ↑ out. Solar is shared out to the house
+grid shows ← sent to the grid and → taken from it, the home battery ↓ in
+and ↑ out, and the car (above the house) ↓ discharging into the house and
+↑ charging. Solar is shared out to the house
 first, then the home battery, then the grid; the car hangs off the house.
 The house's use comes from `sensor.sigen_plant_consumed_power` (or is
 worked out from the others if that isn't set).
@@ -74,10 +75,12 @@ it where it is, and **Keep at least** sets a low limit you choose, for 1
 to 8 hours or until a time. Each is a one-off schedule entry, so it ends
 by itself; the ✕ on its chip ends it early.
 
-The **Car SoC** chart shows the last 24 or 48 hours: the SoC, the limits
-band behind it (with scheduled changes), a strip for charging,
-discharging and unplugged, and markers for starts, stops (hollow while
-watching only) and dropouts. Hover over it for the details.
+The **Car SoC** chart shows the last 24 or 48 hours: the SoC (with a
+break while the car was unplugged), the limits as dashed lines (with
+scheduled changes), the background shaded for charging, discharging and
+unplugged, and markers for starts, stops (hollow while watching only),
+dropouts and starts or stops by something else. Hover over it for the
+details.
 
 The limits always stay between **20% and 99%**, whatever the helpers, the
 schedule or a hold say.

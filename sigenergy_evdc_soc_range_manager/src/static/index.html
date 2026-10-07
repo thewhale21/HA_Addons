@@ -245,10 +245,12 @@
   :root { --s-charge: #43a047; --s-dis: #039be5; }
   .socchart svg { height: auto; }
   .socchart .soc { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; }
-  .socchart .bandr { fill: var(--ok); opacity: .16; }
-  .socchart .lim { fill: none; stroke: var(--ok); stroke-width: 1; opacity: .7; }
+  .socchart .bandr { fill: var(--text2); opacity: .1; }
+  .socchart .lim { fill: none; stroke: var(--text2); stroke-width: 1.2; stroke-dasharray: 5 3; opacity: .9; }
+  .socchart .shade { opacity: .16; }
   .socchart .cross { stroke: var(--text2); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
   .socchart .ev { stroke-width: 1.5; }
+  .legend i.ln-lim { display: inline-block; width: 14px; height: 0; border-top: 1.5px dashed var(--text2); vertical-align: middle; margin-right: 5px; }
   .legend i.ln-soc { display: inline-block; width: 14px; height: 0; border-top: 2px solid var(--text); vertical-align: middle; margin-right: 5px; }
   .field[hidden] { display: none; }
   .holdbox { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--divider); }
@@ -332,8 +334,8 @@
       <h2>Car SoC<span class="spacer"></span><span class="seg" role="group" aria-label="Period" id="sc-hours"><button data-h="24" aria-pressed="true">24 hours</button><button data-h="48" aria-pressed="false">48 hours</button></span></h2>
       <div class="chart socchart" id="o-socchart" role="img" aria-label="The car's SoC over time, with the limits and the starts and stops"></div>
       <div class="legend">
-        <span><i class="ln-soc"></i>SoC</span><span><b class="band" style="background:var(--ok);opacity:.2"></b>Between the limits</span>
-        <span><b class="band" style="background:var(--s-charge);opacity:1;height:5px"></b>Charging</span><span><b class="band" style="background:var(--s-dis);opacity:1;height:5px"></b>Discharging</span><span><b class="band" style="background:var(--divider);opacity:1;height:5px"></b>Unplugged</span>
+        <span><i class="ln-soc"></i>SoC</span><span><i class="ln-lim"></i>Limits</span>
+        <span><b class="band" style="background:var(--s-charge);opacity:.3"></b>Charging</span><span><b class="band" style="background:var(--s-dis);opacity:.3"></b>Discharging</span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 2px, transparent 2px 4px);opacity:.5"></b>Unplugged</span>
         <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:var(--ok)"/></svg> Started</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1H9L5 9Z" style="fill:var(--text2)"/></svg> Stopped</span>
         <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:none;stroke:var(--text2);stroke-width:1.5"/></svg> Would (watch only)</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 0L10 5L5 10L0 5Z" style="fill:var(--warn)"/></svg> Dropped out</span><span><svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" style="fill:none;stroke:var(--text2);stroke-dasharray:2 1.5"/></svg> Started or stopped elsewhere</span>
       </div>
@@ -901,8 +903,8 @@ function drawFlow(f, i, e) {
   nodes += node('battery', '--f-bout', 'Battery', false, [
     [`↓ ${kwShort(batt != null && batt > 0 ? batt : 0)}`, '--f-bin'], [`↑ ${kwShort(batt != null && batt < 0 ? batt : 0)}`, '--f-bout']],
     f.home_soc == null ? null : `${num(f.home_soc, 0)}%`);
-  // The car like the battery: ↓ charging, ↑ discharging
-  nodes += node('car', '--f-car', 'Car', true, [[`${car < 0 ? '↑' : '↓'} ${kwShort(car)}`, '--f-car']],
+  // The car sits above the house: ↓ discharging (down into the house), ↑ charging (up from it)
+  nodes += node('car', '--f-car', 'Car', true, [[`${car < 0 ? '↓' : '↑'} ${kwShort(car)}`, '--f-car']],
     i.soc == null ? null : `${num(i.soc, 0)}%`);
   if (box.dataset.sig !== sig || !box.querySelector('#fl-nodes')) {
     box.dataset.sig = sig;
@@ -1176,7 +1178,7 @@ function drawSocChart() {
   if (!box || !d) return;
   const pts = d.points || [];
   if (!pts.length) { box.innerHTML = '<div class="empty">Nothing recorded yet: the chart fills in as the add-on runs.</div>'; return; }
-  const W = Math.max(300, box.clientWidth || 600), H = 230, P = {l: 34, r: 10, t: 10, b: 36};
+  const W = Math.max(300, box.clientWidth || 600), H = 220, P = {l: 34, r: 10, t: 10, b: 26};
   const pw = W - P.l - P.r, ph = H - P.t - P.b;
   const t1 = d.now, t0 = t1 - d.hours * 3600;
   const X = (t) => P.l + (Math.max(t0, Math.min(t1, t)) - t0) / (t1 - t0) * pw;
@@ -1186,26 +1188,26 @@ function drawSocChart() {
   for (const v of [20, 40, 60, 80, 100]) svg += `<line class="axis" x1="${P.l}" x2="${W - P.r}" y1="${Y(v)}" y2="${Y(v)}" opacity="${v === 20 ? 1 : .5}"/><text x="${P.l - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
   // Spans: each point holds until the next one (the last until now)
   const spans = pts.map((p, n) => [p[0], n + 1 < pts.length ? pts[n + 1][0] : t1, p]);
-  // The limits band, and its edges
-  let hiPath = '', loPath = '';
-  for (const [a, b, p] of spans) {
-    if (p[2] == null || p[3] == null) { hiPath += ' '; loPath += ' '; continue; }
-    svg += `<rect class="bandr" x="${X(a)}" y="${Y(p[2])}" width="${Math.max(0, X(b) - X(a))}" height="${Math.max(0, Y(p[3]) - Y(p[2]))}"/>`;
-    hiPath += `M${X(a)},${Y(p[2])} H${X(b)} `; loPath += `M${X(a)},${Y(p[3])} H${X(b)} `;
-  }
-  svg += `<path class="lim" d="${hiPath}"/><path class="lim" d="${loPath}"/>`;
-  // What the charger was doing, as a strip under the plot
-  const SC = {charge: 'var(--s-charge)', discharge: 'var(--s-dis)', unplugged: 'var(--divider)'};
+  // What the charger was doing, shading the whole height behind the line
+  const SC = {charge: 'var(--s-charge)', discharge: 'var(--s-dis)', unplugged: 'var(--text2)'};
   const runs = [];  // spans in a row with the same state, as one
   for (const [a, b, p] of spans) {
     const last = runs[runs.length - 1];
     if (last && last[2] === p[4] && Math.abs(last[1] - a) < 1) last[1] = b; else runs.push([a, b, p[4]]);
   }
-  for (const [a, b, st] of runs) if (SC[st]) svg += `<rect x="${X(a)}" y="${H - P.b + 4}" width="${Math.max(1, X(b) - X(a))}" height="5" rx="2" style="fill:${SC[st]}"/>`;
+  svg += '<defs><pattern id="sc-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.5" height="6" style="fill:var(--text2)"/></pattern></defs>';
+  for (const [a, b, st] of runs) if (SC[st]) svg += `<rect class="shade" x="${X(a)}" y="${P.t}" width="${Math.max(1, X(b) - X(a))}" height="${ph}" style="fill:${st === 'unplugged' ? 'url(#sc-hatch)' : SC[st]}${st === 'unplugged' ? ';opacity:.18' : ''}"/>`;
+  // The limits band, and its edges
+  let hiPath = '', loPath = '';
+  for (const [a, b, p] of spans) {
+    if (p[2] == null || p[3] == null) { hiPath += ' '; loPath += ' '; continue; }
+    hiPath += `M${X(a)},${Y(p[2])} H${X(b)} `; loPath += `M${X(a)},${Y(p[3])} H${X(b)} `;
+  }
+  svg += `<path class="lim" d="${hiPath}"/><path class="lim" d="${loPath}"/>`;
   // The SoC line
   let line = '', pen = false;
   for (const [a, b, p] of spans) {
-    if (p[1] == null) { pen = false; continue; }
+    if (p[1] == null || p[4] === 'unplugged') { pen = false; continue; }  // a break while unplugged
     line += `${pen ? 'L' : 'M'}${X(a)},${Y(p[1])} `;
     pen = true;
     if (b === t1) line += `L${X(b)},${Y(p[1])}`;
