@@ -25,7 +25,8 @@ from src.debug_tools import DebugTools, install_log_buffer
 from src.ha_link import HaLink
 from src.health import Health
 from src.helpers import ensure_helpers
-from src.manager import Manager, samples_from_history
+from src.manager import Manager, samples_from_history, soc_points_from_history, soc_state
+from src.soc_history import SocHistory
 from src.schedule import Schedule
 from src.stats import StatsRecorder
 from src.shared_state import SharedState
@@ -45,8 +46,9 @@ class Runner:
     """Ties the manager to Home Assistant: looks, decides, presses, publishes."""
 
     def __init__(self, link: HaLink, manager: Manager, settings: AppSettings, state: SharedState,
-                 stats: StatsRecorder) -> None:
+                 stats: StatsRecorder, soc_history: Optional[SocHistory] = None) -> None:
         self.link, self.manager, self.settings, self.state, self.stats = link, manager, settings, state, stats
+        self.soc_history = soc_history or SocHistory()
         self._brief_at = 0.0
         self.wake = asyncio.Event()
         self.lock = asyncio.Lock()
@@ -88,6 +90,10 @@ class Runner:
             sample = self.manager.stats_sample(self.link.states, entities, now)
             if sample is not None:
                 self.stats.feed(sample, self.settings.data)
+            i = self.manager.inputs
+            if i is not None:
+                self.soc_history.add(now, self.manager.soc, i.high, i.low,
+                                     soc_state(i.active, i.discharging, i.running_state, i.plugged_in))
             if now - self._brief_at >= STATS_BRIEF_S:
                 self._brief_at = now
                 self.state.stats = self.stats_brief()
@@ -148,6 +154,40 @@ class Runner:
         logger.info("Statistics: %d session%s found in the last %d days of history",
                     found, "" if found == 1 else "s", HISTORY_DAYS)
 
+    async def backfill_soc(self) -> None:
+        """Once: the last two days of the car's SoC from Home Assistant's history, for the chart."""
+        if self.soc_history.backfilled:
+            return
+        entities = dict(self.link.settings)
+        ids = [entities[k] for k in ("running_state", "vehicle_soc") if entities.get(k)]
+        if len(ids) < 2:
+            return
+        start = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=50)
+        history = await self.link.query({
+            "type": "history/history_during_period", "start_time": start.isoformat(), "entity_ids": ids,
+            "minimal_response": True, "no_attributes": True, "significant_changes_only": False,
+        }, timeout=120)
+        points = soc_points_from_history(history or {}, entities, self.settings.data)
+        async with self.lock:
+            found = self.soc_history.backfill(points)
+        logger.info("SoC chart: %d point%s from Home Assistant's history", found, "" if found == 1 else "s")
+
+    def soc_chart(self, hours: float) -> dict:
+        """The Overview's SoC chart: the points, and the starts, stops and dropouts in the window."""
+        now = time.time()
+        start = now - hours * 3600
+        events = []
+        for x in self.manager.log:
+            if x.get("action") not in ("start", "stop", "dropout"):
+                continue
+            try:
+                at = datetime.datetime.fromisoformat(x["at"].replace("Z", "+00:00")).timestamp()
+            except (KeyError, ValueError):
+                continue
+            if at >= start:
+                events.append({"t": at, **{k: x.get(k) for k in ("action", "rule", "reason", "observe_only", "error", "soc")}})
+        return {"now": now, "hours": hours, "points": self.soc_history.window(hours, now), "events": events}
+
     async def manual(self, action: str) -> dict:
         """Start or Stop pressed on the web page."""
         async with self.lock:
@@ -206,10 +246,15 @@ async def run() -> None:
             await runner.backfill()
         except Exception as err:
             logger.warning("Couldn't read Home Assistant's history for the statistics: %s", err)
+        try:
+            await runner.backfill_soc()
+        except Exception as err:
+            logger.warning("Couldn't read Home Assistant's history for the SoC chart: %s", err)
 
     link = HaLink(data_dir, state, on_entity_changed=entity_changed, on_connected=connected)
     stats = StatsRecorder(data_dir)
-    runner = Runner(link, manager, settings, state, stats)
+    soc_history = SocHistory(data_dir)
+    runner = Runner(link, manager, settings, state, stats, soc_history)
     settings.on_change = lambda changes: runner.wake.set()
     debug = DebugTools(config=config, log_buffer=log_buffer, settings=settings)
 
@@ -235,6 +280,7 @@ async def run() -> None:
     finally:
         state.status = "Stopped"
         stats.save()
+        soc_history.save()
         try:
             await asyncio.wait_for(link.shutdown(), 5)  # its sensors show unavailable while stopped
         except Exception:

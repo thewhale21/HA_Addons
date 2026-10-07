@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.10.0 — Quick holds, SoC chart and limit bounds
+
+- **Feature:** Quick hold on the Overview's Car card: No discharging (the
+  low limit at the SoC now), Hold here (stays where it is) or Keep at
+  least a level, for 1–8 hours or until a time. Each is a one-off
+  schedule entry that ends by itself; end it early with the ✕ on its chip.
+- **Feature:** a Car SoC chart on the Overview for the last 24 or 48
+  hours: the SoC with the limits band behind it (scheduled changes
+  included), a strip for charging, discharging and unplugged, and markers
+  for starts, stops (hollow while watching only) and dropouts. Hover for
+  the details. The first time it connects it fills in from Home
+  Assistant's history.
+- **Feature:** a schedule entry sets the High limit, the Low limit or
+  Both, picked in its editor.
+- **Change:** the limits can't go below 20% or above 99%, whatever the
+  helpers, the schedule or a hold say; the add-on's new limit helpers are
+  made with those bounds.
+
 ## 0.9.0 — History on the Schedule tab
 
 - **Feature:** a History card on the Schedule tab: every start and stop,

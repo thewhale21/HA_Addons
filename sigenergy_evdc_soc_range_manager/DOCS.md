@@ -68,6 +68,20 @@ first, then the home battery, then the grid; the car hangs off the house.
 The house's use comes from `sensor.sigen_plant_consumed_power` (or is
 worked out from the others if that isn't set).
 
+**Quick hold** (on the Car card) holds the car for a while, from now:
+**No discharging** puts the low limit at its SoC now, **Hold here** keeps
+it where it is, and **Keep at least** sets a low limit you choose, for 1
+to 8 hours or until a time. Each is a one-off schedule entry, so it ends
+by itself; the ✕ on its chip ends it early.
+
+The **Car SoC** chart shows the last 24 or 48 hours: the SoC, the limits
+band behind it (with scheduled changes), a strip for charging,
+discharging and unplugged, and markers for starts, stops (hollow while
+watching only) and dropouts. Hover over it for the details.
+
+The limits always stay between **20% and 99%**, whatever the helpers, the
+schedule or a hold say.
+
 The **virtual battery** is the car between its limits seen as one
 battery, the way Predbat sees it through the available energy, window and
 battery rate sensors: how full it is, kWh stored of the window, what it's
@@ -142,7 +156,7 @@ used whenever the schedule doesn't set a limit, and whenever nothing's
 on; they're the limit helpers, so a dashboard or automation can change
 them too. **Now** shows the limits in use and where each comes from.
 The schedule below changes the high and/or low limit for a while, every
-week or once. Its week view shows today and the next 6 days, with high
+week or once. Each entry sets the high limit, the low limit or both. Its week view shows today and the next 6 days, with high
 limits in the top half of each day and low limits in the bottom half:
 click an entry to change, pause or delete it, or click or drag across a
 day (or **+ Add**) to add one.

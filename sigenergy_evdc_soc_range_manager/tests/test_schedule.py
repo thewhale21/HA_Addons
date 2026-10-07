@@ -97,3 +97,28 @@ def test_dropouts_are_counted_per_day(tmp_path):
     rec.record_dropout(t + 600)
     s = rec.summary(now=t + 3600)
     assert s["dropouts_today"] == 2 and s["dropouts_7"] == 2 and s["dropouts_30"] == 2
+
+
+def test_one_tap_holds(tmp_path):
+    from src.controller import bound_limits
+    from src.holds import make_hold
+
+    now = datetime.datetime(2026, 10, 7, 21, 37, 20)
+    e = make_hold("no_discharge", 57.4, now, until="08:00")
+    assert (e["date"], e["start"], e["end"], e["low"], e["high"]) == ("2026-10-07", "21:37", "08:00", 57, None)
+    h = make_hold("hold", 57.6, now, hours=4)
+    assert (h["end"], h["low"], h["high"]) == ("01:37", 58, 59)
+    a = make_hold("at_least", None, now, until="10:00", low=90)
+    assert a["low"] == 90 and a["label"] == "Hold: at least 90%"
+    assert make_hold("no_discharge", 12, now, hours=1)["low"] == 20  # never below the floor
+    for bad in (dict(kind="hold", soc=None, hours=1), dict(kind="x", soc=50, hours=1), dict(kind="hold", soc=50, hours=30),
+                dict(kind="at_least", soc=50, hours=1), dict(kind="hold", soc=50)):
+        with pytest.raises(ValueError):
+            make_hold(bad.pop("kind"), bad.pop("soc"), now, **bad)
+    with pytest.raises(ValueError):
+        make_hold("at_least", 50, now, hours=1, low=10)  # below the floor: refused when it's added
+        Schedule(str(tmp_path)).add(make_hold("at_least", 50, now, hours=1, low=10))
+    s = Schedule(str(tmp_path))
+    s.add(e)
+    assert s.apply(80, 40, now + datetime.timedelta(minutes=5))[:2] == (80, 57)
+    assert bound_limits(100, 10) == (99, 20) and bound_limits(20, 20) == (21, 20) and bound_limits(None, 5) == (None, 20)

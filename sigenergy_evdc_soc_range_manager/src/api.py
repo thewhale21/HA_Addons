@@ -14,6 +14,8 @@ from pathlib import Path
 
 from aiohttp import web
 
+from src.controller import check_limit
+
 logger = logging.getLogger(__name__)
 
 EVENTS_CHECK_INTERVAL = 1.0  # how often the event stream looks for changes
@@ -54,6 +56,8 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app.router.add_post("/api/schedule/{id}", handle_update_schedule)
     app.router.add_delete("/api/schedule/{id}", handle_delete_schedule)
     app.router.add_get("/api/history", handle_history)
+    app.router.add_post("/api/hold", handle_hold)
+    app.router.add_get("/api/soc_history", handle_soc_history)
     # Statistics tab (src/stats.py)
     app.router.add_get("/api/stats", handle_stats)
     # Settings made on the web page (src/app_settings.py)
@@ -202,8 +206,7 @@ async def handle_limits(request: web.Request) -> web.Response:
         for key in ("high", "low"):
             if key in body:
                 value = float(body[key])
-                if not 0 <= value <= 100:
-                    raise ValueError("Limits are 0 to 100%")
+                check_limit(key, value)
                 wanted[key] = value
         st = request.app["shared_state"]
         current, base = st.inputs or {}, st.readings or {}  # the default limits, not scheduled ones
@@ -267,6 +270,40 @@ async def handle_update_schedule(request: web.Request) -> web.Response:
 
 async def handle_delete_schedule(request: web.Request) -> web.Response:
     return await _schedule_call(request, lambda s, b: s.remove(request.match_info["id"]))
+
+
+async def handle_hold(request: web.Request) -> web.Response:
+    """A one-tap hold from the Overview: {"kind", "until": "HH:MM" | "hours": n, "low": n} (src/holds.py)."""
+    import datetime
+
+    from src.holds import make_hold
+
+    runner, schedule = request.app["runner"], request.app["schedule"]
+    if runner is None or schedule is None:
+        return _unavailable()
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("Send a JSON object")
+        entry = make_hold(body.get("kind"), runner.manager.soc, datetime.datetime.now(), until=body.get("until"),
+                          hours=body.get("hours"), low=body.get("low"))
+        schedule.add(entry)
+    except (ValueError, TypeError, json.JSONDecodeError) as err:
+        return _bad_request(err)
+    runner.wake.set()
+    return web.json_response({"status": "ok", **_schedule_view(schedule)})
+
+
+async def handle_soc_history(request: web.Request) -> web.Response:
+    """The Overview's SoC chart: ?hours=24 or 48."""
+    runner = request.app["runner"]
+    if runner is None:
+        return _unavailable()
+    try:
+        hours = min(48.0, max(1.0, float(request.query.get("hours", 24))))
+    except ValueError:
+        hours = 24.0
+    return web.json_response(runner.soc_chart(hours), dumps=_dumps)
 
 
 async def handle_history(request: web.Request) -> web.Response:

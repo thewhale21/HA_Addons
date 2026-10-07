@@ -16,7 +16,7 @@ import time
 from collections import deque
 from typing import Awaitable, Callable, Optional
 
-from src.controller import RULES, Decision, Inputs, decide
+from src.controller import RULES, Decision, Inputs, bound_limits, decide
 from src.flow import flows, house_load
 from src.rates import battery_rates
 from src.schedule import describe
@@ -200,6 +200,7 @@ class Manager:
             local = datetime.datetime.fromtimestamp(now)
             self.schedule.tidy(local)
             high, low, scheduled = self.schedule.apply(base_high, base_low, local)
+        high, low = bound_limits(high, low)  # never below 20% or above 99%
         self._limits_changed(scheduled, high, low, now)
 
         mode_st = get("v2x_mode")
@@ -227,7 +228,7 @@ class Manager:
         )
         self.readings = {
             "base_high": base_high, "base_low": base_low,
-            "scheduled": [{"id": e["id"], "high": e["high"], "low": e["low"], "until": e["until"],
+            "scheduled": [{"id": e["id"], "kind": e["kind"], "high": e["high"], "low": e["low"], "until": e["until"],
                            "label": e.get("label") or ""} for e in scheduled],
             "capacity_kwh": _float(get("capacity")), "mode": mode,
             "energy_mode": plugged and _in(mode, lists["energy_mode_states"]),
@@ -472,4 +473,43 @@ def samples_from_history(history: dict, entities: dict, settings: dict, units: O
             e_in=energy_kwh({"state": now.get("charged_energy")}, units.get("charged_energy")),
             e_out=energy_kwh({"state": now.get("discharged_energy")}, units.get("discharged_energy")),
         ))
+    return out
+
+
+def soc_state(active: bool, discharging: bool, running: Optional[str], plugged: bool) -> str:
+    """What the charger is doing, for the SoC chart."""
+    if not plugged:
+        return "unplugged"
+    d = _direction(active, discharging, running)
+    return "charge" if d == "charge" else "discharge" if d == "discharge" else "idle"
+
+
+def soc_points_from_history(history: dict, entities: dict, settings: dict) -> list:
+    """Home Assistant's history of the SoC and the running state as SoC chart points
+    (no limits: they weren't recorded then)."""
+    lists = {k: settings.get(k) or v for k, v in LIST_DEFAULTS.items()}
+    events = []
+    for key in ("running_state", "vehicle_soc"):
+        for item in (history or {}).get(entities.get(key) or "", []) or []:
+            when = _when(item)
+            if when is not None:
+                events.append((when, key, item.get("s", item.get("state"))))
+    events.sort(key=lambda e: e[0])
+    soc, running, out = None, None, []
+    for when, key, state in events:
+        if key == "vehicle_soc":
+            value = _float({"state": state})
+            if value is None or not 0 < value <= 100:
+                continue  # 0 or nothing while the charger's off: keep the last known
+            soc = value
+        else:
+            running = _text({"state": state})
+        if soc is None:
+            continue
+        state_now = soc_state(_in(running, lists["active_states"]), _in(running, lists["discharging_states"]),
+                              running, _in(running, lists["plugged_states"]))
+        point = [round(when, 1), soc, None, None, state_now]
+        if out and out[-1][1:] == point[1:]:
+            continue
+        out.append(point)
     return out

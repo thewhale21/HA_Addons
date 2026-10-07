@@ -16,10 +16,10 @@ logger = logging.getLogger(__name__)
 # key -> (helper type, what to make)
 HELPERS = {
     "soc_high": ("input_number", {
-        "name": "EVDC SoC High Limit", "min": 0, "max": 100, "step": 1, "mode": "slider",
+        "name": "EVDC SoC High Limit", "min": 21, "max": 99, "step": 1, "mode": "slider",
         "unit_of_measurement": "%", "icon": "mdi:battery-arrow-up", "initial": 80}),
     "soc_low": ("input_number", {
-        "name": "EVDC SoC Low Limit", "min": 0, "max": 100, "step": 1, "mode": "slider",
+        "name": "EVDC SoC Low Limit", "min": 20, "max": 98, "step": 1, "mode": "slider",
         "unit_of_measurement": "%", "icon": "mdi:battery-arrow-down", "initial": 40}),
     "capacity": ("input_number", {
         "name": "EVDC Vehicle Battery Capacity", "min": 0, "max": 200, "step": 0.1, "mode": "box",

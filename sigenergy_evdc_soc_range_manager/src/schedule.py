@@ -17,6 +17,8 @@ import re
 import uuid
 from typing import Optional
 
+from src.controller import SOC_CEILING, SOC_FLOOR, check_limit
+
 logger = logging.getLogger(__name__)
 
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -62,8 +64,7 @@ def validate_entry(raw: dict) -> dict:
             value = float(value)
         except (TypeError, ValueError):
             raise ValueError(f"The {key} limit must be a number") from None
-        if not 0 <= value <= 100:
-            raise ValueError("Limits are 0 to 100%")
+        check_limit(key, value)
         out[key] = value
     if out["high"] is None and out["low"] is None:
         raise ValueError("Set a high limit, a low limit or both")
@@ -198,11 +199,11 @@ class Schedule:
         if sched_high is not None:
             high = sched_high
             if low is not None and sched_low is None and low >= high:
-                low = max(0.0, high - 1)
+                low = max(SOC_FLOOR, high - 1)
         if sched_low is not None:
             low = sched_low
             if high is not None and sched_high is None and high <= low:
-                high = min(100.0, low + 1)
+                high = min(SOC_CEILING, low + 1)
         return high, low, on
 
 

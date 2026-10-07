@@ -23,6 +23,31 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+# The limits can never go outside these, whatever the helpers or the schedule say
+SOC_FLOOR = 20.0  # the low limit is at least this
+SOC_CEILING = 99.0  # the high limit is at most this
+
+
+def bound_limits(high: Optional[float], low: Optional[float]) -> tuple:
+    """(high, low) kept within SOC_FLOOR..SOC_CEILING, with the low below the high."""
+    if high is not None:
+        high = min(max(high, SOC_FLOOR + 1), SOC_CEILING)
+    if low is not None:
+        low = max(min(low, SOC_CEILING - 1), SOC_FLOOR)
+    if high is not None and low is not None and low >= high:
+        low = high - 1
+    return high, low
+
+
+def check_limit(key: str, value: float) -> float:
+    """A limit someone set: refused if it's outside the bounds."""
+    if key == "low" and not SOC_FLOOR <= value <= SOC_CEILING - 1:
+        raise ValueError(f"The low limit must be between {SOC_FLOOR:g}% and {SOC_CEILING - 1:g}%")
+    if key == "high" and not SOC_FLOOR + 1 <= value <= SOC_CEILING:
+        raise ValueError(f"The high limit must be between {SOC_FLOOR + 1:g}% and {SOC_CEILING:g}%")
+    return value
+
+
 # The tuning, as saved by the Settings tab (src/app_settings.py)
 TUNING_DEFAULTS = {
     "restart_wait_s": 180,  # charger off at least this long before it's started again
