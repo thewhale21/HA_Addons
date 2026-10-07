@@ -48,7 +48,7 @@ async def run() -> None:
     log_buffer = install_log_buffer(LOG_FORMAT)
     data_dir: Optional[str] = DATA_DIR if os.path.isdir(DATA_DIR) else None
 
-    settings = AppSettings(data_dir, on_change=lambda changes: settings.apply_log_level())
+    settings = AppSettings(data_dir)  # applies a new log level itself
     settings.apply_log_level()
     config = load_config()
     state = SharedState(example_option=config.example_option)

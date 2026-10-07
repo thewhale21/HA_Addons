@@ -70,7 +70,7 @@ class DebugTools:
         if level not in LEVELS:
             raise ValueError("Log level must be one of: " + ", ".join(LEVELS))
         if self._settings is not None:
-            self._settings.update({"log_level": level})  # saved, and applied by its on_change
+            self._settings.update({"log_level": level})  # saved and applied (src/app_settings.py)
         else:
             logging.getLogger().setLevel(getattr(logging, level.upper()))
         logger.warning("Log level set to %s from the web page", level)

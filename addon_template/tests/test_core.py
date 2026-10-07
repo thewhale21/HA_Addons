@@ -36,7 +36,9 @@ def test_app_settings_are_checked_and_saved(tmp_path):
     assert s.log_level == "info"
     s.update({"log_level": "debug"})
     assert seen == [{"log_level": "debug"}]
-    assert AppSettings(str(tmp_path)).log_level == "debug"  # kept after a restart
+    assert logging.getLogger().getEffectiveLevel() == logging.DEBUG  # applied straight away
+    s.update({"log_level": "info"})
+    assert AppSettings(str(tmp_path)).log_level == "info"  # kept after a restart
     for bad in ({"log_level": "loud"}, {}, "x"):
         with pytest.raises(ValueError):
             s.update(bad)

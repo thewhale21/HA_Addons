@@ -50,6 +50,8 @@ class AppSettings:
             raise ValueError("Nothing to change: " + ", ".join(DEFAULTS))
         self.data.update(changes)
         self._save()
+        if "log_level" in changes:
+            self.apply_log_level()  # straight away, from the web page or the API
         if self.on_change is not None:
             self.on_change(changes)
         return dict(self.data)
