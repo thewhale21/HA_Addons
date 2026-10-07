@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 — Schedule on its own tab, with default limits
+
+- **Change:** the limit schedule has its own Schedule tab, with the
+  default limits (the limit helpers) at the top: used whenever the
+  schedule doesn't set a limit, and whenever nothing's on. A Now card
+  shows the limits in use and where each comes from.
+- **Change:** the Overview's Car card no longer has the limit boxes; it
+  shows any scheduled limit and links to the Schedule tab.
+
 ## 0.5.0 — Limit schedule, round trip, costs and dropouts
 
 - **Feature:** a limit schedule on the Overview: change the high and/or

@@ -1,11 +1,11 @@
 """Scheduled limits: the high and/or low limit changed for a while, every
 week (e.g. Tue and Thu 23:00-08:00: high 50%) or once (e.g. 9 Oct
-06:00-10:00: low 95%). The limit helpers keep your everyday limits; while
+06:00-10:00: low 95%). The limit helpers keep your default limits; while
 an entry is on, its limits are used instead. Saved in /data/schedule.json.
 
 When entries overlap, the one that started last wins (per limit). If a
 scheduled limit crosses the other one, the other moves out of its way:
-a scheduled low of 95% with an everyday high of 80% makes the high 96%.
+a scheduled low of 95% with an default high of 80% makes the high 96%.
 """
 from __future__ import annotations
 
@@ -187,7 +187,7 @@ class Schedule:
         return sorted(out, key=lambda e: e["starts"])[:limit]
 
     def apply(self, high: Optional[float], low: Optional[float], now: datetime.datetime) -> tuple:
-        """(high, low, the entries setting them): the everyday limits with the schedule on top."""
+        """(high, low, the entries setting them): the default limits with the schedule on top."""
         on = self.active(now)
         sched_high = sched_low = None
         for e in on:  # the latest started wins

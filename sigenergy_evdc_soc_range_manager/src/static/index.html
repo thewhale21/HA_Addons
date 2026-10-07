@@ -220,6 +220,7 @@
   </div>
   <nav role="tablist" id="tabs">
     <button role="tab" data-tab="overview"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg><span>Overview</span></button>
+    <button role="tab" data-tab="schedule"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-2 .9-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11zM7 11h5v5H7z"/></svg><span>Schedule</span></button>
     <button role="tab" data-tab="stats"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg><span>Statistics</span></button>
     <button role="tab" data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg><span>Settings</span></button>
     <button role="tab" data-tab="diagnostics"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>Diagnostics</span></button>
@@ -256,14 +257,7 @@
         <div class="range" id="o-range" aria-hidden="true"><div class="win" id="o-win"></div><div class="mark" id="o-mark"></div></div>
         <div class="range-labels"><span>0%</span><span id="o-range-text"></span><span>100%</span></div>
         <div class="row" id="o-sched-now" hidden style="margin-top:10px"></div>
-        <div class="row">
-          <div class="grow">Everyday low limit<div class="note" style="margin:0" id="o-low-note">Stops discharging here</div></div>
-          <input type="number" id="o-low" min="0" max="100" step="1" aria-label="Low limit (%)"> %
-        </div>
-        <div class="row">
-          <div class="grow">Everyday high limit<div class="note" style="margin:0" id="o-high-note">Stops charging here</div></div>
-          <input type="number" id="o-high" min="0" max="100" step="1" aria-label="High limit (%)"> %
-        </div>
+        <div class="row" style="margin-top:12px"><div class="grow note" style="margin:0" id="o-limits-note"></div><button class="btn small" id="o-to-schedule">Limits and schedule</button></div>
       </div>
       <div class="card">
         <h2>Power</h2>
@@ -279,8 +273,37 @@
       </div>
     </div>
     <div class="card">
-      <h2>Limit schedule</h2>
-      <div class="note" style="margin:0 0 6px">Change the high and/or low limit for a while, every week or once: e.g. Tue and Thu 23:00–08:00 high 50%, or tomorrow 06:00–10:00 low 95%. The everyday limits come back afterwards. The latest-starting entry wins where they overlap.</div>
+      <h2>Recent starts and stops<span class="spacer"></span><span class="chip" id="o-presses"></span></h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>What and why</th><th class="num">SoC</th></tr></thead>
+        <tbody id="o-log"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ============ Schedule: the limits and when they change (src/schedule.py) ============ -->
+  <section id="tab-schedule" class="stack" hidden>
+    <div class="grid grid2">
+      <div class="card">
+        <h2>Default limits</h2>
+        <div class="note" style="margin:0">Used whenever the schedule doesn't set a limit. They're the limit helpers in Home Assistant, so a dashboard or automation can change them too.</div>
+        <div class="row">
+          <div class="grow">Default low limit<div class="note" style="margin:0" id="o-low-note">Stops discharging here</div></div>
+          <input type="number" id="o-low" min="0" max="100" step="1" aria-label="Low limit (%)"> %
+        </div>
+        <div class="row">
+          <div class="grow">Default high limit<div class="note" style="margin:0" id="o-high-note">Stops charging here</div></div>
+          <input type="number" id="o-high" min="0" max="100" step="1" aria-label="High limit (%)"> %
+        </div>
+      </div>
+      <div class="card">
+        <h2>Now</h2>
+        <dl class="kv" id="sc-now"></dl>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Schedule</h2>
+      <div class="note" style="margin:0 0 6px">Change the high and/or low limit for a while, every week or once: e.g. Tue and Thu 23:00–08:00 high 50%, or tomorrow 06:00–10:00 low 95%. Any limit an entry doesn't set, and any time nothing's on, uses the defaults. Where entries overlap, the one that started last wins.</div>
       <div class="table-wrap"><table>
         <thead><tr><th>When</th><th>Limits</th><th>Next</th><th class="num"></th></tr></thead>
         <tbody id="o-sched"></tbody>
@@ -296,13 +319,6 @@
         <input type="search" id="f-label" placeholder="Label (optional)" maxlength="60">
         <button class="btn small primary" id="f-add">Add</button>
       </div>
-    </div>
-    <div class="card">
-      <h2>Recent starts and stops<span class="spacer"></span><span class="chip" id="o-presses"></span></h2>
-      <div class="table-wrap"><table>
-        <thead><tr><th>When</th><th>What and why</th><th class="num">SoC</th></tr></thead>
-        <tbody id="o-log"></tbody>
-      </table></div>
     </div>
   </section>
 
@@ -652,6 +668,13 @@ function renderState(s) {
     if (document.activeElement !== $('o-' + k)) $('o-' + k).value = base == null ? '' : base;
   }
   const sched = r.scheduled || [];
+  const from = (k) => { const e = [...sched].reverse().find((x) => x[k] != null); return e ? `scheduled${e.label ? ' (' + esc(e.label) + ')' : ''} until ${whenLocal(e.until)}` : 'default'; };
+  $('sc-now').innerHTML = kv([
+    ['High limit', i.high == null ? '—' : `${num(i.high, 0)}% <span class="muted">· ${from('high')}</span>`],
+    ['Low limit', i.low == null ? '—' : `${num(i.low, 0)}% <span class="muted">· ${from('low')}</span>`],
+    ['Car', i.soc == null ? '—' : `${num(i.soc, 0)}%`],
+  ]);
+  $('o-limits-note').textContent = sched.length ? '' : `Default limits: ${num(r.base_low ?? i.low, 0)}%–${num(r.base_high ?? i.high, 0)}%`;
   $('o-sched-now').hidden = !sched.length;
   $('o-sched-now').innerHTML = sched.map((e) => `<span class="chip info">Scheduled: ${[e.high != null ? `high ${num(e.high, 0)}%` : '', e.low != null ? `low ${num(e.low, 0)}%` : ''].filter(Boolean).join(', ')} until ${whenLocal(e.until)}${e.label ? ' · ' + esc(e.label) : ''}</span>`).join('');
 
@@ -722,7 +745,7 @@ function drawSchedule(v) {
       <td>${on.has(e.id) ? '<span class="chip info">On now</span>' : e.enabled ? (next[e.id] ? whenLocal(next[e.id]) : '—') : '<span class="muted">Paused</span>'}</td>
       <td class="num acts"><button class="btn small" data-toggle="${e.id}" data-on="${e.enabled ? 1 : 0}">${e.enabled ? 'Pause' : 'Resume'}</button>
         <button class="btn small" data-del="${e.id}">Delete</button></td></tr>`).join('')
-    : '<tr><td colspan="4" class="empty">Nothing scheduled: the everyday limits are always used</td></tr>';
+    : '<tr><td colspan="4" class="empty">Nothing scheduled: the default limits are always used</td></tr>';
 }
 async function refreshSchedule() {
   try { drawSchedule(await api('schedule')); } catch (e) {}
@@ -763,6 +786,7 @@ async function setLimit(key) {
   if (await post('limits', {[key]: value})) toast(`${key === 'high' ? 'High' : 'Low'} limit: ${value}%`);
   setTimeout(pollState, 800);
 }
+$('o-to-schedule').addEventListener('click', () => showTab('schedule'));
 $('o-low').addEventListener('change', () => setLimit('low'));
 $('o-high').addEventListener('change', () => setLimit('high'));
 async function charger(action) {
@@ -1208,7 +1232,7 @@ $('d-bundle').addEventListener('click', async () => {
 
 // ---------- refresh loop ----------
 function refreshTab(full) {
-  if (activeTab === 'overview' && (full || Date.now() - (refreshSchedule._at || 0) > 60000)) { refreshSchedule._at = Date.now(); refreshSchedule(); }
+  if (activeTab === 'schedule' && (full || Date.now() - (refreshSchedule._at || 0) > 60000)) { refreshSchedule._at = Date.now(); refreshSchedule(); }
   if (activeTab === 'settings') { refreshSensors(full); if (full) refreshAppSettings(); }
   else if (activeTab === 'stats') refreshStats();
   else if (activeTab === 'health') refreshHealth();

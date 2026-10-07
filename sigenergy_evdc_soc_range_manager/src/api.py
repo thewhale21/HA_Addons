@@ -205,7 +205,7 @@ async def handle_limits(request: web.Request) -> web.Response:
                     raise ValueError("Limits are 0 to 100%")
                 wanted[key] = value
         st = request.app["shared_state"]
-        current, base = st.inputs or {}, st.readings or {}  # the everyday limits, not scheduled ones
+        current, base = st.inputs or {}, st.readings or {}  # the default limits, not scheduled ones
         high = wanted.get("high", base.get("base_high", current.get("high")))
         low = wanted.get("low", base.get("base_low", current.get("low")))
         if high is not None and low is not None and low >= high:

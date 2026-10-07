@@ -56,7 +56,7 @@ It looks whenever one of your entities changes, and every few seconds anyway.
    only off.
 
 The **Overview** shows what it's doing and why, the car's SoC against the
-limits (set them there too), the power readings it decides from, the
+limits (set on the Schedule tab), the power readings it decides from, the
 virtual battery and the recent starts and stops.
 
 The **virtual battery** is the car between its limits seen as one
@@ -128,8 +128,12 @@ Settings tab, and the plant entities default to Sigenergy's
 
 ## Limit schedule
 
-On the Overview, **Limit schedule** changes the high and/or low limit for
-a while, every week or once:
+The **Schedule** tab sets the limits. **Default limits** at the top are
+used whenever the schedule doesn't set a limit, and whenever nothing's
+on; they're the limit helpers, so a dashboard or automation can change
+them too. **Now** shows the limits in use and where each comes from.
+The schedule below changes the high and/or low limit for a while, every
+week or once:
 
 - Every week: e.g. Tue and Thu 23:00–08:00, high 50% (an entry can run
   past midnight).
@@ -137,11 +141,11 @@ a while, every week or once:
   below 95% that morning). One-off entries are removed once they've
   finished.
 
-The limit helpers are your everyday limits and aren't changed; while an
+The defaults aren't changed by the schedule; while an
 entry is on, its limits are used instead (the Car card says so). Where
 entries overlap, the one that started last wins. If a scheduled limit
 crosses the other one, the other moves out of its way (a scheduled low of
-95% with an everyday high of 80% makes the high 96%). The energy and rate
+95% with an default high of 80% makes the high 96%). The energy and rate
 sensors use the scheduled limits too, so Predbat sees the change.
 
 ## Statistics
