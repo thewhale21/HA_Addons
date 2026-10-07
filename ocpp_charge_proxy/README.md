@@ -9,4 +9,4 @@ supplier schedules charging.
 
 See the [full documentation][docs] for setup instructions.
 
-[docs]: https://github.com/thewhale21/ocpp_charge_proxy
+[docs]: https://github.com/thewhale21/HA_Addons/tree/main/ocpp_charge_proxy

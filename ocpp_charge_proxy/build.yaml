@@ -5,5 +5,5 @@ build_from:
 labels:
   org.opencontainers.image.title: "Home Assistant Add-on: OCPP Charge Proxy"
   org.opencontainers.image.description: "Virtual OCPP 1.6 chargepoint for smart tariff suppliers"
-  org.opencontainers.image.source: "https://github.com/thewhale21/ocpp_charge_proxy"
+  org.opencontainers.image.source: "https://github.com/thewhale21/HA_Addons"
   org.opencontainers.image.licenses: "MIT"

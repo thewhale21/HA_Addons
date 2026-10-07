@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.39.2 — Now in the HA_Addons repository
+
+- **Change:** the add-on now lives in the HA_Addons repository: its
+  website link, documentation link and image source point there.
+
 ## 2.39.1 — Reconnecting sooner
 
 - **Fix:** after losing the OCPP connection, it now retries every 60 s at
