@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.0 — Tidier Settings
+
+- **Feature:** the Settings tab hides the entities the add-on set up
+  itself (the Sigenergy integration's, the helpers it made or found, the
+  Octopus rate sensors) while they're working. Any with a problem, or
+  that you picked yourself, stay shown. **Show the ones set up
+  automatically** shows them all (remembered in this browser).
+
 ## 0.13.0 — Charger alarms
 
 - **Feature:** when the charger's running state is an alarm (`#Alarm`,

@@ -43,6 +43,23 @@ def slugify(name: str) -> str:
 OCTOPUS_RATE = re.compile(r"^sensor\.octopus_energy_electricity_.+_current_rate$")
 
 
+def automatic(key: str, entity_id: str) -> bool:
+    """Was this picker filled in by the add-on (a Sigenergy default, a helper it makes or
+    finds, or the Octopus rate sensors), rather than picked by hand? For the Settings tab."""
+    from src.ha_link import DEFAULT_ENTITIES
+
+    if not entity_id:
+        return False
+    if DEFAULT_ENTITIES.get(key) == entity_id:
+        return True
+    if key in HELPERS:
+        kind, spec = HELPERS[key]
+        return entity_id.startswith(f"{kind}.{slugify(spec['name'])}")  # e.g. ..._2 if the name was taken
+    if key in ("import_rate", "export_rate"):
+        return bool(OCTOPUS_RATE.match(entity_id))
+    return False
+
+
 def find_rates(states: dict) -> dict:
     """The Octopus Energy integration's import and export current rate sensors, if there are any."""
     ids = sorted(e for e in states if OCTOPUS_RATE.match(e or ""))

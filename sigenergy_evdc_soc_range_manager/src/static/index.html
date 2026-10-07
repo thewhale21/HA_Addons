@@ -253,6 +253,8 @@
   .legend i.ln-lim { display: inline-block; width: 14px; height: 0; border-top: 1.5px dashed var(--text2); vertical-align: middle; margin-right: 5px; }
   .legend i.ln-soc { display: inline-block; width: 14px; height: 0; border-top: 2px solid var(--text); vertical-align: middle; margin-right: 5px; }
   .field[hidden] { display: none; }
+  .pk + .pk { margin-top: 14px; }
+  .pk[hidden], .pkcard[hidden] { display: none; }
   .holdbox { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--divider); }
   .hold { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .hold .seg button { padding: 5px 9px; font-size: 13px; }
@@ -460,6 +462,11 @@
   <section id="tab-settings" class="stack" hidden>
     <div class="section-title">Your Home Assistant entities</div>
     <div class="note" style="margin:8px 0 0">They start as the Sigenergy integration's own. The limits, battery capacity and charging mode select are made as helpers if left empty; point them at helpers you already have instead if you like.</div>
+    <div class="row" style="margin-top:4px">
+      <div class="grow note" style="margin:0" id="s-auto-note"></div>
+      <span class="muted" style="font-size:13px">Show the ones set up automatically</span>
+      <label class="switch"><input type="checkbox" id="s-show-auto" aria-label="Show the entities set up automatically"><span></span></label>
+    </div>
     <div class="grid" id="s-pickers"></div>
     <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all" checked> Show all entities in the lists</label>
     <div class="section-title">How it runs</div>
@@ -1455,19 +1462,38 @@ const PICKERS = [
 ];
 (function buildPickerCards() {
   const cards = [...new Set(PICKERS.map((p) => p[0]))];
-  $('s-pickers').innerHTML = cards.map((card) => `<div class="card"><h2>${esc(card)}</h2>${PICKERS.filter((p) => p[0] === card).map(([, key, label, note, domains]) => `
+  $('s-pickers').innerHTML = cards.map((card) => `<div class="card pkcard"><h2>${esc(card)}</h2>${PICKERS.filter((p) => p[0] === card).map(([, key, label, note, domains]) => `<div class="pk" data-pk="${key}">
     <div class="row"><div class="grow">${esc(label)}${note ? `<div class="note" style="margin:0">${esc(note)}</div>` : ''}</div><span class="muted" id="s-read-${key}" style="text-align:right"></span></div>
-    <div class="row" style="margin-top:6px"><span class="picker" data-key="${key}" data-domain="${domains}"></span></div>`).join('')}</div>`).join('');
+    <div class="row" style="margin-top:6px"><span class="picker" data-key="${key}" data-domain="${domains}"></span></div></div>`).join('')}</div>`).join('');
 })();
+// The pickers the add-on filled in itself (Sigenergy's entities, its helpers, the Octopus
+// rates) are hidden unless "Show the ones set up automatically" is on, or they have a problem
+let showAuto = false;
+try { showAuto = localStorage.getItem('evdc-show-auto') === '1'; } catch (e) {}
+$('s-show-auto').checked = showAuto;
+$('s-show-auto').addEventListener('change', (ev) => {
+  showAuto = ev.target.checked;
+  try { localStorage.setItem('evdc-show-auto', showAuto ? '1' : '0'); } catch (e) {}
+  drawSensors();
+});
 function drawSensors() {
-  const ents = (sim.data || {}).entities || {};
+  const ents = (sim.data || {}).entities || {}, auto = (sim.data || {}).automatic || {};
+  let hidden = 0;
   for (const [, key] of PICKERS) {
     const ent = ents[key], el = $('s-read-' + key);
     const button = ent && /^(input_)?button\./.test(ent.entity_id);
+    const problem = ent && (ent.state == null || ['unavailable', 'unknown'].includes(ent.state) && !button);
     if (el) el.innerHTML = !ent ? 'Not set' : ent.state == null ? `<span class="chip warn">${button ? 'not found' : 'no reading'}</span>` : button ? ''
       : ['unavailable', 'unknown'].includes(ent.state) ? `<span class="chip warn">${esc(ent.state)}</span>`
       : esc(ent.state) + (ent.unit ? ' ' + esc(ent.unit) : '');
+    const box = document.querySelector(`.pk[data-pk="${key}"]`);
+    const hide = !showAuto && auto[key] && !problem && !(box && box.contains(document.activeElement));
+    if (box) box.hidden = hide;
+    if (hide) hidden++;
   }
+  document.querySelectorAll('#s-pickers .pkcard').forEach((c) => { c.hidden = ![...c.querySelectorAll('.pk')].some((b) => !b.hidden); });
+  $('s-auto-note').textContent = showAuto ? 'Showing all of them.'
+    : hidden ? `${hidden} set up automatically and working, hidden. Any with a problem, or that you've picked yourself, stay shown.` : '';
 }
 
 // ---------- Settings: how it runs (src/app_settings.py) ----------

@@ -27,6 +27,7 @@ import time
 from typing import Awaitable, Callable, Optional
 
 from src.ha_entities import ALL_SENSORS, SensorPublisher, entity_info
+from src.helpers import automatic
 
 logger = logging.getLogger(__name__)
 
@@ -418,6 +419,7 @@ class HaLink:
             "error": self.error,
             "entities": {key: entity_info(self.states, value) for key, value in self.settings.items()},
             "own_sensors": list(ALL_SENSORS),
+            "automatic": {key: automatic(key, value) for key, value in self.settings.items()},
         }
 
 

@@ -33,7 +33,9 @@ It looks whenever one of your entities changes, and every few seconds anyway.
 
 1. Install the add-on and start it, then open it from the sidebar.
 2. **Settings** shows the entities it uses. They start as the Sigenergy
-   integration's own, so most need no change. Check each shows a reading.
+   integration's own, so most need no change. The ones it set up itself
+   are hidden while they're working (any with a problem stay shown);
+   turn on **Show the ones set up automatically** to see or change them.
 3. The first time it connects to Home Assistant it makes helpers for
    anything left empty (**Settings › Devices & services › Helpers**):
    - **EVDC SoC High Limit** and **EVDC SoC Low Limit** (input numbers, %).
