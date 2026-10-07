@@ -17,6 +17,7 @@ from collections import deque
 from typing import Awaitable, Callable, Optional
 
 from src.controller import RULES, Decision, Inputs, decide
+from src.rates import battery_rates
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,10 @@ LIST_DEFAULTS = {
     "discharging_states": ["Discharging"],
     # The V2X mode entity's state(s) that mean "manage the charger"
     "mode_states": ["V2X", "on"],
+    # ...that count for the energy and battery rate sensors (as the V2X template sensors did)
+    "energy_mode_states": ["V2X", "Solar Surplus", "on"],
+    # ...that mean fast charging (the battery rate sensor's top rate)
+    "fast_mode_states": ["Fast Charging"],
     # EMS modes in which exporting isn't spare power (the plant is being told to discharge)
     "blocked_ems_modes": ["Command Discharging (PV First)", "Command Discharging (ESS First)"],
 }
@@ -183,7 +188,14 @@ class Manager:
             export_kw=export, export_held_s=0.0 if self.export_since is None else now - self.export_since,
             ems_mode=ems, charge_signal=signal, ems_blocked=_in(ems, lists["blocked_ems_modes"]),
         )
-        self.readings = {"capacity_kwh": _float(get("capacity")), "mode": mode}
+        self.readings = {
+            "capacity_kwh": _float(get("capacity")), "mode": mode,
+            "energy_mode": plugged and _in(mode, lists["energy_mode_states"]),
+            "fast_mode": plugged and _in(mode, lists["fast_mode_states"]),
+            "available_kw": power_kw(get("available_power")),
+            "home_soc": _float(get("home_battery_soc")), "home_kwh": _float(get("home_battery_capacity")),
+        }
+        self._settings = settings
         return self.inputs
 
     # --- acting -----------------------------------------------------------------
@@ -253,7 +265,7 @@ class Manager:
         full that window is (%): like the V2X SoC template sensors, 0.01 when not in use."""
         i, cap = self.inputs, self.readings.get("capacity_kwh")
         out = {"available_kwh": 0.01, "window_kwh": 0.01, "window_pct": 0.0}
-        if not i or not i.plugged_in or not i.mode_on or not cap or i.low is None or i.high is None:
+        if not i or not self.readings.get("energy_mode") or not cap or i.low is None or i.high is None:
             return out
         if i.soc is not None:
             out["available_kwh"] = round(max(cap * (i.soc - i.low) / 100, 0.01), 2)
@@ -261,6 +273,17 @@ class Manager:
         if out["window_kwh"] > 0.01:
             out["window_pct"] = round(min(100.0, out["available_kwh"] / out["window_kwh"] * 100), 1)
         return out
+
+    def rates(self) -> dict:
+        """The V2X battery rate sensors (src/rates.py)."""
+        i, r = self.inputs, self.readings
+        if i is None:
+            return {}
+        cap = r.get("capacity_kwh") or 0.0
+        window = cap * (i.high - i.low) / 100 if i.high is not None and i.low is not None else 0.0
+        return battery_rates(plugged_in=i.plugged_in, v2x=bool(r.get("energy_mode")), fast=bool(r.get("fast_mode")),
+                             available_kw=r.get("available_kw"), home_soc=r.get("home_soc"), home_kwh=r.get("home_kwh"),
+                             car_window_kwh=window, settings=getattr(self, "_settings", None))
 
     def snapshot(self, now: Optional[float] = None) -> dict:
         now = time.time() if now is None else now
@@ -278,5 +301,6 @@ class Manager:
             "last_action": self.log[-1] if self.log else None,
             "log": list(self.log)[-30:][::-1],
             "energy": self.energy(),
+            "rates": self.rates(),
             "readings": dict(self.readings),
         }

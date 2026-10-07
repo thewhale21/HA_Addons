@@ -286,4 +286,36 @@ def test_missing_helpers_are_found_or_made(tmp_path):
 
     fresh = FakeLink({}, tmp_path / "b")
     _run(ensure_helpers(fresh))
-    assert fresh.settings["v2x_mode"] == "input_boolean.evdc_v2x_mode"
+    assert fresh.settings["v2x_mode"] == "input_select.sigenergy_evdc_charging_mode"
+    mode = [p for p in fresh.made if p["type"] == "input_select/create"][0]
+    assert mode["options"] == ["V2X", "Solar Surplus", "Fast Charging"] and mode["initial"] == "V2X"
+
+
+def test_battery_rates_like_the_v2x_rate_templates():
+    from src.rates import battery_rates
+    common = dict(plugged_in=True, v2x=True, fast=False, available_kw=10.0, home_soc=50.0, home_kwh=9.0,
+                  car_window_kwh=25.6)
+    assert battery_rates(**common) == {"rate_kw": 8.0, "car_kw": 7.4, "house_kw": 2.6}  # scaled to 10 kW
+    roomy = battery_rates(**{**common, "available_kw": 20.0})
+    assert roomy == {"rate_kw": 8.0, "car_kw": 8.0, "house_kw": 2.81}  # in proportion to their sizes
+    assert battery_rates(**{**common, "home_soc": 96.0})["rate_kw"] == 10.0  # nearly full: 12.5, capped at 10
+    assert battery_rates(**{**common, "home_kwh": None})["house_kw"] == 2.6  # 9 kWh when it can't be read
+    fast = battery_rates(**{**common, "v2x": False, "fast": True, "available_kw": 15.0})
+    assert fast == {"rate_kw": 12.5, "car_kw": 0.0, "house_kw": 4.5}
+    off = battery_rates(**{**common, "plugged_in": False})
+    assert off == {"rate_kw": 0.0, "car_kw": 0.0, "house_kw": 4.5}
+    assert battery_rates(**{**common, "car_window_kwh": 0})["house_kw"] == 4.5
+    custom = battery_rates(**{**common, "available_kw": 30.0}, settings={"rate_kw": 6, "house_rate_kw": 3})
+    assert custom["rate_kw"] == 6 and custom["house_kw"] == 2.81
+
+
+def test_manager_reports_the_rates_and_counts_solar_surplus(tmp_path):
+    m = Manager(str(tmp_path))
+    states = {**_states(mode="Solar Surplus"),
+              "sensor.sigen_plant_available_max_active_power": {"state": "10", "attributes": {"unit_of_measurement": "kW"}},
+              "sensor.sigen_plant_battery_state_of_charge": {"state": "50", "attributes": {}},
+              "sensor.sigen_inverter_rated_battery_capacity": {"state": "9", "attributes": {}}}
+    d = _run(m.step(states, _entities(), _settings(), now=1.0))
+    assert d.rule == "not_v2x"  # Solar Surplus isn't V2X: the charger is left alone...
+    assert m.energy()["window_kwh"] == 25.6  # ...but the energy and rate sensors count it
+    assert m.snapshot(2.0)["rates"] == {"rate_kw": 8.0, "car_kw": 7.4, "house_kw": 2.6}

@@ -259,7 +259,7 @@
   <!-- ============ Settings ============ -->
   <section id="tab-settings" class="stack" hidden>
     <div class="section-title">Your Home Assistant entities</div>
-    <div class="note" style="margin:8px 0 0">They start as the Sigenergy integration's own. The limits, battery capacity and V2X mode are made as helpers if left empty; point them at helpers you already have instead if you like.</div>
+    <div class="note" style="margin:8px 0 0">They start as the Sigenergy integration's own. The limits, battery capacity and charging mode select are made as helpers if left empty; point them at helpers you already have instead if you like.</div>
     <div class="grid" id="s-pickers"></div>
     <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all" checked> Show all entities in the lists</label>
     <div class="section-title">How it runs</div>
@@ -279,7 +279,12 @@
         </div>
         <div class="row" style="margin-top:6px"><input type="search" id="s-notify" placeholder="notify.mobile_app_…" style="width:100%"></div>
       </div>
-      <div class="card span2">
+      <div class="card">
+        <h2>Battery rates</h2>
+        <div class="note" style="margin:0">For the battery rate sensors (e.g. for Predbat): the plant's rate with the car plugged in, and how it splits between the home battery and the car, in proportion to their sizes.</div>
+        <div id="s-rates"></div>
+      </div>
+      <div class="card" style="grid-column:1/-1">
         <h2>Advanced: the charger's states</h2>
         <div class="note" style="margin:0 0 6px">Only change these if your charger or set-up reports different words. Comma separated, any case.</div>
         <div id="s-lists"></div>
@@ -554,8 +559,9 @@ function renderState(s) {
     ['Between the limits', e.window_kwh > 0.01 ? `${num(e.window_kwh, 1)} kWh` : '—'],
     ['Window used', e.window_kwh > 0.01 ? `${num(e.window_pct, 0)}%` : '—'],
     ['Battery capacity', cap ? `${num(cap, 1)} kWh` : '<span class="muted">Not set</span>'],
+    ['Battery rate', s.rates && s.rates.rate_kw != null ? `${num(s.rates.rate_kw, 2)} kW <span class="muted">· car ${num(s.rates.car_kw, 2)} · home ${num(s.rates.house_kw, 2)}</span>` : '—'],
   ]);
-  $('o-energy-note').textContent = cap ? 'Shown while plugged in and in V2X mode.' : 'Set the car\'s battery capacity (the capacity helper) to see these.';
+  $('o-energy-note').textContent = cap ? 'Shown while plugged in and in V2X or Solar Surplus mode.' : 'Set the car\'s battery capacity (the capacity helper) to see these.';
 
   // Log
   $('o-presses').textContent = `${s.presses_today || 0} button press${s.presses_today === 1 ? '' : 'es'} today`;
@@ -716,6 +722,9 @@ const PICKERS = [
   ['Mode and limits', 'soc_high', 'High limit', 'Helper: an input number (%).', 'input_number,number'],
   ['Mode and limits', 'soc_low', 'Low limit', 'Helper: an input number (%).', 'input_number,number'],
   ['Mode and limits', 'capacity', 'Battery capacity', "The car's usable kWh, for the energy sensors. Optional.", 'input_number,number,sensor'],
+  ['Home battery', 'available_power', 'Available power', 'What the plant can charge or discharge at right now. For the battery rate sensors.', 'sensor'],
+  ['Home battery', 'home_battery_soc', 'Home battery SoC', 'Nearly full means the higher battery rate.', 'sensor'],
+  ['Home battery', 'home_battery_capacity', 'Home battery capacity', 'kWh, to share the rate between the home battery and the car (9 if not set).', 'sensor,input_number,number'],
   ['Mode and limits', 'charge_signal', 'Charge signal', 'On = charge the car now if there\'s room, e.g. Predbat charging. Optional.', 'binary_sensor,input_boolean,switch'],
 ];
 (function buildPickerCards() {
@@ -745,16 +754,28 @@ const TUNING = [
   ['margin_pct', 'Margin', '%', 'Starts need the SoC this far inside the limits; stops are at the limits. Stops it bouncing on and off at a limit. 0 = off.'],
   ['press_gap_s', 'Between button presses', 's', 'At least this long, so the charger has time to respond.'],
 ];
+const RATES = [
+  ['rate_kw', 'Rate', 'kW', 'The plant\'s rate with the car in V2X or Solar Surplus mode.'],
+  ['rate_full_kw', 'Top rate', 'kW', 'When the home battery is nearly full, and in Fast Charging.'],
+  ['rate_full_soc_pct', 'Nearly full', '%', 'Home battery SoC for the top rate.'],
+  ['house_rate_kw', 'Home battery top rate', 'kW', ''],
+  ['car_rate_kw', 'Car top rate', 'kW', ''],
+];
 const LISTS = [
   ['plugged_states', 'Plugged in', 'Running states that mean a car is plugged in.'],
   ['active_states', 'Running', 'Running states that mean the charger is running.'],
   ['discharging_states', 'Discharging', 'Running states that mean the car is discharging.'],
   ['mode_states', 'V2X mode', 'States of the V2X mode entity that mean "manage the charger".'],
   ['blocked_ems_modes', 'EMS modes without export charging', 'EMS modes in which exporting isn\'t spare power.'],
+  ['energy_mode_states', 'Modes for the energy and rate sensors', 'Mode entity states in which those sensors count the car.'],
+  ['fast_mode_states', 'Fast charging modes', 'Mode entity states that get the top battery rate.'],
 ];
 let appSettings = null;
 async function refreshAppSettings() {
   try { appSettings = await api('settings'); } catch (e) { return; }
+  const numberRows = (rows) => rows.map(([key, label, unit, note]) => `<div class="row"><div class="grow">${esc(label)}${note ? `<div class="note" style="margin:0">${esc(note)}</div>` : ''}</div>
+    <span class="field"><input type="number" data-setting="${key}" step="any" min="0" value="${esc(appSettings[key])}" aria-label="${esc(label)}"><span class="unit">${unit}</span></span></div>`).join('');
+  $('s-rates').innerHTML = numberRows(RATES);
   $('s-tuning').innerHTML = TUNING.map(([key, label, unit, note]) => `<div class="row"><div class="grow">${esc(label)}<div class="note" style="margin:0">${esc(note)}</div></div>
     <span class="field"><input type="number" data-setting="${key}" step="any" min="0" value="${esc(appSettings[key])}" aria-label="${esc(label)}"><span class="unit">${unit}</span></span></div>`).join('');
   $('s-lists').innerHTML = LISTS.map(([key, label, note]) => `<div class="row"><div class="grow">${esc(label)}<div class="note" style="margin:0">${esc(note)}</div></div></div>

@@ -52,6 +52,10 @@ ENTITY_KEYS = {
     "soc_high": ("input_number", "number"),
     "soc_low": ("input_number", "number"),
     "capacity": ("input_number", "number", "sensor"),
+    # For the battery rate sensors
+    "available_power": ("sensor",),
+    "home_battery_soc": ("sensor",),
+    "home_battery_capacity": ("sensor", "input_number", "number"),
 }
 # What a new install starts with: the Sigenergy integration's entity IDs. The
 # limits, capacity and V2X mode are made as helpers when left empty
@@ -65,6 +69,9 @@ DEFAULT_ENTITIES = {
     "grid_power": "sensor.sigen_plant_grid_active_power",
     "export_power": "sensor.sigen_plant_grid_export_power",
     "ems_mode": "select.sigen_plant_remote_ems_control_mode",
+    "available_power": "sensor.sigen_plant_available_max_active_power",
+    "home_battery_soc": "sensor.sigen_plant_battery_state_of_charge",
+    "home_battery_capacity": "sensor.sigen_inverter_rated_battery_capacity",
 }
 
 

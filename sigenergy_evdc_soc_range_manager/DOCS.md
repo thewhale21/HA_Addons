@@ -42,9 +42,9 @@ It looks whenever one of your entities changes, and every few seconds anyway.
    - **EVDC Vehicle Battery Capacity** (kWh), for the energy sensors. It
      starts at your `input_number.vehicle_max_capacity` if you have one,
      otherwise 0 (set it to see the energy sensors).
-   - **EVDC V2X Mode** (an on/off switch), unless you already have
-     `input_select.sigenergy_evdc_charging_mode`, which is used instead
-     (V2X = manage the charger).
+   - **SigEnergy EVDC Charging Mode** (`input_select.sigenergy_evdc_charging_mode`:
+     V2X, Solar Surplus, Fast Charging), unless you already have it. It
+     only manages the charger in V2X.
 
    You can point any of these at a helper you already have instead.
 4. Optional: a **charge signal**, e.g. `binary_sensor.predbat_charging`.
@@ -73,6 +73,7 @@ energy in the car and the recent starts and stops. **Start charger** and
 | Between button presses | 60 s | At least this long between presses |
 | Watch only | off | Decide and log, but don't press anything |
 | Notify service | none | e.g. `notify.mobile_app_your_phone`: told on every start and stop |
+| Battery rates | 8 and 12.5 kW, 95%, 4.5 kW home, 8 kW car | See [Battery rates](#battery-rates) |
 
 **Advanced** has the words the charger uses for its running states (which
 mean plugged in, running and discharging), the V2X mode states, and the EMS
@@ -93,10 +94,31 @@ Power sensors can be in W or kW.
 | `sensor.evdc_soc_range_available_energy` | kWh the car can give before the low limit |
 | `sensor.evdc_soc_range_window_energy` | kWh between the low and high limits |
 | `sensor.evdc_soc_range_window_percent` | How full that window is |
+| `sensor.evdc_soc_range_battery_rate` | The plant's charge/discharge rate with the car plugged in (kW) |
+| `sensor.evdc_soc_range_battery_rate_car` | The car's share of it (kW) |
+| `sensor.evdc_soc_range_battery_rate_house` | The home battery's share of it (kW) |
 | `sensor.evdc_soc_range_presses_today` | Button presses today |
 
 The energy sensors read 0.01 when the car isn't plugged in or isn't in V2X
-mode. They show as unavailable while the add-on is stopped.
+or Solar Surplus mode. All of them show as unavailable while the add-on is
+stopped.
+
+### Battery rates
+
+For Predbat or similar. With the car plugged in and in V2X or Solar
+Surplus mode, the rate is the plant's available power, capped at
+**Rate** (8 kW), or **Top rate** (12.5 kW) once the home battery is
+**Nearly full** (95%). In Fast Charging it's the top rate; otherwise 0.
+
+That's shared between the home battery and the car in proportion to their
+sizes (the home battery's rated capacity, and the car's kWh between its
+limits), each capped at its top rate (4.5 kW home, 8 kW car), and scaled
+down together if that's more than the plant can do. Without the car it's
+all the home battery's (up to its top rate). All the figures are on the
+Settings tab, and the plant entities default to Sigenergy's
+(`sensor.sigen_plant_available_max_active_power`,
+`sensor.sigen_plant_battery_state_of_charge`,
+`sensor.sigen_inverter_rated_battery_capacity`).
 
 ## Diagnostics
 

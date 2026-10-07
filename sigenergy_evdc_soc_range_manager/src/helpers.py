@@ -1,6 +1,6 @@
 """Makes the Home Assistant helpers the add-on needs, the first time it
 connects: the high and low SoC limits, the car's battery capacity and a V2X
-mode switch. Each is only made when its picker on the Settings tab is
+mode select (V2X, Solar Surplus, Fast Charging). Each is only made when its picker on the Settings tab is
 empty, so you can point any of them at a helper you already have instead.
 
 They're ordinary helpers (Settings › Devices & services › Helpers): use them
@@ -24,10 +24,10 @@ HELPERS = {
     "capacity": ("input_number", {
         "name": "EVDC Vehicle Battery Capacity", "min": 0, "max": 200, "step": 0.1, "mode": "box",
         "unit_of_measurement": "kWh", "icon": "mdi:car-battery", "initial": 0}),
-    "v2x_mode": ("input_boolean", {"name": "EVDC V2X Mode", "icon": "mdi:ev-station", "initial": True}),
+    "v2x_mode": ("input_select", {
+        "name": "SigEnergy EVDC Charging Mode", "options": ["V2X", "Solar Surplus", "Fast Charging"],
+        "initial": "V2X", "icon": "mdi:ev-station"}),
 }
-# A charging-mode select some Sigenergy set-ups already have: used for V2X mode if it's there
-KNOWN_MODE_SELECT = "input_select.sigenergy_evdc_charging_mode"
 # Helpers a hand-made V2X automation may already have: a new helper starts at their value
 KNOWN_VALUES = {
     "soc_high": "input_number.v2x_cut_off_threshold_high",
@@ -50,10 +50,6 @@ async def ensure_helpers(link) -> list[str]:
     changes, done = {}, []
     for key in missing:
         kind, spec = HELPERS[key]
-        if key == "v2x_mode" and KNOWN_MODE_SELECT in states:
-            changes[key] = KNOWN_MODE_SELECT
-            done.append(f"V2X mode: using {KNOWN_MODE_SELECT}")
-            continue
         existing = f"{kind}.{slugify(spec['name'])}"
         if existing in states:
             changes[key] = existing

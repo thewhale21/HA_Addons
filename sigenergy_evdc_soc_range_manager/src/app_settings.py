@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 from src.controller import TUNING_DEFAULTS
 from src.manager import LIST_DEFAULTS
+from src.rates import RATE_DEFAULTS
 
 LEVELS = ("debug", "info", "warning", "error")
 # key -> (lowest, highest)
@@ -24,12 +25,18 @@ NUMBERS = {
     "export_hold_s": (0, 600),
     "margin_pct": (0, 20),
     "press_gap_s": (10, 600),
+    "rate_kw": (0, 100),
+    "rate_full_kw": (0, 100),
+    "rate_full_soc_pct": (0, 100),
+    "house_rate_kw": (0, 100),
+    "car_rate_kw": (0, 100),
 }
 BOOLS = ("observe_only",)
 LISTS = tuple(LIST_DEFAULTS)
 DEFAULTS = {
     "log_level": "info",
     **TUNING_DEFAULTS,
+    **RATE_DEFAULTS,
     "observe_only": False,  # decide and log, but don't press the buttons
     "notify_service": "",  # e.g. notify.mobile_app_phone: told when it starts or stops the charger
     **{k: list(v) for k, v in LIST_DEFAULTS.items()},

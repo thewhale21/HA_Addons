@@ -33,6 +33,15 @@ SENSORS = {
     "window_percent": (f"sensor.{PREFIX}_window_percent", {
         "friendly_name": f"{NAME} Window Percent", "unit_of_measurement": "%", "device_class": "battery",
         "state_class": "measurement"}),
+    "battery_rate": (f"sensor.{PREFIX}_battery_rate", {
+        "friendly_name": f"{NAME} Battery Rate", "unit_of_measurement": "kW", "device_class": "power",
+        "state_class": "measurement"}),
+    "battery_rate_car": (f"sensor.{PREFIX}_battery_rate_car", {
+        "friendly_name": f"{NAME} Battery Rate Car", "unit_of_measurement": "kW", "device_class": "power",
+        "state_class": "measurement"}),
+    "battery_rate_house": (f"sensor.{PREFIX}_battery_rate_house", {
+        "friendly_name": f"{NAME} Battery Rate House", "unit_of_measurement": "kW", "device_class": "power",
+        "state_class": "measurement"}),
     "presses_today": (f"sensor.{PREFIX}_presses_today", {
         "friendly_name": f"{NAME} Button Presses Today", "icon": "mdi:gesture-tap-button"}),
 }
@@ -63,6 +72,9 @@ def values(state) -> dict:
         "available_energy": energy.get("available_kwh"),
         "window_energy": energy.get("window_kwh"),
         "window_percent": energy.get("window_pct"),
+        "battery_rate": (state.rates or {}).get("rate_kw"),
+        "battery_rate_car": (state.rates or {}).get("car_kw"),
+        "battery_rate_house": (state.rates or {}).get("house_kw"),
         "presses_today": state.presses_today,
     }
 

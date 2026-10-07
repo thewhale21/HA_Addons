@@ -10,7 +10,7 @@ by starting and stopping a Sigenergy DC charger.
   discharge into the house, at the low limit only to charge from spare power.
 - A restart wait for cars that stop discharging now and then.
 - Makes its own limit helpers, works from the Sigenergy integration's
-  entities, and posts status, SoC and energy sensors.
+  entities, and posts status, SoC, energy and V2X battery rate sensors.
 - A web page in the sidebar: what it's doing and why, the limits, recent
   starts and stops, and a watch-only mode for trying it out.
 
