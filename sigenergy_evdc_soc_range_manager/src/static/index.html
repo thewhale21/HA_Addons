@@ -194,10 +194,34 @@
   .meter { height: 10px; border-radius: 999px; background: var(--hover); box-shadow: inset 0 0 0 1px var(--divider);
     margin-top: 12px; overflow: hidden; }
   .meter > div { height: 100%; width: 0; border-radius: 999px; background: var(--primary); transition: width .4s; }
-  .sched-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
-  .sched-form input[type="time"], .sched-form input[type="date"], .sched-form input[type="search"] { font: inherit; color: var(--text);
-    background: var(--bg); border: 1px solid var(--divider); border-radius: 8px; padding: 5px 8px; }
-  .sched-form .field input[type="number"] { width: 64px; }
+  /* Schedule week view (like the OCPP add-on's) */
+  :root { --w-high: #039be5; --w-low: #f57c00; }
+  .week { display: grid; grid-template-columns: 52px 1fr; gap: 6px 8px; align-items: center; }
+  .week .dl { font-size: 12px; color: var(--text2); }
+  .week .dl.today { color: var(--primary); font-weight: 500; }
+  .week .track { position: relative; height: 30px; background: var(--hover); border-radius: 4px; overflow: hidden; touch-action: pan-y; cursor: copy; }
+  .week .track::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--card); pointer-events: none; }
+  .week .wbar { position: absolute; height: 50%; opacity: .85; cursor: pointer; color: #fff; font-size: 10.5px; line-height: 15px;
+    padding: 0 4px; overflow: hidden; white-space: nowrap; box-sizing: border-box; }
+  .week .wbar.hi { top: 0; background: var(--w-high); }
+  .week .wbar.lo { top: 50%; background: var(--w-low); color: #212121; }
+  .week .wbar.off { opacity: .3; }
+  .week .wbar.picked { box-shadow: inset 0 0 0 2px var(--text); opacity: 1; }
+  .week .wbar.ghost { top: 0; height: 100%; background: var(--primary); opacity: .4; pointer-events: none; }
+  .week .now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--err); z-index: 2; }
+  .week .axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); }
+  .slot-pop { grid-column: 1 / -1; padding: 8px 10px; border-radius: 8px; background: var(--hover); }
+  .slot-pop.top { margin-bottom: 4px; }
+  .slot-pop .ed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+  .slot-pop .ed .acts { display: flex; gap: 6px; margin-left: auto; }
+  .slot-pop .ed .seg button { padding: 3px 8px; }
+  .slot-pop select, .slot-pop input[type="date"], .slot-pop input[type="search"] { font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--divider); border-radius: 8px; padding: 4px 6px; }
+  .slot-pop .field input[type="number"] { width: 64px; }
+  .slot-pop .err { flex-basis: 100%; color: var(--err); font-size: 12px; }
+  .slot-pop .err:empty { display: none; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text2); margin-top: 8px; }
+  .legend b.band { display: inline-block; width: 12px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
   .seg.days button { padding: 6px 8px; }
   tr.off td { opacity: .5; }
   td.acts { white-space: nowrap; }
@@ -319,21 +343,17 @@
     <div class="card">
       <h2>Schedule</h2>
       <div class="note" style="margin:0 0 6px">Change the high and/or low limit for a while, every week or once: e.g. Tue and Thu 23:00–08:00 high 50%, or tomorrow 06:00–10:00 low 95%. Any limit an entry doesn't set, and any time nothing's on, uses the defaults. Where entries overlap, the one that started last wins.</div>
+      <div class="row" style="margin:0 0 12px">
+        <div class="note grow" style="margin:0">The next 7 days. Click an entry to change or delete it, or click or drag across a day to add one. High limits are the top half of each day, low limits the bottom half.</div>
+        <button class="btn small primary" id="w-add">+ Add</button>
+      </div>
+      <div class="week" id="w-grid"></div>
+      <div class="legend"><span><b class="band" style="background:var(--w-high);opacity:.85"></b>High limit</span><span><b class="band" style="background:var(--w-low);opacity:.85"></b>Low limit</span><span><b class="band" style="background:var(--text2);opacity:.3"></b>Paused</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span><span id="w-defaults"></span></div>
+      <h2 style="margin-top:18px">All entries</h2>
       <div class="table-wrap"><table>
         <thead><tr><th>When</th><th>Limits</th><th>Next</th><th class="num"></th></tr></thead>
         <tbody id="o-sched"></tbody>
       </table></div>
-      <div class="sched-form" id="o-sched-form">
-        <div class="seg" role="group" aria-label="Repeat" id="f-kind"><button data-kind="weekly" aria-pressed="true">Every week</button><button data-kind="once" aria-pressed="false">Once</button></div>
-        <div class="seg days" role="group" aria-label="Days" id="f-days"><button data-day="mon">Mon</button><button data-day="tue">Tue</button><button data-day="wed">Wed</button><button data-day="thu">Thu</button><button data-day="fri">Fri</button><button data-day="sat">Sat</button><button data-day="sun">Sun</button></div>
-        <input type="date" id="f-date" hidden aria-label="Date">
-        <label class="field">From <input type="time" id="f-start" value="23:00"></label>
-        <label class="field">until <input type="time" id="f-end" value="08:00"></label>
-        <label class="field">High <input type="number" id="f-high" min="0" max="100" step="1" placeholder="—"><span class="unit">%</span></label>
-        <label class="field">Low <input type="number" id="f-low" min="0" max="100" step="1" placeholder="—"><span class="unit">%</span></label>
-        <input type="search" id="f-label" placeholder="Label (optional)" maxlength="60">
-        <button class="btn small primary" id="f-add">Add</button>
-      </div>
     </div>
   </section>
 
@@ -683,6 +703,7 @@ function renderState(s) {
     if (document.activeElement !== $('o-' + k)) $('o-' + k).value = base == null ? '' : base;
   }
   const sched = r.scheduled || [];
+  drawDefaultsNote();
   const from = (k) => { const e = [...sched].reverse().find((x) => x[k] != null); return e ? `scheduled${e.label ? ' (' + esc(e.label) + ')' : ''} until ${whenLocal(e.until)}` : 'default'; };
   $('sc-now').innerHTML = kv([
     ['High limit', i.high == null ? '—' : `${num(i.high, 0)}% <span class="muted">· ${from('high')}</span>`],
@@ -763,6 +784,11 @@ const FLOWS = {
 };
 const LINE_COLOUR = {solar_home: '--f-solar', solar_grid: '--f-solar', solar_battery: '--f-solar', grid_home: '--f-import',
   grid_battery: '--f-export', battery_home: '--f-bout', car_home: '--f-car'};
+// "M a C b c d" -> "M d C c b a"; "M a L b" -> "M b L a"
+function reversePath(d) {
+  const pts = d.match(/-?\d+(\.\d+)?,-?\d+(\.\d+)?/g);
+  return d.includes('C') ? `M${pts[3]} C${pts[2]} ${pts[1]} ${pts[0]}` : `M${pts[1]} L${pts[0]}`;
+}
 const kwShort = (v) => v == null ? '—' : Math.abs(v) < 1 ? `${Math.round(Math.abs(v) * 1000)} W` : `${num(Math.abs(v), 1)} kW`;
 function drawFlow(f, i, e) {
   const box = $('o-flow'); if (!box) return;
@@ -783,34 +809,44 @@ function drawFlow(f, i, e) {
   }
   for (const [line, dir, colour, kwv] of dots) {
     const durS = Math.max(0.8, Math.min(4, 4 / (0.6 + kwv))).toFixed(2);
+    // Against the line's drawn direction: travel a reversed copy of it (works in every browser)
+    const path = dir < 0 ? reversePath(LINES[line]) : LINES[line];
     for (const offset of [0, 0.5]) {
       svg += `<circle r="3.5" style="fill:var(${colour})"><animateMotion dur="${durS}s" repeatCount="indefinite" begin="-${(offset * durS).toFixed(2)}s"
-        ${dir < 0 ? 'keyPoints="1;0" keyTimes="0;1" calcMode="linear"' : ''}><mpath href="#fl-${line}"/></animateMotion></circle>`;
+        path="${path}"/></circle>`;
     }
   }
   let nodes = '';
-  const node = (key, colour, label, labelAbove, lines) => {
+  // Like the Power Flow Card Plus: an optional reading above the icon, the flows below it
+  const node = (key, colour, label, labelAbove, lines, top) => {
     const [x, y] = NODES[key], r = 38;
     let out = `<circle class="node" cx="${x}" cy="${y}" r="${r}" style="stroke:var(${colour})"/>`;
     out += `<text class="lbl" x="${x}" y="${labelAbove ? y - r - 8 : y + r + 17}">${label}</text>`;
-    const iconY = lines.length > 1 ? y - 27 : y - 17;
-    out += `<g transform="translate(${x - 10},${iconY}) scale(0.84)"><path class="ico" d="${ICONS[key]}"/></g>`;
+    let iconTop = y - (lines.length > 1 ? 27 : 17);
+    if (top) {
+      const base = y - (lines.length > 1 ? 24 : 15);
+      out += `<text x="${x}" y="${base}" class="big">${top}</text>`;
+      iconTop = base + 3;
+    }
+    out += `<g transform="translate(${x - 10},${iconTop}) scale(0.84)"><path class="ico" d="${ICONS[key]}"/></g>`;
     lines.forEach(([text, c, big], n) => {
-      out += `<text x="${x}" y="${iconY + 36 + n * 15}" class="${big ? 'big' : ''}" ${c ? `style="fill:var(${c})"` : ''}>${text}</text>`;
+      out += `<text x="${x}" y="${iconTop + 33 + n * 13}" class="${big ? 'big' : ''}" ${c ? `style="fill:var(${c})"` : ''}>${text}</text>`;
     });
     return out;
   };
   const grid = f.grid_kw, batt = f.battery_kw;
   nodes += node('solar', '--f-solar', 'Solar', true, [[kwShort(f.pv_kw), null, true]]);
+  // As the power flow cards show it: ← sent to the grid, → taken from it
   nodes += node('grid', '--f-export', 'Grid', false, [
-    [`← ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import'], [`→ ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export']]);
+    [`← ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export'], [`→ ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import']]);
   nodes += node('home', '--f-home', 'Home', false, [[kwShort(f.house_kw), null, true]]);
+  // ↓ into the battery, ↑ out of it
   nodes += node('battery', '--f-bout', 'Battery', false, [
-    [f.home_soc == null ? '—' : `${num(f.home_soc, 0)}%`, null, true],
-    [batt == null ? '—' : batt > 0.01 ? `↓ ${kwShort(batt)}` : batt < -0.01 ? `↑ ${kwShort(batt)}` : 'idle', batt > 0.01 ? '--f-bin' : batt < -0.01 ? '--f-bout' : null]]);
-  const carLines = [[i.soc == null ? '—' : `${num(i.soc, 0)}%`, null, true]];
-  if (Math.abs(car) > 0.01) carLines.push([`${car > 0 ? '↓' : '↑'} ${kwShort(car)}`, '--f-car']);
-  nodes += node('car', '--f-car', 'Car', true, carLines);
+    [`↓ ${kwShort(batt != null && batt > 0 ? batt : 0)}`, '--f-bin'], [`↑ ${kwShort(batt != null && batt < 0 ? batt : 0)}`, '--f-bout']],
+    f.home_soc == null ? null : `${num(f.home_soc, 0)}%`);
+  // The car like the battery: ↓ charging, ↑ discharging
+  nodes += node('car', '--f-car', 'Car', true, [[`${car < 0 ? '↑' : '↓'} ${kwShort(car)}`, '--f-car']],
+    i.soc == null ? null : `${num(i.soc, 0)}%`);
   if (box.dataset.sig !== sig || !box.querySelector('#fl-nodes')) {
     box.dataset.sig = sig;
     box.innerHTML = `<svg viewBox="0 -16 420 362">${svg}<g id="fl-nodes">${nodes}</g></svg>`;
@@ -827,11 +863,13 @@ function whenLocal(iso) {
 }
 // ---------- Limit schedule (src/schedule.py) ----------
 const DAYNAMES = {mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun'};
-let schedKind = 'weekly';
 function drawSchedule(v) {
+  week.entries = v.entries || [];
+  if (week.edit && week.edit.id && !week.entries.some((e) => e.id === week.edit.id)) week.edit = null;
+  drawWeek();
   const next = Object.fromEntries((v.upcoming || []).map((u) => [u.id, u.starts]));
   const on = new Set((v.active || []).map((a) => a.id));
-  $('o-sched').innerHTML = (v.entries || []).length ? v.entries.map((e) => `<tr class="${e.enabled ? '' : 'off'}">
+  $('o-sched').innerHTML = (v.entries || []).length ? v.entries.map((e) => `<tr class="${e.enabled ? '' : 'off'}" data-open="${e.id}" style="cursor:pointer">
       <td>${e.kind === 'weekly' ? e.days.map((d) => DAYNAMES[d]).join(', ') : new Date(e.date).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} ${esc(e.start)}–${esc(e.end)}${e.label ? `<div class="sub">${esc(e.label)}</div>` : ''}</td>
       <td>${[e.high != null ? `High ${num(e.high, 0)}%` : '', e.low != null ? `Low ${num(e.low, 0)}%` : ''].filter(Boolean).join(' · ')}</td>
       <td>${on.has(e.id) ? '<span class="chip info">On now</span>' : e.enabled ? (next[e.id] ? whenLocal(next[e.id]) : '—') : '<span class="muted">Paused</span>'}</td>
@@ -842,32 +880,163 @@ function drawSchedule(v) {
 async function refreshSchedule() {
   try { drawSchedule(await api('schedule')); } catch (e) {}
 }
+
+// The week view: today and the next 6 days, an entry's high limit in the top half of
+// each day and its low limit in the bottom half
+const WD = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], DAY_MIN = 1440;
+const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+const tmin = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+function today0() { const t = new Date(); t.setHours(0, 0, 0, 0); return t; }
+function dateAt(n) { const t = today0(); t.setDate(t.getDate() + n); return t; }
+const isoAt = (n) => dateAt(n).toLocaleDateString('en-CA');
+const wdAt = (n) => WD[(dateAt(n).getDay() + 6) % 7];
+const week = {edit: null, entries: []};
+// An entry's on-periods on day `row` (minutes from that day's 00:00, clipped to the day)
+function occOn(e, row) {
+  const s0 = tmin(e.start), e0 = tmin(e.end), night = e0 <= s0, out = [];
+  for (const off of [-1, 0]) {
+    const day = row + off;
+    if (e.kind === 'weekly' ? !e.days.includes(wdAt(day)) : e.date !== isoAt(day)) continue;
+    const a = off * DAY_MIN + s0, b = off * DAY_MIN + (night ? DAY_MIN + e0 : e0);
+    if (b > 0 && a < DAY_MIN) out.push([Math.max(0, a), Math.min(DAY_MIN, b)]);
+  }
+  return out;
+}
+function drawDefaultsNote() {
+  const r = (state && state.readings) || {};
+  $('w-defaults').textContent = r.base_high != null ? `Gaps use the defaults: high ${num(r.base_high, 0)}%, low ${num(r.base_low, 0)}%` : '';
+}
+function drawWeek() {
+  const ed = week.edit, now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  const label = (d) => d === 0 ? 'Today' : `${dateAt(d).toLocaleDateString([], {weekday: 'short'})} ${dateAt(d).getDate()}`;
+  let html = ed && ed.top ? '<div class="slot-pop top" id="w-pop"></div>' : '';
+  for (let d = 0; d < 7; d++) {
+    let bars = '';
+    week.entries.forEach((e, n) => {
+      for (const [a, b] of occOn(e, d)) {
+        const w = (b - a) / 14.4, left = a / 14.4, picked = ed && ed.id === e.id;
+        const when = `${label(d)} ${hhmm(a)}–${b >= DAY_MIN ? '24:00' : hhmm(b)}`;
+        const title = (lim) => `${when}: ${lim}${e.label ? ' · ' + e.label : ''}${e.enabled ? '' : ' (paused)'}${e.kind === 'once' ? ' · once' : ' · every week'}`;
+        if (e.high != null) bars += `<div class="wbar hi ${e.enabled ? '' : 'off'} ${picked ? 'picked' : ''}" data-entry="${n}" data-row="${d}" style="left:${left}%;width:${w}%" title="${esc(title(`high ${num(e.high, 0)}%`))}">${w > 4 ? `${num(e.high, 0)}%` : ''}</div>`;
+        if (e.low != null) bars += `<div class="wbar lo ${e.enabled ? '' : 'off'} ${picked ? 'picked' : ''}" data-entry="${n}" data-row="${d}" style="left:${left}%;width:${w}%" title="${esc(title(`low ${num(e.low, 0)}%`))}">${w > 4 ? `${num(e.low, 0)}%` : ''}</div>`;
+      }
+    });
+    html += `<div class="dl ${d === 0 ? 'today' : ''}">${label(d)}</div><div class="track" data-row="${d}">${bars}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
+    if (ed && !ed.top && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
+  }
+  html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
+  $('w-grid').innerHTML = html;
+  drawDefaultsNote();
+  drawEditor();
+}
+const timeOptions = (val) => {
+  const list = Array.from({length: 96}, (_, k) => hhmm(k * 15));
+  if (val && !list.includes(val)) list.unshift(val);
+  return list.map((t) => `<option ${t === val ? 'selected' : ''}>${t}</option>`).join('');
+};
+function openEditor(row, entry, start, end) {
+  week.edit = entry
+    ? {row, id: entry.id, form: {kind: entry.kind, days: [...(entry.days || [wdAt(row)])], date: entry.date || isoAt(row), start: entry.start, end: entry.end,
+        high: entry.high, low: entry.low, label: entry.label || '', enabled: entry.enabled}}
+    : {row, id: null, form: {kind: 'weekly', days: [wdAt(row)], date: isoAt(row), start, end, high: null, low: null, label: '', enabled: true}};
+  drawWeek();
+}
+function drawEditor() {
+  const pop = $('w-pop'), ed = week.edit;
+  if (!pop || !ed) return;
+  const f = ed.form, nextDay = tmin(f.end) <= tmin(f.start);
+  pop.innerHTML = `<div class="ed">
+    <b>${ed.id ? 'Entry' : 'New'}</b>
+    <div class="seg" role="group" aria-label="Repeat"><button data-rep="weekly" aria-pressed="${f.kind === 'weekly'}">Every week</button><button data-rep="once" aria-pressed="${f.kind === 'once'}">Once</button></div>
+    ${f.kind === 'weekly' ? `<div class="seg days" role="group" aria-label="Days">${WD.map((d) => `<button data-day="${d}" aria-pressed="${f.days.includes(d)}">${DAYNAMES[d].slice(0, 2)}</button>`).join('')}</div>`
+      : `<input type="date" data-f="date" value="${esc(f.date)}" aria-label="Date">`}
+    <label>From <select data-f="start">${timeOptions(f.start)}</select></label>
+    <label>until <select data-f="end">${timeOptions(f.end)}</select></label>${nextDay ? '<span class="muted">next day</span>' : ''}
+    <label class="field">High <input type="number" data-f="high" min="0" max="100" step="1" placeholder="—" value="${f.high ?? ''}"><span class="unit">%</span></label>
+    <label class="field">Low <input type="number" data-f="low" min="0" max="100" step="1" placeholder="—" value="${f.low ?? ''}"><span class="unit">%</span></label>
+    <input type="search" data-f="label" placeholder="Label (optional)" maxlength="60" value="${esc(f.label)}">
+    <label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label>
+    <span class="acts"><button class="btn small primary" id="w-save">Save</button>${ed.id ? '<button class="btn small" id="w-del">Delete</button>' : ''}<button class="btn small" id="w-close">Cancel</button></span>
+    <div class="err" id="w-err"></div></div>`;
+}
+async function saveEditor(del) {
+  const ed = week.edit; if (!ed) return;
+  const f = ed.form, num0 = (v) => v === '' || v == null ? null : Number(v);
+  const body = {kind: f.kind, start: f.start, end: f.end, high: num0(f.high), low: num0(f.low), label: f.label, enabled: f.enabled};
+  if (f.kind === 'weekly') body.days = f.days; else body.date = f.date;
+  try {
+    const v = del ? await api('schedule/' + ed.id, {method: 'DELETE'})
+      : await api(ed.id ? 'schedule/' + ed.id : 'schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    week.edit = null; drawSchedule(v); toast(del ? 'Deleted' : ed.id ? 'Saved' : 'Added to the schedule'); setTimeout(pollState, 800);
+  } catch (e) { const el = $('w-err'); if (el) el.textContent = e.message; }
+}
+$('w-grid').addEventListener('click', (ev) => {
+  const t = ev.target, ed = week.edit;
+  if (t.id === 'w-close') { week.edit = null; drawWeek(); return; }
+  if (t.id === 'w-save') { saveEditor(false); return; }
+  if (t.id === 'w-del') { saveEditor(true); return; }
+  if (ed && t.dataset.rep) { ed.form.kind = t.dataset.rep; drawEditor(); return; }
+  if (ed && t.dataset.day && t.closest('#w-pop')) {
+    const d = t.dataset.day;
+    ed.form.days = ed.form.days.includes(d) ? ed.form.days.filter((x) => x !== d) : [...ed.form.days, d];
+    drawEditor(); return;
+  }
+  const seg = t.closest('.wbar[data-entry]');
+  if (seg) {
+    const e = week.entries[Number(seg.dataset.entry)], row = Number(seg.dataset.row);
+    if (ed && ed.id === e.id && ed.row === row) { week.edit = null; drawWeek(); } else openEditor(row, e);
+  }
+});
+$('w-grid').addEventListener('change', (ev) => {
+  const ed = week.edit, f = ev.target.dataset.f;
+  if (!ed || !f) return;
+  ed.form[f] = f === 'enabled' ? ev.target.checked : ev.target.value;
+  if (f === 'start' || f === 'end' || f === 'date') drawEditor();
+});
+$('w-add').addEventListener('click', () => {
+  const now = new Date(), m = Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / 30) * 30;
+  openEditor(m >= DAY_MIN ? 1 : 0, null, hhmm(m % DAY_MIN), hhmm((m + 120) % DAY_MIN));
+  week.edit.top = true; drawWeek();
+});
+// Click (1 hour) or drag across a day to add an entry there
+const wdrag = {on: false};
+$('w-grid').addEventListener('pointerdown', (ev) => {
+  const track = ev.target.closest('.track');
+  if (!track || ev.target.closest('.wbar') || ev.button !== 0) return;
+  Object.assign(wdrag, {on: true, track, rect: track.getBoundingClientRect(), x0: ev.clientX, x1: ev.clientX, row: Number(track.dataset.row)});
+  track.setPointerCapture(ev.pointerId);
+});
+$('w-grid').addEventListener('pointermove', (ev) => {
+  if (!wdrag.on) return;
+  wdrag.x1 = ev.clientX;
+  let g = wdrag.track.querySelector('.ghost');
+  if (!g) { g = document.createElement('div'); g.className = 'wbar ghost'; wdrag.track.appendChild(g); }
+  const a = Math.min(wdrag.x0, wdrag.x1) - wdrag.rect.left, b = Math.max(wdrag.x0, wdrag.x1) - wdrag.rect.left;
+  g.style.left = `${Math.max(0, a) / wdrag.rect.width * 100}%`; g.style.width = `${(Math.min(b, wdrag.rect.width) - Math.max(0, a)) / wdrag.rect.width * 100}%`;
+});
+$('w-grid').addEventListener('pointerup', () => {
+  if (!wdrag.on) return;
+  wdrag.on = false;
+  const toMin = (x) => Math.max(0, Math.min(DAY_MIN, (x - wdrag.rect.left) / wdrag.rect.width * DAY_MIN));
+  let a = Math.round(toMin(Math.min(wdrag.x0, wdrag.x1)) / 30) * 30, b = Math.round(toMin(Math.max(wdrag.x0, wdrag.x1)) / 30) * 30;
+  if (Math.abs(wdrag.x1 - wdrag.x0) < 6) { a = Math.floor(toMin(wdrag.x0) / 30) * 30; b = a + 60; }
+  if (b <= a) b = a + 30;
+  a = Math.min(a, DAY_MIN - 30); b = Math.min(b, DAY_MIN);
+  openEditor(wdrag.row, null, hhmm(a), hhmm(b % DAY_MIN));
+});
 async function schedCall(path, method, body, msg) {
   try {
     const v = await api(path, {method, headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)});
     drawSchedule(v); toast(msg); setTimeout(pollState, 800); return true;
   } catch (e) { toast('Failed: ' + e.message); return false; }
 }
-$('f-kind').addEventListener('click', (ev) => {
-  const k = ev.target.dataset.kind; if (!k) return;
-  schedKind = k;
-  $('f-kind').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.kind === k));
-  $('f-days').hidden = k !== 'weekly'; $('f-date').hidden = k !== 'once';
-  if (k === 'once' && !$('f-date').value) { const d = new Date(Date.now() + 86400000); $('f-date').value = d.toISOString().slice(0, 10); }
-});
-$('f-days').addEventListener('click', (ev) => {
-  const b = ev.target.closest('button[data-day]'); if (!b) return;
-  b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true');
-});
-$('f-add').addEventListener('click', async () => {
-  const body = {kind: schedKind, start: $('f-start').value, end: $('f-end').value, label: $('f-label').value.trim(),
-    high: $('f-high').value === '' ? null : Number($('f-high').value), low: $('f-low').value === '' ? null : Number($('f-low').value)};
-  if (schedKind === 'weekly') body.days = [...$('f-days').querySelectorAll('button[aria-pressed="true"]')].map((b) => b.dataset.day);
-  else body.date = $('f-date').value;
-  if (await schedCall('schedule', 'POST', body, 'Added to the schedule')) { $('f-high').value = ''; $('f-low').value = ''; $('f-label').value = ''; }
-});
 $('o-sched').addEventListener('click', (ev) => {
-  const t = ev.target.closest('button'); if (!t) return;
+  const t = ev.target.closest('button');
+  if (!t) {
+    const tr = ev.target.closest('tr[data-open]'), e = tr && week.entries.find((x) => x.id === tr.dataset.open);
+    if (e) { let row = 0; while (row < 6 && !occOn(e, row).length) row++; openEditor(row, e); $('w-pop') && $('w-pop').scrollIntoView({block: 'nearest', behavior: 'smooth'}); }
+    return;
+  }
   if (t.dataset.del) schedCall('schedule/' + t.dataset.del, 'DELETE', undefined, 'Removed from the schedule');
   else if (t.dataset.toggle) schedCall('schedule/' + t.dataset.toggle, 'POST', {enabled: t.dataset.on !== '1'}, t.dataset.on === '1' ? 'Paused' : 'Resumed');
 });

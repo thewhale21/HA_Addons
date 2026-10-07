@@ -61,7 +61,9 @@ virtual battery and the recent starts and stops.
 
 The **Power** card's diagram shows where the power is going: solar,
 the grid, the home battery, the house and the car, with dots moving along
-each flow (faster for more power). Solar is shared out to the house
+each flow (faster for more power). As in the Power Flow Card Plus, the
+grid shows ← sent to the grid and → taken from it, and the home battery
+and the car ↓ in and ↑ out. Solar is shared out to the house
 first, then the home battery, then the grid; the car hangs off the house.
 The house's use comes from `sensor.sigen_plant_consumed_power` (or is
 worked out from the others if that isn't set).
@@ -140,7 +142,10 @@ used whenever the schedule doesn't set a limit, and whenever nothing's
 on; they're the limit helpers, so a dashboard or automation can change
 them too. **Now** shows the limits in use and where each comes from.
 The schedule below changes the high and/or low limit for a while, every
-week or once:
+week or once. Its week view shows today and the next 6 days, with high
+limits in the top half of each day and low limits in the bottom half:
+click an entry to change, pause or delete it, or click or drag across a
+day (or **+ Add**) to add one.
 
 - Every week: e.g. Tue and Thu 23:00–08:00, high 50% (an entry can run
   past midnight).

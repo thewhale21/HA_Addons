@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.0 — Schedule week view, power flow fixes
+
+- **Feature:** a week view on the Schedule tab, like the OCPP Charge
+  Proxy's: today and the next 6 days, high limits in the top half of each
+  day and low limits in the bottom half. Click an entry to change, pause
+  or delete it; click or drag across a day (or + Add) to add one. The list
+  of entries is below it.
+- **Fix:** the power flow diagram reads the way the Power Flow Card Plus
+  does: the grid shows ← sent to the grid and → taken from it, the home
+  battery and the car ↓ in and ↑ out (both always shown for the battery),
+  with the SoC above the icon.
+- **Fix:** the moving dots go the right way in every browser (a flow
+  against a line's drawn direction now follows a reversed copy of it).
+
 ## 0.7.0 — Power flow
 
 - **Feature:** the Overview's Power and Virtual battery cards are one
