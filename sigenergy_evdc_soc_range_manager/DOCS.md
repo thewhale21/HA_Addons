@@ -57,7 +57,13 @@ It looks whenever one of your entities changes, and every few seconds anyway.
 
 The **Overview** shows what it's doing and why, the car's SoC against the
 limits (set them there too), the power readings it decides from, the
-energy in the car and the recent starts and stops. **Start charger** and
+virtual battery and the recent starts and stops.
+
+The **virtual battery** is the car between its limits seen as one
+battery, the way Predbat sees it through the available energy, window and
+battery rate sensors: how full it is, kWh stored of the window, what it's
+doing now and roughly when it'll be full or empty at that rate, its
+maximum rate, today's kWh in and out, and the car's capacity and health. **Start charger** and
 **Stop charger** press the buttons by hand.
 
 ## Settings

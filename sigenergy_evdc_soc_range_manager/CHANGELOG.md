@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — Virtual battery on the Overview
+
+- **Feature:** a Virtual battery card on the Overview: the car between its
+  limits as one battery (as Predbat sees it), with how full it is, kWh
+  stored of the window, what it's doing now and roughly when it'll be
+  full or empty, its maximum rate (and the home battery's and plant's),
+  today's kWh in and out, and the car's battery capacity and health. It
+  replaces the Energy in the car card.
+
 ## 0.3.0 — Battery statistics
 
 - **Feature:** a Statistics tab for the car's battery:

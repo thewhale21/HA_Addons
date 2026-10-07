@@ -203,6 +203,7 @@ class Manager:
             "energy_mode": plugged and _in(mode, lists["energy_mode_states"]),
             "fast_mode": plugged and _in(mode, lists["fast_mode_states"]),
             "available_kw": power_kw(get("available_power")),
+            "car_kw": power_kw(get("charger_power")),
             "home_soc": _float(get("home_battery_soc")), "home_kwh": _float(get("home_battery_capacity")),
         }
         self._settings = settings

@@ -190,6 +190,10 @@
   .chart .empty { color: var(--text2); font-size: 13px; padding: 30px 0; text-align: center; }
   .tip { position: absolute; pointer-events: none; z-index: 4; background: var(--card); color: var(--text); font-size: 12px;
     padding: 6px 9px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.2), 0 0 0 1px var(--divider); white-space: nowrap; }
+  /* The virtual battery: the car between its limits */
+  .meter { height: 10px; border-radius: 999px; background: var(--hover); box-shadow: inset 0 0 0 1px var(--divider);
+    margin-top: 12px; overflow: hidden; }
+  .meter > div { height: 100%; width: 0; border-radius: 999px; background: var(--primary); transition: width .4s; }
   .field { display: flex; align-items: center; gap: 6px; flex: none; }
   .field input[type="number"] { width: 84px; }
   .field .unit { color: var(--text2); min-width: 22px; }
@@ -257,8 +261,11 @@
         <dl class="kv" id="o-power"></dl>
       </div>
       <div class="card">
-        <h2>Energy in the car</h2>
-        <dl class="kv" id="o-energy"></dl>
+        <div class="label">Virtual battery</div>
+        <div class="big" id="o-vb">—</div>
+        <div class="sub" id="o-vb-sub"></div>
+        <div class="meter" id="o-vb-meter" role="meter" aria-label="Virtual battery charge" aria-valuemin="0" aria-valuemax="100"><div id="o-vb-fill"></div></div>
+        <dl class="kv" id="o-energy" style="margin-top:14px"></dl>
         <div class="note" id="o-energy-note"></div>
       </div>
     </div>
@@ -604,16 +611,30 @@ function renderState(s) {
     ['Charge signal', i.charge_signal == null ? '<span class="muted">Not set</span>' : i.charge_signal ? '<span class="chip ok">On</span>' : 'Off'],
   ]);
 
-  // Energy
-  const cap = r.capacity_kwh;
+  // The virtual battery: the car between its limits, as Predbat sees it
+  const cap = r.capacity_kwh, inUse = e.window_kwh > 0.01, rt = s.rates || {}, st = s.stats || {};
+  const stored = inUse ? Math.max(0, e.available_kwh > 0.01 ? Math.min(e.available_kwh, e.window_kwh) : 0) : null;
+  $('o-vb').textContent = inUse ? `${num(e.window_pct, 0)}%` : '—';
+  $('o-vb-sub').textContent = inUse ? `${num(stored, 1)} of ${num(e.window_kwh, 1)} kWh between ${num(i.low, 0)}% and ${num(i.high, 0)}%`
+    : !cap ? 'Set the car\'s battery capacity (the capacity helper) to see it' : 'In use while plugged in and in V2X or Solar Surplus mode';
+  $('o-vb-fill').style.width = `${inUse ? Math.min(100, Math.max(0, e.window_pct)) : 0}%`;
+  $('o-vb-meter').setAttribute('aria-valuenow', inUse ? Math.round(e.window_pct) : 0);
+  const flowKw = i.active && r.car_kw != null ? Math.abs(r.car_kw) : null;
+  let flow = '<span class="muted">Idle</span>', eta = null;
+  if (flowKw != null && flowKw > 0.05) {
+    flow = `${i.discharging ? 'Discharging' : 'Charging'} ${num(flowKw, 2)} kW`;
+    if (inUse) {
+      const left = i.discharging ? stored : e.window_kwh - stored;
+      if (left > 0.05) eta = `${i.discharging ? 'Empty' : 'Full'} in about ${dur(left / flowKw * 3600)}`;
+    }
+  } else if (i.active) flow = esc(i.running_state || 'Running');
   $('o-energy').innerHTML = kv([
-    ['Above the low limit', e.available_kwh > 0.01 ? `${num(e.available_kwh, 1)} kWh` : '—'],
-    ['Between the limits', e.window_kwh > 0.01 ? `${num(e.window_kwh, 1)} kWh` : '—'],
-    ['Window used', e.window_kwh > 0.01 ? `${num(e.window_pct, 0)}%` : '—'],
-    ['Battery capacity', cap ? `${num(cap, 1)} kWh` : '<span class="muted">Not set</span>'],
-    ['Battery rate', s.rates && s.rates.rate_kw != null ? `${num(s.rates.rate_kw, 2)} kW <span class="muted">· car ${num(s.rates.car_kw, 2)} · home ${num(s.rates.house_kw, 2)}</span>` : '—'],
+    ['Now', flow + (eta ? `<div class="sub">${eta}</div>` : '')],
+    ['Max rate', rt.car_kw != null && inUse ? `${num(rt.car_kw, 2)} kW <span class="muted">· home battery ${num(rt.house_kw, 2)} · plant ${num(rt.rate_kw, 2)}</span>` : '—'],
+    ['Today', st.today_in_kwh != null ? `${num(st.today_in_kwh, 1)} kWh in · ${num(st.today_out_kwh, 1)} kWh out` : '—'],
+    ['Car battery', cap ? `${num(cap, 1)} kWh` + (st.health_pct ? ` <span class="muted">· ${num(st.health_pct, 0)}% health</span>` : '') : '<span class="muted">Not set</span>'],
   ]);
-  $('o-energy-note').textContent = cap ? 'Shown while plugged in and in V2X or Solar Surplus mode.' : 'Set the car\'s battery capacity (the capacity helper) to see these.';
+  $('o-energy-note').textContent = inUse ? 'The car between its limits, as one battery: what Predbat sees through the available energy, window and battery rate sensors.' : '';
 
   // Log
   $('o-presses').textContent = `${s.presses_today || 0} button press${s.presses_today === 1 ? '' : 'es'} today`;

@@ -88,6 +88,9 @@ class Runner:
             if now - self._brief_at >= STATS_BRIEF_S:
                 self._brief_at = now
                 self.state.stats = self.stats_brief()
+            today = self.stats.days.get(datetime.datetime.fromtimestamp(now).strftime("%Y-%m-%d")) or {}
+            self.state.stats = {**self.state.stats, "today_in_kwh": round(today.get("car_in_kwh", 0.0), 2),
+                                "today_out_kwh": round(today.get("car_out_kwh", 0.0), 2)}
             if decision.rule != getattr(self, "_last_rule", None):
                 logger.debug("%s: %s", decision.status, decision.reason)
                 self._last_rule = decision.rule
