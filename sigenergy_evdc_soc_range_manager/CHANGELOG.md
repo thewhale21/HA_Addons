@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.0 — Limit schedule, round trip, costs and dropouts
+
+- **Feature:** a limit schedule on the Overview: change the high and/or
+  low limit for a while, every week (e.g. Tue and Thu 23:00–08:00 high
+  50%) or once (e.g. tomorrow 06:00–10:00 low 95%). The everyday limits
+  (the helpers) come back afterwards; one-off entries tidy themselves
+  away. Pause, resume or delete entries.
+- **Feature:** the round trip from the SoC: the kWh it takes to put 1%
+  into the car against the kWh back for 1% out, from each charge and
+  discharge (the median of the last 10 of each). The Statistics tab's
+  losses now come from this, with the inverter's measured figures beside
+  it when its sensors are there.
+- **Feature:** Is it paying? Import and export rate pickers (the Octopus
+  Energy integration's current rate sensors are found by themselves); what
+  charging cost and discharging was worth over 30 days, the margin on each
+  kWh out after the losses, the break-even price and what the losses cost.
+  An inverter AC ↔ DC efficiency setting (96%) covers the charger counting
+  DC.
+- **Feature:** discharge dropouts: each time the car stops discharging by
+  itself (not a stop from here, not unplugging) is logged on the Overview
+  and counted on the Statistics tab, with a sensor and an optional
+  notification after so many in a day.
+- **Fix:** the loss chart's axis showed 0.0 for small values.
+
 ## 0.4.0 — Virtual battery on the Overview
 
 - **Feature:** a Virtual battery card on the Overview: the car between its

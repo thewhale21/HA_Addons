@@ -319,3 +319,37 @@ def test_manager_reports_the_rates_and_counts_solar_surplus(tmp_path):
     assert d.rule == "not_v2x"  # Solar Surplus isn't V2X: the charger is left alone...
     assert m.energy()["window_kwh"] == 25.6  # ...but the energy and rate sensors count it
     assert m.snapshot(2.0)["rates"] == {"rate_kw": 8.0, "car_kw": 7.4, "house_kw": 2.6}
+
+
+def test_a_discharge_that_stops_by_itself_is_a_dropout(tmp_path):
+    p = Presses()
+    m = Manager(str(tmp_path), press=p.press)
+    ent, st = _entities(), _settings()
+    _run(m.step(_states(running="Discharging", battery="-1"), ent, st, now=1000.0))
+    _run(m.step(_states(running="Occupied", battery="-1"), ent, st, now=1010.0))
+    assert m.dropouts == [1010.0] and m.log[-1]["action"] == "dropout"
+    assert m.snapshot(1011.0)["last_action"] is None  # a dropout isn't a start or stop
+    # Stopped by us at the low limit: not a dropout
+    m.dropouts.clear()
+    _run(m.step(_states(running="Discharging", soc="45"), ent, st, now=2000.0))
+    _run(m.step(_states(running="Discharging", soc="39"), ent, st, now=2100.0))
+    assert m.log[-1]["action"] == "stop" and m.log[-1]["pressed"]
+    _run(m.step(_states(running="Occupied", soc="39"), ent, st, now=2110.0))
+    assert m.dropouts == []
+    # Unplugged while discharging: not a dropout either
+    _run(m.step(_states(running="Discharging", soc="60"), ent, st, now=3000.0))
+    _run(m.step(_states(running="Idle", soc="0"), ent, st, now=3010.0))
+    assert m.dropouts == []
+
+
+def test_the_schedule_changes_the_limits_used(tmp_path):
+    import datetime
+    from src.schedule import Schedule
+
+    m = Manager(str(tmp_path))
+    m.schedule = Schedule(str(tmp_path))
+    now = datetime.datetime(2026, 10, 6, 23, 30)  # Tuesday
+    m.schedule.add({"kind": "weekly", "days": ["tue"], "start": "23:00", "end": "08:00", "high": 50})
+    _run(m.step(_states(soc="60"), _entities(), _settings(), now=now.timestamp()))
+    assert m.inputs.high == 50 and m.readings["base_high"] == 80
+    assert m.readings["scheduled"][0]["high"] == 50 and m.decision.rule == "held_high"

@@ -33,6 +33,8 @@ NUMBERS = {
     "car_rate_kw": (0, 100),
     "capacity_min_span_pct": (2, 100),
     "clean_share_pct": (0, 100),
+    "inverter_efficiency_pct": (50, 100),
+    "dropout_alert": (0, 50),
 }
 BOOLS = ("observe_only", "flip_inverter_power")
 LISTS = tuple(LIST_DEFAULTS)
@@ -43,6 +45,7 @@ DEFAULTS = {
     **STATS_DEFAULTS,
     "observe_only": False,  # decide and log, but don't press the buttons
     "notify_service": "",  # e.g. notify.mobile_app_phone: told when it starts or stops the charger
+    "dropout_alert": 0,  # ...and when the car stops discharging by itself this many times in a day (0: never)
     **{k: list(v) for k, v in LIST_DEFAULTS.items()},
 }
 

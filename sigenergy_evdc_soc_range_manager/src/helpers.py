@@ -40,14 +40,35 @@ def slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
+OCTOPUS_RATE = re.compile(r"^sensor\.octopus_energy_electricity_.+_current_rate$")
+
+
+def find_rates(states: dict) -> dict:
+    """The Octopus Energy integration's import and export current rate sensors, if there are any."""
+    ids = sorted(e for e in states if OCTOPUS_RATE.match(e or ""))
+    found = {}
+    imports = [e for e in ids if "export" not in e]
+    exports = [e for e in ids if e.endswith("_export_current_rate")]
+    if imports:
+        found["import_rate"] = imports[0]
+    if exports:
+        found["export_rate"] = exports[0]
+    return found
+
+
 async def ensure_helpers(link) -> list[str]:
     """Fill any empty helper picker: an existing helper of the same name, or a new one.
     Returns what was done, for the log."""
     missing = [key for key in HELPERS if not link.settings.get(key)]
-    if not missing:
+    rates_missing = not link.settings.get("import_rate") and not link.settings.get("export_rate")
+    if not missing and not rates_missing:
         return []
     states = {st.get("entity_id"): st for st in await link.all_states(fresh=True)}
     changes, done = {}, []
+    if rates_missing:
+        for key, entity_id in find_rates(states).items():
+            changes[key] = entity_id
+            done.append(f"{'Import' if key == 'import_rate' else 'Export'} rate: using {entity_id}")
     for key in missing:
         kind, spec = HELPERS[key]
         existing = f"{kind}.{slugify(spec['name'])}"
@@ -64,7 +85,8 @@ async def ensure_helpers(link) -> list[str]:
         entity_id = f"{kind}.{(result or {}).get('id') or slugify(spec['name'])}"
         changes[key] = entity_id
         done.append(f"{spec['name']}: made {entity_id}" + (f" at {spec['initial']:g}" if kind == "input_number" else ""))
-    await link.update_settings(changes)
+    if changes:
+        await link.update_settings(changes)
     for line in done:
         logger.info("Helpers: %s", line)
     return done

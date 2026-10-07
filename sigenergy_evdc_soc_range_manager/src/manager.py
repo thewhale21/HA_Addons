@@ -71,6 +71,15 @@ def energy_kwh(st: Optional[dict], unit: Optional[str] = None) -> Optional[float
     return value / 1000 if unit == "Wh" else value * 1000 if unit == "MWh" else value
 
 
+def price_gbp(st: Optional[dict]) -> Optional[float]:
+    """A rate sensor's price in £/kWh (p/kWh converted)."""
+    value = _float(st)
+    if value is None:
+        return None
+    unit = (((st or {}).get("attributes") or {}).get("unit_of_measurement") or "").lower()
+    return value / 100 if unit.startswith("p") or "pence" in unit else value
+
+
 def _text(st: Optional[dict]) -> Optional[str]:
     value = (st or {}).get("state")
     return None if value is None or str(value).lower() in UNKNOWN else str(value)
@@ -93,6 +102,9 @@ class Manager:
         self._path = os.path.join(data_dir, "state.json") if data_dir else None
         self.press = press  # (entity_id) -> presses that button
         self.notify = notify  # (title, message) -> sends a notification
+        self.schedule = None  # src.schedule.Schedule: limits changed for a while
+        self.was_discharging = False  # what the charger was doing while it last ran
+        self.dropouts: list[float] = []  # times the car stopped discharging by itself, not yet collected
         self.soc: Optional[float] = None  # the car's last known SoC
         self.soc_at: Optional[float] = None  # ...when it was read
         self.soc_before_plug_in = False  # ...and it's from before the car was last plugged in
@@ -158,7 +170,11 @@ class Manager:
         elif active != self.active:
             self.active_since = now
             logger.info("Charger %s (%s)", "running" if active else "stopped", running or "unknown")
+            if not active and self.was_discharging and plugged and not self._stopped_by_us(now):
+                self._dropout(now)
         self.active = active
+        if active:
+            self.was_discharging = discharging
 
         if plugged and self.plugged is False:
             self.soc_before_plug_in = self.soc is not None  # until a new reading arrives
@@ -174,6 +190,13 @@ class Manager:
                 self._save()
             else:
                 self.soc_at = now
+
+        base_high, base_low = _float(get("soc_high")), _float(get("soc_low"))
+        high, low, scheduled = base_high, base_low, []
+        if self.schedule is not None:
+            local = datetime.datetime.fromtimestamp(now)
+            self.schedule.tidy(local)
+            high, low, scheduled = self.schedule.apply(base_high, base_low, local)
 
         mode_st = get("v2x_mode")
         mode = _text(mode_st)
@@ -193,12 +216,15 @@ class Manager:
         self.inputs = Inputs(
             plugged_in=plugged, mode_on=mode_on, running_state=running, active=active, discharging=discharging,
             inactive_for=None if active else max(0.0, now - (now if self.active_since is None else self.active_since)),
-            soc=self.soc, high=_float(get("soc_high")), low=_float(get("soc_low")),
+            soc=self.soc, high=high, low=low,
             battery_kw=power_kw(get("battery_power")), grid_kw=power_kw(get("grid_power")),
             export_kw=export, export_held_s=0.0 if self.export_since is None else now - self.export_since,
             ems_mode=ems, charge_signal=signal, ems_blocked=_in(ems, lists["blocked_ems_modes"]),
         )
         self.readings = {
+            "base_high": base_high, "base_low": base_low,
+            "scheduled": [{"id": e["id"], "high": e["high"], "low": e["low"], "until": e["until"],
+                           "label": e.get("label") or ""} for e in scheduled],
             "capacity_kwh": _float(get("capacity")), "mode": mode,
             "energy_mode": plugged and _in(mode, lists["energy_mode_states"]),
             "fast_mode": plugged and _in(mode, lists["fast_mode_states"]),
@@ -264,6 +290,28 @@ class Manager:
                 logger.warning("Couldn't send the notification: %s", err)
         return entry
 
+    def _stopped_by_us(self, now: float) -> bool:
+        """Did a stop from here (or the page) come just before the charger stopped?"""
+        for entry in reversed(self.log):
+            if entry.get("action") == "stop" and entry.get("pressed"):
+                try:
+                    at = datetime.datetime.fromisoformat(entry["at"].replace("Z", "+00:00")).timestamp()
+                except (KeyError, ValueError):
+                    return False
+                return now - at <= 180
+            if entry.get("action") == "start":
+                return False
+        return False
+
+    def _dropout(self, now: float) -> None:
+        """The car stopped discharging without being told to."""
+        self.dropouts.append(now)
+        self.log.append({"at": _iso(now), "action": "dropout", "rule": "dropout",
+                         "reason": "The car stopped discharging by itself.", "soc": self.soc,
+                         "pressed": False, "observe_only": False, "error": None})
+        self._save()
+        logger.info("The car stopped discharging by itself (at %s%%)", self.soc)
+
     def _new_day(self, now: float) -> None:
         day = datetime.datetime.fromtimestamp(now).strftime("%Y-%m-%d")
         if day != self.day:
@@ -307,6 +355,7 @@ class Manager:
             soc=_float(get("vehicle_soc")), e_in=energy_kwh(get("charged_energy")),
             e_out=energy_kwh(get("discharged_energy")), car_kw=power_kw(get("charger_power")),
             pv_kw=power_kw(get("pv_power")), batt_kw=i.battery_kw, ac_kw=power_kw(get("inverter_power")),
+            grid_kw=i.grid_kw, import_price=price_gbp(get("import_rate")), export_price=price_gbp(get("export_rate")),
         )
 
     def snapshot(self, now: Optional[float] = None) -> dict:
@@ -322,7 +371,7 @@ class Manager:
             "soc_before_plug_in": self.soc_before_plug_in,
             "active_since": _iso(self.active_since),
             "presses_today": self.presses_today,
-            "last_action": self.log[-1] if self.log else None,
+            "last_action": next((x for x in reversed(self.log) if x.get("action") in ("start", "stop")), None),
             "log": list(self.log)[-30:][::-1],
             "energy": self.energy(),
             "rates": self.rates(),

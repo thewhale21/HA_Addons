@@ -23,7 +23,7 @@ LIVE_FIELDS = {"timers", "updated"}
 
 
 def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_settings=None,
-                   runner=None) -> web.Application:
+                   runner=None, schedule=None) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state  # src.shared_state.SharedState
     app["ha_link"] = ha_link  # src.ha_link.HaLink, or None
@@ -31,6 +31,7 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app["debug"] = debug  # src.debug_tools.DebugTools, or None
     app["app_settings"] = app_settings  # src.app_settings.AppSettings, or None
     app["runner"] = runner  # src.__main__.Runner, or None
+    app["schedule"] = schedule  # src.schedule.Schedule, or None
     app["events_stop"] = asyncio.Event()
     app["event_clients"] = {"gui": 0}
     app["static_dir"] = Path(__file__).parent / "static"
@@ -47,6 +48,11 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     # The charger and its limits (Overview)
     app.router.add_post("/api/charger", handle_charger)
     app.router.add_post("/api/limits", handle_limits)
+    # Scheduled limits (src/schedule.py)
+    app.router.add_get("/api/schedule", handle_get_schedule)
+    app.router.add_post("/api/schedule", handle_add_schedule)
+    app.router.add_post("/api/schedule/{id}", handle_update_schedule)
+    app.router.add_delete("/api/schedule/{id}", handle_delete_schedule)
     # Statistics tab (src/stats.py)
     app.router.add_get("/api/stats", handle_stats)
     # Settings made on the web page (src/app_settings.py)
@@ -198,8 +204,10 @@ async def handle_limits(request: web.Request) -> web.Response:
                 if not 0 <= value <= 100:
                     raise ValueError("Limits are 0 to 100%")
                 wanted[key] = value
-        current = request.app["shared_state"].inputs or {}
-        high, low = wanted.get("high", current.get("high")), wanted.get("low", current.get("low"))
+        st = request.app["shared_state"]
+        current, base = st.inputs or {}, st.readings or {}  # the everyday limits, not scheduled ones
+        high = wanted.get("high", base.get("base_high", current.get("high")))
+        low = wanted.get("low", base.get("base_low", current.get("low")))
         if high is not None and low is not None and low >= high:
             raise ValueError("The low limit must be below the high limit")
         for key, value in wanted.items():
@@ -216,6 +224,48 @@ async def handle_limits(request: web.Request) -> web.Response:
     except Exception as err:
         return web.json_response({"status": "error", "message": f"Home Assistant refused it: {err}"}, status=502)
     return web.json_response({"status": "ok", **wanted})
+
+
+def _schedule_view(schedule) -> dict:
+    import datetime
+
+    now = datetime.datetime.now()
+    return {"entries": schedule.entries, "active": schedule.active(now), "upcoming": schedule.upcoming(now)}
+
+
+async def _schedule_call(request: web.Request, apply) -> web.Response:
+    schedule = request.app["schedule"]
+    if schedule is None:
+        return _unavailable()
+    try:
+        body = await request.json() if request.can_read_body else {}
+        apply(schedule, body)
+    except KeyError:
+        return web.json_response({"status": "error", "message": "No such entry"}, status=404)
+    except (ValueError, TypeError, json.JSONDecodeError) as err:
+        return _bad_request(err)
+    runner = request.app["runner"]
+    if runner is not None:
+        runner.wake.set()  # use the new limits straight away
+    return web.json_response({"status": "ok", **_schedule_view(schedule)})
+
+
+async def handle_get_schedule(request: web.Request) -> web.Response:
+    if request.app["schedule"] is None:
+        return _unavailable()
+    return web.json_response(_schedule_view(request.app["schedule"]))
+
+
+async def handle_add_schedule(request: web.Request) -> web.Response:
+    return await _schedule_call(request, lambda s, b: s.add(b))
+
+
+async def handle_update_schedule(request: web.Request) -> web.Response:
+    return await _schedule_call(request, lambda s, b: s.update(request.match_info["id"], b))
+
+
+async def handle_delete_schedule(request: web.Request) -> web.Response:
+    return await _schedule_call(request, lambda s, b: s.remove(request.match_info["id"]))
 
 
 async def handle_stats(request: web.Request) -> web.Response:

@@ -26,6 +26,7 @@ from src.ha_link import HaLink
 from src.health import Health
 from src.helpers import ensure_helpers
 from src.manager import Manager, samples_from_history
+from src.schedule import Schedule
 from src.stats import StatsRecorder
 from src.shared_state import SharedState
 
@@ -82,6 +83,8 @@ class Runner:
                 self.manager.press = None
             now = time.time()
             decision = await self.manager.step(self.link.states, entities, self.settings.data, now)
+            while self.manager.dropouts:
+                await self.dropout(self.manager.dropouts.pop(0))
             sample = self.manager.stats_sample(self.link.states, entities, now)
             if sample is not None:
                 self.stats.feed(sample, self.settings.data)
@@ -90,19 +93,33 @@ class Runner:
                 self.state.stats = self.stats_brief()
             today = self.stats.days.get(datetime.datetime.fromtimestamp(now).strftime("%Y-%m-%d")) or {}
             self.state.stats = {**self.state.stats, "today_in_kwh": round(today.get("car_in_kwh", 0.0), 2),
-                                "today_out_kwh": round(today.get("car_out_kwh", 0.0), 2)}
+                                "today_out_kwh": round(today.get("car_out_kwh", 0.0), 2),
+                                "dropouts_today": int(today.get("dropouts", 0))}
             if decision.rule != getattr(self, "_last_rule", None):
                 logger.debug("%s: %s", decision.status, decision.reason)
                 self._last_rule = decision.rule
             self.publish()
 
     def stats_summary(self) -> dict:
-        return self.stats.summary(self.manager.readings.get("capacity_kwh") or None)
+        return self.stats.summary(self.manager.readings.get("capacity_kwh") or None, settings=self.settings.data)
+
+    async def dropout(self, ts: float) -> None:
+        """The car stopped discharging by itself: count it, and say so if it's happening a lot."""
+        self.stats.record_dropout(ts)
+        today = int(self.stats.days.get(datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d"), {}).get("dropouts", 0))
+        alert = int(self.settings.data.get("dropout_alert") or 0)
+        if alert and today >= alert:
+            try:
+                await self.notify("V2X: car keeps stopping discharging",
+                                  f"The car has stopped discharging by itself {today} times today.")
+            except Exception as err:
+                logger.warning("Couldn't send the notification: %s", err)
 
     def stats_brief(self) -> dict:
         """What the statistics sensors show."""
         s = self.stats_summary()
         return {"capacity_kwh": s["capacity_kwh"], "health_pct": s["health_pct"],
+                "round_trip": s["round_trip"], "dropouts_today": s["dropouts_today"],
                 "charge_efficiency": s["charge_efficiency"]["median"],
                 "discharge_efficiency": s["discharge_efficiency"]["median"],
                 "today_car_loss_kwh": s["today_car_loss_kwh"]}
@@ -167,6 +184,8 @@ async def run() -> None:
     state = SharedState()
     health = Health()
     manager = Manager(data_dir)
+    schedule = Schedule(data_dir)
+    manager.schedule = schedule
     runner: Optional[Runner] = None
 
     async def entity_changed(entity_id: str, st: Optional[dict]) -> None:
@@ -194,7 +213,8 @@ async def run() -> None:
     settings.on_change = lambda changes: runner.wake.set()
     debug = DebugTools(config=config, log_buffer=log_buffer, settings=settings)
 
-    app = create_api_app(state, ha_link=link, health=health, debug=debug, app_settings=settings, runner=runner)
+    app = create_api_app(state, ha_link=link, health=health, debug=debug, app_settings=settings, runner=runner,
+                         schedule=schedule)
     web_runner = web.AppRunner(app)
     await web_runner.setup()
     await web.TCPSite(web_runner, "0.0.0.0", PORT).start()

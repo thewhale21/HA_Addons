@@ -62,6 +62,9 @@ ENTITY_KEYS = {
     "discharged_energy": ("sensor",),
     "pv_power": ("sensor",),
     "inverter_power": ("sensor",),
+    # For the costs (e.g. the Octopus Energy integration's current rate sensors)
+    "import_rate": ("sensor", "input_number", "number"),
+    "export_rate": ("sensor", "input_number", "number"),
 }
 # What a new install starts with: the Sigenergy integration's entity IDs. The
 # limits, capacity and V2X mode are made as helpers when left empty

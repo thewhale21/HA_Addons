@@ -57,6 +57,11 @@ SENSORS = {
     "conversion_loss_today": (f"sensor.{PREFIX}_conversion_loss_today", {
         "friendly_name": f"{NAME} Conversion Loss Today", "unit_of_measurement": "kWh",
         "state_class": "measurement", "icon": "mdi:fire"}),
+    "round_trip_efficiency": (f"sensor.{PREFIX}_round_trip_efficiency", {
+        "friendly_name": f"{NAME} Round Trip Efficiency", "unit_of_measurement": "%", "state_class": "measurement",
+        "icon": "mdi:sync"}),
+    "dropouts_today": (f"sensor.{PREFIX}_dropouts_today", {
+        "friendly_name": f"{NAME} Discharge Dropouts Today", "icon": "mdi:car-off"}),
     "presses_today": (f"sensor.{PREFIX}_presses_today", {
         "friendly_name": f"{NAME} Button Presses Today", "icon": "mdi:gesture-tap-button"}),
 }
@@ -99,6 +104,8 @@ def values(state) -> dict:
         "charge_efficiency": _pct(st.get("charge_efficiency")),
         "discharge_efficiency": _pct(st.get("discharge_efficiency")),
         "conversion_loss_today": st.get("today_car_loss_kwh"),
+        "round_trip_efficiency": _pct(st.get("round_trip")),
+        "dropouts_today": st.get("dropouts_today"),
         "presses_today": state.presses_today,
     }
 

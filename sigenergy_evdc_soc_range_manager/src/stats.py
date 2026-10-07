@@ -39,13 +39,15 @@ STATS_DEFAULTS = {
     "capacity_min_span_pct": 10.0,  # SoC a session must move to estimate the capacity from it
     "clean_share_pct": 10.0,  # solar + home battery under this % of the car's energy = a clean session
     "flip_inverter_power": False,  # the inverter's power reads negative when it feeds the house
+    "inverter_efficiency_pct": 96.0,  # AC <-> DC each way, for the costs (the charger's counters are DC)
 }
 MAX_SESSIONS = 1000
 MAX_DAYS = 400
 MAX_GAP_S = 120  # readings further apart than this aren't integrated across
 SAVE_EVERY_S = 300
 DAY_FIELDS = ("pv_kwh", "batt_in_kwh", "batt_out_kwh", "ac_in_kwh", "ac_out_kwh", "loss_kwh", "car_loss_kwh",
-              "car_in_kwh", "car_out_kwh", "measured_h")
+              "car_in_kwh", "car_out_kwh", "measured_h", "dropouts",
+              "in_cost", "in_priced_kwh", "out_value", "out_priced_kwh")
 
 
 @dataclass
@@ -59,6 +61,9 @@ class Sample:
     pv_kw: Optional[float] = None  # solar
     batt_kw: Optional[float] = None  # home battery: positive charging
     ac_kw: Optional[float] = None  # inverter: positive = DC -> AC (feeding the house / grid)
+    grid_kw: Optional[float] = None  # grid: positive importing
+    import_price: Optional[float] = None  # £/kWh now
+    export_price: Optional[float] = None
 
 
 def _iso(ts: Optional[float]) -> Optional[str]:
@@ -69,6 +74,17 @@ def _iso(ts: Optional[float]) -> Optional[str]:
 
 def _day(ts: float) -> str:
     return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+
+
+def _price(s: Sample, charging: bool) -> Optional[float]:
+    """What a kWh into (or out of) the car was worth at the time. Charging while
+    importing costs the import price; otherwise it's energy you could have
+    exported. Discharging while exporting earns the export price; otherwise it
+    saves importing."""
+    grid = s.grid_kw or 0.0
+    if charging:
+        return s.import_price if grid > 0.05 else (s.export_price if s.export_price is not None else s.import_price)
+    return s.export_price if grid < -0.05 and s.export_price is not None else s.import_price
 
 
 def _r(v: Optional[float], n: int = 3) -> Optional[float]:
@@ -127,7 +143,13 @@ class StatsRecorder:
             if len(self.days) > MAX_DAYS:
                 for old in sorted(self.days)[:-MAX_DAYS]:
                     del self.days[old]
+        for k in DAY_FIELDS:
+            row.setdefault(k, 0.0)  # saved by an older version
         return row
+
+    def record_dropout(self, ts: float) -> None:
+        self._dayrow(ts)["dropouts"] += 1
+        self.save(ts)
 
     def feed(self, s: Sample, settings: Optional[dict] = None, live: bool = True) -> None:
         t = {**STATS_DEFAULTS, **(settings or {})}
@@ -147,7 +169,16 @@ class StatsRecorder:
         """The car's energy each day, from the charger's counters."""
         for field, x, y in (("car_in_kwh", a.e_in, b.e_in), ("car_out_kwh", a.e_out, b.e_out)):
             if x is not None and y is not None and 0 < y - x < 100:  # a reset or a glitch isn't energy
-                self._dayrow(b.now)[field] += y - x
+                row = self._dayrow(b.now)
+                row[field] += y - x
+                price = _price(a, charging=field == "car_in_kwh")
+                if price is not None:
+                    if field == "car_in_kwh":
+                        row["in_cost"] += (y - x) * price
+                        row["in_priced_kwh"] += y - x
+                    else:
+                        row["out_value"] += (y - x) * price
+                        row["out_priced_kwh"] += y - x
 
     def _integrate(self, a: Sample, dt: float, flip: bool) -> None:
         """Loss over dt seconds from reading `a`: what went into the inverter's DC side
@@ -285,7 +316,8 @@ class StatsRecorder:
 
     # --- for the page and the sensors ---------------------------------------------------------
 
-    def summary(self, nominal_kwh: Optional[float] = None, now: Optional[float] = None) -> dict:
+    def summary(self, nominal_kwh: Optional[float] = None, now: Optional[float] = None,
+                settings: Optional[dict] = None) -> dict:
         import time
 
         now = time.time() if now is None else now
@@ -310,7 +342,39 @@ class StatsRecorder:
         keys = sorted(self.days)
         since = _day(now - 29 * 86400)
         last30 = [k for k in keys if k >= since]
-        totals = {f: round(sum(self.days[k][f] for k in last30), 2) for f in DAY_FIELDS}
+        totals = {f: round(sum(self.days[k].get(f, 0.0) for k in last30), 4) for f in DAY_FIELDS}
+
+        # Round trip from the SoC: kWh per 1% going in, against kWh per 1% coming out
+        def per_pct(direction):
+            vals = [x["capacity_kwh"] / 100 for x in self.sessions if x["direction"] == direction and x.get("capacity_kwh")]
+            vals = vals[-10:]
+            return {"kwh": _r(statistics.median(vals), 4) if vals else None, "sessions": len(vals)}
+        pin, pout = per_pct("charge"), per_pct("discharge")
+        round_trip = pout["kwh"] / pin["kwh"] if pin["kwh"] and pout["kwh"] else None
+        if round_trip is not None and not 0.3 <= round_trip <= 1.2:
+            round_trip = None  # too few or odd readings
+        soc_loss = (lambda out: out * (1 / round_trip - 1)) if round_trip else None
+
+        # Money: the charger's counters are DC, the prices are for AC
+        inv = float((settings or {}).get("inverter_efficiency_pct", STATS_DEFAULTS["inverter_efficiency_pct"])) / 100
+        money = None
+        if totals["in_priced_kwh"] > 0 or totals["out_priced_kwh"] > 0:
+            in_avg = totals["in_cost"] / totals["in_priced_kwh"] if totals["in_priced_kwh"] else None
+            out_avg = totals["out_value"] / totals["out_priced_kwh"] if totals["out_priced_kwh"] else None
+            money = {"in_kwh": round(totals["in_priced_kwh"], 2), "out_kwh": round(totals["out_priced_kwh"], 2),
+                     "in_cost": round(totals["in_cost"] / inv, 2), "out_value": round(totals["out_value"] * inv, 2),
+                     "in_price": _r(in_avg, 4), "out_price": _r(out_avg, 4), "inverter_efficiency": inv}
+            money["net"] = round(money["out_value"] - money["in_cost"], 2)
+            if in_avg is not None and round_trip:
+                whole = round_trip * inv * inv  # AC in -> car -> AC out
+                money["whole_round_trip"] = round(whole, 4)
+                money["break_even_price"] = round(in_avg / whole, 4)  # what a kWh out must be worth
+                if out_avg is not None:
+                    margin = out_avg * inv - in_avg / (inv * round_trip)  # per kWh out of the car
+                    money["margin_per_kwh"] = round(margin, 4)
+                    money["profit"] = round(margin * totals["out_priced_kwh"], 2)
+                    # what the losses cost: the extra AC bought to get each kWh back out
+                    money["loss_cost"] = round(totals["out_priced_kwh"] * inv * in_avg * (1 / whole - 1), 2)
         today = self.days.get(_day(now), {})
         return {
             "capacity_kwh": _r(capacity, 2), "nominal_kwh": nominal_kwh,
@@ -318,7 +382,14 @@ class StatsRecorder:
             "estimates": ests[-200:], "trend": trend,
             "charge_efficiency": eff("charge"), "discharge_efficiency": eff("discharge"),
             "last30": totals, "today_car_loss_kwh": round(today.get("car_loss_kwh", 0.0), 3),
-            "days": [{"day": k, **{f: round(self.days[k][f], 3) for f in DAY_FIELDS}} for k in last30],
+            "per_pct_in": pin, "per_pct_out": pout, "round_trip": _r(round_trip, 4),
+            "soc_loss_30_kwh": round(soc_loss(totals["car_out_kwh"]), 2) if soc_loss else None,
+            "money": money, "dropouts_today": int(today.get("dropouts", 0)),
+            "dropouts_7": int(sum(self.days[k].get("dropouts", 0) for k in keys if k >= _day(now - 6 * 86400))),
+            "dropouts_30": int(totals["dropouts"]),
+            "days": [{"day": k, **{f: round(self.days[k].get(f, 0.0), 3) for f in DAY_FIELDS},
+                      "soc_loss_kwh": round(soc_loss(self.days[k].get("car_out_kwh", 0.0)), 3) if soc_loss else None}
+                     for k in last30],
             "sessions": self.sessions[-25:][::-1], "session_count": len(self.sessions),
             "since": keys[0] if keys else None, "recording_since": _iso(self.started),
             "in_session": None if self.current is None else {

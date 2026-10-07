@@ -126,6 +126,24 @@ Settings tab, and the plant entities default to Sigenergy's
 `sensor.sigen_plant_battery_state_of_charge`,
 `sensor.sigen_inverter_rated_battery_capacity`).
 
+## Limit schedule
+
+On the Overview, **Limit schedule** changes the high and/or low limit for
+a while, every week or once:
+
+- Every week: e.g. Tue and Thu 23:00–08:00, high 50% (an entry can run
+  past midnight).
+- Once: e.g. tomorrow 06:00–10:00, low 95% (the car isn't discharged
+  below 95% that morning). One-off entries are removed once they've
+  finished.
+
+The limit helpers are your everyday limits and aren't changed; while an
+entry is on, its limits are used instead (the Car card says so). Where
+entries overlap, the one that started last wins. If a scheduled limit
+crosses the other one, the other moves out of its way (a scheduled low of
+95% with an everyday high of 80% makes the high 96%). The energy and rate
+sensors use the scheduled limits too, so Predbat sees the change.
+
 ## Statistics
 
 The **Statistics** tab is about the car's battery.
@@ -140,7 +158,30 @@ measured at the charger, so it includes the car's own charging losses,
 and the car's SoC reading has its own quirks. Watch the trend rather than
 any one figure. Fast charges from low to high give the best estimates.
 
-**Conversion losses.** Every few seconds it compares the inverter's DC
+**Round trip.** Each charge and discharge that moves the SoC far enough
+gives the kWh per 1%: say 0.60 kWh to put 1% in, but only 0.54 kWh back
+for 1% out, a 90% round trip. The median of the last 10 of each is used,
+and the last 30 days' losses are the kWh out of the car × (1 ÷ round trip
+− 1). This covers the charger and the car; the inverter's own AC ↔ DC
+loss is on top.
+
+**Is it paying?** With your import and export rate sensors set (the
+Octopus Energy integration's current rate sensors are picked up by
+themselves), every kWh into the car is priced at the import rate when
+you're importing, otherwise at the export rate you gave up; every kWh out
+at the import rate it saves, or the export rate when exporting. Over 30
+days it shows what charging cost, what discharging was worth, the margin
+on each kWh out after the losses, the break-even price a kWh out must be
+worth, and what the losses cost. The charger counts DC energy and you pay
+for AC, so the **Inverter AC ↔ DC efficiency** setting (96%, each way) is
+applied. Prices are recorded from when they're set.
+
+**Discharge dropouts.** Each time the car stops discharging by itself
+(not a stop from here, and not unplugging) is logged on the Overview and
+counted by day. **Dropout alert** (Settings) sends a notification after
+so many in a day.
+
+**Inverter losses.** Every few seconds it also compares the inverter's DC
 side (solar in, home battery in or out, car in or out) with its AC side;
 what goes in and doesn't come out is lost. The car is given its share of
 that by its share of the DC flow at the time. Sessions with little solar
@@ -163,7 +204,9 @@ capacity estimates; the losses are recorded from then on.
 | `sensor.evdc_soc_range_battery_health` | ...as a % of the capacity helper |
 | `sensor.evdc_soc_range_charge_efficiency` | AC → car (%) |
 | `sensor.evdc_soc_range_discharge_efficiency` | Car → AC (%) |
-| `sensor.evdc_soc_range_conversion_loss_today` | The car's share of today's conversion loss (kWh) |
+| `sensor.evdc_soc_range_conversion_loss_today` | The car's share of today's inverter loss (kWh) |
+| `sensor.evdc_soc_range_round_trip_efficiency` | kWh out per 1% ÷ kWh in per 1% (%) |
+| `sensor.evdc_soc_range_dropouts_today` | Times the car stopped discharging by itself today |
 
 ## Diagnostics
 
