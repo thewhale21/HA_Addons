@@ -23,6 +23,7 @@ class SharedState:
     log: list = field(default_factory=list)  # recent starts and stops, newest first
     energy: dict = field(default_factory=dict)  # kWh above the low limit, kWh between the limits, %
     rates: dict = field(default_factory=dict)  # the V2X battery rates, kW (src/rates.py)
+    flow: dict = field(default_factory=dict)  # the power flow diagram (src/flow.py)
     stats: dict = field(default_factory=dict)  # the statistics sensors' values (src/stats.py; the page uses /api/stats)
     readings: dict = field(default_factory=dict)
     observe_only: bool = False
@@ -34,7 +35,7 @@ class SharedState:
         self.timers = {k: inputs.pop(k, None) for k in ("inactive_for", "export_held_s")}
         self.inputs = inputs
         for key in ("status", "reason", "rule", "soc_at", "soc_before_plug_in", "active_since", "presses_today",
-                    "last_action", "log", "energy", "rates", "readings"):
+                    "last_action", "log", "energy", "rates", "flow", "readings"):
             setattr(self, key, snap.get(key))
         self.observe_only = observe_only
 

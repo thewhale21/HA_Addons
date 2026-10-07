@@ -62,6 +62,7 @@ ENTITY_KEYS = {
     "discharged_energy": ("sensor",),
     "pv_power": ("sensor",),
     "inverter_power": ("sensor",),
+    "home_power": ("sensor",),
     # For the costs (e.g. the Octopus Energy integration's current rate sensors)
     "import_rate": ("sensor", "input_number", "number"),
     "export_rate": ("sensor", "input_number", "number"),
@@ -86,6 +87,7 @@ DEFAULT_ENTITIES = {
     "discharged_energy": "sensor.sigen_inverter_dc_charger_total_discharging_capacity",
     "pv_power": "sensor.sigen_plant_pv_power",
     "inverter_power": "sensor.sigen_inverter_active_power",
+    "home_power": "sensor.sigen_plant_consumed_power",
 }
 
 

@@ -202,6 +202,19 @@
   tr.off td { opacity: .5; }
   td.acts { white-space: nowrap; }
   @media (max-width: 640px) { td.acts button { display: block; margin: 0 0 6px auto; } }
+  /* Power flow: solar, grid, home battery, house and car */
+  .flowwrap { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 760px) { .flowwrap { grid-template-columns: 1fr; } }
+  .flow svg { display: block; width: 100%; height: auto; max-width: 460px; margin: 0 auto; }
+  .flow .ln { fill: none; stroke-width: 1.5; opacity: .22; }
+  .flow .ln.on { opacity: 1; }
+  .flow .node { fill: var(--card); stroke-width: 3; }
+  .flow text { fill: var(--text); font-size: 12px; text-anchor: middle; }
+  .flow text.lbl { fill: var(--text2); font-size: 12.5px; }
+  .flow text.big { font-size: 13px; font-weight: 500; }
+  .flow .ico { fill: var(--text); }
+  :root { --f-solar: #ff9800; --f-import: #488fc2; --f-export: #8353d1; --f-bin: #f06292; --f-bout: #4db6ac; --f-home: #5ec9b6; --f-car: var(--primary); }
+  @media (prefers-reduced-motion: reduce) { .flow animateMotion { display: none; } }
   .field { display: flex; align-items: center; gap: 6px; flex: none; }
   .field input[type="number"] { width: 84px; }
   .field .unit { color: var(--text2); min-width: 22px; }
@@ -259,17 +272,19 @@
         <div class="row" id="o-sched-now" hidden style="margin-top:10px"></div>
         <div class="row" style="margin-top:12px"><div class="grow note" style="margin:0" id="o-limits-note"></div><button class="btn small" id="o-to-schedule">Limits and schedule</button></div>
       </div>
-      <div class="card">
+      <div class="card" style="grid-column:1/-1">
         <h2>Power</h2>
-        <dl class="kv" id="o-power"></dl>
-      </div>
-      <div class="card">
-        <div class="label">Virtual battery</div>
-        <div class="big" id="o-vb">—</div>
-        <div class="sub" id="o-vb-sub"></div>
-        <div class="meter" id="o-vb-meter" role="meter" aria-label="Virtual battery charge" aria-valuemin="0" aria-valuemax="100"><div id="o-vb-fill"></div></div>
-        <dl class="kv" id="o-energy" style="margin-top:14px"></dl>
-        <div class="note" id="o-energy-note"></div>
+        <div class="flowwrap">
+          <div class="flow" id="o-flow" role="img" aria-label="Power flow between solar, the grid, the home battery, the house and the car"></div>
+          <div class="flowside">
+            <div class="label">Virtual battery</div>
+            <div class="big" id="o-vb">—</div>
+            <div class="sub" id="o-vb-sub"></div>
+            <div class="meter" id="o-vb-meter" role="meter" aria-label="Virtual battery charge" aria-valuemin="0" aria-valuemax="100"><div id="o-vb-fill"></div></div>
+            <dl class="kv" id="o-energy" style="margin-top:14px"></dl>
+            <div class="note" id="o-energy-note"></div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -678,16 +693,9 @@ function renderState(s) {
   $('o-sched-now').hidden = !sched.length;
   $('o-sched-now').innerHTML = sched.map((e) => `<span class="chip info">Scheduled: ${[e.high != null ? `high ${num(e.high, 0)}%` : '', e.low != null ? `low ${num(e.low, 0)}%` : ''].filter(Boolean).join(', ')} until ${whenLocal(e.until)}${e.label ? ' · ' + esc(e.label) : ''}</span>`).join('');
 
-  // Power
+  // Power flow
+  drawFlow(s.flow || {}, i, e);
   const off = i.active ? null : t.inactive_for;
-  $('o-power').innerHTML = kv([
-    ['Charger', i.running_state ? esc(i.running_state) + (i.active ? '' : (off != null ? ` <span class="muted">· stopped ${dur(off)} ago</span>` : '')) : '—'],
-    ['Home battery', i.battery_kw == null ? '—' : i.battery_kw < 0 ? `Discharging ${kw(i.battery_kw)}` : i.battery_kw > 0 ? `Charging ${kw(i.battery_kw)}` : 'Idle'],
-    ['Grid', i.grid_kw == null ? '—' : i.grid_kw > 0 ? `Importing ${kw(i.grid_kw)}` : i.grid_kw < 0 ? `Exporting ${kw(i.grid_kw)}` : 'Nothing'],
-    ['Export', i.export_kw == null ? '<span class="muted">Not set</span>' : kw(i.export_kw) + (t.export_held_s ? ` <span class="muted">· for ${dur(t.export_held_s)}</span>` : '')],
-    ['EMS mode', i.ems_mode ? esc(i.ems_mode) + (i.ems_blocked ? ' <span class="chip warn">no charging from export</span>' : '') : '<span class="muted">—</span>'],
-    ['Charge signal', i.charge_signal == null ? '<span class="muted">Not set</span>' : i.charge_signal ? '<span class="chip ok">On</span>' : 'Off'],
-  ]);
 
   // The virtual battery: the car between its limits, as Predbat sees it
   const cap = r.capacity_kwh, inUse = e.window_kwh > 0.01, rt = s.rates || {}, st = s.stats || {};
@@ -707,10 +715,13 @@ function renderState(s) {
     }
   } else if (i.active) flow = esc(i.running_state || 'Running');
   $('o-energy').innerHTML = kv([
-    ['Now', flow + (eta ? `<div class="sub">${eta}</div>` : '')],
+    ['Now', flow + (eta ? `<div class="sub">${eta}</div>` : '') + (!i.active && off != null && i.running_state ? `<div class="sub">Charger ${esc(i.running_state.toLowerCase())}, stopped ${dur(off)} ago</div>` : '')],
     ['Max rate', rt.car_kw != null && inUse ? `${num(rt.car_kw, 2)} kW <span class="muted">· home battery ${num(rt.house_kw, 2)} · plant ${num(rt.rate_kw, 2)}</span>` : '—'],
     ['Today', st.today_in_kwh != null ? `${num(st.today_in_kwh, 1)} kWh in · ${num(st.today_out_kwh, 1)} kWh out` : '—'],
     ['Car battery', cap ? `${num(cap, 1)} kWh` + (st.health_pct ? ` <span class="muted">· ${num(st.health_pct, 0)}% health</span>` : '') : '<span class="muted">Not set</span>'],
+    ['Spare power', i.export_kw == null ? '<span class="muted">Export not set</span>' : `Exporting ${kw(i.export_kw)}` + (t.export_held_s ? ` <span class="muted">· for ${dur(t.export_held_s)}</span>` : '')
+      + (i.charge_signal ? ' · <span class="chip ok">charge signal</span>' : '')],
+    ['EMS mode', i.ems_mode ? esc(i.ems_mode) + (i.ems_blocked ? ' <span class="chip warn">no charging from export</span>' : '') : '<span class="muted">—</span>'],
   ]);
   $('o-energy-note').textContent = inUse ? 'The car between its limits, as one battery: what Predbat sees through the available energy, window and battery rate sensors.' : '';
 
@@ -727,6 +738,87 @@ function renderState(s) {
       <td class="num">${x.soc == null ? '—' : num(x.soc, 0) + '%'}</td></tr>`;
   }).join('') : '<tr><td colspan="3" class="empty">Nothing yet</td></tr>';
 }
+// ---------- Power flow diagram (src/flow.py does the sums) ----------
+const ICONS = {
+  solar: 'M4,2H20A2,2 0 0,1 22,4V14A2,2 0 0,1 20,16H15V20H18V22H13V16H11V22H6V20H9V16H4A2,2 0 0,1 2,14V4A2,2 0 0,1 4,2M4,4V8H11V4H4M4,14H11V10H4V14M20,14V10H13V14H20M20,4H13V8H20V4Z',
+  grid: 'M8.28,5.45L6.5,4.55L7.76,2H16.23L17.5,4.55L15.72,5.44L15,4H9L8.28,5.45M18.62,8H14.09L13.3,5H10.7L9.91,8H5.38L4.1,10.55L5.89,11.44L6.62,10H17.38L18.1,11.45L19.89,10.56L18.62,8M17.77,22H15.7L15.46,21.1L12,15.9L8.53,21.1L8.3,22H6.23L9.12,11H11.19L10.83,12.35L12,14.1L13.16,12.35L12.81,11H14.88L17.77,22M11.4,15L10.5,13.65L9.32,18.13L11.4,15M14.68,18.12L13.5,13.64L12.6,15L14.68,18.12Z',
+  home: 'M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z',
+  battery: 'M16,20H8V6H16M16.67,4H15V2H9V4H7.33A1.33,1.33 0 0,0 6,5.33V20.67C6,21.4 6.6,22 7.33,22H16.67A1.33,1.33 0 0,0 18,20.67V5.33C18,4.6 17.4,4 16.67,4Z',
+  car: 'M5,11L6.5,6.5H17.5L19,11M17.5,16A1.5,1.5 0 0,1 16,14.5A1.5,1.5 0 0,1 17.5,13A1.5,1.5 0 0,1 19,14.5A1.5,1.5 0 0,1 17.5,16M6.5,16A1.5,1.5 0 0,1 5,14.5A1.5,1.5 0 0,1 6.5,13A1.5,1.5 0 0,1 8,14.5A1.5,1.5 0 0,1 6.5,16M18.92,6C18.72,5.42 18.16,5 17.5,5H6.5C5.84,5 5.28,5.42 5.08,6L3,12V20A1,1 0 0,0 4,21H5A1,1 0 0,0 6,20V19H18V20A1,1 0 0,0 19,21H20A1,1 0 0,0 21,20V12L18.92,6Z',
+};
+// Node centres in a 420 x 330 box, and the lines between them (drawn from the first named node)
+const NODES = {solar: [210, 62], grid: [62, 172], home: [358, 172], battery: [210, 282], car: [358, 50]};
+const LINES = {
+  solar_home: 'M226,98 C226,160 262,166 320,166', solar_grid: 'M194,98 C194,160 158,166 100,166',
+  solar_battery: 'M210,100 L210,244', grid_home: 'M100,172 L320,172',
+  grid_battery: 'M100,178 C158,178 194,184 194,246', battery_home: 'M226,246 C226,184 262,178 320,178',
+  car_home: 'M358,88 L358,134',
+};
+// Each flow: the line it travels, which way, and its colour
+const FLOWS = {
+  solar_house: ['solar_home', 1, '--f-solar'], solar_battery: ['solar_battery', 1, '--f-solar'], solar_grid: ['solar_grid', 1, '--f-solar'],
+  grid_house: ['grid_home', 1, '--f-import'], grid_battery: ['grid_battery', 1, '--f-import'],
+  battery_house: ['battery_home', 1, '--f-bout'], battery_grid: ['grid_battery', -1, '--f-export'],
+  house_grid: ['grid_home', -1, '--f-export'], house_battery: ['battery_home', -1, '--f-bin'],
+};
+const LINE_COLOUR = {solar_home: '--f-solar', solar_grid: '--f-solar', solar_battery: '--f-solar', grid_home: '--f-import',
+  grid_battery: '--f-export', battery_home: '--f-bout', car_home: '--f-car'};
+const kwShort = (v) => v == null ? '—' : Math.abs(v) < 1 ? `${Math.round(Math.abs(v) * 1000)} W` : `${num(Math.abs(v), 1)} kW`;
+function drawFlow(f, i, e) {
+  const box = $('o-flow'); if (!box) return;
+  const on = {}, dots = [];
+  const car = f.car_kw || 0;
+  for (const [key, kwv] of Object.entries(f.lines || {})) {
+    const [line, dir, colour] = FLOWS[key] || [];
+    if (!line) continue;
+    on[line] = colour;
+    dots.push([line, dir, colour, kwv]);
+  }
+  if (Math.abs(car) > 0.01) { on.car_home = '--f-car'; dots.push(['car_home', car < 0 ? 1 : -1, '--f-car', Math.abs(car)]); }
+  // Only rebuild the lines and moving dots when the flows change, so the dots don't jump
+  const sig = JSON.stringify(dots.map(([l, d, c, k]) => [l, d, c, Math.round(Math.log2(0.6 + k) * 4)]));
+  let svg = '';
+  for (const [name, d] of Object.entries(LINES)) {
+    svg += `<path id="fl-${name}" class="ln ${on[name] ? 'on' : ''}" d="${d}" style="stroke:var(${on[name] || LINE_COLOUR[name]})"/>`;
+  }
+  for (const [line, dir, colour, kwv] of dots) {
+    const durS = Math.max(0.8, Math.min(4, 4 / (0.6 + kwv))).toFixed(2);
+    for (const offset of [0, 0.5]) {
+      svg += `<circle r="3.5" style="fill:var(${colour})"><animateMotion dur="${durS}s" repeatCount="indefinite" begin="-${(offset * durS).toFixed(2)}s"
+        ${dir < 0 ? 'keyPoints="1;0" keyTimes="0;1" calcMode="linear"' : ''}><mpath href="#fl-${line}"/></animateMotion></circle>`;
+    }
+  }
+  let nodes = '';
+  const node = (key, colour, label, labelAbove, lines) => {
+    const [x, y] = NODES[key], r = 38;
+    let out = `<circle class="node" cx="${x}" cy="${y}" r="${r}" style="stroke:var(${colour})"/>`;
+    out += `<text class="lbl" x="${x}" y="${labelAbove ? y - r - 8 : y + r + 17}">${label}</text>`;
+    const iconY = lines.length > 1 ? y - 27 : y - 17;
+    out += `<g transform="translate(${x - 10},${iconY}) scale(0.84)"><path class="ico" d="${ICONS[key]}"/></g>`;
+    lines.forEach(([text, c, big], n) => {
+      out += `<text x="${x}" y="${iconY + 36 + n * 15}" class="${big ? 'big' : ''}" ${c ? `style="fill:var(${c})"` : ''}>${text}</text>`;
+    });
+    return out;
+  };
+  const grid = f.grid_kw, batt = f.battery_kw;
+  nodes += node('solar', '--f-solar', 'Solar', true, [[kwShort(f.pv_kw), null, true]]);
+  nodes += node('grid', '--f-export', 'Grid', false, [
+    [`← ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import'], [`→ ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export']]);
+  nodes += node('home', '--f-home', 'Home', false, [[kwShort(f.house_kw), null, true]]);
+  nodes += node('battery', '--f-bout', 'Battery', false, [
+    [f.home_soc == null ? '—' : `${num(f.home_soc, 0)}%`, null, true],
+    [batt == null ? '—' : batt > 0.01 ? `↓ ${kwShort(batt)}` : batt < -0.01 ? `↑ ${kwShort(batt)}` : 'idle', batt > 0.01 ? '--f-bin' : batt < -0.01 ? '--f-bout' : null]]);
+  const carLines = [[i.soc == null ? '—' : `${num(i.soc, 0)}%`, null, true]];
+  if (Math.abs(car) > 0.01) carLines.push([`${car > 0 ? '↓' : '↑'} ${kwShort(car)}`, '--f-car']);
+  nodes += node('car', '--f-car', 'Car', true, carLines);
+  if (box.dataset.sig !== sig || !box.querySelector('#fl-nodes')) {
+    box.dataset.sig = sig;
+    box.innerHTML = `<svg viewBox="0 -16 420 362">${svg}<g id="fl-nodes">${nodes}</g></svg>`;
+  } else {
+    box.querySelector('#fl-nodes').innerHTML = nodes;
+  }
+}
+
 function whenLocal(iso) {
   if (!iso) return '—';
   const d = new Date(iso), now = new Date(), t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
@@ -937,6 +1029,7 @@ const PICKERS = [
   ['Statistics', 'discharged_energy', 'Total discharged energy', "The charger's lifetime kWh out of the car.", 'sensor'],
   ['Statistics', 'charger_power', 'Charger power', 'Either sign. W or kW.', 'sensor'],
   ['Statistics', 'pv_power', 'Solar power', 'For the losses. W or kW.', 'sensor'],
+  ['Statistics', 'home_power', 'House power', "The house's use, for the power flow diagram. Optional: worked out from the others without it.", 'sensor'],
   ['Statistics', 'inverter_power', 'Inverter AC power', "The inverter's AC side, for the losses. W or kW.", 'sensor'],
   ['Mode and limits', 'charge_signal', 'Charge signal', 'On = charge the car now if there\'s room, e.g. Predbat charging. Optional.', 'binary_sensor,input_boolean,switch'],
 ];

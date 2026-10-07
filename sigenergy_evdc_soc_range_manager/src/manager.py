@@ -17,6 +17,7 @@ from collections import deque
 from typing import Awaitable, Callable, Optional
 
 from src.controller import RULES, Decision, Inputs, decide
+from src.flow import flows, house_load
 from src.rates import battery_rates
 from src.stats import Sample
 
@@ -230,6 +231,8 @@ class Manager:
             "fast_mode": plugged and _in(mode, lists["fast_mode_states"]),
             "available_kw": power_kw(get("available_power")),
             "car_kw": power_kw(get("charger_power")),
+            "pv_kw": power_kw(get("pv_power")),
+            "home_measured_kw": power_kw(get("home_power")),
             "home_soc": _float(get("home_battery_soc")), "home_kwh": _float(get("home_battery_capacity")),
         }
         self._settings = settings
@@ -344,6 +347,18 @@ class Manager:
                              available_kw=r.get("available_kw"), home_soc=r.get("home_soc"), home_kwh=r.get("home_kwh"),
                              car_window_kwh=window, settings=getattr(self, "_settings", None))
 
+    def power_flow(self) -> dict:
+        """The Overview's power flow diagram (src/flow.py)."""
+        i, r = self.inputs, self.readings
+        if i is None:
+            return {}
+        car = abs(r.get("car_kw") or 0.0) if i.active else 0.0
+        car = -car if i.discharging else car
+        house = house_load(r.get("pv_kw"), i.grid_kw, i.battery_kw, car, r.get("home_measured_kw"))
+        return {"pv_kw": r.get("pv_kw"), "grid_kw": i.grid_kw, "battery_kw": i.battery_kw, "car_kw": car,
+                "house_kw": None if house is None else round(house, 3), "home_soc": r.get("home_soc"),
+                "lines": flows(r.get("pv_kw"), i.grid_kw, i.battery_kw, car, house)}
+
     def stats_sample(self, states: dict, entities: dict, now: float) -> Optional[Sample]:
         """This look's readings for the statistics (src/stats.py)."""
         i = self.inputs
@@ -375,6 +390,7 @@ class Manager:
             "log": list(self.log)[-30:][::-1],
             "energy": self.energy(),
             "rates": self.rates(),
+            "flow": self.power_flow(),
             "readings": dict(self.readings),
         }
 

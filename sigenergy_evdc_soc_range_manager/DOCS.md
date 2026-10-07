@@ -59,6 +59,13 @@ The **Overview** shows what it's doing and why, the car's SoC against the
 limits (set on the Schedule tab), the power readings it decides from, the
 virtual battery and the recent starts and stops.
 
+The **Power** card's diagram shows where the power is going: solar,
+the grid, the home battery, the house and the car, with dots moving along
+each flow (faster for more power). Solar is shared out to the house
+first, then the home battery, then the grid; the car hangs off the house.
+The house's use comes from `sensor.sigen_plant_consumed_power` (or is
+worked out from the others if that isn't set).
+
 The **virtual battery** is the car between its limits seen as one
 battery, the way Predbat sees it through the available energy, window and
 battery rate sensors: how full it is, kWh stored of the window, what it's

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 — Power flow
+
+- **Feature:** the Overview's Power and Virtual battery cards are one
+  Power card: a power flow diagram (solar, grid, home battery, house and
+  car, with moving dots along each flow, faster for more power) beside
+  the virtual battery and what it's doing.
+- **Feature:** a house power picker
+  (`sensor.sigen_plant_consumed_power` by default); without it the house
+  is worked out from the others.
+
 ## 0.6.0 — Schedule on its own tab, with default limits
 
 - **Change:** the limit schedule has its own Schedule tab, with the
