@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.1 — Tidy up
+
+- **Change:** removed code nothing used any more: the capacity chart's
+  drawing code and styles, an unused entity helper and styles on the web
+  page, and two figures the Statistics tab never showed.
+
 ## 0.17.0 — Round trip from short sessions, battery size
 
 - **Fix:** the round trip never came out because it only used charges and

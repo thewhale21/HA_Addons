@@ -415,7 +415,7 @@ class StatsRecorder:
             out_avg = totals["out_value"] / totals["out_priced_kwh"] if totals["out_priced_kwh"] else None
             money = {"in_kwh": round(totals["in_priced_kwh"], 2), "out_kwh": round(totals["out_priced_kwh"], 2),
                      "in_cost": round(totals["in_cost"] / inv, 2), "out_value": round(totals["out_value"] * inv, 2),
-                     "in_price": _r(in_avg, 4), "out_price": _r(out_avg, 4), "inverter_efficiency": inv}
+                     "in_price": _r(in_avg, 4), "out_price": _r(out_avg, 4)}
             money["net"] = round(money["out_value"] - money["in_cost"], 2)
             if in_avg is not None and round_trip:
                 whole = round_trip * inv * inv  # AC in -> car -> AC out
@@ -447,5 +447,5 @@ class StatsRecorder:
             "since": keys[0] if keys else None, "recording_since": _iso(self.started),
             "in_session": None if self.current is None else {
                 "direction": self.current["direction"], "start": _iso(self.current["start"]),
-                "soc_start": self.current["soc_start"], "soc_now": self.current["soc_last"]},
+                "soc_start": self.current["soc_start"]},
         }

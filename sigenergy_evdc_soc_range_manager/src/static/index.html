@@ -243,7 +243,6 @@
   :root { --s-charge: #43a047; --s-dis: #039be5; }
   .socchart svg { height: auto; }
   .socchart .soc { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; }
-  .socchart .bandr { fill: var(--text2); opacity: .1; }
   .socchart .lim { fill: none; stroke: var(--text2); stroke-width: 1.2; stroke-dasharray: 5 3; opacity: .9; }
   .socchart .shade { opacity: .16; }
   .socchart .cross { stroke: var(--text2); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
@@ -253,7 +252,6 @@
   .field[hidden] { display: none; }
   .pk + .pk { margin-top: 14px; }
   .pk[hidden], .pkcard[hidden] { display: none; }
-  .holdbox { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--divider); }
   .hold { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .hold .seg button { padding: 5px 9px; font-size: 13px; }
   .hold select { padding: 5px 8px; }
@@ -1425,12 +1423,6 @@ document.addEventListener('change', (ev) => {
   if (key && ev.target.closest('.picker')) saveSensors({[key]: ev.target.value.trim()}, 'Entity saved');
 });
 $('sim-all').addEventListener('change', drawPickers);
-function entityState(ent) {
-  if (!ent) return '<span class="muted">Not set</span>';
-  const st = ent.state == null ? '<span class="chip warn">no reading yet</span>'
-    : (['unavailable', 'unknown'].includes(ent.state) ? `<span class="chip warn">${esc(ent.state)}</span>` : `${esc(ent.state)}${ent.unit ? ' ' + esc(ent.unit) : ''}`);
-  return `${st} <span class="muted">· ${esc(ent.name)}</span>`;
-}
 // The pickers, drawn into cards: [card, key, label, note, domains]
 const PICKERS = [
   ['The charger', 'running_state', 'Running state', 'Tells it whether the car is plugged in, and whether the charger is running or discharging.', 'sensor'],

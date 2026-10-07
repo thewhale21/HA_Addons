@@ -1,6 +1,5 @@
 """Scheduled limits (src/schedule.py), discharge dropouts and the money (src/stats.py)."""
 
-import asyncio
 import datetime
 
 import pytest
