@@ -374,3 +374,27 @@ def test_the_history_notes_the_limits_and_schedule_changes(tmp_path):
     _run(m.step(_states(soc="60", lc=0.0), ent, st, now=(tue + datetime.timedelta(hours=10, minutes=1)).timestamp()))
     limits = [x for x in m.log if x["action"] == "limits"]
     assert len(limits) == 2 and "default" in limits[-1]["reason"] and limits[-1]["high"] == 80
+
+
+def test_starts_and_stops_by_something_else_are_noted(tmp_path):
+    m = Manager(str(tmp_path))
+    ent, st = _entities(), _settings(observe_only=True)
+    _run(m.step(_states(running="Discharging", battery="-1"), ent, st, now=1000.0))
+    _run(m.step(_states(running="Occupied", battery="-1"), ent, st, now=1010.0))
+    assert m.log[-1]["action"] == "dropout"
+    # Another automation restarts it before our restart wait is up: noted, and no "would start" needed
+    _run(m.step(_states(running="Discharging", battery="-1"), ent, st, now=1150.0))
+    assert m.log[-1]["action"] == "elsewhere_start"
+    # Watching only: we'd have stopped it at the low limit, and something else did: not a dropout
+    _run(m.step(_states(running="Discharging", soc="39"), ent, st, now=1400.0))
+    assert m.log[-1]["action"] == "stop" and m.log[-1]["observe_only"]
+    _run(m.step(_states(running="Occupied", soc="39"), ent, st, now=1420.0))
+    assert m.log[-1]["action"] == "stop" and len([x for x in m.log if x["action"] == "dropout"]) == 1
+
+
+def test_the_restart_wait_counts_from_when_home_assistant_saw_the_stop(tmp_path):
+    m = Manager(str(tmp_path))
+    ent, st = _entities(), _settings()
+    _run(m.step(_states(running="Discharging", battery="-1"), ent, st, now=1000.0))
+    d = _run(m.step(_states(running="Occupied", battery="-1", lc=1050.0), ent, st, now=1060.0))  # seen 10 s late
+    assert d.rule == "restart_wait" and "10 s ago" in d.reason

@@ -311,18 +311,6 @@
         <div class="range" id="o-range" aria-hidden="true"><div class="win" id="o-win"></div><div class="mark" id="o-mark"></div></div>
         <div class="range-labels"><span>0%</span><span id="o-range-text"></span><span>100%</span></div>
         <div class="row" id="o-sched-now" hidden style="margin-top:10px"></div>
-        <div class="holdbox">
-          <div class="label" style="margin-bottom:6px">Quick hold</div>
-          <div class="hold">
-            <div class="seg" role="group" aria-label="Hold" id="hold-kind"><button data-k="no_discharge" aria-pressed="true" title="The low limit at the car's SoC now: it isn't discharged any further">No discharging</button><button data-k="hold" aria-pressed="false" title="Kept where it is: neither charged nor discharged by more than 1%">Hold here</button><button data-k="at_least" aria-pressed="false" title="The low limit at a level you choose">Keep at least</button></div>
-            <span class="field" id="hold-low-wrap" hidden><input type="number" id="hold-low" min="20" max="98" step="1" value="90" aria-label="Keep at least (%)"><span class="unit">%</span></span>
-            <select id="hold-until" aria-label="How long">
-              <option value="h1">for 1 hour</option><option value="h2">for 2 hours</option><option value="h4">for 4 hours</option><option value="h8">for 8 hours</option>
-              <option value="t06:00">until 06:00</option><option value="t07:00">until 07:00</option><option value="t08:00" selected>until 08:00</option><option value="t12:00">until 12:00</option><option value="t18:00">until 18:00</option>
-            </select>
-            <button class="btn small primary" id="hold-go">Hold</button>
-          </div>
-        </div>
         <div class="row" style="margin-top:12px"><div class="grow note" style="margin:0" id="o-limits-note"></div><button class="btn small" id="o-to-schedule">Limits and schedule</button></div>
       </div>
       <div class="card" style="grid-column:1/-1">
@@ -347,7 +335,7 @@
         <span><i class="ln-soc"></i>SoC</span><span><b class="band" style="background:var(--ok);opacity:.2"></b>Between the limits</span>
         <span><b class="band" style="background:var(--s-charge);opacity:1;height:5px"></b>Charging</span><span><b class="band" style="background:var(--s-dis);opacity:1;height:5px"></b>Discharging</span><span><b class="band" style="background:var(--divider);opacity:1;height:5px"></b>Unplugged</span>
         <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:var(--ok)"/></svg> Started</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1H9L5 9Z" style="fill:var(--text2)"/></svg> Stopped</span>
-        <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:none;stroke:var(--text2);stroke-width:1.5"/></svg> Would (watch only)</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 0L10 5L5 10L0 5Z" style="fill:var(--warn)"/></svg> Dropped out</span>
+        <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:none;stroke:var(--text2);stroke-width:1.5"/></svg> Would (watch only)</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 0L10 5L5 10L0 5Z" style="fill:var(--warn)"/></svg> Dropped out</span><span><svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" style="fill:none;stroke:var(--text2);stroke-dasharray:2 1.5"/></svg> Started or stopped elsewhere</span>
       </div>
     </div>
     <div class="card">
@@ -378,6 +366,20 @@
         <h2>Now</h2>
         <dl class="kv" id="sc-now"></dl>
       </div>
+    </div>
+    <div class="card">
+      <h2>Quick hold</h2>
+      <div class="note" style="margin:0 0 10px">Holds the car from now for a while: <b>No discharging</b> puts the low limit at its SoC now, <b>Hold here</b> keeps it where it is, <b>Keep at least</b> sets a low limit you choose. Each is a one-off entry in the schedule below, so it ends by itself.</div>
+      <div class="hold">
+        <div class="seg" role="group" aria-label="Hold" id="hold-kind"><button data-k="no_discharge" aria-pressed="true" title="The low limit at the car's SoC now: it isn't discharged any further">No discharging</button><button data-k="hold" aria-pressed="false" title="Kept where it is: neither charged nor discharged by more than 1%">Hold here</button><button data-k="at_least" aria-pressed="false" title="The low limit at a level you choose">Keep at least</button></div>
+        <span class="field" id="hold-low-wrap" hidden><input type="number" id="hold-low" min="20" max="98" step="1" value="90" aria-label="Keep at least (%)"><span class="unit">%</span></span>
+        <select id="hold-until" aria-label="How long">
+          <option value="h1">for 1 hour</option><option value="h2">for 2 hours</option><option value="h4">for 4 hours</option><option value="h8">for 8 hours</option>
+          <option value="t06:00">until 06:00</option><option value="t07:00">until 07:00</option><option value="t08:00" selected>until 08:00</option><option value="t12:00">until 12:00</option><option value="t18:00">until 18:00</option>
+        </select>
+        <button class="btn small primary" id="hold-go">Hold</button>
+      </div>
+      <div class="row" id="hold-now" style="margin-top:10px;gap:6px" hidden></div>
     </div>
     <div class="card">
       <h2>Schedule</h2>
@@ -725,6 +727,7 @@ const RULES = {
   house_needs_power: 'House needs power', charge_opportunity: 'Spare power to charge', in_range: 'Within the limits',
   high_limit: 'Reached the high limit', low_limit: 'Reached the low limit', manual: 'Pressed on this page',
   dropout: 'Stopped discharging by itself', schedule: 'Schedule',
+  elsewhere_start: 'Started by something else', elsewhere_stop: 'Stopped by something else',
 };
 const kw = (v) => v === null || v === undefined ? '—' : `${num(Math.abs(v), 2)} kW`;
 function renderState(s) {
@@ -762,6 +765,9 @@ function renderState(s) {
   ]);
   $('o-limits-note').textContent = sched.length ? '' : `Default limits: ${num(r.base_low ?? i.low, 0)}%–${num(r.base_high ?? i.high, 0)}%`;
   $('o-sched-now').hidden = !sched.length;
+  const onceOn = sched.filter((e) => e.kind === 'once');
+  $('hold-now').hidden = !onceOn.length;
+  $('hold-now').innerHTML = onceOn.map((e) => `<span class="chip info">${esc(e.label || 'One-off')} until ${whenLocal(e.until)} <a href="#" class="unhold" data-id="${e.id}" title="End it now" aria-label="End it now">✕</a></span>`).join('');
   $('o-sched-now').innerHTML = sched.map((e) => `<span class="chip info">${e.label && e.label.startsWith('Hold') ? esc(e.label) : `Scheduled: ${[e.high != null ? `high ${num(e.high, 0)}%` : '', e.low != null ? `low ${num(e.low, 0)}%` : ''].filter(Boolean).join(', ')}${e.label ? ' · ' + esc(e.label) : ''}`} until ${whenLocal(e.until)}${e.kind === 'once' ? ` <a href="#" class="unhold" data-id="${e.id}" title="End it now" aria-label="End it now">✕</a>` : ''}</span>`).join('');
 
   // Power flow
@@ -802,6 +808,7 @@ function renderState(s) {
   updateStatus();
   $('o-log').innerHTML = log.length ? log.map((x) => {
     const what = x.action === 'dropout' ? '<span class="chip warn">Dropped out</span>'
+      : x.action.startsWith('elsewhere_') ? `<span class="chip">${x.action === 'elsewhere_start' ? 'Started' : 'Stopped'} elsewhere</span>`
       : x.error ? `<span class="chip err">Failed to ${esc(x.action)}</span>`
       : x.observe_only ? `<span class="chip warn">Would ${esc(x.action)}</span>`
       : `<span class="chip ${x.action === 'start' ? 'ok' : ''}">${x.action === 'start' ? 'Started' : 'Stopped'}</span>`;
@@ -935,7 +942,7 @@ async function refreshSchedule() {
 const hist = {entries: [], filter: 'all', shown: 50};
 const HIST_FILTERS = {
   all: () => true,
-  actions: (x) => (x.action === 'start' || x.action === 'stop') && !x.observe_only,
+  actions: (x) => ((x.action === 'start' || x.action === 'stop') && !x.observe_only) || (x.action || '').startsWith('elsewhere_'),
   watch: (x) => x.observe_only,
   limits: (x) => x.action === 'limits',
   problems: (x) => x.action === 'dropout' || !!x.error,
@@ -956,6 +963,7 @@ function drawHistory() {
     }
     const what = x.action === 'limits' ? '<span class="chip info">Limits</span>'
       : x.action === 'dropout' ? '<span class="chip warn">Dropped out</span>'
+      : x.action.startsWith('elsewhere_') ? `<span class="chip">${x.action === 'elsewhere_start' ? 'Started' : 'Stopped'} elsewhere</span>`
       : x.error ? `<span class="chip err">Failed to ${esc(x.action)}</span>`
       : x.observe_only ? `<span class="chip warn">Would ${esc(x.action)}</span>`
       : `<span class="chip ${x.action === 'start' ? 'ok' : ''}">${x.action === 'start' ? 'Started' : 'Stopped'}</span>`;
@@ -1209,6 +1217,7 @@ function drawSocChart() {
   for (const e of evs) {
     const x = X(e.t), y = Y(e.v);
     if (e.action === 'dropout') svg += `<path class="ev" d="M${x},${y - 6} L${x + 6},${y} L${x},${y + 6} L${x - 6},${y} Z" style="fill:var(--warn)"/>`;
+    else if (e.action.startsWith('elsewhere_')) svg += `<circle class="ev" cx="${x}" cy="${y}" r="4" style="fill:var(--card);stroke:var(--text2);stroke-dasharray:2 1.5"/>`;
     else {
       const up = e.action === 'start', c = e.error ? 'var(--err)' : up ? 'var(--ok)' : 'var(--text2)';
       const tri = up ? `M${x},${y - 7} L${x + 6},${y + 4} L${x - 6},${y + 4} Z` : `M${x - 6},${y - 4} L${x + 6},${y - 4} L${x},${y + 7} Z`;
@@ -1228,7 +1237,7 @@ function drawSocChart() {
   // Hover: the time, SoC, limits, what it was doing and anything that happened near then
   const tip = tipFor(box), hit = box.querySelector('#sc-hit'), cross = box.querySelector('#sc-cross');
   const STATE = {charge: 'charging', discharge: 'discharging', idle: 'idle', unplugged: 'unplugged'};
-  const WHAT = (e) => e.action === 'dropout' ? 'Dropped out' : `${e.observe_only ? 'Would ' + e.action : e.action === 'start' ? 'Started' : 'Stopped'}${e.error ? ' (failed)' : ''}`;
+  const WHAT = (e) => e.action === 'dropout' ? 'Dropped out' : e.action.startsWith('elsewhere_') ? (e.action === 'elsewhere_start' ? 'Started elsewhere' : 'Stopped elsewhere') : `${e.observe_only ? 'Would ' + e.action : e.action === 'start' ? 'Started' : 'Stopped'}${e.error ? ' (failed)' : ''}`;
   hit.addEventListener('mousemove', (ev) => {
     const r = box.querySelector('svg').getBoundingClientRect(), x = (ev.clientX - r.left) * (W / r.width);
     const t = t0 + (x - P.l) / pw * (t1 - t0);
@@ -1264,6 +1273,13 @@ $('hold-go').addEventListener('click', async () => {
     toast('Held: it ends by itself'); setTimeout(pollState, 800); refreshSchedule();
   } catch (e) { toast('Failed: ' + e.message); }
 });
+$('hold-now').addEventListener('click', (ev) => $('o-sched-now').onclickUnhold(ev));
+$('o-sched-now').onclickUnhold = async (ev) => {
+  const a = ev.target.closest('a.unhold'); if (!a) return;
+  ev.preventDefault();
+  try { await api('schedule/' + a.dataset.id, {method: 'DELETE'}); toast('Ended'); setTimeout(pollState, 800); refreshSchedule(); }
+  catch (e) { toast('Failed: ' + e.message); }
+};
 $('o-sched-now').addEventListener('click', async (ev) => {
   const a = ev.target.closest('a.unhold'); if (!a) return;
   ev.preventDefault();

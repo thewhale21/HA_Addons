@@ -68,7 +68,7 @@ first, then the home battery, then the grid; the car hangs off the house.
 The house's use comes from `sensor.sigen_plant_consumed_power` (or is
 worked out from the others if that isn't set).
 
-**Quick hold** (on the Car card) holds the car for a while, from now:
+**Quick hold** (on the Schedule tab) holds the car for a while, from now:
 **No discharging** puts the low limit at its SoC now, **Hold here** keeps
 it where it is, and **Keep at least** sets a low limit you choose, for 1
 to 8 hours or until a time. Each is a one-off schedule entry, so it ends
@@ -177,8 +177,10 @@ sensors use the scheduled limits too, so Predbat sees the change.
 **History** (at the bottom of the Schedule tab) lists every start and
 stop, what it would have done while Watch only was on, dropouts,
 failures, and each time scheduled limits came on or went back to the
-defaults, with the limits in use and the car's SoC at the time. It keeps
-the last 500.
+defaults, with the limits in use and the car's SoC at the time. When the
+charger starts or stops without this add-on (another automation, the
+Sigenergy app, Predbat or the charger itself) it says so: "Started
+elsewhere" or "Stopped elsewhere". It keeps the last 500.
 
 ## Statistics
 

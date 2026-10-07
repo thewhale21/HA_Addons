@@ -171,10 +171,17 @@ class Manager:
             changed = (running_st or {}).get("last_changed")
             self.active_since = changed if isinstance(changed, (int, float)) else now
         elif active != self.active:
-            self.active_since = now
+            # When it changed, by Home Assistant's clock (we may only look a few seconds later)
+            changed = (running_st or {}).get("last_changed")
+            self.active_since = changed if isinstance(changed, (int, float)) and now - 120 <= changed <= now else now
             logger.info("Charger %s (%s)", "running" if active else "stopped", running or "unknown")
-            if not active and self.was_discharging and plugged and not self._stopped_by_us(now):
-                self._dropout(now)
+            if active and plugged and not self._ours("start", now):
+                self._elsewhere("start", now)
+            elif not active and plugged and not self._ours("stop", now):
+                if self.was_discharging:
+                    self._dropout(now)
+                else:
+                    self._elsewhere("stop", now)
         self.active = active
         if active:
             self.was_discharging = discharging
@@ -297,18 +304,29 @@ class Manager:
                 logger.warning("Couldn't send the notification: %s", err)
         return entry
 
-    def _stopped_by_us(self, now: float) -> bool:
-        """Did a stop from here (or the page) come just before the charger stopped?"""
+    def _ours(self, action: str, now: float) -> bool:
+        """Did this add-on start (or stop) the charger just before it started (or stopped)?
+        A watch-only "would" counts: something else did what it would have done."""
         for entry in reversed(self.log):
-            if entry.get("action") == "stop" and entry.get("pressed"):
-                try:
-                    at = datetime.datetime.fromisoformat(entry["at"].replace("Z", "+00:00")).timestamp()
-                except (KeyError, ValueError):
-                    return False
-                return now - at <= 180
-            if entry.get("action") == "start":
+            try:
+                at = datetime.datetime.fromisoformat(entry["at"].replace("Z", "+00:00")).timestamp()
+            except (KeyError, ValueError):
                 return False
+            if now - at > 180:
+                return False
+            if entry.get("action") == action and (entry.get("pressed") or entry.get("observe_only")) and not entry.get("error"):
+                return True
         return False
+
+    def _elsewhere(self, action: str, now: float) -> None:
+        """The charger started or stopped without this add-on: e.g. another automation, the
+        Sigenergy app or Predbat. Noted so the history says who did what."""
+        self.log.append({"at": _iso(now), "action": f"elsewhere_{action}", "rule": f"elsewhere_{action}",
+                         "reason": f"The charger {'started' if action == 'start' else 'stopped'} without this add-on "
+                                   "(another automation, the Sigenergy app or the charger itself).",
+                         "soc": self.soc, "pressed": False, "observe_only": False, "error": None, **self._limits_now()})
+        self._save()
+        logger.info("The charger %s without this add-on", "started" if action == "start" else "stopped")
 
     def _limits_now(self) -> dict:
         """The limits in use, for a history entry."""

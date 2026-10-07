@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.11.0 — Who started it, and Quick hold on the Schedule tab
+
+- **Feature:** when the charger starts or stops without this add-on
+  (another automation, the Sigenergy app, Predbat or the charger itself),
+  the history and the Overview say so ("Started elsewhere" / "Stopped
+  elsewhere"), and the SoC chart marks it. While watching only, a restart
+  by your own automation shows up this way, so you can see why there was
+  no "Would start".
+- **Fix:** while watching only, a stop by something else just after a
+  "Would stop" (e.g. your automation at the low limit) is no longer
+  counted as a dropout.
+- **Change:** the restart wait counts from when Home Assistant saw the
+  charger stop, not from when the add-on next looked.
+- **Change:** Quick hold is on the Schedule tab, with the holds that are
+  on (✕ to end one early). The Overview's Car card still shows them.
+
 ## 0.10.0 — Quick holds, SoC chart and limit bounds
 
 - **Feature:** Quick hold on the Overview's Car card: No discharging (the

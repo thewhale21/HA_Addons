@@ -178,7 +178,7 @@ class Runner:
         start = now - hours * 3600
         events = []
         for x in self.manager.log:
-            if x.get("action") not in ("start", "stop", "dropout"):
+            if x.get("action") not in ("start", "stop", "dropout", "elsewhere_start", "elsewhere_stop"):
                 continue
             try:
                 at = datetime.datetime.fromisoformat(x["at"].replace("Z", "+00:00")).timestamp()
