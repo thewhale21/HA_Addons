@@ -1,0 +1,20 @@
+name: "SigEnergy EVDC SoC Range Manager"
+description: "Keeps an EV's state of charge between a high and a low limit in V2X mode, by starting and stopping a Sigenergy DC charger"
+version: "0.1.0"
+slug: "sigenergy_evdc_soc_range_manager"
+url: "https://github.com/thewhale21/HA_Addons/tree/main/sigenergy_evdc_soc_range_manager"
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: "services"
+homeassistant_api: true
+hassio_api: true
+ingress: true
+panel_icon: "mdi:car-electric"
+panel_title: "EVDC SoC Range"
+ports:
+  "8099/tcp": null
+ports_description:
+  "8099/tcp": "Add-on API (optional; the web page doesn't need it)"
+image: "ghcr.io/thewhale21/{arch}-addon-sigenergy-evdc-soc-range-manager"

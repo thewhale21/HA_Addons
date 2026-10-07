@@ -12,6 +12,7 @@ store.
 | Add-on | What it does |
 | --- | --- |
 | [OCPP Charge Proxy](ocpp_charge_proxy/) | A virtual OCPP 1.6 chargepoint for smart tariff suppliers (Octopus, EDF, E.ON Next), with a schedule, auto plug-in and more. |
+| [SigEnergy EVDC SoC Range Manager](sigenergy_evdc_soc_range_manager/) | Keeps an EV's state of charge between a high and a low limit in V2X mode by starting and stopping a Sigenergy DC charger. |
 | [Add-on Template](addon_template/) | A working add-on to start new ones from: web page, Home Assistant link, its own sensors, settings and diagnostics. |
 
 ## Starting a new add-on
