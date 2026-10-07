@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0 — More chart periods
+
+- **Feature:** the Car SoC chart shows the last 1, 3, 6, 12, 24 or 48
+  hours, with the time axis spaced to suit (every 10 minutes for 1 hour,
+  up to every 12 hours for 48).
+
 ## 0.11.2 — Crossing limits from two entries
 
 - **Fix:** when two schedule entries that are on at once cross (e.g. one

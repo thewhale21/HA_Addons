@@ -331,7 +331,7 @@
       </div>
     </div>
     <div class="card">
-      <h2>Car SoC<span class="spacer"></span><span class="seg" role="group" aria-label="Period" id="sc-hours"><button data-h="24" aria-pressed="true">24 hours</button><button data-h="48" aria-pressed="false">48 hours</button></span></h2>
+      <h2>Car SoC<span class="spacer"></span><span class="seg" role="group" aria-label="Period" id="sc-hours"><button data-h="1" aria-pressed="false">1h</button><button data-h="3" aria-pressed="false">3h</button><button data-h="6" aria-pressed="false">6h</button><button data-h="12" aria-pressed="false">12h</button><button data-h="24" aria-pressed="true">24h</button><button data-h="48" aria-pressed="false">48h</button></span></h2>
       <div class="chart socchart" id="o-socchart" role="img" aria-label="The car's SoC over time, with the limits and the starts and stops"></div>
       <div class="legend">
         <span><i class="ln-soc"></i>SoC</span><span><i class="ln-lim"></i>Limits</span>
@@ -1226,9 +1226,11 @@ function drawSocChart() {
       svg += `<path class="ev" d="${tri}" style="${e.observe_only ? `fill:var(--card);stroke:${c}` : `fill:${c};stroke:var(--card)`}"/>`;
     }
   }
-  // Time axis: every 6 hours (12 for 48), the day where it starts
-  const step = (d.hours > 24 ? 12 : 6) * 3600, first = new Date(t0 * 1000);
-  first.setMinutes(0, 0, 0); first.setHours(Math.ceil(first.getHours() / (step / 3600)) * (step / 3600));
+  // Time axis: about 4-8 labels whatever the period, the day's name at midnight
+  const stepMin = {1: 10, 3: 30, 6: 60, 12: 120, 24: 360, 48: 720}[d.hours] || Math.max(10, d.hours * 15);
+  const step = stepMin * 60, firstT = Math.ceil(t0 / step) * step;  // whole steps of the clock
+  const tzShift = new Date(firstT * 1000).getTimezoneOffset() * 60;  // ...in local time
+  const first = new Date((Math.ceil((t0 - tzShift) / step) * step + tzShift) * 1000);
   for (let t = first.getTime() / 1000; t <= t1; t += step) {
     const dt = new Date(t * 1000), lab = dt.getHours() === 0 ? dt.toLocaleDateString([], {weekday: 'short'}) : dt.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
     svg += `<line class="axis" x1="${X(t)}" x2="${X(t)}" y1="${P.t}" y2="${H - P.b}" opacity=".35"/><text x="${X(t)}" y="${H - 6}" text-anchor="middle">${lab}</text>`;
