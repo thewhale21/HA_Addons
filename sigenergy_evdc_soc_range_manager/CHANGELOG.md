@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.15.2 — Alarms on the SoC chart
+
+- **Fix:** alarms recorded before 0.13.0 showed on the Car SoC chart as
+  unplugged. The next time it connects, the add-on checks those against
+  Home Assistant's history (once) and marks them as alarms, shaded red.
+- **Change:** the running states for Plugged in no longer include the
+  stray `#Alarm`, and Alarm also counts `Alarm` and `Fault` (the
+  Sigenergy integration's names). During an alarm,
+  `binary_sensor.evdc_soc_range_plugged_in` reads off, as your own
+  plugged-in sensor does.
+
 ## 0.15.1 — Clearer status after a stop and a start
 
 - **Change:** during the restart wait the status reads "Reconnecting car

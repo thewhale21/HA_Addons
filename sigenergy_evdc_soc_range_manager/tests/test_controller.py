@@ -410,10 +410,10 @@ def test_a_charger_alarm_is_noted_and_left_alone(tmp_path):
     m = Manager(str(tmp_path), press=p.press)
     ent, st = _entities(), _settings()
     _run(m.step(_states(running="Discharging", battery="-1"), ent, st, now=1000.0))
-    d = _run(m.step(_states(running="#Alarm", battery="-1"), ent, st, now=1010.0))
+    d = _run(m.step(_states(running="Alarm", battery="-1"), ent, st, now=1010.0))
     assert d.rule == "alarm" and d.action is None and m.inputs.alarm
     assert m.log[-1]["action"] == "alarm" and m.alarms and not [x for x in m.log if x["action"] == "dropout"]
-    _run(m.step(_states(running="#Alarm", battery="-1"), ent, st, now=1500.0))
+    _run(m.step(_states(running="Alarm", battery="-1"), ent, st, now=1500.0))
     assert p.pressed == []  # nothing pressed while it's in alarm
     _run(m.step(_states(running="Occupied", battery="-1"), ent, st, now=1610.0))
     cleared = [x for x in m.log if x["action"] == "alarm_cleared"]
@@ -423,5 +423,5 @@ def test_a_charger_alarm_is_noted_and_left_alone(tmp_path):
 
 def test_the_chart_marks_alarms():
     from src.manager import soc_state
-    assert soc_state(False, False, "#Alarm", True, True) == "alarm"
+    assert soc_state(False, False, "Alarm", False, True) == "alarm"
     assert soc_state(True, True, "Discharging", True) == "discharge"

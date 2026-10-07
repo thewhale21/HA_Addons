@@ -30,12 +30,13 @@ UNKNOWN = ("unknown", "unavailable", "none", "")
 # Lists the Settings tab can change (Advanced); matched without regard to case
 LIST_DEFAULTS = {
     # The charger's running states (sensor.sigen_inverter_dc_charger_running_state)
-    "plugged_states": ["Occupied", "#Alarm", "Ended", "Preparing Comm", "Preparing Insulation",
+    # (not Alarm or Fault: those are an alarm, whether or not a car's plugged in)
+    "plugged_states": ["Occupied", "Ended", "Preparing Comm", "Preparing Insulation",
                        "Charging", "Discharging"],
     "active_states": ["Charging", "Discharging", "Preparing Insulation", "Preparing Comm"],
     "discharging_states": ["Discharging"],
     # ...and that mean the charger has a fault
-    "alarm_states": ["#Alarm", "Alarm", "Fault"],
+    "alarm_states": ["Alarm", "#Alarm", "Fault"],
     # The V2X mode entity's state(s) that mean "manage the charger"
     "mode_states": ["V2X", "on"],
     # ...that count for the energy and battery rate sensors (as the V2X template sensors did)

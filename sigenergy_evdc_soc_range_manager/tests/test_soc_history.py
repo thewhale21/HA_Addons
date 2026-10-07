@@ -42,3 +42,25 @@ def test_points_from_home_assistants_history():
             soc: [{"s": "0", "lu": 0}, {"s": "62", "lu": 210}, {"s": "60", "lu": 800}, {"s": "0", "lu": 910}]}
     pts = soc_points_from_history(hist, ent, {})
     assert [(p[0], p[1], p[4]) for p in pts] == [(210, 62, "discharge"), (800, 60, "discharge"), (900, 60, "idle")]
+
+
+def test_alarms_recorded_as_unplugged_are_put_right_once(tmp_path):
+    h = SocHistory(str(tmp_path))
+    h.add(1000, 60, 80, 40, "idle")
+    h.add(1005, 60, 80, 40, "unplugged")  # really an alarm (seen a few seconds after HA)
+    h.add(2000, 60, 80, 40, "idle")
+    h.add(3000, 60, None, None, "unplugged")  # really unplugged
+    hist = [[990, 60, None, None, "idle"], [1001, 60, None, None, "alarm"], [1999, 60, None, None, "idle"],
+            [2999, 60, None, None, "unplugged"]]
+    assert h.fix_alarms(hist) == 1
+    assert [p[4] for p in h.points] == ["idle", "alarm", "idle", "unplugged"]
+    assert SocHistory(str(tmp_path)).alarms_fixed
+
+
+def test_the_integrations_alarm_state_is_an_alarm_not_unplugged():
+    from src.manager import LIST_DEFAULTS, _in, soc_state
+
+    lists = LIST_DEFAULTS
+    for running in ("Alarm", "Fault"):
+        assert _in(running, lists["alarm_states"]) and not _in(running, lists["plugged_states"])
+        assert soc_state(False, False, running, False, True) == "alarm"

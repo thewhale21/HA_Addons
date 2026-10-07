@@ -192,11 +192,12 @@ Sigenergy app, Predbat or the charger itself) it says so: "Started
 elsewhere" or "Stopped elsewhere". It keeps the last 500.
 
 **Charger alarms.** When the charger's running state is an alarm
-(`#Alarm`: an error with the charger), the add-on leaves the charger alone
+(`Alarm` or `Fault`: an error with the charger), the add-on leaves the charger alone
 until it clears. The status and the health dot say so, the History notes
 when it started and cleared, your notify service (if set) is told, the
 Car SoC chart shades it red, and `binary_sensor.evdc_soc_range_charger_alarm`
-turns on. Which states count is under Settings › Advanced.
+turns on (and `binary_sensor.evdc_soc_range_plugged_in` reads off). Which
+states count is under Settings › Advanced.
 
 ## Statistics
 

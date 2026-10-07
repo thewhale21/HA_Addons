@@ -160,8 +160,9 @@ class Runner:
                     found, "" if found == 1 else "s", HISTORY_DAYS)
 
     async def backfill_soc(self) -> None:
-        """Once: the last two days of the car's SoC from Home Assistant's history, for the chart."""
-        if self.soc_history.backfilled:
+        """Once: the last two days of the car's SoC from Home Assistant's history, for the chart
+        (and, once, alarms recorded as unplugged before they were recognised put right)."""
+        if self.soc_history.backfilled and self.soc_history.alarms_fixed:
             return
         entities = dict(self.link.settings)
         ids = [entities[k] for k in ("running_state", "vehicle_soc") if entities.get(k)]
@@ -174,8 +175,14 @@ class Runner:
         }, timeout=120)
         points = soc_points_from_history(history or {}, entities, self.settings.data)
         async with self.lock:
-            found = self.soc_history.backfill(points)
-        logger.info("SoC chart: %d point%s from Home Assistant's history", found, "" if found == 1 else "s")
+            if not self.soc_history.backfilled:
+                found = self.soc_history.backfill(points)
+                logger.info("SoC chart: %d point%s from Home Assistant's history", found, "" if found == 1 else "s")
+            if not self.soc_history.alarms_fixed:
+                fixed = self.soc_history.fix_alarms(points)
+                if fixed:
+                    logger.info("SoC chart: %d point%s marked as a charger alarm, not unplugged", fixed,
+                                "" if fixed == 1 else "s")
 
     def soc_chart(self, hours: float) -> dict:
         """The Overview's SoC chart: the points, and the starts, stops and dropouts in the window."""
