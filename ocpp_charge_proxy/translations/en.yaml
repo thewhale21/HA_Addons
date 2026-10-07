@@ -1,0 +1,37 @@
+---
+configuration:
+  server_hostname:
+    name: OCPP Server Hostname
+    description: >-
+      The hostname of your OCPP server (e.g. ocpp.example.com).
+  chargepoint_id:
+    name: Chargepoint ID
+    description: >-
+      Your chargepoint ID for authentication with the OCPP server.
+  password:
+    name: OCPP Password
+    description: >-
+      Your password for authentication with the OCPP server.
+  charger_model:
+    name: Charger Model
+    description: >-
+      The charger model to report in the BootNotification.
+  charger_vendor:
+    name: Charger Vendor
+    description: >-
+      The charger vendor to report in the BootNotification.
+  charger_serial:
+    name: Charger Serial Number (optional)
+    description: >-
+      The charger serial number. Auto-generated on first boot if left empty.
+  firmware_version:
+    name: Firmware Version
+    description: >-
+      The firmware version to report in the BootNotification.
+  initial_energy_wh:
+    name: Initial Energy Register (Wh)
+    description: >-
+      Seed the energy meter with this value in watt-hours. Useful when
+      migrating from an existing charger. Set to 0 for a fresh install.
+      Only applied if higher than the stored meter reading (the meter never
+      goes backwards), once on startup, and then cleared.

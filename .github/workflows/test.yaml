@@ -1,0 +1,59 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "*"
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  find:
+    name: Find add-ons with tests
+    runs-on: ubuntu-latest
+    outputs:
+      addons: ${{ steps.find.outputs.addons }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Find add-ons with a tests folder
+        id: find
+        run: |
+          addons=$(for d in */; do d=${d%/}; if [ -f "$d/config.yaml" ] && [ -d "$d/tests" ] && [ -f "$d/requirements-dev.txt" ]; then printf '"%s",' "$d"; fi; done)
+          echo "addons=[${addons%,}]" >> "$GITHUB_OUTPUT"
+          echo "Add-ons with tests: [${addons%,}]"
+
+  test:
+    name: Test ${{ matrix.addon }}
+    needs: find
+    if: needs.find.outputs.addons != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        addon: ${{ fromJson(needs.find.outputs.addons) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: ${{ matrix.addon }}/requirements*.txt
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.addon }}
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        working-directory: ${{ matrix.addon }}
+        run: python -m pytest tests/ -v --tb=short

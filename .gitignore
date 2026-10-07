@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.claude/
+tmp/
+.DS_Store
+*.csv
+
+# Files the Claude desktop app saves into this folder
+Claude outputs/

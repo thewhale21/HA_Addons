@@ -1,0 +1,40 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Home Assistant Add-on: OCPP Charge Proxy
+# Runs the OCPP chargepoint proxy
+# ==============================================================================
+
+export IO_SERVER_HOSTNAME=$(bashio::config 'server_hostname')
+export IO_CHARGEPOINT_ID=$(bashio::config 'chargepoint_id')
+export IO_PASSWORD=$(bashio::config 'password')
+export IO_CHARGER_MODEL=$(bashio::config 'charger_model')
+export IO_CHARGER_VENDOR=$(bashio::config 'charger_vendor')
+export IO_CHARGER_SERIAL=$(bashio::config 'charger_serial')
+export IO_FIRMWARE_VERSION=$(bashio::config 'firmware_version')
+export IO_INITIAL_ENERGY_WH=$(bashio::config 'initial_energy_wh')
+
+# Auto-generate serial number if empty, write back to config
+if [ -z "${IO_CHARGER_SERIAL}" ]; then
+    # Check if we already have a persisted serial
+    if [ -f /data/serial_number.json ]; then
+        IO_CHARGER_SERIAL=$(python3 -c "import json; print(json.load(open('/data/serial_number.json'))['serial'])" 2>/dev/null)
+    fi
+    if [ -z "${IO_CHARGER_SERIAL}" ]; then
+        IO_CHARGER_SERIAL=$(shuf -i 100000-999999 -n 1)
+        python3 -c "import json; json.dump({'serial': '${IO_CHARGER_SERIAL}'}, open('/data/serial_number.json', 'w'))"
+        bashio::log.info "Generated charger serial number: ${IO_CHARGER_SERIAL}"
+    fi
+    bashio::addon.option 'charger_serial' "${IO_CHARGER_SERIAL}"
+    export IO_CHARGER_SERIAL
+fi
+
+# Clear initial_energy_wh after reading (one-shot seed)
+if [ "${IO_INITIAL_ENERGY_WH}" -gt 0 ] 2>/dev/null; then
+    bashio::log.info "initial_energy_wh=${IO_INITIAL_ENERGY_WH} Wh (applied only if above the stored register)"
+    bashio::addon.option 'initial_energy_wh' '0'
+fi
+
+bashio::log.info "Starting OCPP Charge Proxy..."
+cd /app || exit 1
+exec python3 -m src

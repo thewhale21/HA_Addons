@@ -1,0 +1,7 @@
+---
+configuration:
+  example_option:
+    name: Example option
+    description: >-
+      An example add-on option, shown on the web page (Overview). Replace it
+      with your own options here, in config.yaml and in src/config.py.

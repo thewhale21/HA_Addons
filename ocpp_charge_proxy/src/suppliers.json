@@ -1,0 +1,42 @@
+{
+  "_about": [
+    "Defaults for each supplier. Edit this file and rebuild the add-on to change them.",
+    "Anything set on the web page (Settings > Your supplier) still wins over these.",
+    "name: shown on the page, and how a supplier is matched in the other settings.",
+    "dispatch_prefix: the start of the supplier's smart charging (intelligent dispatching) binary sensor's entity ID.",
+    "schedule_sensor_suffix: instead, a sensor whose entity ID contains this, with a 'schedule' attribute (E.ON Next).",
+    "ready_times: the ready (target) times its app accepts, from / to on the hour or half hour; null: it has no ready time.",
+    "daily_limit_h: the most hours of smart charging it schedules (Force schedule on supplier keeps within it); null: no limit.",
+    "limit_reset: when that limit starts again: a time (HH:MM, every day), or \"rolling\" (any 24 hours).",
+    "other: used for a supplier that isn't listed."
+  ],
+  "suppliers": [
+    {
+      "name": "Octopus Energy",
+      "dispatch_prefix": "binary_sensor.octopus_energy_",
+      "ready_times": {"from": "00:00", "to": "23:30"},
+      "daily_limit_h": 6,
+      "limit_reset": "12:00"
+    },
+    {
+      "name": "EDF Energy",
+      "dispatch_prefix": "binary_sensor.edf_energy_",
+      "ready_times": {"from": "04:00", "to": "11:00"},
+      "daily_limit_h": null,
+      "limit_reset": "rolling"
+    },
+    {
+      "name": "E.ON Next",
+      "schedule_sensor_suffix": "smart_charging_schedule",
+      "ready_times": null,
+      "daily_limit_h": null,
+      "limit_reset": "rolling"
+    }
+  ],
+  "other": {
+    "name": "Your supplier",
+    "ready_times": {"from": "04:00", "to": "11:00"},
+    "daily_limit_h": null,
+    "limit_reset": "rolling"
+  }
+}

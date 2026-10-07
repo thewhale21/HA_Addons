@@ -1,0 +1,9 @@
+# https://developers.home-assistant.io/docs/add-ons/configuration#add-on-dockerfile
+build_from:
+  aarch64: "ghcr.io/home-assistant/aarch64-base-python:3.13-alpine3.21"
+  amd64: "ghcr.io/home-assistant/amd64-base-python:3.13-alpine3.21"
+labels:
+  org.opencontainers.image.title: "Home Assistant Add-on: OCPP Charge Proxy"
+  org.opencontainers.image.description: "Virtual OCPP 1.6 chargepoint for smart tariff suppliers"
+  org.opencontainers.image.source: "https://github.com/thewhale21/ocpp_charge_proxy"
+  org.opencontainers.image.licenses: "MIT"
