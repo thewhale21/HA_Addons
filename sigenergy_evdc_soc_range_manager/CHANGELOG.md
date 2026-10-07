@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0 — History on the Schedule tab
+
+- **Feature:** a History card on the Schedule tab: every start and stop,
+  what it would have done while Watch only was on, dropouts, failures and
+  each time scheduled limits came on or went back to the defaults, by
+  day, with the limits in use and the car's SoC at the time. Filter to
+  starts and stops, watch only, limits, or dropouts and failures. The
+  last 500 are kept (up from 100).
+
 ## 0.8.0 — Schedule week view, power flow fixes
 
 - **Feature:** a week view on the Schedule tab, like the OCPP Charge

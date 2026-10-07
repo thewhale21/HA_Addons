@@ -19,11 +19,12 @@ from typing import Awaitable, Callable, Optional
 from src.controller import RULES, Decision, Inputs, decide
 from src.flow import flows, house_load
 from src.rates import battery_rates
+from src.schedule import describe
 from src.stats import Sample
 
 logger = logging.getLogger(__name__)
 
-LOG_SIZE = 100
+LOG_SIZE = 500  # the history on the Schedule tab
 UNKNOWN = ("unknown", "unavailable", "none", "")
 
 # Lists the Settings tab can change (Advanced); matched without regard to case
@@ -106,6 +107,7 @@ class Manager:
         self.schedule = None  # src.schedule.Schedule: limits changed for a while
         self.was_discharging = False  # what the charger was doing while it last ran
         self.dropouts: list[float] = []  # times the car stopped discharging by itself, not yet collected
+        self._scheduled: Optional[tuple] = None  # the schedule entries on at the last look
         self.soc: Optional[float] = None  # the car's last known SoC
         self.soc_at: Optional[float] = None  # ...when it was read
         self.soc_before_plug_in = False  # ...and it's from before the car was last plugged in
@@ -198,6 +200,7 @@ class Manager:
             local = datetime.datetime.fromtimestamp(now)
             self.schedule.tidy(local)
             high, low, scheduled = self.schedule.apply(base_high, base_low, local)
+        self._limits_changed(scheduled, high, low, now)
 
         mode_st = get("v2x_mode")
         mode = _text(mode_st)
@@ -265,7 +268,7 @@ class Manager:
         button = entities.get("start_button" if action == "start" else "stop_button")
         watching = bool(settings.get("observe_only")) and rule != "manual"
         entry = {"at": _iso(now), "action": action, "rule": rule, "reason": reason,
-                 "soc": self.soc, "pressed": False, "observe_only": watching, "error": None}
+                 "soc": self.soc, "pressed": False, "observe_only": watching, "error": None, **self._limits_now()}
         self.last_press_at = now
         if not button:
             entry["error"] = f"No {action} button set on the Settings tab"
@@ -306,12 +309,37 @@ class Manager:
                 return False
         return False
 
+    def _limits_now(self) -> dict:
+        """The limits in use, for a history entry."""
+        i, r = self.inputs, self.readings
+        return {"high": i.high if i else None, "low": i.low if i else None,
+                "scheduled": [e.get("label") or "scheduled" for e in r.get("scheduled") or []]}
+
+    def _limits_changed(self, scheduled: list, high, low, now: float) -> None:
+        """A schedule entry came on or went off: note it in the history."""
+        ids = tuple(sorted(e["id"] for e in scheduled))
+        if self._scheduled is None or ids == self._scheduled:
+            self._scheduled = ids  # the first look after starting isn't a change
+            return
+        self._scheduled = ids
+        fmt = lambda v: "—" if v is None else f"{v:g}%"  # noqa: E731
+        if scheduled:
+            names = ", ".join(e.get("label") or describe(e) for e in scheduled)
+            reason = f"Scheduled limits on ({names}): high {fmt(high)}, low {fmt(low)}."
+        else:
+            reason = f"Back to the default limits: high {fmt(high)}, low {fmt(low)}."
+        self.log.append({"at": _iso(now), "action": "limits", "rule": "schedule", "reason": reason, "soc": self.soc,
+                         "pressed": False, "observe_only": False, "error": None, "high": high, "low": low,
+                         "scheduled": [e.get("label") or "scheduled" for e in scheduled]})
+        self._save()
+        logger.info(reason)
+
     def _dropout(self, now: float) -> None:
         """The car stopped discharging without being told to."""
         self.dropouts.append(now)
         self.log.append({"at": _iso(now), "action": "dropout", "rule": "dropout",
                          "reason": "The car stopped discharging by itself.", "soc": self.soc,
-                         "pressed": False, "observe_only": False, "error": None})
+                         "pressed": False, "observe_only": False, "error": None, **self._limits_now()})
         self._save()
         logger.info("The car stopped discharging by itself (at %s%%)", self.soc)
 
@@ -387,7 +415,7 @@ class Manager:
             "active_since": _iso(self.active_since),
             "presses_today": self.presses_today,
             "last_action": next((x for x in reversed(self.log) if x.get("action") in ("start", "stop")), None),
-            "log": list(self.log)[-30:][::-1],
+            "log": [x for x in self.log if x.get("action") != "limits"][-30:][::-1],
             "energy": self.energy(),
             "rates": self.rates(),
             "flow": self.power_flow(),

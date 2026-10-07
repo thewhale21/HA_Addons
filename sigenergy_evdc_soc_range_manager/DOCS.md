@@ -160,6 +160,12 @@ crosses the other one, the other moves out of its way (a scheduled low of
 95% with an default high of 80% makes the high 96%). The energy and rate
 sensors use the scheduled limits too, so Predbat sees the change.
 
+**History** (at the bottom of the Schedule tab) lists every start and
+stop, what it would have done while Watch only was on, dropouts,
+failures, and each time scheduled limits came on or went back to the
+defaults, with the limits in use and the car's SoC at the time. It keeps
+the last 500.
+
 ## Statistics
 
 The **Statistics** tab is about the car's battery.

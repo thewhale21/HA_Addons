@@ -224,6 +224,8 @@
   .legend b.band { display: inline-block; width: 12px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
   .seg.days button { padding: 6px 8px; }
   tr.off td { opacity: .5; }
+  .honly { display: none; }
+  @media (max-width: 640px) { .hcol { display: none; } .honly { display: block; } #h-rows td[colspan] { padding-top: 10px; } }
   td.acts { white-space: nowrap; }
   @media (max-width: 640px) { td.acts button { display: block; margin: 0 0 6px auto; } }
   /* Power flow: solar, grid, home battery, house and car */
@@ -354,6 +356,17 @@
         <thead><tr><th>When</th><th>Limits</th><th>Next</th><th class="num"></th></tr></thead>
         <tbody id="o-sched"></tbody>
       </table></div>
+    </div>
+    <div class="card">
+      <h2>History<span class="spacer"></span>
+        <span class="seg" role="group" aria-label="Show" id="h-filter"><button data-f="all" aria-pressed="true">All</button><button data-f="actions" aria-pressed="false">Starts and stops</button><button data-f="watch" aria-pressed="false">Watch only</button><button data-f="limits" aria-pressed="false">Limits</button><button data-f="problems" aria-pressed="false">Dropouts and failures</button></span>
+      </h2>
+      <div class="note" style="margin:0 0 6px">What it did, and what it would have done while Watch only was on, with the limits in use at the time. The last 500 kept.</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>What and why</th><th class="num hcol">Limits</th><th class="num hcol">SoC</th></tr></thead>
+        <tbody id="h-rows"></tbody>
+      </table></div>
+      <div class="row" id="h-more-row" hidden><button class="btn small" id="h-more">Show more</button></div>
     </div>
   </section>
 
@@ -674,7 +687,7 @@ setInterval(() => {
 const RULES = {
   house_needs_power: 'House needs power', charge_opportunity: 'Spare power to charge', in_range: 'Within the limits',
   high_limit: 'Reached the high limit', low_limit: 'Reached the low limit', manual: 'Pressed on this page',
-  dropout: 'Stopped discharging by itself',
+  dropout: 'Stopped discharging by itself', schedule: 'Schedule',
 };
 const kw = (v) => v === null || v === undefined ? '—' : `${num(Math.abs(v), 2)} kW`;
 function renderState(s) {
@@ -880,6 +893,53 @@ function drawSchedule(v) {
 async function refreshSchedule() {
   try { drawSchedule(await api('schedule')); } catch (e) {}
 }
+
+// ---------- History: every action and change of limits (newest first) ----------
+const hist = {entries: [], filter: 'all', shown: 50};
+const HIST_FILTERS = {
+  all: () => true,
+  actions: (x) => (x.action === 'start' || x.action === 'stop') && !x.observe_only,
+  watch: (x) => x.observe_only,
+  limits: (x) => x.action === 'limits',
+  problems: (x) => x.action === 'dropout' || !!x.error,
+};
+async function refreshHistory() {
+  try { hist.entries = (await api('history')).entries || []; } catch (e) { return; }
+  drawHistory();
+}
+function drawHistory() {
+  const list = hist.entries.filter(HIST_FILTERS[hist.filter]);
+  const shown = list.slice(0, hist.shown);
+  let day = null, html = '';
+  for (const x of shown) {
+    const d = new Date(x.at), key = d.toDateString();
+    if (key !== day) {
+      day = key;
+      html += `<tr><td colspan="4" class="label" style="padding-top:14px">${d.toLocaleDateString([], {weekday: 'long', day: 'numeric', month: 'long'})}</td></tr>`;
+    }
+    const what = x.action === 'limits' ? '<span class="chip info">Limits</span>'
+      : x.action === 'dropout' ? '<span class="chip warn">Dropped out</span>'
+      : x.error ? `<span class="chip err">Failed to ${esc(x.action)}</span>`
+      : x.observe_only ? `<span class="chip warn">Would ${esc(x.action)}</span>`
+      : `<span class="chip ${x.action === 'start' ? 'ok' : ''}">${x.action === 'start' ? 'Started' : 'Stopped'}</span>`;
+    const title = x.action === 'limits' ? '' : ` ${esc(RULES[x.rule] || x.rule)}`;
+    const lim = x.high == null && x.low == null ? '—'
+      : `${num(x.low, 0)}–${num(x.high, 0)}%${(x.scheduled || []).length ? `<div class="sub">${esc(x.scheduled.join(', '))}</div>` : ''}`;
+    html += `<tr><td style="white-space:nowrap">${d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})}</td>
+      <td>${what}${title}<div class="sub">${esc(x.error || x.reason || '')}</div>
+        <div class="sub honly">Limits ${x.high == null ? '—' : `${num(x.low, 0)}–${num(x.high, 0)}%`}${(x.scheduled || []).length ? ` (${esc(x.scheduled.join(', '))})` : ''} · car ${x.soc == null ? '—' : num(x.soc, 0) + '%'}</div></td>
+      <td class="num hcol">${lim}</td><td class="num hcol">${x.soc == null ? '—' : num(x.soc, 0) + '%'}</td></tr>`;
+  }
+  $('h-rows').innerHTML = html || '<tr><td colspan="4" class="empty">Nothing yet</td></tr>';
+  $('h-more-row').hidden = list.length <= hist.shown;
+}
+$('h-filter').addEventListener('click', (ev) => {
+  const f = ev.target.dataset.f; if (!f) return;
+  hist.filter = f; hist.shown = 50;
+  $('h-filter').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.f === f));
+  drawHistory();
+});
+$('h-more').addEventListener('click', () => { hist.shown += 100; drawHistory(); });
 
 // The week view: today and the next 6 days, an entry's high limit in the top half of
 // each day and its low limit in the bottom half
@@ -1495,6 +1555,7 @@ $('d-bundle').addEventListener('click', async () => {
 // ---------- refresh loop ----------
 function refreshTab(full) {
   if (activeTab === 'schedule' && (full || Date.now() - (refreshSchedule._at || 0) > 60000)) { refreshSchedule._at = Date.now(); refreshSchedule(); }
+  if (activeTab === 'schedule') refreshHistory();
   if (activeTab === 'settings') { refreshSensors(full); if (full) refreshAppSettings(); }
   else if (activeTab === 'stats') refreshStats();
   else if (activeTab === 'health') refreshHealth();

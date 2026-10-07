@@ -53,6 +53,7 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app.router.add_post("/api/schedule", handle_add_schedule)
     app.router.add_post("/api/schedule/{id}", handle_update_schedule)
     app.router.add_delete("/api/schedule/{id}", handle_delete_schedule)
+    app.router.add_get("/api/history", handle_history)
     # Statistics tab (src/stats.py)
     app.router.add_get("/api/stats", handle_stats)
     # Settings made on the web page (src/app_settings.py)
@@ -266,6 +267,14 @@ async def handle_update_schedule(request: web.Request) -> web.Response:
 
 async def handle_delete_schedule(request: web.Request) -> web.Response:
     return await _schedule_call(request, lambda s, b: s.remove(request.match_info["id"]))
+
+
+async def handle_history(request: web.Request) -> web.Response:
+    """Every start, stop (or would-be one, watching only), dropout and change of limits, newest first."""
+    runner = request.app["runner"]
+    if runner is None:
+        return _unavailable()
+    return web.json_response({"entries": list(runner.manager.log)[::-1]}, dumps=_dumps)
 
 
 async def handle_stats(request: web.Request) -> web.Response:

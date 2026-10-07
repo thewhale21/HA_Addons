@@ -353,3 +353,24 @@ def test_the_schedule_changes_the_limits_used(tmp_path):
     _run(m.step(_states(soc="60"), _entities(), _settings(), now=now.timestamp()))
     assert m.inputs.high == 50 and m.readings["base_high"] == 80
     assert m.readings["scheduled"][0]["high"] == 50 and m.decision.rule == "held_high"
+
+
+def test_the_history_notes_the_limits_and_schedule_changes(tmp_path):
+    import datetime
+    from src.schedule import Schedule
+
+    p = Presses()
+    m = Manager(str(tmp_path), press=p.press)
+    m.schedule = Schedule(str(tmp_path))
+    m.schedule.add({"kind": "weekly", "days": ["tue"], "start": "23:00", "end": "08:00", "high": 50, "label": "Work"})
+    tue = datetime.datetime(2026, 10, 6, 22, 0)
+    ent, st = _entities(), _settings(observe_only=True)
+    _run(m.step(_states(soc="60", lc=0.0), ent, st, now=tue.timestamp()))  # starts in range (watching)
+    assert m.log[-1]["action"] == "start" and m.log[-1]["observe_only"] and m.log[-1]["high"] == 80
+    _run(m.step(_states(soc="60", lc=0.0), ent, st, now=(tue + datetime.timedelta(hours=1, minutes=1)).timestamp()))
+    limits = [x for x in m.log if x["action"] == "limits"]
+    assert len(limits) == 1 and "Work" in limits[0]["reason"] and limits[0]["high"] == 50
+    assert all(x["action"] != "limits" for x in m.snapshot()["log"])  # not on the Overview
+    _run(m.step(_states(soc="60", lc=0.0), ent, st, now=(tue + datetime.timedelta(hours=10, minutes=1)).timestamp()))
+    limits = [x for x in m.log if x["action"] == "limits"]
+    assert len(limits) == 2 and "default" in limits[-1]["reason"] and limits[-1]["high"] == 80
