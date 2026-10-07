@@ -26,9 +26,27 @@ After the charger stops, for whatever reason, it isn't started again for
 the **restart wait** (3 minutes). Some cars stop discharging now and then;
 this stops the add-on restarting it over and over. While it waits, the
 status shows "Reconnecting car in … s" if it will start again once the wait
-is over. It also never presses a button within a minute of the last press.
+is over. It also never presses the same button again within a minute (the other
+button goes straight away, e.g. Stop at the low limit just after a Start).
 
 It looks whenever one of your entities changes, and every few seconds anyway.
+
+### Compared with the "V2X SOC Range Manager" automation
+
+The rules are the automation's, in its order, with the same thresholds.
+The differences:
+
+- It doesn't press Start while the charger is already running, or Stop
+  while it's already stopped (the automation's rules 2 and 3 can; the
+  press does nothing).
+- Spare power from exporting needs the export held for 10 s when it
+  decides, not just at the trigger.
+- If the charge signal (e.g. Predbat) is unavailable, the low-limit stop
+  still happens (the automation's needs it to be "off").
+- A charger alarm leaves the charger alone, and the limits stay between
+  20% and 99%.
+- It checks every few seconds as well as on changes, so it can act a
+  little sooner than the automation's triggers would.
 
 ## Getting started
 
@@ -105,7 +123,7 @@ maximum rate, today's kWh in and out, and the car's capacity and health. **Start
 | Spare power: export | 0.5 kW | Exporting more than this… |
 | Spare power: for | 10 s | …for at least this long |
 | Margin | 0% | Starts need the SoC this far inside the limits (stops are at the limits). 1 or 2 stops it bouncing at a limit |
-| Between button presses | 60 s | At least this long between presses |
+| Between button presses | 60 s | At least this long before pressing the same button again |
 | Watch only | off | Decide and log, but don't press anything |
 | Notify service | none | e.g. `notify.mobile_app_your_phone`: told on every start and stop |
 | Battery rates | 8 and 12.5 kW, 95%, 4.5 kW home, 8 kW car | See [Battery rates](#battery-rates) |

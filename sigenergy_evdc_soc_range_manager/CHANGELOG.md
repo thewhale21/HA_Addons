@@ -1,15 +1,24 @@
 # Changelog
 
+## 0.15.3 — Checked against the automation
+
+- **Fix:** the minute between button presses only applies to pressing the
+  same button again. Before, a stop at the low limit within a minute of a
+  start (or at the high limit within a minute of a start) waited out the
+  minute, so the car could discharge below the low limit for up to a
+  minute; the "V2X SOC Range Manager" automation stops it straight away.
+- **Docs:** the decisions were checked against the automation, rule by
+  rule; the remaining differences are listed in DOCS.md.
+
 ## 0.15.2 — Alarms on the SoC chart
 
 - **Fix:** alarms recorded before 0.13.0 showed on the Car SoC chart as
   unplugged. The next time it connects, the add-on checks those against
   Home Assistant's history (once) and marks them as alarms, shaded red.
-- **Change:** the running states for Plugged in no longer include the
-  stray `#Alarm`, and Alarm also counts `Alarm` and `Fault` (the
-  Sigenergy integration's names). During an alarm,
-  `binary_sensor.evdc_soc_range_plugged_in` reads off, as your own
-  plugged-in sensor does.
+- **Change:** Plugged in (Settings › Advanced) no longer lists `#Alarm`,
+  which the Sigenergy integration never reports (it says `Alarm`). During
+  an alarm `binary_sensor.evdc_soc_range_plugged_in` reads off, as a
+  plugged-in template that treats an alarm as unplugged does.
 
 ## 0.15.1 — Clearer status after a stop and a start
 

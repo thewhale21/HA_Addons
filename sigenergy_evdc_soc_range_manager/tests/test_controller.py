@@ -425,3 +425,14 @@ def test_the_chart_marks_alarms():
     from src.manager import soc_state
     assert soc_state(False, False, "Alarm", False, True) == "alarm"
     assert soc_state(True, True, "Discharging", True) == "discharge"
+
+
+def test_a_stop_at_the_low_limit_isnt_held_up_by_a_start_just_before(tmp_path):
+    # As the automation: the gap between presses is only for pressing the same button again
+    p = Presses()
+    m = Manager(str(tmp_path), press=p.press)
+    ent, st = _entities(), _settings()
+    _run(m.step(_states(soc="41", battery="-1", lc=1000.0), ent, st, now=1200.0))  # house needs power: start
+    assert p.pressed == ["button.sigen_inverter_dc_charger_start_charging"]
+    d = _run(m.step(_states(running="Discharging", soc="40", battery="-1"), ent, st, now=1230.0))
+    assert d.rule == "low_limit" and p.pressed[-1] == "button.sigen_inverter_dc_charger_stop_charging"

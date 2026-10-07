@@ -56,7 +56,7 @@ TUNING_DEFAULTS = {
     "export_kw": 0.5,  # exporting more than this = spare power to charge the car from
     "export_hold_s": 10,  # ...for at least this long
     "margin_pct": 0.0,  # starts need the SoC this far inside the limits (stops are at the limits)
-    "press_gap_s": 60,  # at least this long between button presses
+    "press_gap_s": 60,  # at least this long before pressing the same button again
 }
 
 

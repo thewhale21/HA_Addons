@@ -271,11 +271,15 @@ class Manager:
         decision = decide(inputs, settings)
         if decision.action:
             gap = float(settings.get("press_gap_s", 60))
-            if self.last_press_at is not None and now - self.last_press_at < gap:
+            last = self.last_press or {}
+            # The gap only stops the same button being pressed again too soon. The other one goes
+            # straight away, as the automation would (e.g. a stop at the low limit just after a start);
+            # a start straight after a stop can't happen anyway (the restart wait).
+            same = last.get("action", decision.action) == decision.action
+            if same and self.last_press_at is not None and now - self.last_press_at < gap:
                 left = round(gap - (now - self.last_press_at))
                 ago = round(now - self.last_press_at)
-                last = self.last_press or {}
-                if last.get("action") == decision.action and last.get("pressed"):
+                if last.get("pressed"):
                     # Just pressed this: the charger takes a few seconds to respond, so not a retry yet
                     decision = Decision(None, "press_gap", "Starting" if decision.action == "start" else "Stopping",
                                         f"{'Start' if decision.action == 'start' else 'Stop'} was pressed {ago} s ago; "
@@ -283,7 +287,8 @@ class Manager:
                                         f"{'started' if decision.action == 'start' else 'stopped'}).")
                 else:
                     decision = Decision(None, "press_gap", "Waiting to retry",
-                                        f"{RULES.get(decision.rule, decision.rule)}, but a button was pressed "
+                                        f"{RULES.get(decision.rule, decision.rule)}, but "
+                                        f"{'that was tried' if last.get('error') else 'that was decided'} "
                                         f"{ago} s ago; trying again in {left} s.")
             else:
                 await self.act(decision.action, decision.rule, decision.reason, entities, settings, now)

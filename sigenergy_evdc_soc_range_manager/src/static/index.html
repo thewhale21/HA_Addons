@@ -1504,7 +1504,7 @@ const TUNING = [
   ['export_kw', 'Spare power: export', 'kW', 'Exporting more than this means there\'s spare power to charge the car from…'],
   ['export_hold_s', 'Spare power: for', 's', '…for at least this long.'],
   ['margin_pct', 'Margin', '%', 'Starts need the SoC this far inside the limits; stops are at the limits. Stops it bouncing on and off at a limit. 0 = off.'],
-  ['press_gap_s', 'Between button presses', 's', 'At least this long, so the charger has time to respond.'],
+  ['press_gap_s', 'Between button presses', 's', 'At least this long before pressing the same button again, so the charger has time to respond. The other button isn\'t held up.'],
 ];
 const RATES = [
   ['rate_kw', 'Rate', 'kW', 'The plant\'s rate with the car in V2X or Solar Surplus mode.'],
