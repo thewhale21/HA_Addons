@@ -24,6 +24,8 @@ SENSORS = {
         "friendly_name": f"{NAME} Plugged In", "device_class": "plug"}),
     "charger_running": (f"binary_sensor.{PREFIX}_charger_running", {
         "friendly_name": f"{NAME} Charger Running", "device_class": "running"}),
+    "charger_alarm": (f"binary_sensor.{PREFIX}_charger_alarm", {
+        "friendly_name": f"{NAME} Charger Alarm", "device_class": "problem"}),
     "available_energy": (f"sensor.{PREFIX}_available_energy", {
         "friendly_name": f"{NAME} Available Energy", "unit_of_measurement": "kWh",
         "device_class": "energy_storage", "state_class": "measurement", "icon": "mdi:car-battery"}),
@@ -93,6 +95,7 @@ def values(state) -> dict:
         "vehicle_soc": (i.get("soc"), {"read_at": state.soc_at, "from_before_plug_in": state.soc_before_plug_in}),
         "plugged_in": _onoff(i.get("plugged_in")) if i else None,
         "charger_running": (_onoff(i.get("active")) if i else None, {"running_state": i.get("running_state")}),
+        "charger_alarm": (_onoff(i.get("alarm")) if i else None, {"running_state": i.get("running_state")}),
         "available_energy": energy.get("available_kwh"),
         "window_energy": energy.get("window_kwh"),
         "window_percent": energy.get("window_pct"),

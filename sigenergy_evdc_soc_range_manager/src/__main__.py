@@ -93,7 +93,12 @@ class Runner:
             i = self.manager.inputs
             if i is not None:
                 self.soc_history.add(now, self.manager.soc, i.high, i.low,
-                                     soc_state(i.active, i.discharging, i.running_state, i.plugged_in))
+                                     soc_state(i.active, i.discharging, i.running_state, i.plugged_in, i.alarm))
+            while self.manager.alarms:  # a charger alarm: say so, whatever the notification settings for starts and stops
+                try:
+                    await self.notify("EVDC: charger alarm", self.manager.alarms.pop(0))
+                except Exception as err:
+                    logger.warning("Couldn't send the notification: %s", err)
             if now - self._brief_at >= STATS_BRIEF_S:
                 self._brief_at = now
                 self.state.stats = self.stats_brief()
@@ -178,7 +183,7 @@ class Runner:
         start = now - hours * 3600
         events = []
         for x in self.manager.log:
-            if x.get("action") not in ("start", "stop", "dropout", "elsewhere_start", "elsewhere_stop"):
+            if x.get("action") not in ("start", "stop", "dropout", "elsewhere_start", "elsewhere_stop", "alarm", "alarm_cleared"):
                 continue
             try:
                 at = datetime.datetime.fromisoformat(x["at"].replace("Z", "+00:00")).timestamp()

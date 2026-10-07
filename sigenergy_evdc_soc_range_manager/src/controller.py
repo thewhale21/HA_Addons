@@ -78,6 +78,7 @@ class Inputs:
     ems_mode: Optional[str]
     charge_signal: Optional[bool]  # e.g. Predbat charging (None: not set up)
     ems_blocked: bool = False  # the EMS mode is one that rules out charging from export
+    alarm: bool = False  # the charger reports an alarm (an error): it's left alone
 
 
 @dataclass
@@ -103,6 +104,10 @@ def _pct(v: float) -> str:
 
 def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
     t = {**TUNING_DEFAULTS, **(tuning or {})}
+    if i.alarm:
+        return Decision(None, "alarm", "Charger alarm",
+                        f"The charger reports an alarm ({i.running_state}): it's left alone until that clears. "
+                        "Check it in the Sigenergy app.")
     if not i.plugged_in:
         return Decision(None, "not_plugged_in", "Not plugged in", "The car isn't plugged in.")
     if i.mode_on is None:

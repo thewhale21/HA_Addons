@@ -335,7 +335,7 @@
       <div class="chart socchart" id="o-socchart" role="img" aria-label="The car's SoC over time, with the limits and the starts and stops"></div>
       <div class="legend">
         <span><i class="ln-soc"></i>SoC</span><span><i class="ln-lim"></i>Limits</span>
-        <span><b class="band" style="background:var(--s-charge);opacity:.3"></b>Charging</span><span><b class="band" style="background:var(--s-dis);opacity:.3"></b>Discharging</span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 2px, transparent 2px 4px);opacity:.5"></b>Unplugged</span>
+        <span><b class="band" style="background:var(--s-charge);opacity:.3"></b>Charging</span><span><b class="band" style="background:var(--s-dis);opacity:.3"></b>Discharging</span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 2px, transparent 2px 4px);opacity:.5"></b>Unplugged</span><span><b class="band" style="background:var(--err);opacity:.3"></b>Charger alarm</span>
         <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:var(--ok)"/></svg> Started</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1H9L5 9Z" style="fill:var(--text2)"/></svg> Stopped</span>
         <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:none;stroke:var(--text2);stroke-width:1.5"/></svg> Would (watch only)</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 0L10 5L5 10L0 5Z" style="fill:var(--warn)"/></svg> Dropped out</span><span><svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" style="fill:none;stroke:var(--text2);stroke-dasharray:2 1.5"/></svg> Started or stopped elsewhere</span>
       </div>
@@ -400,7 +400,7 @@
     </div>
     <div class="card">
       <h2>History<span class="spacer"></span>
-        <span class="seg" role="group" aria-label="Show" id="h-filter"><button data-f="all" aria-pressed="true">All</button><button data-f="actions" aria-pressed="false">Starts and stops</button><button data-f="watch" aria-pressed="false">Watch only</button><button data-f="limits" aria-pressed="false">Limits</button><button data-f="problems" aria-pressed="false">Dropouts and failures</button></span>
+        <span class="seg" role="group" aria-label="Show" id="h-filter"><button data-f="all" aria-pressed="true">All</button><button data-f="actions" aria-pressed="false">Starts and stops</button><button data-f="watch" aria-pressed="false">Watch only</button><button data-f="limits" aria-pressed="false">Limits</button><button data-f="problems" aria-pressed="false">Problems</button></span>
       </h2>
       <div class="note" style="margin:0 0 6px">What it did, and what it would have done while Watch only was on, with the limits in use at the time. The last 500 kept.</div>
       <div class="table-wrap"><table>
@@ -668,6 +668,7 @@ function currentIssues() {
   if (state && state.observe_only) out.push(['warn', 'Watch only is on: the charger\'s buttons aren\'t pressed (Settings)']);
   const last = state && state.last_action;
   if (last && last.error) out.push(['err', `Couldn't ${last.action} the charger: ${last.error}`]);
+  if (state && state.inputs && state.inputs.alarm) out.push(['err', `The charger reports an alarm (${state.inputs.running_state}): check it in the Sigenergy app`]);
   return out;
 }
 function updateStatus() {
@@ -728,7 +729,7 @@ setInterval(() => {
 const RULES = {
   house_needs_power: 'House needs power', charge_opportunity: 'Spare power to charge', in_range: 'Within the limits',
   high_limit: 'Reached the high limit', low_limit: 'Reached the low limit', manual: 'Pressed on this page',
-  dropout: 'Stopped discharging by itself', schedule: 'Schedule',
+  dropout: 'Stopped discharging by itself', schedule: 'Schedule', alarm: 'Charger',
   elsewhere_start: 'Started by something else', elsewhere_stop: 'Stopped by something else',
 };
 const kw = (v) => v === null || v === undefined ? '—' : `${num(Math.abs(v), 2)} kW`;
@@ -741,7 +742,7 @@ function renderState(s) {
   if (s.observe_only) chips.push('<span class="chip warn">Watch only: not pressing buttons</span>');
   if ('plugged_in' in i) chips.push(i.plugged_in ? '<span class="chip ok">Plugged in</span>' : '<span class="chip">Not plugged in</span>');
   if (r.mode != null) chips.push(`<span class="chip ${i.mode_on ? 'ok' : ''}">Mode: ${esc(r.mode)}</span>`);
-  if (i.running_state) chips.push(`<span class="chip ${i.active ? 'info' : ''}">Charger: ${esc(i.running_state)}</span>`);
+  if (i.running_state) chips.push(`<span class="chip ${i.alarm ? 'err' : i.active ? 'info' : ''}">Charger: ${esc(i.running_state)}</span>`);
   $('o-chips').innerHTML = chips.join('');
   $('o-note').hidden = !s.setup_note; $('o-note-text').textContent = s.setup_note || '';
 
@@ -809,7 +810,9 @@ function renderState(s) {
   const log = s.log || [];
   updateStatus();
   $('o-log').innerHTML = log.length ? log.map((x) => {
-    const what = x.action === 'dropout' ? '<span class="chip warn">Dropped out</span>'
+    const what = x.action === 'alarm' ? '<span class="chip err">Charger alarm</span>'
+      : x.action === 'alarm_cleared' ? '<span class="chip ok">Alarm cleared</span>'
+      : x.action === 'dropout' ? '<span class="chip warn">Dropped out</span>'
       : x.action.startsWith('elsewhere_') ? `<span class="chip">${x.action === 'elsewhere_start' ? 'Started' : 'Stopped'} elsewhere</span>`
       : x.error ? `<span class="chip err">Failed to ${esc(x.action)}</span>`
       : x.observe_only ? `<span class="chip warn">Would ${esc(x.action)}</span>`
@@ -947,7 +950,7 @@ const HIST_FILTERS = {
   actions: (x) => ((x.action === 'start' || x.action === 'stop') && !x.observe_only) || (x.action || '').startsWith('elsewhere_'),
   watch: (x) => x.observe_only,
   limits: (x) => x.action === 'limits',
-  problems: (x) => x.action === 'dropout' || !!x.error,
+  problems: (x) => x.action === 'dropout' || x.action === 'alarm' || x.action === 'alarm_cleared' || !!x.error,
 };
 async function refreshHistory() {
   try { hist.entries = (await api('history')).entries || []; } catch (e) { return; }
@@ -964,6 +967,8 @@ function drawHistory() {
       html += `<tr><td colspan="4" class="label" style="padding-top:14px">${d.toLocaleDateString([], {weekday: 'long', day: 'numeric', month: 'long'})}</td></tr>`;
     }
     const what = x.action === 'limits' ? '<span class="chip info">Limits</span>'
+      : x.action === 'alarm' ? '<span class="chip err">Charger alarm</span>'
+      : x.action === 'alarm_cleared' ? '<span class="chip ok">Alarm cleared</span>'
       : x.action === 'dropout' ? '<span class="chip warn">Dropped out</span>'
       : x.action.startsWith('elsewhere_') ? `<span class="chip">${x.action === 'elsewhere_start' ? 'Started' : 'Stopped'} elsewhere</span>`
       : x.error ? `<span class="chip err">Failed to ${esc(x.action)}</span>`
@@ -1189,14 +1194,14 @@ function drawSocChart() {
   // Spans: each point holds until the next one (the last until now)
   const spans = pts.map((p, n) => [p[0], n + 1 < pts.length ? pts[n + 1][0] : t1, p]);
   // What the charger was doing, shading the whole height behind the line
-  const SC = {charge: 'var(--s-charge)', discharge: 'var(--s-dis)', unplugged: 'var(--text2)'};
+  const SC = {charge: 'var(--s-charge)', discharge: 'var(--s-dis)', unplugged: 'var(--text2)', alarm: 'var(--err)'};
   const runs = [];  // spans in a row with the same state, as one
   for (const [a, b, p] of spans) {
     const last = runs[runs.length - 1];
     if (last && last[2] === p[4] && Math.abs(last[1] - a) < 1) last[1] = b; else runs.push([a, b, p[4]]);
   }
   svg += '<defs><pattern id="sc-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.5" height="6" style="fill:var(--text2)"/></pattern></defs>';
-  for (const [a, b, st] of runs) if (SC[st]) svg += `<rect class="shade" x="${X(a)}" y="${P.t}" width="${Math.max(1, X(b) - X(a))}" height="${ph}" style="fill:${st === 'unplugged' ? 'url(#sc-hatch)' : SC[st]}${st === 'unplugged' ? ';opacity:.18' : ''}"/>`;
+  for (const [a, b, st] of runs) if (SC[st]) svg += `<rect class="shade" x="${X(a)}" y="${P.t}" width="${Math.max(1, X(b) - X(a))}" height="${ph}" style="fill:${st === 'unplugged' ? 'url(#sc-hatch)' : SC[st]}${st === 'unplugged' ? ';opacity:.18' : st === 'alarm' ? ';opacity:.22' : ''}"/>`;
   // The limits band, and its edges
   let hiPath = '', loPath = '';
   for (const [a, b, p] of spans) {
@@ -1215,10 +1220,14 @@ function drawSocChart() {
   svg += `<path class="soc" d="${line}"/>`;
   // Starts, stops (hollow while watching only) and dropouts, at the SoC then
   const socAt = (t) => { let v = null; for (const p of pts) { if (p[0] > t) break; if (p[1] != null) v = p[1]; } return v; };
-  const evs = (d.events || []).map((e) => ({...e, v: e.soc != null ? e.soc : socAt(e.t)})).filter((e) => e.v != null);
+  const evs = (d.events || []).map((e) => ({...e, v: e.soc != null ? e.soc : socAt(e.t)}))
+    .filter((e) => e.v != null || e.action === 'alarm' || e.action === 'alarm_cleared');
   for (const e of evs) {
     const x = X(e.t), y = Y(e.v);
     if (e.action === 'dropout') svg += `<path class="ev" d="M${x},${y - 6} L${x + 6},${y} L${x},${y + 6} L${x - 6},${y} Z" style="fill:var(--warn)"/>`;
+    else if (e.action === 'alarm' || e.action === 'alarm_cleared') {
+      if (e.action === 'alarm') svg += `<circle class="ev" cx="${x}" cy="${P.t + 8}" r="7" style="fill:var(--err);stroke:var(--card)"/><text x="${x}" y="${P.t + 12}" text-anchor="middle" style="fill:#fff;font-weight:700;font-size:11px">!</text>`;
+    }
     else if (e.action.startsWith('elsewhere_')) svg += `<circle class="ev" cx="${x}" cy="${y}" r="4" style="fill:var(--card);stroke:var(--text2);stroke-dasharray:2 1.5"/>`;
     else {
       const up = e.action === 'start', c = e.error ? 'var(--err)' : up ? 'var(--ok)' : 'var(--text2)';
@@ -1240,8 +1249,8 @@ function drawSocChart() {
   box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${svg}</svg>`;
   // Hover: the time, SoC, limits, what it was doing and anything that happened near then
   const tip = tipFor(box), hit = box.querySelector('#sc-hit'), cross = box.querySelector('#sc-cross');
-  const STATE = {charge: 'charging', discharge: 'discharging', idle: 'idle', unplugged: 'unplugged'};
-  const WHAT = (e) => e.action === 'dropout' ? 'Dropped out' : e.action.startsWith('elsewhere_') ? (e.action === 'elsewhere_start' ? 'Started elsewhere' : 'Stopped elsewhere') : `${e.observe_only ? 'Would ' + e.action : e.action === 'start' ? 'Started' : 'Stopped'}${e.error ? ' (failed)' : ''}`;
+  const STATE = {charge: 'charging', discharge: 'discharging', idle: 'idle', unplugged: 'unplugged', alarm: 'charger alarm'};
+  const WHAT = (e) => e.action === 'alarm' ? 'Charger alarm' : e.action === 'alarm_cleared' ? 'Alarm cleared' : e.action === 'dropout' ? 'Dropped out' : e.action.startsWith('elsewhere_') ? (e.action === 'elsewhere_start' ? 'Started elsewhere' : 'Stopped elsewhere') : `${e.observe_only ? 'Would ' + e.action : e.action === 'start' ? 'Started' : 'Stopped'}${e.error ? ' (failed)' : ''}`;
   hit.addEventListener('mousemove', (ev) => {
     const r = box.querySelector('svg').getBoundingClientRect(), x = (ev.clientX - r.left) * (W / r.width);
     const t = t0 + (x - P.l) / pw * (t1 - t0);
@@ -1487,6 +1496,7 @@ const LISTS = [
   ['plugged_states', 'Plugged in', 'Running states that mean a car is plugged in.'],
   ['active_states', 'Running', 'Running states that mean the charger is running.'],
   ['discharging_states', 'Discharging', 'Running states that mean the car is discharging.'],
+  ['alarm_states', 'Alarm', 'Running states that mean the charger has an error: it\'s left alone, and you\'re told.'],
   ['mode_states', 'V2X mode', 'States of the V2X mode entity that mean "manage the charger".'],
   ['blocked_ems_modes', 'EMS modes without export charging', 'EMS modes in which exporting isn\'t spare power.'],
   ['energy_mode_states', 'Modes for the energy and rate sensors', 'Mode entity states in which those sensors count the car.'],

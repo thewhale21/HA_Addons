@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.13.0 — Charger alarms
+
+- **Feature:** when the charger's running state is an alarm (`#Alarm`,
+  i.e. an error with the charger), the add-on leaves it alone (no button
+  presses) until it clears, and says so: the status, the health dot, a
+  red chip, a History entry when it starts and when it clears (with how
+  long it lasted), a notification through your notify service, and
+  `binary_sensor.evdc_soc_range_charger_alarm`.
+- **Feature:** the Car SoC chart shades alarms red, with a ! where each
+  one began.
+- **Change:** the History's "Dropouts and failures" filter is now
+  "Problems" and includes alarms. Which running states count as an alarm
+  is under Settings › Advanced.
+
 ## 0.12.0 — More chart periods
 
 - **Feature:** the Car SoC chart shows the last 1, 3, 6, 12, 24 or 48

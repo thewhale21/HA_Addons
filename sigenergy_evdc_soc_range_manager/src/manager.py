@@ -34,6 +34,8 @@ LIST_DEFAULTS = {
                        "Charging", "Discharging"],
     "active_states": ["Charging", "Discharging", "Preparing Insulation", "Preparing Comm"],
     "discharging_states": ["Discharging"],
+    # ...and that mean the charger has a fault
+    "alarm_states": ["#Alarm", "Alarm", "Fault"],
     # The V2X mode entity's state(s) that mean "manage the charger"
     "mode_states": ["V2X", "on"],
     # ...that count for the energy and battery rate sensors (as the V2X template sensors did)
@@ -108,6 +110,8 @@ class Manager:
         self.was_discharging = False  # what the charger was doing while it last ran
         self.dropouts: list[float] = []  # times the car stopped discharging by itself, not yet collected
         self._scheduled: Optional[tuple] = None  # the schedule entries on at the last look
+        self.alarm_since: Optional[float] = None  # the charger has reported an alarm since then
+        self.alarms: list[str] = []  # alarm messages not yet sent as notifications
         self.soc: Optional[float] = None  # the car's last known SoC
         self.soc_at: Optional[float] = None  # ...when it was read
         self.soc_before_plug_in = False  # ...and it's from before the car was last plugged in
@@ -166,6 +170,11 @@ class Manager:
         plugged = _in(running, lists["plugged_states"])
         active = _in(running, lists["active_states"])
         discharging = _in(running, lists["discharging_states"])
+        alarm = _in(running, lists["alarm_states"])
+        if alarm != bool(self.alarm_since) and self.active is not None:
+            self._alarm_changed(alarm, running, now)
+        elif alarm and not self.alarm_since:
+            self.alarm_since = now
 
         if self.active is None:  # first look: when did the running state last change?
             changed = (running_st or {}).get("last_changed")
@@ -177,7 +186,7 @@ class Manager:
             logger.info("Charger %s (%s)", "running" if active else "stopped", running or "unknown")
             if active and plugged and not self._ours("start", now):
                 self._elsewhere("start", now)
-            elif not active and plugged and not self._ours("stop", now):
+            elif not active and plugged and not alarm and not self._ours("stop", now):  # an alarm is noted as one
                 if self.was_discharging:
                     self._dropout(now)
                 else:
@@ -227,6 +236,7 @@ class Manager:
 
         self.inputs = Inputs(
             plugged_in=plugged, mode_on=mode_on, running_state=running, active=active, discharging=discharging,
+            alarm=alarm,
             inactive_for=None if active else max(0.0, now - (now if self.active_since is None else self.active_since)),
             soc=self.soc, high=high, low=low,
             battery_kw=power_kw(get("battery_power")), grid_kw=power_kw(get("grid_power")),
@@ -352,6 +362,25 @@ class Manager:
                          "scheduled": [e.get("label") or "scheduled" for e in scheduled]})
         self._save()
         logger.info(reason)
+
+    def _alarm_changed(self, alarm: bool, running: Optional[str], now: float) -> None:
+        """The charger went into, or came out of, its alarm state."""
+        if alarm:
+            self.alarm_since = now
+            reason = f"The charger reports an alarm ({running}): an error with the charger. Check it in the Sigenergy app."
+            self.log.append({"at": _iso(now), "action": "alarm", "rule": "alarm", "reason": reason, "soc": self.soc,
+                             "pressed": False, "observe_only": False, "error": None, **self._limits_now()})
+            self.alarms.append(reason)
+            logger.warning(reason)
+        else:
+            lasted = round((now - (self.alarm_since or now)) / 60)
+            self.alarm_since = None
+            reason = f"The charger's alarm cleared after {lasted} min (now {running or 'unknown'})."
+            self.log.append({"at": _iso(now), "action": "alarm_cleared", "rule": "alarm", "reason": reason,
+                             "soc": self.soc, "pressed": False, "observe_only": False, "error": None,
+                             **self._limits_now()})
+            logger.info(reason)
+        self._save()
 
     def _dropout(self, now: float) -> None:
         """The car stopped discharging without being told to."""
@@ -494,8 +523,10 @@ def samples_from_history(history: dict, entities: dict, settings: dict, units: O
     return out
 
 
-def soc_state(active: bool, discharging: bool, running: Optional[str], plugged: bool) -> str:
+def soc_state(active: bool, discharging: bool, running: Optional[str], plugged: bool, alarm: bool = False) -> str:
     """What the charger is doing, for the SoC chart."""
+    if alarm:
+        return "alarm"
     if not plugged:
         return "unplugged"
     d = _direction(active, discharging, running)
@@ -525,7 +556,7 @@ def soc_points_from_history(history: dict, entities: dict, settings: dict) -> li
         if soc is None:
             continue
         state_now = soc_state(_in(running, lists["active_states"]), _in(running, lists["discharging_states"]),
-                              running, _in(running, lists["plugged_states"]))
+                              running, _in(running, lists["plugged_states"]), _in(running, lists["alarm_states"]))
         point = [round(when, 1), soc, None, None, state_now]
         if out and out[-1][1:] == point[1:]:
             continue
