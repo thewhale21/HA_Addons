@@ -26,15 +26,16 @@ SENSORS = {
         "friendly_name": f"{NAME} Charger Running", "device_class": "running"}),
     "charger_alarm": (f"binary_sensor.{PREFIX}_charger_alarm", {
         "friendly_name": f"{NAME} Charger Alarm", "device_class": "problem"}),
-    "available_energy": (f"sensor.{PREFIX}_available_energy", {
-        "friendly_name": f"{NAME} Available Energy", "unit_of_measurement": "kWh",
-        "device_class": "energy_storage", "state_class": "measurement", "icon": "mdi:car-battery"}),
-    "window_energy": (f"sensor.{PREFIX}_window_energy", {
-        "friendly_name": f"{NAME} Window Energy", "unit_of_measurement": "kWh",
-        "device_class": "energy_storage", "state_class": "measurement", "icon": "mdi:arrow-expand-vertical"}),
-    "window_percent": (f"sensor.{PREFIX}_window_percent", {
-        "friendly_name": f"{NAME} Window Percent", "unit_of_measurement": "%", "device_class": "battery",
+    # The virtual battery: the car between its limits, as one battery (e.g. for Predbat)
+    "vb_soc": (f"sensor.{PREFIX}_virtual_battery_soc", {
+        "friendly_name": f"{NAME} Virtual Battery SoC", "unit_of_measurement": "%", "device_class": "battery",
         "state_class": "measurement"}),
+    "vb_usable": (f"sensor.{PREFIX}_virtual_battery_usable_energy", {
+        "friendly_name": f"{NAME} Virtual Battery Usable Energy", "unit_of_measurement": "kWh",
+        "device_class": "energy_storage", "state_class": "measurement", "icon": "mdi:car-battery"}),
+    "vb_max": (f"sensor.{PREFIX}_virtual_battery_max_energy", {
+        "friendly_name": f"{NAME} Virtual Battery Max Energy", "unit_of_measurement": "kWh",
+        "device_class": "energy_storage", "state_class": "measurement", "icon": "mdi:arrow-expand-vertical"}),
     "battery_rate": (f"sensor.{PREFIX}_battery_rate", {
         "friendly_name": f"{NAME} Battery Rate", "unit_of_measurement": "kW", "device_class": "power",
         "state_class": "measurement"}),
@@ -84,6 +85,9 @@ def values(state) -> dict:
     """The value of each sensor (by its key in SENSORS) from the shared state:
     the value, or (value, extra attributes)."""
     i, energy, last, st = state.inputs or {}, state.energy or {}, state.last_action or {}, state.stats or {}
+    vb_attrs = {"low_limit": i.get("low"), "high_limit": i.get("high"),
+                "car_capacity_kwh": (state.readings or {}).get("capacity_kwh"),
+                "in_use": (energy.get("window_kwh") or 0) > 0.01}
     action = None
     if last:
         verb = last.get("action") or ""
@@ -96,9 +100,9 @@ def values(state) -> dict:
         "plugged_in": _onoff(i.get("plugged_in")) if i else None,
         "charger_running": (_onoff(i.get("active")) if i else None, {"running_state": i.get("running_state")}),
         "charger_alarm": (_onoff(i.get("alarm")) if i else None, {"running_state": i.get("running_state")}),
-        "available_energy": energy.get("available_kwh"),
-        "window_energy": energy.get("window_kwh"),
-        "window_percent": energy.get("window_pct"),
+        "vb_soc": (energy.get("window_pct"), vb_attrs),
+        "vb_usable": (energy.get("available_kwh"), vb_attrs),
+        "vb_max": (energy.get("window_kwh"), vb_attrs),
         "battery_rate": (state.rates or {}).get("rate_kw"),
         "battery_rate_car": (state.rates or {}).get("car_kw"),
         "battery_rate_house": (state.rates or {}).get("house_kw"),

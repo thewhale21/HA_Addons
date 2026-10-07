@@ -125,16 +125,18 @@ Power sensors can be in W or kW.
 | `sensor.evdc_soc_range_vehicle_soc` | The car's last known SoC (kept while the charger reports 0 or nothing, and after a restart) |
 | `binary_sensor.evdc_soc_range_plugged_in` | Car plugged in |
 | `binary_sensor.evdc_soc_range_charger_running` | Charger running (charging, discharging or preparing) |
-| `sensor.evdc_soc_range_available_energy` | kWh the car can give before the low limit |
-| `sensor.evdc_soc_range_window_energy` | kWh between the low and high limits |
-| `sensor.evdc_soc_range_window_percent` | How full that window is |
+| `sensor.evdc_soc_range_virtual_battery_soc` | The virtual battery's SoC: how full the window between the limits is (%) |
+| `sensor.evdc_soc_range_virtual_battery_usable_energy` | Its usable energy: kWh the car can give before the low limit |
+| `sensor.evdc_soc_range_virtual_battery_max_energy` | Its size: kWh between the low and high limits |
 | `sensor.evdc_soc_range_battery_rate` | The plant's charge/discharge rate with the car plugged in (kW) |
 | `sensor.evdc_soc_range_battery_rate_car` | The car's share of it (kW) |
 | `sensor.evdc_soc_range_battery_rate_house` | The home battery's share of it (kW) |
 | `sensor.evdc_soc_range_presses_today` | Button presses today |
 
-The energy sensors read 0.01 when the car isn't plugged in or isn't in V2X
-or Solar Surplus mode. All of them show as unavailable while the add-on is
+The virtual battery sensors read 0.01 kWh (and 0%) when the car isn't
+plugged in or isn't in V2X or Solar Surplus mode, as the V2X SoC template
+sensors did; their attributes give the limits, the car's capacity and
+whether it's in use. All of them show as unavailable while the add-on is
 stopped.
 
 ### Battery rates

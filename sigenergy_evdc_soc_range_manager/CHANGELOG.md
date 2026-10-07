@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.15.0 — Virtual battery sensors
+
+- **Change:** the energy sensors are now named for the virtual battery:
+  `sensor.evdc_soc_range_virtual_battery_soc` (%),
+  `..._virtual_battery_usable_energy` (kWh) and
+  `..._virtual_battery_max_energy` (kWh), with the limits, the car's
+  capacity and whether it's in use as attributes. They replace
+  `..._window_percent`, `..._available_energy` and `..._window_energy`
+  (which go when Home Assistant next restarts): update anything that
+  used those.
+
 ## 0.14.0 — Tidier Settings
 
 - **Feature:** the Settings tab hides the entities the add-on set up
