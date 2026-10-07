@@ -14,7 +14,7 @@ is on) and the car's SoC is known. Then, in this order:
 | | When | It |
 | --- | --- | --- |
 | 1 | The house needs power (home battery discharging, or importing from the grid) and the car is above the low limit | starts the charger, so the car can discharge |
-| 2 | There's spare power (exporting for 10 s, or a charge signal such as Predbat charging) and the car is below the high limit | starts the charger, so the car can charge |
+| 2 | There's spare power (exporting, or a charge signal such as Predbat charging) and the car is below the high limit | starts the charger, so the car can charge |
 | 3 | The car is at or above the high limit, isn't discharging and the house doesn't need power | stops the charger |
 | 4 | The car is at or below the low limit and is discharging (and no charge signal is on) | stops the charger |
 | 5 | The car is between the limits | starts the charger |
@@ -39,8 +39,6 @@ The differences:
 - It doesn't press Start while the charger is already running, or Stop
   while it's already stopped (the automation's rules 2 and 3 can; the
   press does nothing).
-- Spare power from exporting needs the export held for 10 s when it
-  decides, not just at the trigger.
 - If the charge signal (e.g. Predbat) is unavailable, the low-limit stop
   still happens (the automation's needs it to be "off").
 - A charger alarm leaves the charger alone, and the limits stay between
@@ -121,7 +119,6 @@ maximum rate, today's kWh in and out, and the car's capacity and health. **Start
 | House needs power: battery | 0.1 kW | Home battery discharging faster than this |
 | House needs power: grid | 0.1 kW | Importing more than this |
 | Spare power: export | 0.5 kW | Exporting more than this… |
-| Spare power: for | 10 s | …for at least this long |
 | Margin | 0% | Starts need the SoC this far inside the limits (stops are at the limits). 1 or 2 stops it bouncing at a limit |
 | Between button presses | 60 s | At least this long before pressing the same button again |
 | Watch only | off | Decide and log, but don't press anything |

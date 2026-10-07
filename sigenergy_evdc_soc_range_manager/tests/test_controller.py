@@ -69,7 +69,7 @@ def test_house_needing_power_starts_it_above_the_low_limit_even_above_high():
 def test_spare_power_starts_it_below_the_high_limit_even_below_low():
     exporting = {"export_kw": 1.2, "export_held_s": 15}
     assert d(soc=30, **exporting).rule == "charge_opportunity"
-    assert d(soc=30, export_kw=1.2, export_held_s=5).rule == "held_low"  # not held for 10 s yet
+    assert d(soc=30, export_kw=1.2, export_held_s=0).rule == "charge_opportunity"  # exporting now is enough
     assert d(soc=30, export_kw=0.4, export_held_s=60).action is None  # below the export level
     assert d(soc=30, ems_blocked=True, **exporting).action is None  # the EMS is force-discharging
     assert d(soc=30, charge_signal=True).rule == "charge_opportunity"  # e.g. Predbat charging
@@ -202,12 +202,12 @@ def test_manager_stops_at_the_low_limit_and_watch_only_presses_nothing(tmp_path)
     assert p.notes == ["V2X: charger stopped"]
 
 
-def test_manager_waits_for_export_to_be_held(tmp_path):
+def test_manager_starts_as_soon_as_its_exporting(tmp_path):
     p = Presses()
     m = Manager(str(tmp_path), press=p.press)
-    ent, st = _entities(), _settings()
-    assert _run(m.step(_states(soc="30", export="2"), ent, st, now=1000.0)).rule == "held_low"
-    assert _run(m.step(_states(soc="30", export="2"), ent, st, now=1011.0)).rule == "charge_opportunity"
+    ent, st = _entities(), {**_settings(), "export_hold_s": 10}  # an old saved setting: ignored
+    assert _run(m.step(_states(soc="30", export="2"), ent, st, now=1000.0)).rule == "charge_opportunity"
+    assert p.pressed == ["button.sigen_inverter_dc_charger_start_charging"]
 
 
 def test_last_known_soc_is_kept_and_saved(tmp_path):

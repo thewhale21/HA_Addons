@@ -23,7 +23,6 @@ NUMBERS = {
     "house_battery_kw": (0, 20),
     "house_grid_kw": (0, 20),
     "export_kw": (0, 50),
-    "export_hold_s": (0, 600),
     "margin_pct": (0, 20),
     "press_gap_s": (10, 600),
     "rate_kw": (0, 100),

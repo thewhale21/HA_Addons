@@ -2,7 +2,7 @@
 loop, and stops them cleanly when Home Assistant stops the add-on.
 
 The manager looks at the charger whenever a followed entity changes, and
-every few seconds anyway (the restart wait and "exporting for 10 s" need
+every few seconds anyway (the restart wait needs
 time to pass, not just changes).
 """
 from __future__ import annotations

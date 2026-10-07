@@ -54,7 +54,6 @@ TUNING_DEFAULTS = {
     "house_battery_kw": 0.1,  # home battery discharging faster than this = the house needs power
     "house_grid_kw": 0.1,  # ...or importing more than this from the grid
     "export_kw": 0.5,  # exporting more than this = spare power to charge the car from
-    "export_hold_s": 10,  # ...for at least this long
     "margin_pct": 0.0,  # starts need the SoC this far inside the limits (stops are at the limits)
     "press_gap_s": 60,  # at least this long before pressing the same button again
 }
@@ -74,7 +73,7 @@ class Inputs:
     battery_kw: Optional[float]  # home battery: negative = discharging
     grid_kw: Optional[float]  # grid: positive = importing
     export_kw: Optional[float]  # grid export, kW
-    export_held_s: float  # how long export has been above the export level
+    export_held_s: float  # how long export has been above the export level (shown, not needed)
     ems_mode: Optional[str]
     charge_signal: Optional[bool]  # e.g. Predbat charging (None: not set up)
     ems_blocked: bool = False  # the EMS mode is one that rules out charging from export
@@ -129,8 +128,8 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
                    or (i.grid_kw is not None and i.grid_kw > t["house_grid_kw"]))
     house_quiet = (i.battery_kw is not None and i.battery_kw > -t["house_battery_kw"]
                    and i.grid_kw is not None and i.grid_kw < t["house_grid_kw"])
-    exporting = (i.export_kw is not None and i.export_kw > t["export_kw"]
-                 and i.export_held_s >= t["export_hold_s"] and not i.ems_blocked)
+    # Exporting now is enough, as in the automation's condition
+    exporting = i.export_kw is not None and i.export_kw > t["export_kw"] and not i.ems_blocked
     opportunity = i.charge_signal is True or exporting
     why_spare = "a charge signal is on" if i.charge_signal is True else "you're exporting"
 

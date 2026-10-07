@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.16.0 — Exporting is enough
+
+- **Change:** spare power from exporting only needs the export above the
+  export level (0.5 kW) when it decides, as in the automation's
+  condition; it no longer has to have been for 10 s. The "Spare power:
+  for" setting is gone (a saved value is ignored).
+
 ## 0.15.3 — Checked against the automation
 
 - **Fix:** the minute between button presses only applies to pressing the
