@@ -24,8 +24,9 @@ runs to discharge, and at the low limit only to charge.
 
 After the charger stops, for whatever reason, it isn't started again for
 the **restart wait** (3 minutes). Some cars stop discharging now and then;
-this stops the add-on restarting it over and over. It also never presses a
-button within a minute of the last press.
+this stops the add-on restarting it over and over. While it waits, the
+status shows "Reconnecting car in … s" if it will start again once the wait
+is over. It also never presses a button within a minute of the last press.
 
 It looks whenever one of your entities changes, and every few seconds anyway.
 

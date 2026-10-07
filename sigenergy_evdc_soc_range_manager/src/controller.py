@@ -20,7 +20,7 @@ buttons.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 # The limits can never go outside these, whatever the helpers or the schedule say
@@ -164,10 +164,14 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
                                                      else "Running")
         return Decision(None, "running", doing, f"The charger is {(i.running_state or 'running').lower()}; "
                         f"the car is at {_pct(soc)} ({_pct(low)}–{_pct(high)}).")
+    # In the restart wait: say when it'll reconnect, if it would start once the wait's over
     if not rested and i.inactive_for is not None:
-        left = max(0, round(wait - i.inactive_for))
-        return Decision(None, "restart_wait", "Restart wait",
-                        f"The charger stopped {round(i.inactive_for)} s ago; it can be started again in {left} s.")
+        after = decide(replace(i, inactive_for=wait), t)
+        if after.action == "start":
+            left = max(0, round(wait - i.inactive_for))
+            return Decision(None, "restart_wait", f"Reconnecting car in {left} s",
+                            f"The charger stopped {round(i.inactive_for)} s ago; it starts again in {left} s: "
+                            f"{after.reason[0].lower()}{after.reason[1:]}")
     if soc >= high - margin:
         return Decision(None, "held_high", "Held at the high limit",
                         f"The car is at {_pct(soc)}: it starts again when the house needs power.")

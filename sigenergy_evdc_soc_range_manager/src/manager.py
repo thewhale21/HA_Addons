@@ -120,6 +120,7 @@ class Manager:
         self.plugged: Optional[bool] = None
         self.export_since: Optional[float] = None
         self.last_press_at: Optional[float] = None
+        self.last_press: Optional[dict] = None  # its log entry: what was pressed, and whether it worked
         self.presses_today = 0
         self.day: Optional[str] = None
         self.log: deque = deque(maxlen=LOG_SIZE)
@@ -271,9 +272,18 @@ class Manager:
             gap = float(settings.get("press_gap_s", 60))
             if self.last_press_at is not None and now - self.last_press_at < gap:
                 left = round(gap - (now - self.last_press_at))
-                decision = Decision(None, "press_gap", "Waiting to retry",
-                                    f"{RULES.get(decision.rule, decision.rule)}, but a button was pressed "
-                                    f"{round(now - self.last_press_at)} s ago; trying again in {left} s.")
+                ago = round(now - self.last_press_at)
+                last = self.last_press or {}
+                if last.get("action") == decision.action and last.get("pressed"):
+                    # Just pressed this: the charger takes a few seconds to respond, so not a retry yet
+                    decision = Decision(None, "press_gap", "Starting" if decision.action == "start" else "Stopping",
+                                        f"{'Start' if decision.action == 'start' else 'Stop'} was pressed {ago} s ago; "
+                                        f"waiting for the charger (pressed again in {left} s if it hasn't "
+                                        f"{'started' if decision.action == 'start' else 'stopped'}).")
+                else:
+                    decision = Decision(None, "press_gap", "Waiting to retry",
+                                        f"{RULES.get(decision.rule, decision.rule)}, but a button was pressed "
+                                        f"{ago} s ago; trying again in {left} s.")
             else:
                 await self.act(decision.action, decision.rule, decision.reason, entities, settings, now)
         self.decision = decision
@@ -305,6 +315,7 @@ class Manager:
         if entry["error"]:
             logger.warning("Couldn't %s the charger: %s", action, entry["error"])
         self.log.append(entry)
+        self.last_press = entry
         self._save()
         if entry["pressed"] and settings.get("notify_service") and self.notify is not None:
             title = "V2X: charger " + ("started" if action == "start" else "stopped")

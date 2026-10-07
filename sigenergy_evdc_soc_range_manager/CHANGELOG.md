@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.15.1 — Clearer status after a stop and a start
+
+- **Change:** during the restart wait the status reads "Reconnecting car
+  in 80 s" (counting down), with why it will start in the reason. If the
+  car won't be started once the wait's over (e.g. it's held at a limit),
+  the status says that instead.
+- **Fix:** for the few seconds after it presses Start (or Stop), while
+  the charger responds, the status stays "Starting" (or "Stopping")
+  rather than flicking to "Waiting to retry". "Waiting to retry" is now
+  only shown when a press failed or something else needs doing.
+
 ## 0.15.0 — Virtual battery sensors
 
 - **Change:** the energy sensors are now named for the virtual battery:

@@ -49,6 +49,10 @@ def test_between_the_limits_it_starts_once_the_restart_wait_is_over():
     assert d().action == "start" and d().rule == "in_range"
     waiting = d(inactive_for=100)
     assert waiting.action is None and waiting.rule == "restart_wait" and "80 s" in waiting.reason
+    assert waiting.status == "Reconnecting car in 80 s"
+    # It wouldn't start once the wait's over (at the high limit, the house quiet): no countdown
+    held = d(soc=85, inactive_for=100)
+    assert held.action is None and held.rule == "held_high"
     assert d(inactive_for=180).action == "start"
     assert decide(replace(BASE, inactive_for=100), {"restart_wait_s": 60}).action == "start"
 
@@ -169,6 +173,7 @@ def test_manager_starts_in_range_after_the_restart_wait_and_presses_start(tmp_pa
     # The charger takes a moment to start: no second press within the press gap
     third = _run(m.step(_states(lc=1000.0), ent, st, now=1230.0))
     assert third.rule == "press_gap" and len(p.pressed) == 1
+    assert third.status == "Starting" and "waiting for the charger" in third.reason  # not "Waiting to retry"
     assert p.notes == []  # no notify service set
 
 
