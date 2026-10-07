@@ -173,7 +173,8 @@ day (or **+ Add**) to add one.
 The defaults aren't changed by the schedule; while an
 entry is on, its limits are used instead (the Car card says so). Where
 entries overlap, the one that started last wins. If a scheduled limit
-crosses the other one, the other moves out of its way (a scheduled low of
+crosses the other one, the other moves out of its way (between two
+entries, the one that started later stays) (a scheduled low of
 95% with an default high of 80% makes the high 96%). The energy and rate
 sensors use the scheduled limits too, so Predbat sees the change.
 

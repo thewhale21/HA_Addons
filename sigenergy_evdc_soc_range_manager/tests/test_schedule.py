@@ -122,3 +122,16 @@ def test_one_tap_holds(tmp_path):
     s.add(e)
     assert s.apply(80, 40, now + datetime.timedelta(minutes=5))[:2] == (80, 57)
     assert bound_limits(100, 10) == (99, 20) and bound_limits(20, 20) == (21, 20) and bound_limits(None, 5) == (None, 20)
+
+
+def test_crossing_limits_from_two_entries_the_later_one_wins(tmp_path):
+    s = Schedule(str(tmp_path))
+    s.add({"kind": "weekly", "days": ["tue"], "start": "23:00", "end": "08:00", "high": 50})
+    s.add({"kind": "weekly", "days": ["tue"], "start": "23:10", "end": "08:00", "low": 60})
+    assert s.apply(80, 40, TUE_23)[:2] == (61, 60)  # the low started later: the high moves
+    t = Schedule(None)
+    t.add({"kind": "weekly", "days": ["tue"], "start": "23:00", "end": "08:00", "low": 60})
+    t.add({"kind": "weekly", "days": ["tue"], "start": "23:10", "end": "08:00", "high": 50})
+    assert t.apply(80, 40, TUE_23)[:2] == (50, 49)  # the high started later: the low moves
+    assert t.apply(80, 40, TUE_23 - datetime.timedelta(minutes=25))[:2] == (80, 60)  # only the low is on yet: no clash
+    assert t.apply(80, 40, TUE_23 - datetime.timedelta(minutes=35))[:2] == (80, 40)  # before either

@@ -191,19 +191,23 @@ class Schedule:
         """(high, low, the entries setting them): the default limits with the schedule on top."""
         on = self.active(now)
         sched_high = sched_low = None
+        high_at = low_at = ""
         for e in on:  # the latest started wins
             if e["high"] is not None:
-                sched_high = e["high"]
+                sched_high, high_at = e["high"], e["started"]
             if e["low"] is not None:
-                sched_low = e["low"]
+                sched_low, low_at = e["low"], e["started"]
         if sched_high is not None:
             high = sched_high
-            if low is not None and sched_low is None and low >= high:
-                low = max(SOC_FLOOR, high - 1)
         if sched_low is not None:
             low = sched_low
-            if high is not None and sched_high is None and high <= low:
+        if high is not None and low is not None and low >= high:
+            # The limits cross: the one set most recently stays, the other moves out of its way
+            # (a default counts as set before any schedule entry)
+            if sched_low is not None and (sched_high is None or low_at > high_at):
                 high = min(SOC_CEILING, low + 1)
+            else:
+                low = max(SOC_FLOOR, high - 1)
         return high, low, on
 
 

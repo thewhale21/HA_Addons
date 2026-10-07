@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.2 — Crossing limits from two entries
+
+- **Fix:** when two schedule entries that are on at once cross (e.g. one
+  sets the high to 50% and a later one the low to 60%), the one that
+  started later now stays and the other moves out of its way, as the
+  schedule says. Before, the high always won.
+
 ## 0.11.1 — Car arrow
 
 - **Fix:** the power flow's car shows ↓ while discharging (down into the
