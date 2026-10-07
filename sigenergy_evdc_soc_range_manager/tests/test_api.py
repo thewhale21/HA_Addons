@@ -55,6 +55,7 @@ async def test_limits_and_charger_need_home_assistant(client):
     resp = await client.post("/api/limits", json={"high": 85})
     assert resp.status == 400  # no helper picked yet (they're made when Home Assistant connects)
     assert (await client.post("/api/charger", json={"action": "start"})).status == 501  # no runner here
+    assert (await client.get("/api/stats")).status == 501
     assert (await client.post("/api/settings", json={"margin_pct": 2, "observe_only": True})).status == 200
     assert (await client.post("/api/settings", json={"margin_pct": 50})).status == 400
 

@@ -12,7 +12,8 @@ by starting and stopping a Sigenergy DC charger.
 - Makes its own limit helpers, works from the Sigenergy integration's
   entities, and posts status, SoC, energy and V2X battery rate sensors.
 - A web page in the sidebar: what it's doing and why, the limits, recent
-  starts and stops, and a watch-only mode for trying it out.
+  starts and stops, a watch-only mode for trying it out, and battery
+  statistics: usable capacity over time and conversion losses.
 
 See [DOCS.md](DOCS.md).
 

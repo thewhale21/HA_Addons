@@ -12,6 +12,7 @@ import datetime
 import logging
 import os
 import signal
+import time
 from typing import Optional
 
 from aiohttp import web
@@ -24,7 +25,8 @@ from src.debug_tools import DebugTools, install_log_buffer
 from src.ha_link import HaLink
 from src.health import Health
 from src.helpers import ensure_helpers
-from src.manager import Manager
+from src.manager import Manager, samples_from_history
+from src.stats import StatsRecorder
 from src.shared_state import SharedState
 
 logger = logging.getLogger("sigenergy_evdc_soc_range_manager")
@@ -33,14 +35,18 @@ LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 DATA_DIR = os.environ.get("ADDON_DATA", "/data")
 PORT = 8099  # ingress_port in config.yaml defaults to 8099
 CHECK_INTERVAL_S = 5  # look at least this often
+STATS_BRIEF_S = 60  # the statistics sensors are worked out this often
+HISTORY_DAYS = 30  # how far back the statistics look in Home Assistant's history, once
 SETTLE_S = 1  # after a change, wait this long for related changes before looking
 
 
 class Runner:
     """Ties the manager to Home Assistant: looks, decides, presses, publishes."""
 
-    def __init__(self, link: HaLink, manager: Manager, settings: AppSettings, state: SharedState) -> None:
-        self.link, self.manager, self.settings, self.state = link, manager, settings, state
+    def __init__(self, link: HaLink, manager: Manager, settings: AppSettings, state: SharedState,
+                 stats: StatsRecorder) -> None:
+        self.link, self.manager, self.settings, self.state, self.stats = link, manager, settings, state, stats
+        self._brief_at = 0.0
         self.wake = asyncio.Event()
         self.lock = asyncio.Lock()
         manager.press = self.press
@@ -74,11 +80,53 @@ class Runner:
                 return
             if not self.link.available:  # outside HA: nothing to read or press
                 self.manager.press = None
-            decision = await self.manager.step(self.link.states, entities, self.settings.data)
+            now = time.time()
+            decision = await self.manager.step(self.link.states, entities, self.settings.data, now)
+            sample = self.manager.stats_sample(self.link.states, entities, now)
+            if sample is not None:
+                self.stats.feed(sample, self.settings.data)
+            if now - self._brief_at >= STATS_BRIEF_S:
+                self._brief_at = now
+                self.state.stats = self.stats_brief()
             if decision.rule != getattr(self, "_last_rule", None):
                 logger.debug("%s: %s", decision.status, decision.reason)
                 self._last_rule = decision.rule
             self.publish()
+
+    def stats_summary(self) -> dict:
+        return self.stats.summary(self.manager.readings.get("capacity_kwh") or None)
+
+    def stats_brief(self) -> dict:
+        """What the statistics sensors show."""
+        s = self.stats_summary()
+        return {"capacity_kwh": s["capacity_kwh"], "health_pct": s["health_pct"],
+                "charge_efficiency": s["charge_efficiency"]["median"],
+                "discharge_efficiency": s["discharge_efficiency"]["median"],
+                "today_car_loss_kwh": s["today_car_loss_kwh"]}
+
+    async def backfill(self) -> None:
+        """Once: the car's sessions from Home Assistant's history, before recording began."""
+        if self.stats.backfilled:
+            return
+        from src.manager import HISTORY_KEYS
+
+        entities = dict(self.link.settings)
+        ids = [entities[k] for k in HISTORY_KEYS if entities.get(k)]
+        if not entities.get("running_state") or not ids:
+            return
+        start = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=HISTORY_DAYS)
+        history = await self.link.query({
+            "type": "history/history_during_period", "start_time": start.isoformat(), "entity_ids": ids,
+            "minimal_response": True, "no_attributes": True, "significant_changes_only": False,
+        }, timeout=120)
+        units = {k: ((self.link.states.get(entities.get(k) or "") or {}).get("attributes") or {}).get(
+            "unit_of_measurement") for k in HISTORY_KEYS}
+        samples = samples_from_history(history or {}, entities, self.settings.data, units)
+        async with self.lock:
+            found = self.stats.backfill(samples, self.settings.data)
+            self._brief_at = 0.0
+        logger.info("Statistics: %d session%s found in the last %d days of history",
+                    found, "" if found == 1 else "s", HISTORY_DAYS)
 
     async def manual(self, action: str) -> dict:
         """Start or Stop pressed on the web page."""
@@ -132,9 +180,14 @@ async def run() -> None:
                                 "(Settings › Devices & services › Helpers) and pick them on the Settings tab.")
             logger.warning(state.setup_note)
         runner.wake.set()
+        try:
+            await runner.backfill()
+        except Exception as err:
+            logger.warning("Couldn't read Home Assistant's history for the statistics: %s", err)
 
     link = HaLink(data_dir, state, on_entity_changed=entity_changed, on_connected=connected)
-    runner = Runner(link, manager, settings, state)
+    stats = StatsRecorder(data_dir)
+    runner = Runner(link, manager, settings, state, stats)
     settings.on_change = lambda changes: runner.wake.set()
     debug = DebugTools(config=config, log_buffer=log_buffer, settings=settings)
 
@@ -158,6 +211,7 @@ async def run() -> None:
         logger.info("Stopping")
     finally:
         state.status = "Stopped"
+        stats.save()
         try:
             await asyncio.wait_for(link.shutdown(), 5)  # its sensors show unavailable while stopped
         except Exception:

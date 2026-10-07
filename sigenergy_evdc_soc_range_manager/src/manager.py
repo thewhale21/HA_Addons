@@ -18,6 +18,7 @@ from typing import Awaitable, Callable, Optional
 
 from src.controller import RULES, Decision, Inputs, decide
 from src.rates import battery_rates
+from src.stats import Sample
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,15 @@ def power_kw(st: Optional[dict]) -> Optional[float]:
         return None
     unit = ((st.get("attributes") or {}).get("unit_of_measurement") or "kW").strip()
     return value / 1000 if unit == "W" else value * 1000 if unit == "MW" else value
+
+
+def energy_kwh(st: Optional[dict], unit: Optional[str] = None) -> Optional[float]:
+    """An energy sensor's reading in kWh (Wh and MWh converted)."""
+    value = _float(st)
+    if value is None:
+        return None
+    unit = (unit or ((st or {}).get("attributes") or {}).get("unit_of_measurement") or "kWh").strip()
+    return value / 1000 if unit == "Wh" else value * 1000 if unit == "MWh" else value
 
 
 def _text(st: Optional[dict]) -> Optional[str]:
@@ -285,6 +295,19 @@ class Manager:
                              available_kw=r.get("available_kw"), home_soc=r.get("home_soc"), home_kwh=r.get("home_kwh"),
                              car_window_kwh=window, settings=getattr(self, "_settings", None))
 
+    def stats_sample(self, states: dict, entities: dict, now: float) -> Optional[Sample]:
+        """This look's readings for the statistics (src/stats.py)."""
+        i = self.inputs
+        if i is None:
+            return None
+        get = lambda key: states.get(entities.get(key) or "")  # noqa: E731
+        return Sample(
+            now=now, direction=_direction(i.active, i.discharging, i.running_state),
+            soc=_float(get("vehicle_soc")), e_in=energy_kwh(get("charged_energy")),
+            e_out=energy_kwh(get("discharged_energy")), car_kw=power_kw(get("charger_power")),
+            pv_kw=power_kw(get("pv_power")), batt_kw=i.battery_kw, ac_kw=power_kw(get("inverter_power")),
+        )
+
     def snapshot(self, now: Optional[float] = None) -> dict:
         now = time.time() if now is None else now
         i, d = self.inputs, self.decision
@@ -304,3 +327,55 @@ class Manager:
             "rates": self.rates(),
             "readings": dict(self.readings),
         }
+
+
+def _direction(active: bool, discharging: bool, running_state: Optional[str]) -> Optional[str]:
+    if not active:
+        return None
+    if discharging:
+        return "discharge"
+    return "charge" if (running_state or "").strip().lower() == "charging" else "other"
+
+
+def _when(item: dict) -> Optional[float]:
+    for key in ("lu", "lc"):
+        if isinstance(item.get(key), (int, float)):
+            return float(item[key])
+    for key in ("last_updated", "last_changed"):
+        if item.get(key):
+            try:
+                return datetime.datetime.fromisoformat(str(item[key]).replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                pass
+    return None
+
+
+HISTORY_KEYS = ("running_state", "vehicle_soc", "charged_energy", "discharged_energy")
+
+
+def samples_from_history(history: dict, entities: dict, settings: dict, units: Optional[dict] = None) -> list:
+    """Home Assistant's history (history/history_during_period: entity_id -> states)
+    as statistics samples, one per change. `units`: key -> the sensor's unit now."""
+    lists = {k: settings.get(k) or v for k, v in LIST_DEFAULTS.items()}
+    units = units or {}
+    events = []
+    for key in HISTORY_KEYS:
+        for item in (history or {}).get(entities.get(key) or "", []) or []:
+            when = _when(item)
+            if when is not None:
+                events.append((when, key, item.get("s", item.get("state"))))
+    events.sort(key=lambda e: e[0])
+    now: dict = {}
+    out = []
+    for when, key, state in events:
+        now[key] = state
+        running = _text({"state": now.get("running_state")})
+        active = _in(running, lists["active_states"])
+        discharging = _in(running, lists["discharging_states"])
+        out.append(Sample(
+            now=when, direction=_direction(active, discharging, running),
+            soc=_float({"state": now.get("vehicle_soc")}),
+            e_in=energy_kwh({"state": now.get("charged_energy")}, units.get("charged_energy")),
+            e_out=energy_kwh({"state": now.get("discharged_energy")}, units.get("discharged_energy")),
+        ))
+    return out

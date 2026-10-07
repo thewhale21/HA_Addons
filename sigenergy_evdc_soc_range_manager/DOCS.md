@@ -120,6 +120,45 @@ Settings tab, and the plant entities default to Sigenergy's
 `sensor.sigen_plant_battery_state_of_charge`,
 `sensor.sigen_inverter_rated_battery_capacity`).
 
+## Statistics
+
+The **Statistics** tab is about the car's battery.
+
+**Usable capacity.** Each charge or discharge that moves the SoC at least
+10% gives an estimate: the kWh at the charger divided by the SoC moved.
+It's measured between the moments the SoC ticks over, since it's only a
+whole number. The figure shown is the median of the last 10, against your
+battery capacity helper, and after 6 estimates over 2 months there's a
+trend in kWh (and %) a year. It's a guess at degradation: the energy is
+measured at the charger, so it includes the car's own charging losses,
+and the car's SoC reading has its own quirks. Watch the trend rather than
+any one figure. Fast charges from low to high give the best estimates.
+
+**Conversion losses.** Every few seconds it compares the inverter's DC
+side (solar in, home battery in or out, car in or out) with its AC side;
+what goes in and doesn't come out is lost. The car is given its share of
+that by its share of the DC flow at the time. Sessions with little solar
+or home battery going at the same time ("clean" ones) give a straight
+efficiency for charging (AC → car) and discharging (car → AC). If the
+losses read large and negative, turn on **Flip the inverter's power**
+(Settings): your inverter's power sensor reads the other way round.
+
+It reads `sensor.sigen_inverter_dc_charger_total_charging_capacity` and
+`..._total_discharging_capacity` (the car's energy),
+`sensor.sigen_inverter_dc_charger_output_power`, `sensor.sigen_plant_pv_power`,
+`sensor.sigen_inverter_active_power` and the home battery power. Change
+any of them on the Settings tab. The first time it connects it reads the
+last 30 days of these from Home Assistant's history for the sessions and
+capacity estimates; the losses are recorded from then on.
+
+| Entity | |
+| --- | --- |
+| `sensor.evdc_soc_range_capacity_estimate` | The car's usable capacity estimate (kWh) |
+| `sensor.evdc_soc_range_battery_health` | ...as a % of the capacity helper |
+| `sensor.evdc_soc_range_charge_efficiency` | AC → car (%) |
+| `sensor.evdc_soc_range_discharge_efficiency` | Car → AC (%) |
+| `sensor.evdc_soc_range_conversion_loss_today` | The car's share of today's conversion loss (kWh) |
+
 ## Diagnostics
 
 **Diagnostics › Health** shows the link to Home Assistant and anything

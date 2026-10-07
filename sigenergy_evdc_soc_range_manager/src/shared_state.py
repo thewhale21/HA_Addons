@@ -23,6 +23,7 @@ class SharedState:
     log: list = field(default_factory=list)  # recent starts and stops, newest first
     energy: dict = field(default_factory=dict)  # kWh above the low limit, kWh between the limits, %
     rates: dict = field(default_factory=dict)  # the V2X battery rates, kW (src/rates.py)
+    stats: dict = field(default_factory=dict)  # the statistics sensors' values (src/stats.py; the page uses /api/stats)
     readings: dict = field(default_factory=dict)
     observe_only: bool = False
     setup_note: Optional[str] = None  # a problem making the helpers, for the page

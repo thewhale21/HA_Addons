@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.3.0 — Battery statistics
+
+- **Feature:** a Statistics tab for the car's battery:
+  - **Usable capacity:** each charge or discharge that moves the SoC 10% or
+    more gives an estimate (kWh at the charger ÷ SoC moved, measured
+    between the SoC's tick-overs). The latest is the median of the last
+    10, compared with the capacity helper, with a trend (kWh and % a year)
+    once there are 6 estimates over 2 months.
+  - **Conversion losses:** the inverter's DC side (solar, home battery,
+    car) against its AC side, every few seconds; the car gets its share of
+    the loss by its share of the DC flow. The last 30 days by day, and the
+    charging (AC → car) and discharging (car → AC) efficiency from clean
+    sessions.
+  - **Sessions:** every charge and discharge with its SoC, energy,
+    capacity estimate, efficiency and loss.
+- **Feature:** the last 30 days of Home Assistant's history are read once,
+  so the capacity estimates and sessions start with something in them
+  (losses are recorded from now on).
+- **Feature:** sensors for the capacity estimate, battery health, charge
+  and discharge efficiency and today's conversion loss.
+- **Feature:** pickers for the charger's power and total charged and
+  discharged energy, solar power and the inverter's AC power (Sigenergy's
+  by default), and settings for the capacity span, what counts as a clean
+  session, and flipping the inverter power's sign.
+
 ## 0.2.0 — Charging mode select and battery rate sensors
 
 - **Feature:** battery rate sensors, as the "V2X Battery Rate", "Rate Car"

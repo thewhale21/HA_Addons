@@ -42,12 +42,31 @@ SENSORS = {
     "battery_rate_house": (f"sensor.{PREFIX}_battery_rate_house", {
         "friendly_name": f"{NAME} Battery Rate House", "unit_of_measurement": "kW", "device_class": "power",
         "state_class": "measurement"}),
+    "capacity_estimate": (f"sensor.{PREFIX}_capacity_estimate", {
+        "friendly_name": f"{NAME} Capacity Estimate", "unit_of_measurement": "kWh",
+        "device_class": "energy_storage", "state_class": "measurement", "icon": "mdi:car-battery"}),
+    "battery_health": (f"sensor.{PREFIX}_battery_health", {
+        "friendly_name": f"{NAME} Battery Health", "unit_of_measurement": "%", "state_class": "measurement",
+        "icon": "mdi:battery-heart-variant"}),
+    "charge_efficiency": (f"sensor.{PREFIX}_charge_efficiency", {
+        "friendly_name": f"{NAME} Charge Efficiency", "unit_of_measurement": "%", "state_class": "measurement",
+        "icon": "mdi:transmission-tower-import"}),
+    "discharge_efficiency": (f"sensor.{PREFIX}_discharge_efficiency", {
+        "friendly_name": f"{NAME} Discharge Efficiency", "unit_of_measurement": "%", "state_class": "measurement",
+        "icon": "mdi:transmission-tower-export"}),
+    "conversion_loss_today": (f"sensor.{PREFIX}_conversion_loss_today", {
+        "friendly_name": f"{NAME} Conversion Loss Today", "unit_of_measurement": "kWh",
+        "state_class": "measurement", "icon": "mdi:fire"}),
     "presses_today": (f"sensor.{PREFIX}_presses_today", {
         "friendly_name": f"{NAME} Button Presses Today", "icon": "mdi:gesture-tap-button"}),
 }
 ALL_SENSORS = [entity_id for entity_id, _ in SENSORS.values()]
 
 REFRESH_S = 300  # everything posted again at least this often, even unchanged
+
+
+def _pct(fraction) -> Optional[float]:
+    return None if fraction is None else round(fraction * 100, 1)
 
 
 def _onoff(value) -> Optional[str]:
@@ -57,7 +76,7 @@ def _onoff(value) -> Optional[str]:
 def values(state) -> dict:
     """The value of each sensor (by its key in SENSORS) from the shared state:
     the value, or (value, extra attributes)."""
-    i, energy, last = state.inputs or {}, state.energy or {}, state.last_action or {}
+    i, energy, last, st = state.inputs or {}, state.energy or {}, state.last_action or {}, state.stats or {}
     action = None
     if last:
         verb = last.get("action") or ""
@@ -75,6 +94,11 @@ def values(state) -> dict:
         "battery_rate": (state.rates or {}).get("rate_kw"),
         "battery_rate_car": (state.rates or {}).get("car_kw"),
         "battery_rate_house": (state.rates or {}).get("house_kw"),
+        "capacity_estimate": st.get("capacity_kwh"),
+        "battery_health": st.get("health_pct"),
+        "charge_efficiency": _pct(st.get("charge_efficiency")),
+        "discharge_efficiency": _pct(st.get("discharge_efficiency")),
+        "conversion_loss_today": st.get("today_car_loss_kwh"),
         "presses_today": state.presses_today,
     }
 

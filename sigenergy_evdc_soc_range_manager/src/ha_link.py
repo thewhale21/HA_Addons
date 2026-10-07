@@ -56,6 +56,12 @@ ENTITY_KEYS = {
     "available_power": ("sensor",),
     "home_battery_soc": ("sensor",),
     "home_battery_capacity": ("sensor", "input_number", "number"),
+    # For the statistics
+    "charger_power": ("sensor",),
+    "charged_energy": ("sensor",),
+    "discharged_energy": ("sensor",),
+    "pv_power": ("sensor",),
+    "inverter_power": ("sensor",),
 }
 # What a new install starts with: the Sigenergy integration's entity IDs. The
 # limits, capacity and V2X mode are made as helpers when left empty
@@ -72,6 +78,11 @@ DEFAULT_ENTITIES = {
     "available_power": "sensor.sigen_plant_available_max_active_power",
     "home_battery_soc": "sensor.sigen_plant_battery_state_of_charge",
     "home_battery_capacity": "sensor.sigen_inverter_rated_battery_capacity",
+    "charger_power": "sensor.sigen_inverter_dc_charger_output_power",
+    "charged_energy": "sensor.sigen_inverter_dc_charger_total_charging_capacity",
+    "discharged_energy": "sensor.sigen_inverter_dc_charger_total_discharging_capacity",
+    "pv_power": "sensor.sigen_plant_pv_power",
+    "inverter_power": "sensor.sigen_inverter_active_power",
 }
 
 

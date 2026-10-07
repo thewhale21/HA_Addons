@@ -47,6 +47,8 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     # The charger and its limits (Overview)
     app.router.add_post("/api/charger", handle_charger)
     app.router.add_post("/api/limits", handle_limits)
+    # Statistics tab (src/stats.py)
+    app.router.add_get("/api/stats", handle_stats)
     # Settings made on the web page (src/app_settings.py)
     app.router.add_get("/api/settings", handle_get_settings)
     app.router.add_post("/api/settings", handle_set_settings)
@@ -214,6 +216,13 @@ async def handle_limits(request: web.Request) -> web.Response:
     except Exception as err:
         return web.json_response({"status": "error", "message": f"Home Assistant refused it: {err}"}, status=502)
     return web.json_response({"status": "ok", **wanted})
+
+
+async def handle_stats(request: web.Request) -> web.Response:
+    runner = request.app["runner"]
+    if runner is None:
+        return _unavailable()
+    return web.json_response(runner.stats_summary(), dumps=_dumps)
 
 
 # --- Settings made on the web page (src/app_settings.py) --------------------------

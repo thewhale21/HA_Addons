@@ -176,6 +176,20 @@
   .range .mark { position: absolute; top: -4px; bottom: -4px; width: 4px; margin-left: -2px; border-radius: 2px;
     background: var(--text); display: none; }
   .range-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); }
+  /* Statistics charts: thin marks, recessive axes */
+  .chart { position: relative; margin-top: 12px; }
+  .chart svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+  .chart .axis { stroke: var(--divider); stroke-width: 1; }
+  .chart .ref { stroke: var(--text2); stroke-width: 1; stroke-dasharray: 4 3; }
+  .chart text { fill: var(--text2); font-size: 11px; }
+  .chart .mark { fill: var(--primary); pointer-events: none; }
+  .chart .mark.dim { fill: var(--card); stroke: var(--primary); stroke-width: 2; }
+  .chart .hit { fill: transparent; cursor: default; }
+  .chart circle.mark.on { r: 6.5; }
+  .chart path.mark.on { opacity: .75; }
+  .chart .empty { color: var(--text2); font-size: 13px; padding: 30px 0; text-align: center; }
+  .tip { position: absolute; pointer-events: none; z-index: 4; background: var(--card); color: var(--text); font-size: 12px;
+    padding: 6px 9px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.2), 0 0 0 1px var(--divider); white-space: nowrap; }
   .field { display: flex; align-items: center; gap: 6px; flex: none; }
   .field input[type="number"] { width: 84px; }
   .field .unit { color: var(--text2); min-width: 22px; }
@@ -194,6 +208,7 @@
   </div>
   <nav role="tablist" id="tabs">
     <button role="tab" data-tab="overview"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg><span>Overview</span></button>
+    <button role="tab" data-tab="stats"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg><span>Statistics</span></button>
     <button role="tab" data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg><span>Settings</span></button>
     <button role="tab" data-tab="diagnostics"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>Diagnostics</span></button>
   </nav>
@@ -256,6 +271,35 @@
     </div>
   </section>
 
+  <!-- ============ Statistics: the car's battery (src/stats.py) ============ -->
+  <section id="tab-stats" class="stack" hidden>
+    <div class="grid grid2">
+      <div class="card">
+        <div class="label">Car battery: usable capacity</div>
+        <div class="big" id="t-cap">—</div>
+        <div class="sub" id="t-cap-sub"></div>
+        <div class="chart" id="t-cap-chart" role="img" aria-label="Capacity estimates over time"></div>
+        <div class="note" id="t-cap-note">Each dot is one charge or discharge that moved the SoC far enough: kWh at the charger ÷ SoC moved. Filled dots are charges, rings are discharges. Read the trend more than any one dot: it includes the car's own charging losses, and the SoC is only whole numbers.</div>
+      </div>
+      <div class="card">
+        <div class="label">Conversion losses: last 30 days</div>
+        <div class="big" id="t-loss">—</div>
+        <div class="sub" id="t-loss-sub"></div>
+        <div class="chart" id="t-loss-chart" role="img" aria-label="Car conversion loss per day"></div>
+        <dl class="kv" id="t-eff" style="margin-top:12px"></dl>
+        <div class="note">The inverter's DC side (solar, home battery, car) against its AC side. The car gets its share of what's lost by its share of the DC flow at the time. Efficiencies come from "clean" sessions with little solar or home battery going at the same time.</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Sessions<span class="spacer"></span><span class="chip" id="t-count"></span></h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>What</th><th class="num">SoC</th><th class="num">Energy</th><th class="num">Capacity</th><th class="num">Efficiency</th><th class="num">Loss</th></tr></thead>
+        <tbody id="t-sessions"></tbody>
+      </table></div>
+      <div class="note" id="t-since"></div>
+    </div>
+  </section>
+
   <!-- ============ Settings ============ -->
   <section id="tab-settings" class="stack" hidden>
     <div class="section-title">Your Home Assistant entities</div>
@@ -283,6 +327,14 @@
         <h2>Battery rates</h2>
         <div class="note" style="margin:0">For the battery rate sensors (e.g. for Predbat): the plant's rate with the car plugged in, and how it splits between the home battery and the car, in proportion to their sizes.</div>
         <div id="s-rates"></div>
+      </div>
+      <div class="card">
+        <h2>Statistics</h2>
+        <div id="s-stats"></div>
+        <div class="row">
+          <div class="grow">Flip the inverter's power<div class="note" style="margin:0">Turn on if the losses read large and negative: your inverter power sensor is negative while it feeds the house.</div></div>
+          <label class="switch"><input type="checkbox" id="s-flip" aria-label="Flip the inverter's power"><span></span></label>
+        </div>
       </div>
       <div class="card" style="grid-column:1/-1">
         <h2>Advanced: the charger's states</h2>
@@ -725,6 +777,11 @@ const PICKERS = [
   ['Home battery', 'available_power', 'Available power', 'What the plant can charge or discharge at right now. For the battery rate sensors.', 'sensor'],
   ['Home battery', 'home_battery_soc', 'Home battery SoC', 'Nearly full means the higher battery rate.', 'sensor'],
   ['Home battery', 'home_battery_capacity', 'Home battery capacity', 'kWh, to share the rate between the home battery and the car (9 if not set).', 'sensor,input_number,number'],
+  ['Statistics', 'charged_energy', 'Total charged energy', "The charger's lifetime kWh into the car.", 'sensor'],
+  ['Statistics', 'discharged_energy', 'Total discharged energy', "The charger's lifetime kWh out of the car.", 'sensor'],
+  ['Statistics', 'charger_power', 'Charger power', 'Either sign. W or kW.', 'sensor'],
+  ['Statistics', 'pv_power', 'Solar power', 'For the losses. W or kW.', 'sensor'],
+  ['Statistics', 'inverter_power', 'Inverter AC power', "The inverter's AC side, for the losses. W or kW.", 'sensor'],
   ['Mode and limits', 'charge_signal', 'Charge signal', 'On = charge the car now if there\'s room, e.g. Predbat charging. Optional.', 'binary_sensor,input_boolean,switch'],
 ];
 (function buildPickerCards() {
@@ -761,6 +818,10 @@ const RATES = [
   ['house_rate_kw', 'Home battery top rate', 'kW', ''],
   ['car_rate_kw', 'Car top rate', 'kW', ''],
 ];
+const STATS_SETTINGS = [
+  ['capacity_min_span_pct', 'Capacity: SoC moved at least', '%', 'Shorter sessions are too rough to estimate the capacity from.'],
+  ['clean_share_pct', 'Clean session: other DC flow under', '%', 'Solar and home battery under this share of the car\'s energy.'],
+];
 const LISTS = [
   ['plugged_states', 'Plugged in', 'Running states that mean a car is plugged in.'],
   ['active_states', 'Running', 'Running states that mean the charger is running.'],
@@ -776,6 +837,8 @@ async function refreshAppSettings() {
   const numberRows = (rows) => rows.map(([key, label, unit, note]) => `<div class="row"><div class="grow">${esc(label)}${note ? `<div class="note" style="margin:0">${esc(note)}</div>` : ''}</div>
     <span class="field"><input type="number" data-setting="${key}" step="any" min="0" value="${esc(appSettings[key])}" aria-label="${esc(label)}"><span class="unit">${unit}</span></span></div>`).join('');
   $('s-rates').innerHTML = numberRows(RATES);
+  $('s-stats').innerHTML = numberRows(STATS_SETTINGS);
+  $('s-flip').checked = !!appSettings.flip_inverter_power;
   $('s-tuning').innerHTML = TUNING.map(([key, label, unit, note]) => `<div class="row"><div class="grow">${esc(label)}<div class="note" style="margin:0">${esc(note)}</div></div>
     <span class="field"><input type="number" data-setting="${key}" step="any" min="0" value="${esc(appSettings[key])}" aria-label="${esc(label)}"><span class="unit">${unit}</span></span></div>`).join('');
   $('s-lists').innerHTML = LISTS.map(([key, label, note]) => `<div class="row"><div class="grow">${esc(label)}<div class="note" style="margin:0">${esc(note)}</div></div></div>
@@ -798,7 +861,119 @@ document.addEventListener('change', (ev) => {
 });
 $('s-observe').addEventListener('change', (ev) => saveSetting({observe_only: ev.target.checked},
   ev.target.checked ? 'Watch only: buttons won\'t be pressed' : 'Live: it presses the buttons'));
+$('s-flip').addEventListener('change', (ev) => saveSetting({flip_inverter_power: ev.target.checked}));
 $('s-notify').addEventListener('change', (ev) => saveSetting({notify_service: ev.target.value.trim()}));
+
+// ---------- Statistics ----------
+// Charts: one series each (no legend: the card's label names it), a hover
+// tooltip on every mark, inline SVG in the page's theme colours.
+function tipFor(box) {
+  let tip = box.querySelector('.tip');
+  if (!tip) { tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; box.appendChild(tip); }
+  return tip;
+}
+function bindTips(box) {
+  const tip = tipFor(box);
+  box.querySelectorAll('[data-tip]').forEach((el) => {
+    el.addEventListener('mouseenter', () => {
+      tip.innerHTML = el.dataset.tip; tip.hidden = false;
+      const b = box.getBoundingClientRect(), r = el.getBoundingClientRect();
+      const x = Math.min(Math.max(r.left + r.width / 2 - b.left - tip.offsetWidth / 2, 0), b.width - tip.offsetWidth);
+      tip.style.left = x + 'px'; tip.style.top = Math.max(0, r.top - b.top - tip.offsetHeight - 8) + 'px';
+      el.nextElementSibling && el.nextElementSibling.classList.add('on');
+    });
+    el.addEventListener('mouseleave', () => { tip.hidden = true; el.nextElementSibling && el.nextElementSibling.classList.remove('on'); });
+  });
+}
+let W = 600; const H = 170, PAD = {l: 38, r: 8, t: 10, b: 22};
+function niceMax(v) { if (!(v > 0)) return 1; const p = Math.pow(10, Math.floor(Math.log10(v))); return Math.ceil(v / p * 2) / 2 * p; }
+function yAxis(lo, hi, fmt) {
+  return [0, 0.5, 1].map((f) => {
+    const v = lo + (hi - lo) * f, y = PAD.t + (H - PAD.t - PAD.b) * (1 - f);
+    return `<line class="axis" x1="${PAD.l}" x2="${W - PAD.r}" y1="${y}" y2="${y}" opacity="${f ? .5 : 1}"/><text x="${PAD.l - 6}" y="${y + 4}" text-anchor="end">${fmt(v)}</text>`;
+  }).join('');
+}
+function dotChart(box, pts, ref) {
+  W = Math.max(280, box.clientWidth || 600);
+  if (!pts.length) { box.innerHTML = '<div class="empty">No estimates yet: they come from charges or discharges that move the SoC 10% or more.</div>'; return; }
+  const xs = pts.map((p) => p.x), vals = pts.map((p) => p.y).concat(ref ? [ref] : []);
+  let lo = Math.min(...vals), hi = Math.max(...vals); const pad = Math.max(1, (hi - lo) * 0.15); lo = Math.max(0, Math.floor(lo - pad)); hi = Math.ceil(hi + pad);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), span = Math.max(x1 - x0, 86400000);
+  const X = (x) => PAD.l + 8 + (W - PAD.l - PAD.r - 16) * (pts.length === 1 ? 0.5 : (x - x0) / span);
+  const Y = (v) => PAD.t + (H - PAD.t - PAD.b) * (1 - (v - lo) / (hi - lo));
+  const fmtD = (t) => new Date(t).toLocaleDateString([], {day: 'numeric', month: 'short'});
+  let svg = yAxis(lo, hi, (v) => num(v, 0));
+  if (ref) svg += `<line class="ref" x1="${PAD.l}" x2="${W - PAD.r}" y1="${Y(ref)}" y2="${Y(ref)}"/><text x="${W - PAD.r}" y="${Y(ref) - 4}" text-anchor="end">Nominal ${num(ref, 1)}</text>`;
+  svg += `<text x="${X(x0)}" y="${H - 4}" text-anchor="start">${fmtD(x0)}</text>` + (pts.length > 1 ? `<text x="${X(x1)}" y="${H - 4}" text-anchor="end">${fmtD(x1)}</text>` : '');
+  svg += pts.map((p) => `<circle class="hit" cx="${X(p.x)}" cy="${Y(p.y)}" r="10" data-tip="${esc(p.tip)}"/><circle class="mark ${p.dim ? 'dim' : ''}" cx="${X(p.x)}" cy="${Y(p.y)}" r="4.5"/>`).join('');
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${svg}</svg>`;
+  bindTips(box);
+}
+function barChart(box, bars, unit) {
+  W = Math.max(280, box.clientWidth || 600);
+  if (!bars.length) { box.innerHTML = '<div class="empty">Nothing recorded yet.</div>'; return; }
+  const hi = niceMax(Math.max(...bars.map((b) => b.v), 0)), n = bars.length;
+  const slot = (W - PAD.l - PAD.r) / n, bw = Math.max(2, slot - 2);
+  const Y = (v) => PAD.t + (H - PAD.t - PAD.b) * (1 - Math.max(0, v) / hi);
+  let svg = yAxis(0, hi, (v) => num(v, hi < 3 ? 1 : 0));
+  svg += bars.map((b, i) => {
+    const x = PAD.l + i * slot + 1, y = Y(b.v), h = Math.max(0, H - PAD.b - y), r = Math.min(4, bw / 2, h);
+    const path = h > 0 ? `M${x},${H - PAD.b} V${y + r} Q${x},${y} ${x + r},${y} H${x + bw - r} Q${x + bw},${y} ${x + bw},${y + r} V${H - PAD.b} Z` : '';
+    return `<rect class="hit" x="${x}" y="${PAD.t}" width="${slot}" height="${H - PAD.t - PAD.b}" data-tip="${esc(b.tip)}"/><path class="mark" d="${path}"/>`;
+  }).join('');
+  svg += `<text x="${PAD.l}" y="${H - 4}">${esc(bars[0].label)}</text><text x="${W - PAD.r}" y="${H - 4}" text-anchor="end">${esc(bars[n - 1].label)}</text>`;
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${svg}</svg>`;
+  bindTips(box);
+}
+const pct = (f, d = 1) => f == null ? '—' : `${num(f * 100, d)}%`;
+async function refreshStats() {
+  let t;
+  try { t = await api('stats'); } catch (e) { return; }
+  const sig = JSON.stringify(t) + (document.querySelector('#t-cap-chart').clientWidth);
+  if (sig === refreshStats._sig) return;  // unchanged: don't redraw under the pointer
+  refreshStats._sig = sig;
+  // Capacity
+  $('t-cap').textContent = t.capacity_kwh ? `${num(t.capacity_kwh, 1)} kWh` : '—';
+  const sub = [];
+  if (t.health_pct) sub.push(`${num(t.health_pct, 0)}% of the ${num(t.nominal_kwh, 1)} kWh capacity helper`);
+  else if (!t.nominal_kwh) sub.push('Set the battery capacity helper to compare against it');
+  if (t.trend) sub.push(`trend ${t.trend.kwh_per_year > 0 ? '+' : ''}${num(t.trend.kwh_per_year, 1)} kWh a year` + (t.trend.pct_per_year != null ? ` (${num(t.trend.pct_per_year, 1)}%)` : '') + ` over ${t.trend.days} days`);
+  else if (t.estimates.length) sub.push('a trend needs 6 estimates over 2 months');
+  $('t-cap-sub').textContent = sub.join(' · ') || (t.estimates.length ? '' : 'Median of the last 10 estimates');
+  dotChart($('t-cap-chart'), t.estimates.map((e) => ({
+    x: new Date(e.at).getTime(), y: e.kwh, dim: e.direction === 'discharge',
+    tip: `<b>${num(e.kwh, 1)} kWh</b> · ${e.direction === 'charge' ? 'charging' : 'discharging'}, ${num(e.span, 0)}% moved<br>${dateTime(e.at)}`,
+  })), t.nominal_kwh);
+  // Losses
+  const l = t.last30 || {};
+  $('t-loss').textContent = t.days.length ? `${num(l.car_loss_kwh, 1)} kWh` : '—';
+  $('t-loss-sub').textContent = t.days.length ? `lost getting ${num(l.car_in_kwh, 0)} kWh into the car and ${num(l.car_out_kwh, 0)} kWh out` + (l.car_in_kwh + l.car_out_kwh > 0 ? ` (${num(l.car_loss_kwh / (l.car_in_kwh + l.car_out_kwh) * 100, 1)}%)` : '') : 'Recording starts when the add-on runs';
+  barChart($('t-loss-chart'), t.days.map((d) => ({
+    v: d.car_loss_kwh, label: new Date(d.day).toLocaleDateString([], {day: 'numeric', month: 'short'}),
+    tip: `<b>${new Date(d.day).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})}</b><br>Car loss ${num(d.car_loss_kwh, 2)} kWh<br>In ${num(d.car_in_kwh, 1)} · out ${num(d.car_out_kwh, 1)} kWh` + (d.measured_h < 23 ? `<br><span class="muted">${num(d.measured_h, 1)} h measured</span>` : ''),
+  })));
+  const ce = t.charge_efficiency, de = t.discharge_efficiency;
+  $('t-eff').innerHTML = kv([
+    ['Charging: AC → car', ce.median ? `${pct(ce.median)} <span class="muted">· ${ce.sessions} clean session${ce.sessions === 1 ? '' : 's'}</span>` : '<span class="muted">No clean session yet</span>'],
+    ['Discharging: car → AC', de.median ? `${pct(de.median)} <span class="muted">· ${de.sessions} clean session${de.sessions === 1 ? '' : 's'}</span>` : '<span class="muted">No clean session yet</span>'],
+    ['Whole inverter, 30 days', t.days.length ? `${num(l.loss_kwh, 1)} kWh lost` : '—'],
+  ]);
+  // Sessions
+  $('t-count').textContent = `${t.session_count} recorded`;
+  $('t-sessions').innerHTML = t.sessions.length ? t.sessions.map((x) => `<tr>
+      <td style="white-space:nowrap">${dateTime(x.start)}<div class="sub">${num(x.minutes, 0)} min${x.source === 'history' ? ' · from history' : ''}</div></td>
+      <td><span class="chip ${x.direction === 'charge' ? 'ok' : 'info'}">${x.direction === 'charge' ? 'Charge' : 'Discharge'}</span></td>
+      <td class="num">${x.soc_start == null ? '—' : `${num(x.soc_start, 0)} → ${num(x.soc_end, 0)}%`}</td>
+      <td class="num">${x.energy_kwh == null ? '—' : num(x.energy_kwh, 1) + ' kWh'}</td>
+      <td class="num">${x.capacity_kwh ? num(x.capacity_kwh, 1) + ' kWh' : '—'}</td>
+      <td class="num">${x.efficiency ? pct(x.efficiency) : (x.clean ? '—' : '<span class="muted">mixed</span>')}</td>
+      <td class="num">${x.car_loss_kwh == null ? '—' : num(x.car_loss_kwh, 2) + ' kWh'}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="empty">No sessions yet</td></tr>';
+  const now = t.in_session ? ` A ${t.in_session.direction} is in progress (from ${t.in_session.soc_start ?? '?'}%).` : '';
+  $('t-since').textContent = (t.recording_since ? `Recording since ${dateTime(t.recording_since)}.` : '') + (t.since ? ` Data from ${t.since}.` : '') + now;
+}
+
+window.addEventListener('resize', () => { clearTimeout(refreshStats._t); refreshStats._t = setTimeout(() => { if (activeTab === 'stats') refreshStats(); }, 250); });
 
 // ---------- Diagnostics › Health ----------
 async function refreshHealth() {
@@ -872,6 +1047,7 @@ $('d-bundle').addEventListener('click', async () => {
 // ---------- refresh loop ----------
 function refreshTab(full) {
   if (activeTab === 'settings') { refreshSensors(full); if (full) refreshAppSettings(); }
+  else if (activeTab === 'stats') refreshStats();
   else if (activeTab === 'health') refreshHealth();
   else if (activeTab === 'debug') refreshDebug();
 }
