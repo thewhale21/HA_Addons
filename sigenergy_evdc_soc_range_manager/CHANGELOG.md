@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.17.0 — Round trip from short sessions, battery size
+
+- **Fix:** the round trip never came out because it only used charges and
+  discharges that moved the SoC 10% or more, and discharges cut short by
+  dropouts never do. Now it adds up the SoC moved (and its kWh, measured
+  between the SoC's tick-overs) over the latest sessions, short ones
+  included, until there's 10% each way (up to 60%, last 30 days). The
+  first time it connects, sessions already recorded get their figures from
+  Home Assistant's history.
+- **Feature:** a Battery size chip on the Statistics tab: 100% of the car's
+  battery itself, between the kWh to fill it and the kWh back out of it.
+- **Change:** the usable capacity chart is gone.
+
 ## 0.16.0 — Exporting is enough
 
 - **Change:** spare power from exporting only needs the export above the

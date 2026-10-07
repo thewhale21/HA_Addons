@@ -180,10 +180,8 @@
   .chart { position: relative; margin-top: 12px; }
   .chart svg { display: block; max-width: 100%; height: auto; overflow: visible; }
   .chart .axis { stroke: var(--divider); stroke-width: 1; }
-  .chart .ref { stroke: var(--text2); stroke-width: 1; stroke-dasharray: 4 3; }
   .chart text { fill: var(--text2); font-size: 11px; }
   .chart .mark { fill: var(--primary); pointer-events: none; }
-  .chart .mark.dim { fill: var(--card); stroke: var(--primary); stroke-width: 2; }
   .chart .hit { fill: transparent; cursor: default; }
   .chart circle.mark.on { r: 6.5; }
   .chart path.mark.on { opacity: .75; }
@@ -420,8 +418,8 @@
         <div class="label">Car battery: usable capacity</div>
         <div class="big" id="t-cap">—</div>
         <div class="sub" id="t-cap-sub"></div>
-        <div class="chart" id="t-cap-chart" role="img" aria-label="Capacity estimates over time"></div>
-        <div class="note" id="t-cap-note">Each dot is one charge or discharge that moved the SoC far enough: kWh at the charger ÷ SoC moved. Filled dots are charges, rings are discharges. Read the trend more than any one dot: it includes the car's own charging losses, and the SoC is only whole numbers.</div>
+        <div class="row" style="margin-top:10px;gap:6px"><span class="chip" id="t-size">Battery size: —</span></div>
+        <div class="note">Usable capacity: the kWh at the charger to go from 0 to 100%, from charges and discharges that move the SoC 10% or more, so the car's own charging losses are in it. Battery size: 100% of the battery itself, between that and the kWh you get back out of it (from the round trip, taking the losses as about even each way).</div>
       </div>
       <div class="card">
         <div class="label">Round-trip losses: last 30 days</div>
@@ -429,7 +427,7 @@
         <div class="sub" id="t-loss-sub"></div>
         <div class="chart" id="t-loss-chart" role="img" aria-label="Car conversion loss per day"></div>
         <dl class="kv" id="t-eff" style="margin-top:12px"></dl>
-        <div class="note" id="t-loss-note">From the SoC: the kWh it takes to put 1% into the car against the kWh you get back for 1% out, from each charge and discharge that moves the SoC far enough (the median of the last 10 of each). That's the charger and the car; the inverter's own AC ↔ DC loss is on top (see Is it paying?).</div>
+        <div class="note" id="t-loss-note">From the SoC: the kWh it takes to put 1% into the car against the kWh you get back for 1% out, added up over the latest charges and discharges (short ones too, up to 60% of SoC each way, last 30 days). That's the charger and the car; the inverter's own AC ↔ DC loss is on top (see Is it paying?).</div>
       </div>
     </div>
     <div class="grid grid2">
@@ -1590,22 +1588,6 @@ function yAxis(lo, hi, fmt) {
     return `<line class="axis" x1="${PAD.l}" x2="${W - PAD.r}" y1="${y}" y2="${y}" opacity="${f ? .5 : 1}"/><text x="${PAD.l - 6}" y="${y + 4}" text-anchor="end">${fmt(v)}</text>`;
   }).join('');
 }
-function dotChart(box, pts, ref) {
-  W = Math.max(280, box.clientWidth || 600);
-  if (!pts.length) { box.innerHTML = '<div class="empty">No estimates yet: they come from charges or discharges that move the SoC 10% or more.</div>'; return; }
-  const xs = pts.map((p) => p.x), vals = pts.map((p) => p.y).concat(ref ? [ref] : []);
-  let lo = Math.min(...vals), hi = Math.max(...vals); const pad = Math.max(1, (hi - lo) * 0.15); lo = Math.max(0, Math.floor(lo - pad)); hi = Math.ceil(hi + pad);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs), span = Math.max(x1 - x0, 86400000);
-  const X = (x) => PAD.l + 8 + (W - PAD.l - PAD.r - 16) * (pts.length === 1 ? 0.5 : (x - x0) / span);
-  const Y = (v) => PAD.t + (H - PAD.t - PAD.b) * (1 - (v - lo) / (hi - lo));
-  const fmtD = (t) => new Date(t).toLocaleDateString([], {day: 'numeric', month: 'short'});
-  let svg = yAxis(lo, hi, (v) => num(v, 0));
-  if (ref) svg += `<line class="ref" x1="${PAD.l}" x2="${W - PAD.r}" y1="${Y(ref)}" y2="${Y(ref)}"/><text x="${W - PAD.r}" y="${Y(ref) - 4}" text-anchor="end">Nominal ${num(ref, 1)}</text>`;
-  svg += `<text x="${X(x0)}" y="${H - 4}" text-anchor="start">${fmtD(x0)}</text>` + (pts.length > 1 ? `<text x="${X(x1)}" y="${H - 4}" text-anchor="end">${fmtD(x1)}</text>` : '');
-  svg += pts.map((p) => `<circle class="hit" cx="${X(p.x)}" cy="${Y(p.y)}" r="10" data-tip="${esc(p.tip)}"/><circle class="mark ${p.dim ? 'dim' : ''}" cx="${X(p.x)}" cy="${Y(p.y)}" r="4.5"/>`).join('');
-  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${svg}</svg>`;
-  bindTips(box);
-}
 function barChart(box, bars, unit) {
   W = Math.max(280, box.clientWidth || 600);
   if (!bars.length) { box.innerHTML = '<div class="empty">Nothing recorded yet.</div>'; return; }
@@ -1622,11 +1604,16 @@ function barChart(box, bars, unit) {
   box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${svg}</svg>`;
   bindTips(box);
 }
+function perPct(p, what) {
+  const over = `${num(p.pct || 0, 0)}% over ${p.sessions || 0} ${what}${p.sessions === 1 ? '' : 's'}`;
+  return p.kwh ? `${num(p.kwh, 3)} kWh <span class="muted">· ${over}</span>`
+    : `<span class="muted">${over} so far (needs ${num(p.needs_pct || 10, 0)}%)</span>`;
+}
 const pct = (f, d = 1) => f == null ? '—' : `${num(f * 100, d)}%`;
 async function refreshStats() {
   let t;
   try { t = await api('stats'); } catch (e) { return; }
-  const sig = JSON.stringify(t) + (document.querySelector('#t-cap-chart').clientWidth);
+  const sig = JSON.stringify(t) + (document.querySelector('#t-loss-chart').clientWidth);
   if (sig === refreshStats._sig) return;  // unchanged: don't redraw under the pointer
   refreshStats._sig = sig;
   // Capacity
@@ -1635,26 +1622,23 @@ async function refreshStats() {
   if (t.health_pct) sub.push(`${num(t.health_pct, 0)}% of the ${num(t.nominal_kwh, 1)} kWh capacity helper`);
   else if (!t.nominal_kwh) sub.push('Set the battery capacity helper to compare against it');
   if (t.trend) sub.push(`trend ${t.trend.kwh_per_year > 0 ? '+' : ''}${num(t.trend.kwh_per_year, 1)} kWh a year` + (t.trend.pct_per_year != null ? ` (${num(t.trend.pct_per_year, 1)}%)` : '') + ` over ${t.trend.days} days`);
-  else if (t.estimates.length) sub.push('a trend needs 6 estimates over 2 months');
-  $('t-cap-sub').textContent = sub.join(' · ') || (t.estimates.length ? '' : 'Median of the last 10 estimates');
-  dotChart($('t-cap-chart'), t.estimates.map((e) => ({
-    x: new Date(e.at).getTime(), y: e.kwh, dim: e.direction === 'discharge',
-    tip: `<b>${num(e.kwh, 1)} kWh</b> · ${e.direction === 'charge' ? 'charging' : 'discharging'}, ${num(e.span, 0)}% moved<br>${dateTime(e.at)}`,
-  })), t.nominal_kwh);
+  else if (t.estimate_count) sub.push('a trend needs 6 estimates over 2 months');
+  $('t-cap-sub').textContent = sub.join(' · ') || (t.estimate_count ? '' : 'Median of the last 10 estimates');
+  $('t-size').textContent = t.battery_kwh ? `Battery size ≈ ${num(t.battery_kwh, 1)} kWh` : 'Battery size: needs the round trip';
   // Round-trip losses, from kWh per 1% in and out
   const l = t.last30 || {}, rt = t.round_trip, inP = t.per_pct_in || {}, outP = t.per_pct_out || {};
   $('t-loss').textContent = t.soc_loss_30_kwh != null ? `${num(Math.max(0, t.soc_loss_30_kwh), 1)} kWh` : '—';
   $('t-loss-sub').textContent = rt && rt >= 1 ? `${num(rt * 100, 1)}% round trip: too close to call yet; more charges and discharges will settle it`
     : rt ? `${num(rt * 100, 1)}% round trip: ${num(l.car_out_kwh, 0)} kWh out of the car took ${num(l.car_out_kwh / rt, 0)} kWh in`
-    : `Needs a charge and a discharge that each move the SoC ${num((appSettings || {}).capacity_min_span_pct || 10, 0)}% or more`;
+    : `Needs the SoC to move ${num(inP.needs_pct || 10, 0)}% each way: short charges and discharges add up`;
   barChart($('t-loss-chart'), rt ? t.days.map((d) => ({
     v: d.soc_loss_kwh || 0, label: new Date(d.day).toLocaleDateString([], {day: 'numeric', month: 'short'}),
     tip: `<b>${new Date(d.day).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})}</b><br>Lost ${num(d.soc_loss_kwh, 2)} kWh<br>In ${num(d.car_in_kwh, 1)} · out ${num(d.car_out_kwh, 1)} kWh`,
   })) : []);
   const ce = t.charge_efficiency, de = t.discharge_efficiency;
   $('t-eff').innerHTML = kv([
-    ['In: kWh per 1%', inP.kwh ? `${num(inP.kwh, 3)} kWh <span class="muted">· ${inP.sessions} charge${inP.sessions === 1 ? '' : 's'}</span>` : '<span class="muted">No charge long enough yet</span>'],
-    ['Out: kWh per 1%', outP.kwh ? `${num(outP.kwh, 3)} kWh <span class="muted">· ${outP.sessions} discharge${outP.sessions === 1 ? '' : 's'}</span>` : '<span class="muted">No discharge long enough yet</span>'],
+    ['In: kWh per 1%', perPct(inP, 'charge')],
+    ['Out: kWh per 1%', perPct(outP, 'discharge')],
     ['Round trip', rt ? `${num(rt * 100, 1)}%` : '—'],
     ['Inverter measured', ce.median || de.median ? `AC → car ${pct(ce.median)} · car → AC ${pct(de.median)}` : '<span class="muted">Needs the solar and inverter power sensors (Settings) and a clean session</span>'],
   ]);

@@ -28,6 +28,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import math
 import os
 import statistics
 from dataclasses import dataclass
@@ -42,6 +43,10 @@ STATS_DEFAULTS = {
     "inverter_efficiency_pct": 96.0,  # AC <-> DC each way, for the costs (the charger's counters are DC)
 }
 MAX_SESSIONS = 1000
+# Round trip from the SoC: add up the SoC moved (and its kWh) over recent sessions, short ones included
+PER_PCT_MIN_PCT = 10  # at least this much SoC moved each way before it says anything
+PER_PCT_ENOUGH_PCT = 60  # ...and the most recent sessions up to this much
+PER_PCT_DAYS = 30
 MAX_DAYS = 400
 MAX_GAP_S = 120  # readings further apart than this aren't integrated across
 SAVE_EVERY_S = 300
@@ -100,6 +105,7 @@ class StatsRecorder:
         self.last: Optional[Sample] = None
         self.started: Optional[float] = None  # first live sample (history is only used before this)
         self.backfilled = False
+        self.spans_filled = False  # sessions recorded before 0.17.0 given their kWh per SoC step from history
         self._saved_at = 0.0
         self._load()
 
@@ -115,6 +121,7 @@ class StatsRecorder:
             self.days = dict(data.get("days") or {})
             self.started = data.get("started")
             self.backfilled = bool(data.get("backfilled"))
+            self.spans_filled = bool(data.get("spans_filled"))
         except FileNotFoundError:
             pass
         except Exception:
@@ -128,7 +135,7 @@ class StatsRecorder:
             tmp = self._path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({"sessions": self.sessions[-MAX_SESSIONS:], "days": self.days, "started": self.started,
-                           "backfilled": self.backfilled}, f)
+                           "backfilled": self.backfilled, "spans_filled": self.spans_filled}, f)
             os.replace(tmp, self._path)
         except Exception:
             logger.warning("Could not save the statistics", exc_info=True)
@@ -261,10 +268,12 @@ class StatsRecorder:
         duration = cur["last"] - cur["start"]
         if (energy or 0) < 0.05 and duration < 120:
             return  # a blip
-        capacity = span = None
+        capacity = span = span_kwh = None
         if cur["soc_anchor"] is not None and cur["soc_end"] is not None:
             span = abs(cur["soc_end"] - cur["soc_anchor"])
             moved = cur["e_end"] - cur["e_anchor"]
+            if span >= 1 and moved > 0:
+                span_kwh = moved  # the kWh for exactly `span` % (between tick-overs): for the round trip
             if span >= float(t["capacity_min_span_pct"]) and moved > 0:
                 capacity = moved / span * 100
         efficiency = None
@@ -278,7 +287,7 @@ class StatsRecorder:
         self.sessions.append({
             "start": _iso(cur["start"]), "end": _iso(cur["last"]), "direction": cur["direction"],
             "minutes": round(duration / 60, 1), "energy_kwh": _r(energy), "soc_start": cur["soc_start"],
-            "soc_end": cur["soc_last"], "capacity_kwh": _r(capacity, 2), "capacity_span": span,
+            "soc_end": cur["soc_last"], "capacity_kwh": _r(capacity, 2), "capacity_span": span, "span_kwh": _r(span_kwh, 4),
             "car_loss_kwh": _r(cur["car_loss_kwh"]) if cur["measured_s"] else None,
             "efficiency": _r(efficiency, 4), "clean": bool(clean), "source": "live",
         })
@@ -314,6 +323,50 @@ class StatsRecorder:
         self.save()
         return len(found)
 
+    def fill_spans(self, samples: list[Sample], settings: Optional[dict] = None) -> int:
+        """Once: sessions recorded before they kept their kWh per SoC step (0.17.0) get it
+        from Home Assistant's history, matched by start time. Returns how many."""
+        replay = StatsRecorder()
+        for sample in sorted(samples, key=lambda x: x.now):
+            replay.feed(sample, settings, live=False)
+        if replay.current is not None and replay.last is not None:
+            replay._end(replay.last, {**STATS_DEFAULTS, **(settings or {})})
+        when = lambda x: datetime.datetime.fromisoformat(x["start"].replace("Z", "+00:00")).timestamp()  # noqa: E731
+        found = [(when(x), x) for x in replay.sessions if x.get("span_kwh")]
+        filled = 0
+        for sess in self.sessions:
+            if sess.get("span_kwh") or not sess.get("start"):
+                continue
+            at = when(sess)
+            match = min(((abs(t - at), x) for t, x in found if x["direction"] == sess["direction"]),
+                        key=lambda m: m[0], default=None)
+            if match and match[0] <= 180:
+                sess["span_kwh"], sess["capacity_span"] = match[1]["span_kwh"], match[1]["capacity_span"]
+                filled += 1
+        self.spans_filled = True
+        self.save()
+        return filled
+
+    def per_pct(self, direction: str, now: float) -> dict:
+        """kWh per 1% of SoC going in (or coming out): the kWh over the SoC moved, added up
+        across the most recent sessions (short ones too: a dropout's 3% counts)."""
+        since = _iso(now - PER_PCT_DAYS * 86400)
+        kwh = pct = 0.0
+        n = 0
+        for x in reversed(self.sessions):
+            if x.get("direction") != direction or (x.get("start") or "") < since:
+                continue
+            span = x.get("capacity_span") or 0
+            moved = x.get("span_kwh") or (x["capacity_kwh"] * span / 100 if x.get("capacity_kwh") else None)
+            if span < 1 or not moved or not 0.05 <= moved / span <= 3:  # nothing measured, or an odd reading
+                continue
+            kwh, pct, n = kwh + moved, pct + span, n + 1
+            if pct >= PER_PCT_ENOUGH_PCT:
+                break
+        enough = pct >= PER_PCT_MIN_PCT
+        return {"kwh": _r(kwh / pct, 4) if enough else None, "pct": round(pct), "sessions": n,
+                "needs_pct": PER_PCT_MIN_PCT}
+
     # --- for the page and the sensors ---------------------------------------------------------
 
     def summary(self, nominal_kwh: Optional[float] = None, now: Optional[float] = None,
@@ -345,14 +398,13 @@ class StatsRecorder:
         totals = {f: round(sum(self.days[k].get(f, 0.0) for k in last30), 4) for f in DAY_FIELDS}
 
         # Round trip from the SoC: kWh per 1% going in, against kWh per 1% coming out
-        def per_pct(direction):
-            vals = [x["capacity_kwh"] / 100 for x in self.sessions if x["direction"] == direction and x.get("capacity_kwh")]
-            vals = vals[-10:]
-            return {"kwh": _r(statistics.median(vals), 4) if vals else None, "sessions": len(vals)}
-        pin, pout = per_pct("charge"), per_pct("discharge")
+        pin, pout = self.per_pct("charge", now), self.per_pct("discharge", now)
         round_trip = pout["kwh"] / pin["kwh"] if pin["kwh"] and pout["kwh"] else None
         if round_trip is not None and not 0.3 <= round_trip <= 1.2:
             round_trip = None  # too few or odd readings
+        # The real battery: 100% of it, between the kWh to fill it (charging losses on top) and the
+        # kWh back out of it (discharging losses off), taking the losses as about even each way
+        battery_kwh = math.sqrt(pin["kwh"] * pout["kwh"]) * 100 if round_trip else None
         soc_loss = (lambda out: out * (1 / round_trip - 1)) if round_trip else None
 
         # Money: the charger's counters are DC, the prices are for AC
@@ -379,10 +431,11 @@ class StatsRecorder:
         return {
             "capacity_kwh": _r(capacity, 2), "nominal_kwh": nominal_kwh,
             "health_pct": round(capacity / nominal_kwh * 100, 1) if capacity and nominal_kwh else None,
-            "estimates": ests[-200:], "trend": trend,
+            "estimate_count": len(ests), "trend": trend,
             "charge_efficiency": eff("charge"), "discharge_efficiency": eff("discharge"),
             "last30": totals, "today_car_loss_kwh": round(today.get("car_loss_kwh", 0.0), 3),
             "per_pct_in": pin, "per_pct_out": pout, "round_trip": _r(round_trip, 4),
+            "battery_kwh": _r(battery_kwh, 1),
             "soc_loss_30_kwh": round(soc_loss(totals["car_out_kwh"]), 2) if soc_loss else None,
             "money": money, "dropouts_today": int(today.get("dropouts", 0)),
             "dropouts_7": int(sum(self.days[k].get("dropouts", 0) for k in keys if k >= _day(now - 6 * 86400))),

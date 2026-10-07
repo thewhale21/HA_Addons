@@ -135,3 +135,46 @@ def test_crossing_limits_from_two_entries_the_later_one_wins(tmp_path):
     assert t.apply(80, 40, TUE_23)[:2] == (50, 49)  # the high started later: the low moves
     assert t.apply(80, 40, TUE_23 - datetime.timedelta(minutes=25))[:2] == (80, 60)  # only the low is on yet: no clash
     assert t.apply(80, 40, TUE_23 - datetime.timedelta(minutes=35))[:2] == (80, 40)  # before either
+
+
+def _short(rec, direction, socs, per_pct, now, e):
+    """One short session: the SoC through `socs`, a minute a step."""
+    for soc in socs:
+        e_in, e_out = (e, 100.0) if direction == "charge" else (100.0, e)
+        rec.feed(Sample(now, direction, soc, e_in, e_out))
+        now += 60
+        e += per_pct
+    rec.feed(Sample(now, None, 0, *((e, 100.0) if direction == "charge" else (100.0, e))))
+    return now + 600, e
+
+
+def test_short_sessions_add_up_to_a_round_trip_and_a_battery_size(tmp_path):
+    # Discharges cut short by dropouts (3-4% each) still count, added up
+    rec = StatsRecorder(str(tmp_path))
+    now = datetime.datetime(2026, 10, 7, 9, 0).timestamp()
+    e_in = e_out = 100.0
+    for start in (30, 34, 38):  # three 4% charges at 0.5 kWh per 1%
+        now, e_in = _short(rec, "charge", range(start, start + 5), 0.5, now, e_in)
+    for start in (70, 66, 62, 58):  # four 4% discharges at 0.45 kWh per 1%
+        now, e_out = _short(rec, "discharge", range(start, start - 5, -1), 0.45, now, e_out)
+    s = rec.summary(45, now=now)
+    assert s["per_pct_in"]["pct"] == 9 and s["per_pct_in"]["kwh"] is None  # 3 x 3% between tick-overs: not 10% yet
+    now, e_in = _short(rec, "charge", range(42, 47), 0.5, now, e_in)
+    s = rec.summary(45, now=now)
+    assert s["per_pct_in"]["kwh"] == 0.5 and s["per_pct_out"]["kwh"] == 0.45 and s["per_pct_out"]["sessions"] == 4
+    assert s["round_trip"] == 0.9 and abs(s["battery_kwh"] - (0.5 * 0.45) ** 0.5 * 100) < 0.1
+
+
+def test_older_sessions_get_their_soc_steps_from_history(tmp_path):
+    rec = StatsRecorder(str(tmp_path))
+    now = datetime.datetime(2026, 10, 7, 9, 0).timestamp()
+    samples = []
+
+    class Tap(StatsRecorder):  # the same readings, as Home Assistant's history would have them
+        def feed(self, s, settings=None, live=True):
+            samples.append(s)
+            super().feed(s, settings, live)
+    tap = Tap()
+    _short(tap, "discharge", range(70, 65, -1), 0.45, now, 100.0)
+    rec.sessions = [dict(x, span_kwh=None) for x in tap.sessions]  # as recorded before 0.17.0
+    assert rec.fill_spans(samples) == 1 and rec.sessions[0]["span_kwh"] == 1.35 and rec.spans_filled

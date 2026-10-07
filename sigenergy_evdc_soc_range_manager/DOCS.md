@@ -228,10 +228,16 @@ measured at the charger, so it includes the car's own charging losses,
 and the car's SoC reading has its own quirks. Watch the trend rather than
 any one figure. Fast charges from low to high give the best estimates.
 
-**Round trip.** Each charge and discharge that moves the SoC far enough
-gives the kWh per 1%: say 0.60 kWh to put 1% in, but only 0.54 kWh back
-for 1% out, a 90% round trip. The median of the last 10 of each is used,
-and the last 30 days' losses are the kWh out of the car × (1 ÷ round trip
+**Battery size.** 100% of the battery itself: between the kWh it takes to
+fill it (with the charging losses on top) and the kWh you get back out of
+it, from the round trip below, taking the losses as about even each way.
+
+**Round trip.** The kWh per 1% of SoC each way: say 0.60 kWh to put 1% in,
+but only 0.54 kWh back for 1% out, a 90% round trip. Every charge and
+discharge counts, short ones too (a discharge cut short by a dropout after
+3%): the SoC moved and its kWh, measured between the SoC's tick-overs, are
+added up over the latest sessions until there's at least 10% each way (up
+to 60%, over the last 30 days). The last 30 days' losses are the kWh out of the car × (1 ÷ round trip
 − 1). This covers the charger and the car; the inverter's own AC ↔ DC
 loss is on top.
 

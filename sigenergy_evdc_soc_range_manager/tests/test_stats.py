@@ -82,7 +82,7 @@ def test_capacity_trend_needs_two_months(tmp_path):
         charge_session(rec, T0 + n * 12 * 86400, 30, 70, kwh_per_pct=0.62 - n * 0.002, e0=1000 + n * 50)
     s = rec.summary(nominal_kwh=62.0, now=T0 + 90 * 86400)
     assert s["trend"] and s["trend"]["kwh_per_year"] < 0 and s["trend"]["days"] >= 60
-    assert len(s["estimates"]) == 8
+    assert s["estimate_count"] == 8
 
 
 def test_history_is_replayed_once_and_only_before_live_recording(tmp_path):

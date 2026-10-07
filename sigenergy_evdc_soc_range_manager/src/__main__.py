@@ -136,8 +136,9 @@ class Runner:
                 "today_car_loss_kwh": s["today_car_loss_kwh"]}
 
     async def backfill(self) -> None:
-        """Once: the car's sessions from Home Assistant's history, before recording began."""
-        if self.stats.backfilled:
+        """Once: the car's sessions from Home Assistant's history, before recording began (and,
+        once, the kWh per SoC step for sessions recorded before they kept it)."""
+        if self.stats.backfilled and self.stats.spans_filled:
             return
         from src.manager import HISTORY_KEYS
 
@@ -154,10 +155,15 @@ class Runner:
             "unit_of_measurement") for k in HISTORY_KEYS}
         samples = samples_from_history(history or {}, entities, self.settings.data, units)
         async with self.lock:
-            found = self.stats.backfill(samples, self.settings.data)
+            if not self.stats.backfilled:
+                found = self.stats.backfill(samples, self.settings.data)
+                logger.info("Statistics: %d session%s found in the last %d days of history",
+                            found, "" if found == 1 else "s", HISTORY_DAYS)
+            if not self.stats.spans_filled:
+                filled = self.stats.fill_spans(samples, self.settings.data)
+                logger.info("Statistics: %d session%s given the SoC moved and its kWh from history",
+                            filled, "" if filled == 1 else "s")
             self._brief_at = 0.0
-        logger.info("Statistics: %d session%s found in the last %d days of history",
-                    found, "" if found == 1 else "s", HISTORY_DAYS)
 
     async def backfill_soc(self) -> None:
         """Once: the last two days of the car's SoC from Home Assistant's history, for the chart
