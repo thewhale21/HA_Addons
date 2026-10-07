@@ -42,7 +42,7 @@ Where everything lives (all under this folder):
 | Logs, diagnostics, restart | `src/debug_tools.py`, `src/log_filters.py` |
 | Python packages | `requirements.txt` (tests: `requirements-dev.txt`) |
 | Tests | `tests/` (`python -m pytest tests/`) |
-| Icons | `icon.png` (128×128) and `logo.png` (250×100) |
+| Icons | `icon.png` (128×128) and `logo.png` (250×100); the sidebar icon is `panel_icon` in `config.yaml` |
 
 Some recipes:
 

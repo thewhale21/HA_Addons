@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 — Passes the add-on linter
+
+- **Fix:** `panel_icon` is no longer set to its default (`mdi:puzzle`),
+  which the add-on linter rejects. It's left as a comment in `config.yaml`
+  for setting your own add-on's sidebar icon.
+
 ## 0.1.1 — Log level applies straight away
 
 - **Fix:** a log level set through the API's settings (or anything other
