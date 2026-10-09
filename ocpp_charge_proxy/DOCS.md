@@ -145,8 +145,14 @@ hatched in blue-grey.
   time with no plug-in before it (e.g. "unplug at 07:00 every day", to
   unplug anything left plugged in) shows as a small tick, and can be
   changed or deleted the same way. Times are in your Home Assistant time
-  zone. A time missed while the add-on was stopped isn't run later.
-  Unplugging during a session ends the session.
+  zone. A plug-in time missed while the add-on was stopped isn't run later
+  (if it starts inside a plugged-in stretch it plugs in, see below). An
+  unplug time is never left behind: one missed while the add-on was stopped
+  or restarting (within a day, and if nothing in the schedule has come since)
+  unplugs as soon as it's back, also with **Continue session after a
+  restart** on, and an unplug that was waiting for the supplier to stop the
+  session carries on after a restart. Unplugging during a session ends the
+  session.
 - **One-off slots:** a **Once** slot runs on its date only. Once it has
   run it's kept for 14 days: sessions on the **Sessions** tab that ran in
   a one-off slot are tagged **One-off** (or **Auto plug-in** / **Charge
@@ -219,13 +225,17 @@ hatched in blue-grey.
   and since Octopus may only start a session at the next half hour (e.g.
   after the add-on restarted mid-slot), the wait counts from the next :00
   or :30: with no session the set minutes after that, it re-plugs.
+  It doesn't re-plug when the schedule unplugs before the car would be
+  plugged back in (the **Unplugged for** time plus a minute), and it doesn't
+  plug back in if a scheduled unplug came while it was unplugged.
 - **Start delay and ramp-up** (**Settings** tab, Simulated car): after
   StartTransaction (or resuming after a charging-profile pause) the simulated
   car waits the start delay (default 3s) before drawing current, then ramps
   linearly to full power over the ramp-up (default 5s). 0 and 0 = full power
   straight away. Not applied when power comes from your power sensor.
 
-The schedule and auto re-plug are saved in `/data/automation.json`, auto
+The schedule and auto re-plug are saved in `/data/automation.json` (and
+when the schedule was last checked in `/data/automation_runtime.json`), auto
 plug-in and your sensors in `/data/sensors.json`.
 
 ## How it works

@@ -1318,3 +1318,128 @@ def test_saved_slots_across_the_reset_are_split():
     b.set_schedule(enabled=True, entries=[{"time": "09:00", "action": "plug", "days": [1]},
                                           {"time": "17:00", "action": "unplug", "days": [1]}], daily_cap_min=360)
     assert len(b.entries) == 2
+
+
+# --- an unplug is never missed (re-plug, a busy loop, a restart) ------------------------
+
+
+def _night(a):
+    every = list(range(7))
+    a.set_schedule(enabled=True, entries=[{"time": "23:30", "action": "plug", "days": every},
+                                          {"time": "07:00", "action": "unplug", "days": every}])
+
+
+def _timed_loop(a, clock, state, plug, unplug, run_s, monkeypatch):
+    """Run the loop on the fake clock: every sleep moves the clock on that far."""
+    import types
+    from src import automation as auto_mod
+    real_sleep = asyncio.sleep
+
+    async def sleep(s):
+        clock.advance(seconds=s)
+        await real_sleep(0)
+    monkeypatch.setattr(auto_mod, "asyncio", types.SimpleNamespace(sleep=sleep, CancelledError=asyncio.CancelledError))
+
+    async def go():
+        end = clock.epoch() + run_s
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=15))
+        while clock.epoch() < end:
+            await real_sleep(0)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    _run(go())
+
+
+def _recorder(state, clock):
+    calls = []
+
+    async def plug(source=None):
+        calls.append((clock.now().strftime("%H:%M:%S"), "plug", source))
+        state.plugged_in, state.state = True, "Preparing"
+
+    async def unplug(source=None):
+        calls.append((clock.now().strftime("%H:%M:%S"), "unplug", source))
+        state.plugged_in, state.state, state.transaction_id = False, "Available", None
+    return calls, plug, unplug
+
+
+def test_no_replug_just_before_a_scheduled_unplug(monkeypatch):
+    # No session since 06:49:40: a re-plug would be due at 06:59:40, 20 s before the 07:00 unplug
+    a, clock = _automation(options=ReplugOptions(True, 10, 3, 30), start=datetime.datetime(2026, 10, 6, 6, 49, 40, tzinfo=TZ))
+    _night(a)
+    state = SharedState(plugged_in=True, state="Preparing", connected_to_server=True)
+    calls, plug, unplug = _recorder(state, clock)
+    _timed_loop(a, clock, state, plug, unplug, 15 * 60, monkeypatch)
+    assert calls == [("07:00:10", "unplug", "schedule")]
+    assert not state.plugged_in
+
+
+def test_a_replug_running_past_the_unplug_doesnt_plug_back_in(monkeypatch):
+    # The schedule's unplug changed to 07:00 while a 5-minute re-plug was under way from 06:56
+    a, clock = _automation(options=ReplugOptions(True, 10, 3, 300), start=datetime.datetime(2026, 10, 6, 6, 56, tzinfo=TZ))
+    every = list(range(7))
+    a.set_schedule(enabled=True, entries=[{"time": "23:30", "action": "plug", "days": every},
+                                          {"time": "08:00", "action": "unplug", "days": every}])
+    state = SharedState(plugged_in=True, state="Preparing", connected_to_server=True)
+    calls, plug, unplug = _recorder(state, clock)
+
+    async def unplug_and_reschedule(source=None):
+        await unplug(source)
+        a.set_schedule(entries=[{"time": "23:30", "action": "plug", "days": every},
+                                {"time": "07:00", "action": "unplug", "days": every}])
+    import types
+    from src import automation as auto_mod
+    real_sleep = asyncio.sleep
+
+    async def sleep(s):
+        clock.advance(seconds=s)
+        await real_sleep(0)
+    monkeypatch.setattr(auto_mod, "asyncio", types.SimpleNamespace(sleep=sleep, CancelledError=asyncio.CancelledError))
+    _run(a.run_replug(unplug_and_reschedule, plug))
+    assert calls == [("06:56:00", "unplug", "auto re-plug")]  # 07:01: past the unplug, so not plugged back in
+    assert not state.plugged_in
+
+
+def test_a_late_unplug_still_runs_if_nothing_came_after_it():
+    a, clock = _automation(start=datetime.datetime(2026, 10, 6, 6, 55, tzinfo=TZ))
+    _night(a)
+    a.due()
+    clock.advance(minutes=11)  # the loop was busy (e.g. re-plugging) through 07:00
+    assert [e["action"] for e in a.due()] == ["unplug"]
+    a, clock = _automation(start=datetime.datetime(2026, 10, 6, 23, 25, tzinfo=TZ))
+    _night(a)
+    a.due()
+    clock.advance(minutes=11)
+    assert a.due() == []  # a late plug-in isn't (as before)
+
+
+def test_an_unplug_missed_while_stopped_runs_at_start_up(tmp_path):
+    a, clock = _automation(tmp_path, start=datetime.datetime(2026, 10, 6, 6, 58, tzinfo=TZ))
+    _night(a)
+    a.due()
+    a.save_runtime()
+    # Restarted (or updated): back at 07:04, the car still plugged in (maybe with its session continued)
+    b, clock2 = _automation(tmp_path, start=datetime.datetime(2026, 10, 6, 7, 4, tzinfo=TZ))
+    assert [e["action"] for e in b.due()] == ["unplug"]
+    assert b.due() == []  # once
+    # A plug-in missed while stopped is left to the start-up check
+    c, _ = _automation(tmp_path, start=datetime.datetime(2026, 10, 6, 23, 29, tzinfo=TZ))
+    c.due()
+    c.save_runtime()
+    d, _ = _automation(tmp_path, start=datetime.datetime(2026, 10, 6, 23, 33, tzinfo=TZ))
+    assert d.due() == []
+
+
+def test_without_a_record_of_the_last_check_nothing_is_caught_up(tmp_path):
+    a, _ = _automation(tmp_path, start=datetime.datetime(2026, 10, 6, 7, 4, tzinfo=TZ))
+    _night(a)
+    assert a.due() == []
+
+
+def test_a_waiting_unplug_survives_a_restart(tmp_path):
+    a, clock = _automation(tmp_path, start=datetime.datetime(2026, 10, 6, 7, 0, 5, tzinfo=TZ))
+    a.due()
+    a.unplug_at = clock.epoch() + 60
+    a.save_runtime()
+    b, _ = _automation(tmp_path, start=datetime.datetime(2026, 10, 6, 7, 0, 30, tzinfo=TZ))
+    assert b.unplug_at == a.unplug_at

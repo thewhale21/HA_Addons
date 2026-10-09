@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.40.0 — Scheduled unplugs aren't missed
+
+- **Fix:** an auto re-plug that started just before a scheduled unplug
+  could leave the car plugged in after it. The re-plug holds up the
+  schedule while the car's unplugged, then plugged it back in; if that took
+  more than 5 minutes past the unplug time (a long **Unplugged for**), the
+  unplug was dropped and re-plug carried on. Now it doesn't re-plug when the
+  schedule unplugs before the car would be plugged back in (plus a minute),
+  doesn't plug back in if a scheduled unplug came while it was unplugged,
+  and a late unplug still runs as long as nothing in the schedule has come
+  after it.
+- **Fix:** an unplug time that passed while the add-on was stopped or
+  restarting (e.g. an update) was never run, so the car stayed plugged in,
+  and with **Continue session after a restart** on its session carried on.
+  The add-on now remembers when it last checked the schedule
+  (`/data/automation_runtime.json`) and runs a missed unplug when it's back
+  (within a day, if nothing has come since). An unplug waiting for the
+  supplier to stop the session also carries on after a restart.
+
 ## 2.39.2 — Now in the HA_Addons repository
 
 - **Change:** the add-on now lives in the HA_Addons repository: its

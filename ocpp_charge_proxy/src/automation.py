@@ -2,8 +2,8 @@
 
 - Schedule: switch Plugged In on or off at set times, on chosen days, as
   many times a day as you like. Times are local (the add-on's TZ, which Home
-  Assistant sets to your configured time zone). A time missed while the
-  add-on was stopped isn't caught up.
+  Assistant sets to your configured time zone). A plug-in time missed while
+  the add-on was stopped isn't caught up; an unplug is (see due()).
 - Re-plug: if the car is plugged in but the supplier hasn't started a
   session after `after_min` minutes, unplug, wait REPLUG_WAIT_S seconds and
   plug back in, up to `attempts` times. The count resets when a session
@@ -73,7 +73,9 @@ GRACEFUL_UNPLUG_S = 60  # with Force schedule on supplier: wait this long for it
 MAX_UNPLUG_WAIT_S = 600
 PENDING_TICK_S = 2  # check this often while waiting
 TICK_S = 15
-CATCH_UP_S = 300  # a scheduled time is still run if noticed within this
+CATCH_UP_S = 300  # a scheduled time is still run if noticed within this (or if nothing's come after it)
+MISSED_MAX_S = 86400  # after a restart, times missed while stopped are looked for this far back
+REPLUG_UNPLUG_MARGIN_S = 60  # no re-plug if a scheduled unplug comes before it'd be plugged back in + this
 ACTIONS = ("plug", "unplug")
 AUTO_SOURCE = "auto_plug"  # entries added by an auto plug-in charge
 CHARGE_NOW_SOURCE = "charge_now"  # ... or by the Charge now button
@@ -353,6 +355,10 @@ class Automation:
     ) -> None:
         self._localize = localize  # naive local time -> aware (local DST rules)
         self._path = os.path.join(data_dir, "automation.json") if data_dir else None
+        # When the schedule was last checked and any unplug waiting for the supplier: kept across
+        # a restart, so an unplug due while the add-on was stopped (or waiting) still happens
+        self._runtime_path = os.path.join(data_dir, "automation_runtime.json") if data_dir else None
+        self._runtime_saved: Optional[tuple] = None
         self._now = now
         self._clock = clock
         self.schedule_enabled = False
@@ -382,7 +388,9 @@ class Automation:
         self.last_run: Optional[dict] = None  # last schedule entry run
         self.unplug_at: Optional[float] = None  # a scheduled unplug waiting for the supplier, until
         self._last_check: Optional[datetime.datetime] = None
+        self._first_check = True
         self._load()
+        self._load_runtime()
 
     # --- persistence ---------------------------------------------------------
 
@@ -432,6 +440,39 @@ class Automation:
                 self.replug = self._valid_replug({**self.replug, **replug})
             except ValueError:
                 pass
+
+    def _load_runtime(self) -> None:
+        self._missed_since: Optional[float] = None  # the last check before a restart
+        if not self._runtime_path:
+            return
+        try:
+            with open(self._runtime_path, encoding="utf-8") as f:
+                data = json.load(f)
+            last = data.get("last_check")
+            if isinstance(last, (int, float)) and 0 <= self._clock() - last <= MISSED_MAX_S:
+                self._missed_since = float(last)
+            if isinstance(data.get("unplug_at"), (int, float)):
+                self.unplug_at = float(data["unplug_at"])
+        except FileNotFoundError:
+            pass
+        except Exception:
+            logger.debug("Could not read %s", self._runtime_path, exc_info=True)
+
+    def save_runtime(self) -> None:
+        """Save the last check (to the minute) and any waiting unplug, when they change."""
+        if not self._runtime_path or self._last_check is None:
+            return
+        state = (int(self._last_check.timestamp() // 60), self.unplug_at)
+        if state == self._runtime_saved:
+            return
+        try:
+            tmp = self._runtime_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"last_check": self._last_check.timestamp(), "unplug_at": self.unplug_at}, f)
+            os.replace(tmp, self._runtime_path)
+            self._runtime_saved = state
+        except Exception:
+            logger.debug("Could not save %s", self._runtime_path, exc_info=True)
 
     def _save(self) -> None:
         if not self._path:
@@ -1094,9 +1135,17 @@ class Automation:
         return out[:30]
 
     def due(self) -> list[dict]:
-        """Entries whose time has come since the last check (empty on the first)."""
+        """Entries whose time has come since the last check. A time is run if
+        it's noticed within CATCH_UP_S; an unplug also later, if nothing's come
+        after it (e.g. the loop was busy re-plugging), so it's never left plugged in. The first check after a restart
+        runs only an unplug missed while the add-on was stopped, if it's still
+        the schedule's latest time (a plug-in is done at start-up: see
+        automation_loop); with no record of the last check, nothing."""
         now = self._now()
         prev, self._last_check = self._last_check, now
+        first, self._first_check = self._first_check, False
+        if first and self._missed_since is not None:
+            prev = datetime.datetime.fromtimestamp(self._missed_since, tz=now.tzinfo)
         if prev is None or now <= prev:
             return []  # (with the schedule off, only auto plug-in times run: see timeline)
         start = prev.date() - datetime.timedelta(days=1)
@@ -1104,8 +1153,15 @@ class Automation:
         due = []
         timeline = self.timeline(start, span)
         plugs_at = {occ for occ, e, skipped in timeline if e["action"] == "plug" and not skipped}
-        for occ, entry, skipped in timeline:
-            if prev < occ <= now and (now - occ).total_seconds() <= CATCH_UP_S:
+        latest = max(((occ, n) for n, (occ, e, skipped) in enumerate(timeline) if occ <= now and not skipped),
+                     default=None)
+        for n, (occ, entry, skipped) in enumerate(timeline):
+            late = (now - occ).total_seconds() > CATCH_UP_S
+            if late and (entry["action"] != "unplug" or skipped or latest is None or latest[1] != n):
+                continue  # a late plug-in, or a late unplug something's come after: leave it
+            if first and entry["action"] == "plug":
+                continue  # after a restart, plugging in is the start-up check's job
+            if prev < occ <= now:
                 if skipped:
                     logger.info("Schedule: %s at %s skipped",
                                 "plug-in" if entry["action"] == "plug" else "unplug", entry["time"])
@@ -1221,6 +1277,10 @@ class Automation:
             return False
         if now < self._replug_at():
             return False
+        unplug = self.next_unplug(self._now())
+        off = self.replug.get("off_s", REPLUG_WAIT_S)
+        if unplug is not None and (unplug - self._now()).total_seconds() <= off + REPLUG_UNPLUG_MARGIN_S:
+            return False  # the schedule unplugs before it'd be plugged back in: leave it to that
         if self.attempts_used >= self.replug["attempts"]:
             if not self.gave_up:
                 self.gave_up = True
@@ -1247,9 +1307,16 @@ class Automation:
             self.replug["after_min"], self.attempts_used, self.replug["attempts"],
         )
         self.replugging = True
+        began = self._now()
         try:
             await unplug(source="auto re-plug")
             await asyncio.sleep(self.replug.get("off_s", REPLUG_WAIT_S) if wait_s is None else wait_s)
+            unplug_at = self.next_unplug(began)
+            if unplug_at is not None and unplug_at <= self._now():
+                # The schedule unplugged meanwhile (e.g. the off time ran past it): stay unplugged
+                logger.info("Re-plug: the schedule's unplug at %s came while unplugged, so not plugging back in",
+                            unplug_at.strftime("%H:%M"))
+                return
             await plug(source="auto re-plug")
         finally:
             self.replugging = False
@@ -1441,6 +1508,7 @@ async def automation_loop(
                 automation.publish(shared_state)
                 await automation.run_replug(unplug, plug)
             automation.publish(shared_state)
+            automation.save_runtime()
         except asyncio.CancelledError:
             raise
         except Exception:
