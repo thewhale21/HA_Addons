@@ -8,12 +8,12 @@ import logging
 import time
 from typing import Optional
 
-from src.evstats import EvStats, number, parse_trip, to_c, to_km
+from src.evstats import EvStats, forecast_temp, next_departure, number, parse_trip, to_c, to_km
 
 logger = logging.getLogger(__name__)
 
 HISTORY_DAYS = 30  # read once at the start (HA keeps 10 days by default)
-NUMERIC = ("soc", "range", "temperature", "residual", "capacity", "soh_capacity", "soh_resistance", "odometer")
+NUMERIC = ("soc", "range", "temperature", "residual", "capacity", "soh_capacity", "soh_resistance", "odometer", "plugged")
 
 
 def _value(key: str, state, unit: Optional[str]) -> Optional[float]:
@@ -47,6 +47,12 @@ class Feed:
             if str(state).lower() in ("unknown", "unavailable", "none", ""):
                 return None
             return s.trip(ts, parse_trip(state, attrs or {}, unit or "km"), source)
+        if key == "plugged":
+            on = str(state).lower()
+            s.plugged(ts, True if on == "on" else False if on == "off" else None)
+            return None
+        if key == "weather":
+            return None
         cur[key] = _value(key, state, unit)
         if key == "temperature":
             s.temperature(ts, cur[key])
@@ -83,6 +89,8 @@ class Runner:
         self.link, self.stats, self.settings, self.state = link, stats, settings, state
         self.feed = Feed(stats)
         self._saved_at = 0.0
+        self.forecast: Optional[dict] = None  # the next commute's {"at", "temp_c", "source"}
+        self._forecast_at = 0.0
 
     def unit(self, key: str) -> Optional[str]:
         st = self.link.states.get(self.link.settings.get(key) or "") or {}
@@ -104,7 +112,7 @@ class Runner:
         c = self.feed.cur
         return {"soc": c.get("soc"), "range_km": c.get("range"), "temp_c": c.get("temperature"),
                 "odometer_km": c.get("odometer"), "residual_kwh": c.get("residual"),
-                "capacity_kwh": c.get("capacity")}
+                "capacity_kwh": c.get("capacity"), "forecast": self.forecast}
 
     def summary(self, now: Optional[float] = None) -> dict:
         return self.stats.summary(time.time() if now is None else now, self.settings.data,
@@ -114,7 +122,8 @@ class Runner:
         """The headline figures for the page and the sensors; saves now and then."""
         now = time.time() if now is None else now
         sm = self.summary(now)
-        brief = {k: sm[k] for k in ("now", "efficiency", "usable_kwh", "usable_from")}
+        brief = {k: sm[k] for k in ("now", "efficiency", "usable_kwh", "usable_from", "commute")}
+        brief["drain"] = {k: sm["drain"][k] for k in ("pct_per_day", "mi_per_day", "spells", "days")}
         brief["health"] = {k: sm["health"][k] for k in ("soh_capacity", "soh_resistance")}
         self.state.car = self.current()
         if brief != self.state.brief or self.state.trips != sm["trip_count"]:
@@ -130,6 +139,43 @@ class Runner:
         if self.stats.dirty and now - self._saved_at >= 60:
             self.stats.save()
             self._saved_at = now
+
+    async def refresh_forecast(self, now: Optional[datetime.datetime] = None, every_s: float = 1800) -> None:
+        """The temperature forecast for the next commute (weather.get_forecasts), every half hour."""
+        s = self.settings.data
+        entity = self.link.settings.get("weather")
+        if not s.get("commute_mi"):
+            self.forecast = None
+            return
+        if time.time() - self._forecast_at < every_s and self.forecast is not None:
+            return
+        now = now or datetime.datetime.now().astimezone()
+        at = next_departure(now, s.get("commute_time", "07:30"), s.get("commute_days") or [])
+        if at is None:
+            return
+        temp, source = None, None
+        st = self.link.states.get(entity or "") or {}
+        unit = (st.get("attributes") or {}).get("temperature_unit")
+        if entity:
+            for kind in ("hourly", "daily"):
+                try:
+                    res = await self.link.query({
+                        "type": "call_service", "domain": "weather", "service": "get_forecasts",
+                        "service_data": {"type": kind}, "target": {"entity_id": entity}, "return_response": True})
+                except Exception as err:
+                    logger.debug("No %s forecast from %s: %s", kind, entity, err)
+                    continue
+                forecast = (((res or {}).get("response") or {}).get(entity) or {}).get("forecast") or []
+                temp = forecast_temp(forecast, at, kind == "hourly")
+                if temp is not None:
+                    temp, source = to_c(temp, unit), f"{entity} ({kind} forecast)"
+                    break
+        if temp is None:  # no forecast: the temperature now
+            temp, source = self.feed.cur.get("temperature"), "the temperature now (no forecast)"
+        self.forecast = {"at": at.isoformat(timespec="minutes"), "temp_c": None if temp is None else round(temp, 1),
+                         "source": source}
+        self._forecast_at = time.time()
+        self.refresh()
 
     async def backfill(self) -> None:
         """Once: the last HISTORY_DAYS of the sensors from Home Assistant's history."""

@@ -34,7 +34,7 @@ SUPERVISOR_WS = "ws://supervisor/core/websocket"
 SUPERVISOR_API = "http://supervisor/core/api"
 RECONNECT_DELAYS = (2, 5, 10, 20, 30, 60)
 ENTITY_LIST_TTL_S = 30
-PICKER_DOMAINS = ("sensor", "binary_sensor", "switch", "input_boolean", "input_number", "light", "climate")
+PICKER_DOMAINS = ("sensor", "binary_sensor", "switch", "input_boolean", "input_number", "light", "climate", "weather")
 
 # The entity pickers on the Settings tab: key -> domain(s) allowed. The
 # Stellantis Vehicles integration's are found by themselves (find_entities).
@@ -48,6 +48,8 @@ ENTITY_KEYS = {
     "soh_capacity": ("sensor",),  # Battery SOH capacity (%)
     "soh_resistance": ("sensor",),  # Battery SOH resistance (%)
     "odometer": ("sensor",),  # Mileage
+    "plugged": ("binary_sensor", "input_boolean"),  # Battery plugged: spells on a charger aren't drain
+    "weather": ("weather",),  # the forecast for the commute's temperature
 }
 # Each picker's entity ID ends in one of these (after the car's own prefix,
 # taken from its Last trip sensor), in English
@@ -61,6 +63,7 @@ SUFFIXES = {
     "soh_capacity": ("_battery_soh_capacity", "_battery_health_capacity"),
     "soh_resistance": ("_battery_soh_resistance", "_battery_health_resistance"),
     "odometer": ("_mileage", "_odometer"),
+    "plugged": ("_battery_plugged",),
 }
 
 
@@ -76,9 +79,13 @@ def find_entities(states: list[dict]) -> dict:
     found = {}
     for key, suffixes in SUFFIXES.items():
         for suffix in suffixes:
-            if prefix + suffix in ids:
-                found[key] = prefix + suffix
-                break
+            for domain in ENTITY_KEYS[key]:
+                candidate = domain + prefix[prefix.index("."):] + suffix
+                if candidate in ids and key not in found:
+                    found[key] = candidate
+    weather = sorted(e for e in ids if e and e.startswith("weather."))
+    if weather:  # Home Assistant's own (Met.no) if it's there
+        found["weather"] = "weather.forecast_home" if "weather.forecast_home" in weather else weather[0]
     return found
 
 

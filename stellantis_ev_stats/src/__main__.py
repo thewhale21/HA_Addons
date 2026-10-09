@@ -47,6 +47,8 @@ async def worker(runner: Runner, link: HaLink) -> None:
                     await runner.backfill()
                 except Exception as err:
                     logger.warning("Couldn't read Home Assistant's history (trying again in a minute): %s", err)
+            if ready:
+                await runner.refresh_forecast()
             runner.refresh()
         except asyncio.CancelledError:
             raise
@@ -71,7 +73,11 @@ async def run() -> None:
     link = HaLink(data_dir, state)
     runner = Runner(link, stats, settings, state)
     link.on_entity_changed = runner.entity_changed
-    settings.on_change = lambda changes: runner.refresh()
+    def settings_changed(changes: dict) -> None:
+        if any(k.startswith("commute") for k in changes):
+            runner._forecast_at = 0.0  # look again for the new time
+        runner.refresh()
+    settings.on_change = settings_changed
     debug = DebugTools(config=config, log_buffer=log_buffer, settings=settings)
 
     app = create_api_app(state, ha_link=link, health=health, debug=debug, app_settings=settings, runner=runner)

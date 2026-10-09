@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0 — Commute, speed and drain
+
+- **Feature:** commute planner. Set the distance, the time you leave, the
+  days and the SoC to arrive with (Settings), and the Overview shows the
+  charge to have for the next one, from the forecast temperature when you
+  leave (a weather entity; Home Assistant's own is found by itself) and your
+  efficiency then: from commute-length trips at that temperature when
+  there are 3 or more, otherwise from all trips at it. Also
+  `sensor.stellantis_ev_stats_commute_charge`, e.g. for a charge limit.
+- **Feature:** efficiency by average speed (town, mixed, faster roads,
+  motorway), and a table of temperature against speed, so the temperature's
+  effect can be seen at the same kind of driving (Temperature tab).
+- **Feature:** drain while parked: the SoC lost per day while parked
+  unplugged between trips (6 hours or more), overall and by temperature, in
+  %, kWh and miles (Temperature tab, the Overview, and
+  `sensor.stellantis_ev_stats_drain`). A Battery plugged picker (found by
+  itself) keeps time on a charger or V2X out of it.
+
 ## 0.1.0 — First version
 
 - **Feature:** records every trip from the Stellantis Vehicles

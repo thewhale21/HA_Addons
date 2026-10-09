@@ -248,6 +248,11 @@
         <div class="big" id="o-soh">—</div>
         <div class="sub" id="o-soh-sub"></div>
       </div>
+      <div class="card">
+        <div class="label">Next commute</div>
+        <div class="big" id="o-com">—</div>
+        <div class="sub" id="o-com-sub"></div>
+      </div>
     </div>
     <div class="grid">
       <div class="card span2">
@@ -276,6 +281,29 @@
         <tbody id="t-bands"></tbody>
       </table></div>
       <div class="note">All at 100% charge. Real range: mi/kWh × the usable capacity (<span id="t-usable">—</span>). From the SoC: miles per 1% used × 100, from trips that used 5% or more (no kWh needed, but the SoC is only whole numbers). Car's estimate: the median of its range ÷ SoC.</div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Efficiency by speed</h2>
+        <div class="chart" id="t-speed-chart" role="img" aria-label="Efficiency by average speed"></div>
+        <div class="note">By each trip's average speed, all temperatures.</div>
+      </div>
+      <div class="card">
+        <h2>Temperature and speed</h2>
+        <div class="table-wrap"><table>
+          <thead id="t-matrix-head"></thead><tbody id="t-matrix"></tbody>
+        </table></div>
+        <div class="note">mi/kWh (and trips). Read down a column to see the temperature's effect at the same kind of driving.</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Drain while parked<span class="spacer"></span><span class="chip" id="t-drain-chip"></span></h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Temperature</th><th class="num">Spells</th><th class="num">Days parked</th><th class="num">% a day</th><th class="num">kWh a day</th><th class="num">Miles a day</th></tr></thead>
+        <tbody id="t-drain"></tbody>
+      </table></div>
+      <div class="note" id="t-drain-note"></div>
     </div>
   </section>
 
@@ -330,12 +358,21 @@
         <div class="pk"><div>Mileage<div class="note" style="margin:0">Optional.</div></div><span class="picker" data-key="odometer" data-domain="sensor" style="margin-top:6px"></span></div>
       </div>
       <div class="card">
-        <h2>Battery</h2>
+        <h2>Battery and charging</h2>
         <div class="pk"><div>Battery residual<div class="note" style="margin:0">kWh in the battery now: with the SoC, gives the usable capacity.</div></div><span class="picker" data-key="residual" data-domain="sensor" style="margin-top:6px"></span></div>
         <div class="pk"><div>Battery capacity<div class="note" style="margin:0">kWh: used until there are measurements.</div></div><span class="picker" data-key="capacity" data-domain="sensor" style="margin-top:6px"></span></div>
         <div class="pk"><div>Battery SOH capacity<div class="note" style="margin:0">%.</div></div><span class="picker" data-key="soh_capacity" data-domain="sensor" style="margin-top:6px"></span></div>
         <div class="pk"><div>Battery SOH resistance<div class="note" style="margin:0">%.</div></div><span class="picker" data-key="soh_resistance" data-domain="sensor" style="margin-top:6px"></span></div>
+        <div class="pk"><div>Battery plugged<div class="note" style="margin:0">So time on a charger (or V2X) isn't counted as drain while parked.</div></div><span class="picker" data-key="plugged" data-domain="binary_sensor,input_boolean" style="margin-top:6px"></span></div>
       </div>
+    </div>
+    <div class="section-title">Commute</div>
+    <div class="card">
+      <div class="row" style="margin-top:0"><div class="grow">Distance<div class="note" style="margin:0">One way. 0 = no commute planner.</div></div><input type="number" id="s-cmi" min="0" max="400" step="0.5"> <span class="muted">mi</span></div>
+      <div class="row"><div class="grow">Arrive with<div class="note" style="margin:0">The SoC to have left when you get there: your margin.</div></div><input type="number" id="s-carr" min="0" max="80" step="1"> <span class="muted">%</span></div>
+      <div class="row"><div class="grow">Leave at</div><input type="time" id="s-ctime" style="font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--divider);border-radius:8px;padding:6px 10px"></div>
+      <div class="row"><div class="grow">On</div><div class="seg" id="s-cdays" role="group" aria-label="Commute days"><button data-d="0">Mon</button><button data-d="1">Tue</button><button data-d="2">Wed</button><button data-d="3">Thu</button><button data-d="4">Fri</button><button data-d="5">Sat</button><button data-d="6">Sun</button></div></div>
+      <div class="pk" style="margin-top:14px"><div>Weather forecast<div class="note" style="margin:0">For the temperature when you leave (Home Assistant's own is found by itself).</div></div><span class="picker" data-key="weather" data-domain="weather" style="margin-top:6px"></span></div>
     </div>
     <div class="section-title">Statistics</div>
     <div class="card">
@@ -588,11 +625,22 @@ function renderState(s) {
   $('o-soh').textContent = h.soh_capacity != null ? `${num(h.soh_capacity, 1)}%` : '—';
   $('o-soh-sub').textContent = [h.soh_resistance != null ? `resistance ${num(h.soh_resistance, 1)}%` : null,
     b.usable_kwh != null ? `${num(b.usable_kwh, 1)} kWh usable` : null].filter(Boolean).join(' · ') || 'The car hasn\'t sent its battery health yet';
+  const cm = b.commute;
+  if (!cm) { $('o-com').textContent = '—'; $('o-com-sub').textContent = 'Set your commute on the Settings tab to see the charge it needs'; }
+  else if (cm.charge_to == null) { $('o-com').textContent = '—'; $('o-com-sub').textContent = cm.temp_c == null ? 'Waiting for the forecast' : 'Needs a few trips first'; }
+  else {
+    $('o-com').textContent = `Charge to ${num(cm.charge_to, 0)}%`;
+    const when = cm.departure ? new Date(cm.departure).toLocaleString([], {weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '';
+    $('o-com-sub').textContent = `${num(cm.mi, 0)} mi ${when ? 'on ' + when : ''} at ${degC(cm.temp_c)}: ${num(cm.mi_per_kwh, 2)} mi/kWh, ${num(cm.kwh, 1)} kWh = ${num(cm.need_pct, 0)}%, arriving with ${num(cm.arrive_pct, 0)}%`
+      + (cm.enough === false ? '. Not enough even when full!' : '');
+  }
+  const dr = b.drain || {};
   $('o-car').innerHTML = kv([
     ['Battery', c.soc != null ? `${num(c.soc, 0)}%` : '—'],
     ['Range (car)', c.range_km != null ? mi(c.range_km / 1.609344) : '—'],
     ['Temperature', degC(c.temp_c)],
     ['Mileage', c.odometer_km != null ? mi(c.odometer_km / 1.609344) : '—'],
+    ['Drain parked', dr.pct_per_day != null ? `${num(dr.pct_per_day, 1)}% a day${dr.mi_per_day != null ? ` (${num(dr.mi_per_day, 1)} mi)` : ''}` : '<span class="muted">—</span>'],
     ['Trips recorded', String(s.trips || 0)],
     ['Status', `${esc(s.status)}<div class="sub">${esc(s.reason || '')}</div>`],
   ]);
@@ -617,6 +665,21 @@ function drawStats() {
     <td class="num"><b>${mi(r.real_full_mi)}</b></td><td class="num">${mi(r.soc_full_mi)}</td>
     <td class="num">${mi(r.car_full_mi)}${r.car_full_mi && r.real_full_mi ? ` <span class="muted">(${r.car_full_mi > r.real_full_mi ? '+' : ''}${num((r.car_full_mi / r.real_full_mi - 1) * 100, 0)}%)</span>` : ''}</td></tr>`).join('')
     : '<tr><td colspan="7" class="empty">Nothing yet: trips fill this in.</td></tr>';
+  speedChart($('t-speed-chart'), d.speeds);
+  const names = d.speed_bands.map((x) => x[0]);
+  $('t-matrix-head').innerHTML = `<tr><th>Temp</th>${names.map((n, i) => `<th class="num">${esc(n)}<div class="sub" style="text-transform:none">${d.speed_bands[i][2] < 999 ? `${d.speed_bands[i][1]}–${d.speed_bands[i][2]}` : `${d.speed_bands[i][1]}+`} mph</div></th>`).join('')}</tr>`;
+  $('t-matrix').innerHTML = d.matrix.length ? d.matrix.slice().reverse().map((r) => `<tr><td>${r.from_c}–${r.from_c + 5}°</td>${names.map((n) => {
+    const c = r.cells[n]; return `<td class="num">${c ? `${num(c.mi_per_kwh, 2)} <span class="muted">(${c.trips})</span>` : '<span class="muted">—</span>'}</td>`;
+  }).join('')}</tr>`).join('') : `<tr><td colspan="${names.length + 1}" class="empty">Nothing yet.</td></tr>`;
+  const dr = d.drain;
+  $('t-drain-chip').textContent = dr.pct_per_day != null ? `${num(dr.pct_per_day, 1)}% a day overall` : 'Nothing yet';
+  $('t-drain').innerHTML = dr.bands.length ? dr.bands.slice().reverse().map((r) => `<tr><td>${band(r.from_c)}</td><td class="num">${r.spells}</td>
+    <td class="num">${num(r.days, 1)}</td><td class="num"><b>${num(r.pct_per_day, 1)}%</b></td><td class="num">${r.kwh_per_day != null ? num(r.kwh_per_day, 2) : '—'}</td>
+    <td class="num">${r.mi_per_day != null ? num(r.mi_per_day, 1) : '—'}</td></tr>`).join('')
+    : '<tr><td colspan="6" class="empty">Nothing yet: it needs the car parked unplugged for 6 hours or more between trips, with the SoC read during it.</td></tr>';
+  $('t-drain-note').textContent = 'The SoC lost while parked unplugged between trips (6 hours or more), from the first SoC reading after one trip to the start of the next (the car only reports a change, so an unchanged SoC counts as no drain); spells with any charging are left out. Miles a day at today\'s efficiency. '
+    + (dr.plug_known ? '' : 'Pick the Battery plugged sensor on the Settings tab so spells on a charger (or V2X) are left out for sure. ')
+    + 'The SoC is only whole numbers, so it settles over a few weeks; the car also has to wake now and then for a reading (the integration\'s wake-up automations).';
   // Trips
   $('r-count').textContent = `${d.trip_count} recorded`;
   $('r-trips').innerHTML = d.trips.length ? d.trips.map((t) => {
@@ -697,6 +760,26 @@ function rangeChart(box, bands) {
     svg += `<text x="${x}" y="${H - 8}" text-anchor="middle">${r.from_c}–${r.from_c + 5}°</text>`;
   });
   finish(box, W, svg + `<path class="car" d="${line}"/>` + pts);
+}
+// Efficiency by speed band: one series of bars
+function speedChart(box, speeds) {
+  const W = frame(box), rows = speeds.filter((r) => r.trips);
+  if (!rows.length) { box.innerHTML = '<div class="empty">No trips with an average speed yet.</div>'; return; }
+  const ax = nice(0, Math.max(...rows.map((r) => r.mi_per_kwh)) * 1.05);
+  const n = speeds.length, slot = (W - P.l - P.r) / n, bw = Math.min(56, slot * 0.6);
+  const X = (i) => P.l + slot * i + slot / 2, Y = (v) => P.t + (H - P.t - P.b) * (1 - v / ax.hi);
+  let svg = yGrid(W, 0, ax.hi, Y, (v) => num(v, Number.isInteger(ax.step) ? 0 : 1), ax.step);
+  speeds.forEach((r, i) => {
+    const x = X(i);
+    svg += `<text x="${x}" y="${H - 8}" text-anchor="middle">${esc(r.name)}</text>`;
+    if (!r.trips) return;
+    const y = Y(r.mi_per_kwh), h = H - P.b - y, rad = Math.min(4, bw / 2, h);
+    const tip = `<b>${esc(r.name)}</b> (${r.to_mph ? `${r.from_mph}–${r.to_mph}` : `${r.from_mph}+`} mph)<br>${num(r.mi_per_kwh, 2)} mi/kWh · ${r.trips} trip${r.trips === 1 ? '' : 's'}, ${num(r.mi, 0)} mi`;
+    svg += `<rect class="hit" x="${x - slot / 2}" y="${P.t}" width="${slot}" height="${H - P.t - P.b}" data-tip="${esc(tip)}"/>`;
+    svg += `<path class="bar" d="M${x - bw / 2},${H - P.b} V${y + rad} Q${x - bw / 2},${y} ${x - bw / 2 + rad},${y} H${x + bw / 2 - rad} Q${x + bw / 2},${y} ${x + bw / 2},${y + rad} V${H - P.b} Z"/>`;
+    if (h > 22) svg += `<text class="inlbl" x="${x}" y="${y + 16}" text-anchor="middle">${num(r.mi_per_kwh, 1)}</text>`;
+  });
+  finish(box, W, svg);
 }
 // Each trip's efficiency against the temperature, with each band's average
 function effChart(box, trips, bands) {
@@ -883,13 +966,27 @@ async function refreshAppSettings() {
   try { a = await api('settings'); } catch (e) { return; }
   if (document.activeElement !== $('s-min')) $('s-min').value = a.min_trip_mi;
   if (document.activeElement !== $('s-usable')) $('s-usable').value = a.usable_kwh;
+  if (document.activeElement !== $('s-cmi')) $('s-cmi').value = a.commute_mi;
+  if (document.activeElement !== $('s-carr')) $('s-carr').value = a.commute_arrive_pct;
+  if (document.activeElement !== $('s-ctime')) $('s-ctime').value = a.commute_time;
+  $('s-cdays').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', a.commute_days.includes(+b.dataset.d)));
+  refreshAppSettings.data = a;
 }
-for (const [id, key, label] of [['s-min', 'min_trip_mi', 'Shortest trip counted'], ['s-usable', 'usable_kwh', 'Usable capacity']]) {
+for (const [id, key, label, text] of [['s-min', 'min_trip_mi', 'Shortest trip counted'], ['s-usable', 'usable_kwh', 'Usable capacity'],
+  ['s-cmi', 'commute_mi', 'Commute distance'], ['s-carr', 'commute_arrive_pct', 'Arrive with'], ['s-ctime', 'commute_time', 'Leave at', true]]) {
   $(id).addEventListener('change', async (ev) => {
-    if (await post('settings', {[key]: Number(ev.target.value)})) { toast(`${label} saved`); loadStats(); pollState(); }
+    if (await post('settings', {[key]: text ? ev.target.value : Number(ev.target.value)})) { toast(`${label} saved`); loadStats(); pollState(); }
     refreshAppSettings();
   });
 }
+$('s-cdays').addEventListener('click', async (ev) => {
+  const d = ev.target.dataset.d; if (d === undefined) return;
+  const cur = new Set((refreshAppSettings.data || {}).commute_days || []);
+  cur.has(+d) ? cur.delete(+d) : cur.add(+d);
+  if (!cur.size) { toast('Pick at least one day'); return; }
+  if (await post('settings', {commute_days: [...cur]})) toast('Commute days saved');
+  refreshAppSettings(); pollState();
+});
 
 // ---------- Diagnostics › Health ----------
 async function refreshHealth() {

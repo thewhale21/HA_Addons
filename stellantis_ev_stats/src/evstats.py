@@ -30,6 +30,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import math
 import os
 import re
 import statistics
@@ -42,11 +43,19 @@ BAND_C = 5  # temperature bands this wide
 MAX_TRIPS = 3000
 MAX_RANGE_READINGS = 5000
 MAX_HEALTH = 2000
-BUFFER_S = 3 * 86400  # recent temperature and SoC readings kept for matching to trips
+BUFFER_S = 7 * 86400  # recent temperature and SoC readings kept for matching to trips and parked spells
+PLUG_KEEP_S = 30 * 86400  # plugged in / unplugged changes kept this long
+PARK_MIN_H = 6  # a parked spell this long or longer gives a drain figure
+MAX_PARKS = 2000
+# Average speed bands (mph): name, from, to
+SPEED_BANDS = (("Town", 0, 20), ("Mixed", 20, 35), ("Faster roads", 35, 50), ("Motorway", 50, 999))
+COMMUTE_MATCH = 0.15  # trips within this share of the commute's distance count as the commute
+COMMUTE_MIN_TRIPS = 3  # ...at least this many in a temperature band to use them
 RANGE_MIN_SOC = 30  # the car's estimate ÷ SoC is only used at or above this SoC
 SOC_TRIP_MIN_PCT = 5  # trips using at least this much SoC give a miles-per-1% figure
 USABLE_MIN_SOC = 20  # Battery residual ÷ SoC only at or above this SoC
-DEFAULTS = {"min_trip_mi": 2.0, "usable_kwh": 0.0}  # 0: measured / the car's capacity sensor
+DEFAULTS = {"min_trip_mi": 2.0, "usable_kwh": 0.0,  # 0: measured / the car's capacity sensor
+            "commute_mi": 0.0, "commute_arrive_pct": 5.0, "commute_time": "07:30", "commute_days": [0, 1, 2, 3, 4]}
 
 
 def _iso(ts: Optional[float]) -> Optional[str]:
@@ -136,6 +145,43 @@ def parse_trip(state, attrs: dict, distance_unit: Optional[str] = "km") -> Optio
             "odo_start": start_km, "avg_kmh": speed}
 
 
+def next_departure(now: datetime.datetime, hhmm: str, days: list) -> Optional[datetime.datetime]:
+    """The next commute: `hhmm` on one of `days` (0 = Monday), after `now` (local, naive or not)."""
+    try:
+        h, m = (int(x) for x in str(hhmm).split(":"))
+    except ValueError:
+        return None
+    for ahead in range(8):
+        d = now + datetime.timedelta(days=ahead)
+        at = d.replace(hour=h, minute=m, second=0, microsecond=0)
+        if at > now and at.weekday() in (days or range(7)):
+            return at
+    return None
+
+
+def forecast_temp(forecast: list, at: datetime.datetime, hourly: bool) -> Optional[float]:
+    """The forecast temperature for `at`: the nearest hour (within 90 minutes), or for a daily
+    forecast that day's low before 11:00 and its high after."""
+    best = None
+    for f in forecast or []:
+        try:
+            when = datetime.datetime.fromisoformat(str(f.get("datetime")).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if when.tzinfo is None and at.tzinfo is not None:
+            when = when.replace(tzinfo=at.tzinfo)
+        elif at.tzinfo is None and when.tzinfo is not None:
+            when = when.astimezone().replace(tzinfo=None)
+        if hourly:
+            gap = abs((when - at).total_seconds())
+            if gap <= 5400 and (best is None or gap < best[0]):
+                best = (gap, number(f.get("temperature")))
+        elif when.astimezone(at.tzinfo).date() == at.date() if at.tzinfo else when.date() == at.date():
+            low = number(f.get("templow"))
+            return low if at.hour < 11 and low is not None else number(f.get("temperature"))
+    return best[1] if best else None
+
+
 # --- the recorder ---------------------------------------------------------------------
 
 
@@ -148,6 +194,8 @@ class EvStats:
         self.temps: list[list] = []  # [ts, °C], recent
         self.socs: list[list] = []  # [ts, %], recent
         self.usable: list[list] = []  # [ts, kWh]: Battery residual ÷ SoC
+        self.plugs: list[list] = []  # [ts, plugged in (bool)]
+        self.parks: list[dict] = []  # spells parked unplugged: {"from", "to", "hours", "soc_from", "soc_to", "temp_c"}
         self.backfilled = False
         self.dirty = False
         self._load()
@@ -166,6 +214,8 @@ class EvStats:
             self.temps = list(data.get("temps") or [])
             self.socs = list(data.get("socs") or [])
             self.usable = list(data.get("usable") or [])
+            self.plugs = list(data.get("plugs") or [])
+            self.parks = list(data.get("parks") or [])
             self.backfilled = bool(data.get("backfilled"))
         except FileNotFoundError:
             pass
@@ -180,7 +230,8 @@ class EvStats:
             tmp = self._path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({"trips": self.trips, "ranges": self.ranges, "health": self.health, "temps": self.temps,
-                           "socs": self.socs, "usable": self.usable, "backfilled": self.backfilled}, f)
+                           "socs": self.socs, "usable": self.usable, "plugs": self.plugs, "parks": self.parks,
+                           "backfilled": self.backfilled}, f)
             os.replace(tmp, self._path)
         except Exception:
             logger.warning("Could not save the statistics", exc_info=True)
@@ -212,6 +263,49 @@ class EvStats:
         self._prune(max(ts, self.socs[-1][0]))
         self._fill_soc_end()
         self.dirty = True
+
+    def plugged(self, ts: float, on: Optional[bool]) -> None:
+        """The car's plugged in sensor (so a spell on a charger, or V2X, isn't counted as drain)."""
+        if on is None or (self.plugs and self.plugs[-1][1] == on):
+            return
+        self.plugs.append([round(ts), on])
+        self.plugs.sort(key=lambda x: x[0])
+        self.plugs = [x for x in self.plugs if x[0] >= self.plugs[-1][0] - PLUG_KEEP_S]
+        self.dirty = True
+
+    def plugged_between(self, a: float, b: float) -> Optional[bool]:
+        """Was it plugged in at any time from a to b? None if there's no plugged in sensor's record."""
+        if not self.plugs:
+            return None
+        before = [on for at, on in self.plugs if at <= a]
+        # at the start: the last change before it, else the opposite of the first change after it
+        at_start = before[-1] if before else not self.plugs[0][1]
+        return bool(at_start) or any(on for at, on in self.plugs if a < at <= b)
+
+    def _park(self, prev: Optional[dict], start: Optional[float]) -> None:
+        """The spell parked between the last trip and this one: the SoC it lost, from the first SoC
+        reading after the last trip ended to the SoC as this one began (the latest reading: the
+        integration only sends a change, so an unchanged SoC is no drain, not no reading)."""
+        if not prev or start is None:
+            return
+        a_end = _ts(prev["end"])
+        if start - a_end < PARK_MIN_H * 3600:
+            return
+        during = [x for x in self.socs if a_end - 300 <= x[0] <= start]
+        if not during:
+            return
+        first, last = during[0], [start, during[-1][1]]
+        hours = (last[0] - first[0]) / 3600
+        if hours < PARK_MIN_H:
+            return
+        if any(y[1] > x[1] + 1 for x, y in zip(during, during[1:])) or self.plugged_between(a_end, start):
+            return  # it was charged (or plugged in) meanwhile
+        temps = [t for at, t in self.temps if first[0] <= at <= last[0]]
+        self.parks.append({"from": _iso(first[0]), "to": _iso(last[0]), "hours": round(hours, 1),
+                           "soc_from": first[1], "soc_to": last[1],
+                           "temp_c": round(statistics.fmean(temps), 1) if temps else self.temp_at(last[0]),
+                           "plug_known": self.plugs != []})
+        del self.parks[:-MAX_PARKS]
 
     def temp_at(self, ts: float, start: Optional[float] = None) -> Optional[float]:
         """The temperature over start..ts (the mean of the readings then), else the last one
@@ -277,6 +371,8 @@ class EvStats:
             return None  # the same trip again (e.g. sent again when the link reconnects)
         end = ts
         start = end - trip["duration_s"] if trip.get("duration_s") else None
+        prev = self.trips[-1] if self.trips and self.trips[-1]["end"] < _iso(end) else None
+        self._park(prev, start)
         soc_start = self.soc_at(start if start is not None else end - 60)
         rec = {
             "end": _iso(end), "start": _iso(start), "km": key[1], "kwh": key[2],
@@ -326,6 +422,8 @@ class EvStats:
                     h["soh_capacity"], h["soh_resistance"]):
                 merged.append(h)  # only changes
         self.health = merged[-MAX_HEALTH:]
+        pts = {x["from"] for x in self.parks}
+        self.parks = sorted(self.parks + [x for x in other.parks if x["from"] not in pts], key=lambda x: x["from"])[-MAX_PARKS:]
         uts = {u[0] for u in self.usable}
         self.usable = sorted(self.usable + [u for u in other.usable if u[0] not in uts], key=lambda u: u[0])[-MAX_HEALTH:]
         self.dirty = True
@@ -416,6 +514,41 @@ class EvStats:
         car_range_mi = current.get("range_km") / KM_PER_MI if current.get("range_km") is not None else None
         car_full_now = (car_range_mi / soc_now * 100) if car_range_mi is not None and soc_now and soc_now >= 10 else None
 
+        # By average speed, overall and in each temperature band
+        def speed_of(t):
+            if not t.get("avg_kmh"):
+                return None
+            mph = t["avg_kmh"] / KM_PER_MI
+            return next((name for name, lo, hi in SPEED_BANDS if lo <= mph < hi), None)
+        speeds = []
+        for name, lo, hi in SPEED_BANDS:
+            e = eff([t for t in good if speed_of(t) == name])
+            e.pop("raw")
+            speeds.append({"name": name, "from_mph": lo, "to_mph": hi if hi < 999 else None, **e})
+        matrix = []
+        for r in rows:
+            cells = {}
+            for name, _, _ in SPEED_BANDS:
+                e = eff([t for t in bands[r["from_c"]]["trips"] if speed_of(t) == name])
+                cells[name] = {"trips": e["trips"], "mi_per_kwh": e["mi_per_kwh"]} if e["trips"] else None
+            matrix.append({"from_c": r["from_c"], "cells": cells})
+
+        # Drain while parked unplugged: SoC lost per day, overall and by temperature band
+        parks = [p for p in self.parks if p["hours"] >= PARK_MIN_H]
+
+        def drain(ps) -> dict:
+            days = sum(p["hours"] for p in ps) / 24
+            lost = sum(p["soc_from"] - p["soc_to"] for p in ps)
+            per_day = lost / days if days else None
+            return {"spells": len(ps), "days": _r(days, 1), "pct_per_day": _r(per_day, 2),
+                    "kwh_per_day": _r(per_day * usable / 100, 2) if per_day is not None and usable else None,
+                    "mi_per_day": _r(per_day / 100 * mpk_now * usable, 1) if per_day is not None and usable and mpk_now else None}
+        drain_bands = []
+        for b in sorted({self.band(p["temp_c"]) for p in parks if p.get("temp_c") is not None}):
+            drain_bands.append({"from_c": b, "to_c": b + BAND_C, **drain([p for p in parks if self.band(p.get("temp_c")) == b])})
+        drain_all = {**drain(parks), "plug_known": any(p.get("plug_known") for p in parks), "bands": drain_bands,
+                     "recent": parks[-20:][::-1]}
+
         for d in [overall, last30, *rows]:
             d.pop("raw", None)
         latest_health = self.health[-1] if self.health else {}
@@ -434,9 +567,50 @@ class EvStats:
             "health": {"soh_capacity": latest_health.get("soh_capacity"),
                        "soh_resistance": latest_health.get("soh_resistance"),
                        "history": self.health[-500:], "usable": usable_series},
+            "speeds": speeds, "matrix": matrix, "speed_bands": [list(x) for x in SPEED_BANDS], "drain": drain_all,
+            "commute": self.commute(good, rows, usable, s, current.get("forecast")),
             "trips": self.trips[-300:][::-1], "trip_count": len(self.trips),
             "range_readings": len(self.ranges), "since": self.trips[0]["end"] if self.trips else None,
         }
+
+    def commute(self, good: list, rows: list, usable: Optional[float], s: dict, forecast: Optional[dict]) -> Optional[dict]:
+        """The charge to have for the next commute: its miles at the efficiency expected at the
+        forecast temperature (from commute-length trips in that band if there are enough, else all
+        trips in it), plus the SoC to arrive with."""
+        miles = float(s.get("commute_mi") or 0)
+        if not miles:
+            return None
+        arrive = float(s.get("commute_arrive_pct") or 0)
+        out = {"mi": miles, "arrive_pct": arrive, "time": s.get("commute_time"),
+               "departure": (forecast or {}).get("at"), "temp_c": (forecast or {}).get("temp_c"),
+               "temp_from": (forecast or {}).get("source"), "charge_to": None}
+        temp = out["temp_c"]
+        km = miles * KM_PER_MI
+        similar = [t for t in good if abs(t["km"] - km) <= COMMUTE_MATCH * km]
+        mpk, basis, band = None, None, None
+        if temp is not None:
+            b = self.band(temp)
+            alike = [t for t in similar if self.band(t.get("temp_c")) == b]
+            if len(alike) >= COMMUTE_MIN_TRIPS:
+                mpk = sum(t["km"] for t in alike) / KM_PER_MI / sum(t["kwh"] for t in alike)
+                basis, band = f"{len(alike)} commute-length trips at {b} to {b + BAND_C} °C", b
+            else:
+                with_eff = [r for r in rows if r["mi_per_kwh"]]
+                if with_eff:
+                    near = min(with_eff, key=lambda r: abs(r["from_c"] + BAND_C / 2 - temp))
+                    mpk, band = near["mi_per_kwh"], near["from_c"]
+                    basis = f"all trips at {band} to {band + BAND_C} °C"
+        if mpk is None and similar:
+            mpk = sum(t["km"] for t in similar) / KM_PER_MI / sum(t["kwh"] for t in similar)
+            basis = f"{len(similar)} commute-length trips (any temperature)"
+        out.update({"mi_per_kwh": _r(mpk, 2), "basis": basis, "band": band, "similar_trips": len(similar)})
+        if not mpk or not usable:
+            return out
+        kwh = miles / mpk
+        need = kwh / usable * 100
+        out.update({"kwh": _r(kwh, 1), "need_pct": _r(need, 1),
+                    "charge_to": min(100, math.ceil(round(need + arrive, 1))), "enough": need + arrive <= 100})
+        return out
 
     @staticmethod
     def _weekly(series: list) -> list:

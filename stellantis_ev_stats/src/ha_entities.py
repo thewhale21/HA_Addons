@@ -33,6 +33,9 @@ SENSORS = {
     "usable_capacity": (f"sensor.{PREFIX}_usable_capacity",
                         _measure("Usable Capacity", "kWh", "mdi:car-battery", device_class="energy_storage")),
     "battery_soh": (f"sensor.{PREFIX}_battery_soh", _measure("Battery Health", "%", "mdi:battery-heart-variant")),
+    "commute_charge": (f"sensor.{PREFIX}_commute_charge",
+                       _measure("Charge for the Commute", "%", "mdi:battery-arrow-up", device_class="battery")),
+    "drain": (f"sensor.{PREFIX}_drain", _measure("Drain While Parked", "%/day", "mdi:battery-minus-outline")),
     "trips": (f"sensor.{PREFIX}_trips", {"friendly_name": f"{NAME} Trips Recorded", "icon": "mdi:map-marker-path",
                                          "state_class": "total_increasing"}),
 }
@@ -59,6 +62,11 @@ def values(state) -> dict:
         "efficiency_now": (now.get("mi_per_kwh"), at),
         "usable_capacity": (b.get("usable_kwh"), {"from": b.get("usable_from")}),
         "battery_soh": (health.get("soh_capacity"), {"soh_resistance": health.get("soh_resistance")}),
+        "commute_charge": ((b.get("commute") or {}).get("charge_to"), {
+            k: (b.get("commute") or {}).get(k) for k in ("mi", "departure", "temp_c", "mi_per_kwh", "kwh", "need_pct",
+                                                          "arrive_pct", "basis", "enough")}),
+        "drain": ((b.get("drain") or {}).get("pct_per_day"),
+                  {"mi_per_day": (b.get("drain") or {}).get("mi_per_day"), "spells": (b.get("drain") or {}).get("spells")}),
         "trips": state.trips,
     }
 

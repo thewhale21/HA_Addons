@@ -28,6 +28,9 @@ switched off: the integration's wake-up automations help.
 - **Temperature:** each trip's efficiency (mi/kWh) against the outside
   temperature, and a table by 5 °C band: trips, miles, mi/kWh, the real
   range at 100% and the car's estimate.
+- **Temperature** also has the efficiency by average speed, a table of
+  temperature against speed, and the drain while parked.
+- **Commute** (Overview): the charge to have for your next commute.
 - **Trips:** the latest 300 trips: distance, time, average speed, kWh,
   mi/kWh, temperature and SoC.
 - **Battery:** the car's battery health figures over time (capacity and
@@ -53,6 +56,32 @@ switched off: the integration's wake-up automations help.
   more, the median for each band.
 - **Real range left:** the real range at 100% for today's temperature (the
   nearest band with trips) × the SoC.
+- **Speed:** each trip's average speed puts it in a band: town (under 20
+  mph), mixed (20–35), faster roads (35–50) and motorway (50+). Colder
+  weather often comes with different driving, so compare a column of the
+  temperature and speed table rather than the temperature bands alone.
+- **Drain while parked:** for each spell of 6 hours or more parked between
+  trips, the SoC from the first reading after the trip to the start of the
+  next (the integration only sends a change, so an unchanged SoC is no
+  drain). Spells where the car was plugged in (the Battery plugged sensor)
+  or the SoC rose are left out. Per day, overall and by the temperature
+  during the spell. It needs the car to report now and then while parked
+  (the integration's wake-up automations), and takes a few weeks to settle
+  as the SoC is only whole numbers.
+
+## Commute planner
+
+Set the commute on the Settings tab: the distance (one way), the time you
+leave, the days, and the SoC to arrive with (your margin). For the next
+commute it takes the forecast temperature when you leave (from the weather
+entity, hourly if it has it, else the day's low before 11:00 or high after;
+the temperature now if there's no forecast) and the efficiency to expect:
+from your commute-length trips (within 15% of the distance) at that
+temperature when there are 3 or more, otherwise from all trips at it.
+
+Charge to = the kWh it needs ÷ the usable capacity + the SoC to arrive
+with, rounded up. `sensor.stellantis_ev_stats_commute_charge` has it (and
+the details as attributes), e.g. for your charge limit the night before.
 
 ## Sensors
 
@@ -67,6 +96,8 @@ The add-on posts these to Home Assistant (unavailable while it's stopped):
 | `sensor.stellantis_ev_stats_efficiency_now` | Efficiency at today's temperature (mi/kWh) |
 | `sensor.stellantis_ev_stats_usable_capacity` | Usable capacity (kWh) |
 | `sensor.stellantis_ev_stats_battery_soh` | The car's battery health, capacity (%) |
+| `sensor.stellantis_ev_stats_commute_charge` | The charge to have for the next commute (%) |
+| `sensor.stellantis_ev_stats_drain` | Drain while parked unplugged (% a day) |
 | `sensor.stellantis_ev_stats_trips` | Trips recorded |
 | `sensor.stellantis_ev_stats_status` | What the add-on is doing |
 

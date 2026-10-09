@@ -15,8 +15,12 @@ DEFAULTS = {
     "log_level": "info",
     "min_trip_mi": 2.0,  # shorter trips aren't counted in the efficiency (src/evstats.py)
     "usable_kwh": 0.0,  # the battery's usable capacity; 0 = measured, or the car's sensor
+    "commute_mi": 0.0,  # the commute's distance (0 = no commute planner)
+    "commute_arrive_pct": 5.0,  # the SoC to arrive with
+    "commute_time": "07:30",  # when you leave
+    "commute_days": [0, 1, 2, 3, 4],  # on these days (0 = Monday)
 }
-NUMBERS = {"min_trip_mi": (0.1, 50), "usable_kwh": (0, 250)}
+NUMBERS = {"min_trip_mi": (0.1, 50), "usable_kwh": (0, 250), "commute_mi": (0, 400), "commute_arrive_pct": (0, 80)}
 
 
 class AppSettings:
@@ -54,6 +58,17 @@ class AppSettings:
                 if not low <= value <= high:
                     raise ValueError(f"{key} must be between {low:g} and {high:g}")
                 out[key] = value
+        if "commute_time" in body:
+            text = str(body["commute_time"] or "").strip()
+            parts = text.split(":")
+            if len(parts) != 2 or not all(p.isdigit() for p in parts) or not (0 <= int(parts[0]) < 24 and 0 <= int(parts[1]) < 60):
+                raise ValueError("commute_time must be HH:MM")
+            out["commute_time"] = f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+        if "commute_days" in body:
+            days = body["commute_days"]
+            if not isinstance(days, list) or not days or not all(isinstance(d, int) and 0 <= d <= 6 for d in days):
+                raise ValueError("commute_days must be a list of days, 0 (Monday) to 6")
+            out["commute_days"] = sorted(set(days))
         return out
 
     def update(self, body) -> dict:

@@ -164,3 +164,102 @@ def test_live_readings_update_the_page_and_sensors():
     assert now["real_full_mi"] == round(30 / 4 / KM_PER_MI * 50) and now["car_range_mi"] == 100
     v = values(state)
     assert v["real_range_full"][0] == now["real_full_mi"] and v["usable_capacity"][0] == 50 and v["trips"] == 1
+
+
+def _trip_at(s, end, km, kwh, temp, mph=None, mins=30):
+    s.temperature(end - mins * 30, temp)
+    attrs = {"duration": f"00:{mins:02d}:00", "start_mileage": f"{end / 100:.0f} km", "electric_consumption": f"{kwh} kWh"}
+    if mph:
+        attrs["avg_speed"] = f"{mph * KM_PER_MI:.1f} km/h"
+    s.trip(end, parse_trip(str(km), attrs))
+
+
+def test_efficiency_by_speed_in_each_temperature_band():
+    s = EvStats()
+    t = T0
+    for _ in range(2):
+        _trip_at(s, t, 16, 2, 3.0, mph=15)  # town, cold: 8 km/kWh
+        _trip_at(s, t + 7200, 48, 9, 3.0, mph=60)  # motorway, cold: 5.3 km/kWh
+        _trip_at(s, t + 14400, 16, 1.6, 13.0, mph=15)  # town, mild: 10 km/kWh
+        t += 86400
+    sm = s.summary(t, {"usable_kwh": 50})
+    sp = {x["name"]: x for x in sm["speeds"]}
+    assert sp["Town"]["trips"] == 4 and sp["Motorway"]["trips"] == 2 and sp["Mixed"]["trips"] == 0
+    assert sp["Motorway"]["to_mph"] is None and sp["Town"]["to_mph"] == 20
+    cold, mild = sm["matrix"]
+    assert cold["from_c"] == 0 and cold["cells"]["Town"]["mi_per_kwh"] == round(8 / KM_PER_MI, 2)
+    assert cold["cells"]["Motorway"]["trips"] == 2 and cold["cells"]["Mixed"] is None
+    assert mild["cells"]["Town"]["mi_per_kwh"] == round(10 / KM_PER_MI, 2) and mild["cells"]["Motorway"] is None
+
+
+def test_drain_while_parked_unplugged():
+    s = EvStats()
+    s.plugged(T0 - 86400, False)
+    _trip_at(s, T0, 20, 3, 5.0)
+    s.soc(T0 + 60, 70)
+    s.temperature(T0 + 3600 * 10, 3.0)
+    s.soc(T0 + 3600 * 24 + 60, 68)  # a day later, parked: 2% gone
+    _trip_at(s, T0 + 3600 * 26, 20, 3, 5.0)
+    (p,) = s.parks
+    # From the first reading after the trip to when the next began (the SoC then: the last reading)
+    assert p["soc_from"] == 70 and p["soc_to"] == 68 and p["hours"] == 25.5 and p["plug_known"]
+    sm = s.summary(T0 + 3600 * 27, {"usable_kwh": 50})
+    assert sm["drain"]["pct_per_day"] == round(2 / 25.5 * 24, 2) and sm["drain"]["kwh_per_day"] == round(1 / 25.5 * 24, 2)
+    # Plugged in (e.g. charging, or V2X) meanwhile: not drain
+    s.plugged(T0 + 3600 * 30, True)
+    s.soc(T0 + 3600 * 27, 66)
+    s.soc(T0 + 3600 * 40, 60)
+    s.plugged(T0 + 3600 * 41, False)
+    _trip_at(s, T0 + 3600 * 44, 20, 3, 5.0)
+    assert len(s.parks) == 1
+    assert s.plugged_between(T0, T0 + 3600) is False and s.plugged_between(T0 + 3600 * 29, T0 + 3600 * 31) is True
+    assert EvStats().plugged_between(T0, T0 + 1) is None  # no plugged in sensor
+
+
+def test_commute_charge():
+    from src.evstats import forecast_temp, next_departure
+
+    s = EvStats()
+    t = T0
+    for i in range(4):  # the 26-mile commute at 2 °C: 3.25 mi/kWh
+        _trip_at(s, t + i * 86400, round(26 * KM_PER_MI, 2), 8, 2.0)
+    _trip_at(s, t + 5 * 86400, 10, 1, 2.5)  # another (efficient) trip in the band
+    settings = {"usable_kwh": 50, "commute_mi": 26, "commute_arrive_pct": 5}
+    c = s.summary(t + 6 * 86400, settings, current={"forecast": {"at": "x", "temp_c": 1.0, "source": "w"}})["commute"]
+    assert c["basis"].startswith("4 commute-length trips") and c["mi_per_kwh"] == 3.25
+    assert c["kwh"] == 8.0 and c["need_pct"] == 16.0 and c["charge_to"] == 21 and c["enough"]
+    # Warmer than any commute: all trips in the nearest band
+    c = s.summary(t + 6 * 86400, settings, current={"forecast": {"temp_c": 12.0}})["commute"]
+    assert c["basis"].startswith("all trips at 0 to 5") and c["charge_to"] > 5
+    assert s.summary(t, {"commute_mi": 0})["commute"] is None
+    # The next Tuesday or Thursday at 07:30
+    mon = datetime.datetime(2026, 10, 5, 20, 0)
+    assert next_departure(mon, "07:30", [1, 3]) == datetime.datetime(2026, 10, 6, 7, 30)
+    assert next_departure(datetime.datetime(2026, 10, 6, 8, 0), "07:30", [1, 3]) == datetime.datetime(2026, 10, 8, 7, 30)
+    hourly = [{"datetime": "2026-10-06T07:00:00", "temperature": 3.1}, {"datetime": "2026-10-06T08:00:00", "temperature": 4.0}]
+    assert forecast_temp(hourly, datetime.datetime(2026, 10, 6, 7, 30), True) in (3.1, 4.0)
+    daily = [{"datetime": "2026-10-06T00:00:00", "temperature": 12, "templow": 2}]
+    assert forecast_temp(daily, datetime.datetime(2026, 10, 6, 7, 30), False) == 2
+    assert forecast_temp(daily, datetime.datetime(2026, 10, 6, 17, 30), False) == 12
+
+
+def test_commute_settings_are_checked(tmp_path):
+    import pytest
+    from src.app_settings import AppSettings
+
+    a = AppSettings(str(tmp_path))
+    a.update({"commute_mi": 26, "commute_time": "7:05", "commute_days": [3, 1, 1]})
+    assert a.data["commute_time"] == "07:05" and a.data["commute_days"] == [1, 3]
+    for bad in ({"commute_time": "25:00"}, {"commute_days": []}, {"commute_days": [7]}, {"commute_arrive_pct": 90}):
+        with pytest.raises(ValueError):
+            a.update(bad)
+
+
+def test_an_unchanged_soc_while_parked_is_no_drain():
+    s = EvStats()
+    _trip_at(s, T0, 20, 3, 5.0)
+    s.soc(T0 + 60, 70)  # and nothing new (the integration only sends changes)
+    _trip_at(s, T0 + 3600 * 12, 20, 3, 5.0)
+    (p,) = s.parks
+    assert p["soc_from"] == p["soc_to"] == 70 and p["plug_known"] is False
+    assert s.summary(T0 + 3600 * 13)["drain"]["pct_per_day"] == 0
