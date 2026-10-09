@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stellantis EV Stats</title>
+<style>
+  /* Colours follow the Home Assistant theme when the page is opened in the
+     HA sidebar (see applyHaTheme), otherwise light/dark from the browser. */
+  :root {
+    --bg: #fafafa; --card: #ffffff; --text: #212121; --text2: #727272;
+    --divider: rgba(0,0,0,0.12); --primary: #03a9f4; --on-primary: #fff;
+    --hover: rgba(0,0,0,0.04); --code: #f3f3f3;
+    --ok: #43a047; --warn: #f57c00; --err: #db4437; --info: #039be5; --violet: #8e24aa;
+    --radius: 12px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
+      --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
+      --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
+    --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
+    --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.45 Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5; background: var(--bg);
+    border-bottom: 1px solid var(--divider);
+  }
+  .bar { max-width: 1100px; margin: 0 auto; padding: 12px 16px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .bar h1 { font-size: 20px; font-weight: 400; margin: 0; flex: 1; min-width: 180px; }
+  .live { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+  nav { max-width: 1100px; margin: 0 auto; padding: 0 8px; display: flex; overflow-x: auto; }
+  nav button {
+    background: none; border: 0; color: var(--text2); font: inherit; font-weight: 500;
+    padding: 12px 14px 10px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap;
+  }
+  nav button[aria-selected="true"] { color: var(--primary); border-bottom-color: var(--primary); }
+  nav button * { pointer-events: none; }
+  nav .ti { display: none; width: 22px; height: 22px; fill: currentColor; }
+  @media (max-width: 640px) {
+    nav { padding: 0; }
+    nav button { flex: 1 1 0; min-width: 0; padding: 8px 2px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+      font-size: 10.5px; font-weight: 500; }
+    nav button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    nav .ti { display: block; }
+    .bar { padding-bottom: 4px; }
+  }
+  /* Health status: a dot the size of the title, left of it */
+  .status-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; cursor: pointer;
+    width: 28px; height: 28px; padding: 0; margin-right: -4px; border: 0; border-radius: 50%; background: none; }
+  .status-btn:hover { background: var(--hover); }
+  .status-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .status-btn .dot { width: 16px; height: 16px; }
+  .status-btn .dot.ok { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); }
+  .status-btn .dot.warn { box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 25%, transparent); }
+  .status-btn .dot.err { box-shadow: 0 0 0 4px color-mix(in srgb, var(--err) 25%, transparent); }
+  .issues { margin: 0; padding-left: 18px; } .issues li { margin: 4px 0; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  section[hidden] { display: none; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .card {
+    background: var(--card); border-radius: var(--radius); padding: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--divider);
+    min-width: 0;
+  }
+  @media (min-width: 760px) { .span2 { grid-column: span 2; } }
+  .card h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card h2 .seg, .card h2 label { font-size: 13px; font-weight: 400; }
+  .ctl { display: inline-flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+  .card h2 .spacer { flex: 1; }
+  .stack { display: grid; gap: 16px; }
+  .label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
+  .big { font-size: 26px; font-weight: 400; margin-top: 2px; }
+  .sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .muted { color: var(--text2); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--text2); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.err { background: var(--err); } .dot.warn { background: var(--warn); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500; background: var(--hover); color: var(--text2); white-space: nowrap;
+  }
+  .chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.err { color: var(--err); } .chip.info { color: var(--info); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+  .kv dt { color: var(--text2); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .row + .row { margin-top: 14px; }
+  .row .grow { flex: 1; min-width: 120px; }
+  .row[hidden] { display: none; }
+  button.btn {
+    font: inherit; font-weight: 500; border-radius: 8px; padding: 6px 14px; cursor: pointer;
+    border: 1px solid var(--divider); background: var(--card); color: var(--primary);
+  }
+  button.btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  button.small { padding: 2px 10px; font-size: 12px; }
+  input[type="number"], input[type="search"], input[type="date"], select {
+    font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 10px; min-width: 0;
+  }
+  input[type="number"] { width: 90px; }
+  .seg { display: inline-flex; border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+  .seg button { font: inherit; border: 0; background: none; color: var(--text); padding: 6px 11px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--divider); }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  details.more { display: inline; }
+  details.more > summary { display: inline; cursor: pointer; color: var(--primary); list-style: none; white-space: nowrap; }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more[open] > summary { display: none; }
+  details.more > div { display: inline; }
+  .subnav { max-width: 1100px; margin: 0 auto 4px; display: flex; gap: 8px; }
+  .subnav[hidden] { display: none; }
+  .subnav button { font: inherit; font-size: 13px; border: 1px solid var(--divider); background: none; color: var(--text2);
+    padding: 5px 12px; border-radius: 16px; cursor: pointer; }
+  .subnav button[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+  .section-title { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -4px; }
+  .picker { display: block; width: 100%; min-width: 0; }
+  .picker select, .picker input { width: 100%; max-width: 100%; }
+  /* sensor pickers: type to filter */
+  .combo { position: relative; display: block; }
+  .combo input, .picker input[type="text"] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 30px 6px 10px; box-sizing: border-box; text-overflow: ellipsis; }
+  .combo::after { content: ''; position: absolute; right: 12px; top: 50%; margin-top: -3px; pointer-events: none;
+    border: 5px solid transparent; border-top-color: var(--text2); border-bottom: 0; }
+  .combo-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; margin: 0; padding: 4px 0; list-style: none;
+    max-height: 280px; overflow-y: auto; background: var(--card); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25), 0 0 0 1px var(--divider); }
+  .combo-list li { padding: 6px 10px; cursor: pointer; overflow-wrap: anywhere; }
+  .combo-list li .sub { color: var(--text2); font-size: 12px; }
+  .combo-list li.active { background: var(--hover); box-shadow: inset 3px 0 0 var(--primary); }
+  .combo-list li.sel { font-weight: 600; }
+  .combo-list li.empty { color: var(--text2); cursor: default; }
+  .switch { position: relative; width: 44px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
+  .switch span { position: absolute; inset: 0; background: var(--divider); border-radius: 999px; transition: background .15s; }
+  .switch span::after {
+    content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s;
+  }
+  .switch input:checked + span { background: var(--primary); }
+  .switch input:checked + span::after { transform: translateX(20px); }
+  .note { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #323232; color: #fff;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10; }
+  .toast.show { opacity: 1; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--divider); vertical-align: top; }
+  th { font-weight: 500; color: var(--text2); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .table-wrap { overflow-x: auto; }
+  pre { margin: 0 0 8px; padding: 10px; background: var(--code); border-radius: 8px; overflow-x: auto; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; }
+  .empty { color: var(--text2); padding: 12px 0; }
+  .error-banner { background: var(--err); color: #fff; padding: 8px 16px; text-align: center; font-size: 13px; display: none; }
+  @media (max-width: 520px) {
+    .big { font-size: 22px; }
+  }
+  .logs { max-height: 60vh; overflow: auto; white-space: pre; }
+  /* Charts: inline SVG in the theme's colours. Two series: the theme's blue
+     (solid bars / filled dots) and violet (dashed line, hollow dots) */
+  :root { --s1: #039be5; --s2: #8e24aa; }
+  :root[data-theme="dark"] { --s1: #42a5f5; --s2: #ba68c8; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --s1: #42a5f5; --s2: #ba68c8; } }
+  .chart { position: relative; width: 100%; min-height: 60px; }
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart text { fill: var(--text2); font-size: 11px; }
+  .chart .axis { stroke: var(--divider); stroke-width: 1; }
+  .chart .bar { fill: var(--s1); }
+  .chart .car { fill: none; stroke: var(--s2); stroke-width: 2; stroke-dasharray: 5 3; }
+  .chart .carpt { fill: var(--card); stroke: var(--s2); stroke-width: 2; }
+  .chart .dot1 { fill: var(--s1); fill-opacity: .55; stroke: var(--card); stroke-width: 1.5; }
+  .chart .bandln { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
+  .chart .ln1 { fill: none; stroke: var(--s1); stroke-width: 2; }
+  .chart .ln2 { fill: none; stroke: var(--s2); stroke-width: 2; stroke-dasharray: 5 3; }
+  .chart .pt1 { fill: var(--s1); stroke: var(--card); stroke-width: 2; }
+  .chart .pt2 { fill: var(--card); stroke: var(--s2); stroke-width: 2; }
+  .chart .inlbl { fill: var(--on-primary); font-size: 11px; font-weight: 500; }
+  .chart .hit { fill: transparent; cursor: default; }
+  .chart .hit:hover + * { opacity: .75; }
+  .tip { position: absolute; z-index: 3; pointer-events: none; background: var(--card); color: var(--text); font-size: 12px; line-height: 1.4;
+    padding: 6px 9px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.25), 0 0 0 1px var(--divider); white-space: nowrap; }
+  .legend { font-size: 12px; font-weight: 400; color: var(--text2); display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { display: inline-block; vertical-align: middle; margin-left: 6px; }
+  .legend .lg-bar { width: 10px; height: 10px; border-radius: 2px; background: var(--s1); }
+  .legend .lg-car { width: 16px; height: 0; border-top: 2px dashed var(--s2); }
+  .legend .lg-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--s1); opacity: .6; }
+  .legend .lg-band { width: 14px; height: 0; border-top: 2.5px solid var(--text); }
+  .legend .lg-ln1 { width: 16px; height: 0; border-top: 2px solid var(--s1); }
+  .legend .lg-ln2 { width: 16px; height: 0; border-top: 2px dashed var(--s2); }
+  .pk + .pk { margin-top: 14px; }
+
+</style>
+</head>
+<body>
+<div class="error-banner" id="error">Can't reach the add-on</div>
+<header>
+  <div class="bar">
+    <button class="status-btn" id="status-btn" title="Checking…" aria-label="Health: checking"><span class="dot" id="status-dot"></span></button>
+    <h1>Stellantis EV Stats</h1>
+    <span class="live" id="live"><span class="dot" id="live-dot"></span><span id="live-text">Connecting…</span></span>
+  </div>
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="overview"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg><span>Overview</span></button>
+    <button role="tab" data-tab="temperature"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 13V5a3 3 0 0 0-6 0v8a5 5 0 1 0 6 0zm-3-9a1 1 0 0 1 1 1v3h-2V5a1 1 0 0 1 1-1z"/></svg><span>Temperature</span></button>
+    <button role="tab" data-tab="trips"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm1 5.6V11a4 4 0 0 0 4 4h2a2 2 0 0 1 2 2v.4h2V17a4 4 0 0 0-4-4h-2a2 2 0 0 1-2-2V8.6z"/></svg><span>Trips</span></button>
+    <button role="tab" data-tab="battery"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h-2V2h-4v2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm-4 14.5l-4-4.5h3V9l4 4.5h-3v5z"/></svg><span>Battery</span></button>
+    <button role="tab" data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg><span>Settings</span></button>
+    <button role="tab" data-tab="diagnostics"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>Diagnostics</span></button>
+  </nav>
+</header>
+
+<main>
+  <div class="subnav" id="diag-nav" hidden role="group" aria-label="Diagnostics">
+    <button data-sub="health">Health</button><button data-sub="debug">Debug</button>
+  </div>
+
+  <!-- ============ Overview: the headline figures (renderState) ============ -->
+  <section id="tab-overview" class="stack">
+    <div class="card" id="o-start" hidden>
+      <h2>Getting started</h2>
+      <div class="note" style="margin:0" id="o-start-text"></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="label">Real range at 100%</div>
+        <div class="big" id="o-real">—</div>
+        <div class="sub" id="o-real-sub"></div>
+        <div class="row" style="margin-top:10px;gap:6px" id="o-real-chips"></div>
+      </div>
+      <div class="card">
+        <div class="label">Efficiency: last 30 days</div>
+        <div class="big" id="o-eff">—</div>
+        <div class="sub" id="o-eff-sub"></div>
+      </div>
+      <div class="card">
+        <div class="label">Battery health</div>
+        <div class="big" id="o-soh">—</div>
+        <div class="sub" id="o-soh-sub"></div>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card span2">
+        <h2>Range at 100% by temperature<span class="spacer"></span><span class="legend"><i class="lg-bar"></i>Real <i class="lg-car"></i>Car's estimate</span></h2>
+        <div class="chart" id="o-range-chart" role="img" aria-label="Real range and the car's estimate at 100% by temperature"></div>
+        <div class="note">Real: the efficiency on trips in each 5 °C band × the battery's usable capacity. Car's estimate: its range ÷ SoC, from readings at 30% or more. The Temperature tab has the figures.</div>
+      </div>
+      <div class="card">
+        <h2>The car now</h2>
+        <dl class="kv" id="o-car"></dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Temperature: efficiency and range by temperature ============ -->
+  <section id="tab-temperature" class="stack" hidden>
+    <div class="card">
+      <h2>Efficiency by temperature<span class="spacer"></span><span class="legend"><i class="lg-dot"></i>A trip <i class="lg-band"></i>The band's average</span></h2>
+      <div class="chart" id="t-eff-chart" role="img" aria-label="Efficiency of each trip against the temperature"></div>
+      <div class="note" id="t-eff-note"></div>
+    </div>
+    <div class="card">
+      <h2>By temperature band</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Temperature</th><th class="num">Trips</th><th class="num">Miles</th><th class="num">mi/kWh</th><th class="num">Real range</th><th class="num">From the SoC</th><th class="num">Car's estimate</th></tr></thead>
+        <tbody id="t-bands"></tbody>
+      </table></div>
+      <div class="note">All at 100% charge. Real range: mi/kWh × the usable capacity (<span id="t-usable">—</span>). From the SoC: miles per 1% used × 100, from trips that used 5% or more (no kWh needed, but the SoC is only whole numbers). Car's estimate: the median of its range ÷ SoC.</div>
+    </div>
+  </section>
+
+  <!-- ============ Trips ============ -->
+  <section id="tab-trips" class="stack" hidden>
+    <div class="card">
+      <h2>Trips<span class="spacer"></span><span class="chip" id="r-count"></span></h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th class="num">Miles</th><th class="num">Time</th><th class="num">Avg mph</th><th class="num">kWh</th><th class="num">mi/kWh</th><th class="num">Temp</th><th class="num">SoC</th></tr></thead>
+        <tbody id="r-trips"></tbody>
+      </table></div>
+      <div class="note" id="r-note"></div>
+    </div>
+  </section>
+
+  <!-- ============ Battery ============ -->
+  <section id="tab-battery" class="stack" hidden>
+    <div class="grid">
+      <div class="card"><div class="label">Capacity (SoH)</div><div class="big" id="b-cap">—</div><div class="sub">The car's own figure</div></div>
+      <div class="card"><div class="label">Resistance (SoH)</div><div class="big" id="b-res">—</div><div class="sub">The car's own figure</div></div>
+      <div class="card">
+        <div class="label">Usable capacity</div>
+        <div class="big" id="b-usable">—</div>
+        <div class="sub" id="b-usable-sub"></div>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card span2">
+        <h2>Battery health over time<span class="spacer"></span><span class="legend"><i class="lg-ln1"></i>Capacity <i class="lg-ln2"></i>Resistance</span></h2>
+        <div class="chart" id="b-soh-chart" role="img" aria-label="The car's battery health figures over time"></div>
+        <div class="note">The car's own state-of-health figures (from the Stellantis Vehicles integration), recorded each time they change. Capacity is what's left of the original; resistance rises as a battery ages.</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Usable capacity, measured, by week</h2>
+      <div class="chart" id="b-usable-chart" role="img" aria-label="The measured usable capacity each week"></div>
+      <div class="note">Battery residual (kWh in the battery) ÷ SoC, from readings at 20% or more: the median each week. A slow fall over months is the battery ageing; a week here and there is noise.</div>
+    </div>
+  </section>
+
+  <!-- ============ Settings ============ -->
+  <section id="tab-settings" class="stack" hidden>
+    <div class="section-title">The car's sensors (Stellantis Vehicles integration)</div>
+    <div class="note" style="margin:0">Found by themselves from the car's Last trip sensor. Pick others if you've renamed them, or another outdoor temperature sensor.</div>
+    <div class="grid">
+      <div class="card">
+        <h2>Trips and range</h2>
+        <div class="pk"><div>Last trip<div class="note" style="margin:0">Distance, with the energy used as attributes. Needed.</div></div><span class="picker" data-key="last_trip" data-domain="sensor" style="margin-top:6px"></span></div>
+        <div class="pk"><div>Battery<div class="note" style="margin:0">The SoC, %.</div></div><span class="picker" data-key="soc" data-domain="sensor" style="margin-top:6px"></span></div>
+        <div class="pk"><div>Range<div class="note" style="margin:0">The car's own range estimate.</div></div><span class="picker" data-key="range" data-domain="sensor" style="margin-top:6px"></span></div>
+        <div class="pk"><div>Temperature<div class="note" style="margin:0">The car's outside temperature (or any outdoor sensor).</div></div><span class="picker" data-key="temperature" data-domain="sensor" style="margin-top:6px"></span></div>
+        <div class="pk"><div>Mileage<div class="note" style="margin:0">Optional.</div></div><span class="picker" data-key="odometer" data-domain="sensor" style="margin-top:6px"></span></div>
+      </div>
+      <div class="card">
+        <h2>Battery</h2>
+        <div class="pk"><div>Battery residual<div class="note" style="margin:0">kWh in the battery now: with the SoC, gives the usable capacity.</div></div><span class="picker" data-key="residual" data-domain="sensor" style="margin-top:6px"></span></div>
+        <div class="pk"><div>Battery capacity<div class="note" style="margin:0">kWh: used until there are measurements.</div></div><span class="picker" data-key="capacity" data-domain="sensor" style="margin-top:6px"></span></div>
+        <div class="pk"><div>Battery SOH capacity<div class="note" style="margin:0">%.</div></div><span class="picker" data-key="soh_capacity" data-domain="sensor" style="margin-top:6px"></span></div>
+        <div class="pk"><div>Battery SOH resistance<div class="note" style="margin:0">%.</div></div><span class="picker" data-key="soh_resistance" data-domain="sensor" style="margin-top:6px"></span></div>
+      </div>
+    </div>
+    <div class="section-title">Statistics</div>
+    <div class="card">
+      <div class="row" style="margin-top:0"><div class="grow">Shortest trip counted<div class="note" style="margin:0">Shorter trips (a warm-up, a few hundred yards) are left out of the efficiency.</div></div><input type="number" id="s-min" min="0.1" max="50" step="0.5"> <span class="muted">mi</span></div>
+      <div class="row"><div class="grow">Usable capacity<div class="note" style="margin:0">0 = measured (Battery residual ÷ SoC), or the car's Battery capacity sensor until there are measurements.</div></div><input type="number" id="s-usable" min="0" max="250" step="0.1"> <span class="muted">kWh</span></div>
+    </div>
+    <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all" checked> Show all entities in the lists</label>
+  </section>
+
+  <!-- ============ Diagnostics › Debug ============ -->
+  <section id="tab-debug" class="stack" hidden>
+    <div class="card">
+      <h2>Logs</h2>
+      <div class="row" style="margin-top:0">
+        <div class="grow">Log level<div class="note" style="margin:0">Saved: kept after a restart.</div></div>
+        <div class="seg" id="d-level" role="group" aria-label="Log level"><button data-level="debug">Debug</button><button data-level="info">Info</button><button data-level="warning">Warning</button></div>
+      </div>
+      <div class="row">
+        <div class="grow">Recent log lines<div class="note" style="margin:0">The last 200, newest at the bottom.</div></div>
+        <button class="btn small" id="d-logs-refresh">Refresh</button><button class="btn small" id="d-logs-copy">Copy</button>
+      </div>
+      <pre class="logs" id="d-logs" style="margin-top:10px"></pre>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>Restart</h2>
+        <div class="row" style="margin-top:0">
+          <div class="grow">Restart the add-on<div class="note" style="margin:0">Asks Home Assistant to restart it.</div></div>
+          <button class="btn small" id="d-restart">Restart</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Diagnostics bundle</h2>
+        <div class="row" style="margin-top:0">
+          <div class="grow"><div class="note" style="margin:0">One file to attach to a bug report: the state, settings, health, the add-on's options (secrets hidden) and recent log lines.</div></div>
+          <button class="btn small primary" id="d-bundle">Download</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Diagnostics › Health ============ -->
+  <section id="tab-health" class="stack" hidden>
+    <div class="card" id="h-issues-card" hidden><h2>Needs attention</h2><ul class="issues" id="h-issues"></ul></div>
+    <div class="grid">
+      <div class="card"><h2>Add-on</h2><dl class="kv" id="h-addon"></dl></div>
+      <div class="card"><h2>Home Assistant</h2><dl class="kv" id="h-ha"></dl></div>
+      <div class="card span2">
+        <h2>Home Assistant entities</h2>
+        <div class="note" style="margin:0 0 10px">The add-on posts these itself. They show as unavailable while the add-on is stopped.</div>
+        <dl class="kv" id="h-entities"></dl>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+let state = null;          // latest /api/state
+let activeTab = 'overview';
+
+// ---------- formatting ----------
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v, d = 1) => (v === null || v === undefined || isNaN(v)) ? '—' : Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
+function dur(s) {
+  if (s === null || s === undefined) return '—';
+  s = Math.max(0, Math.round(s));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+function dateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso), today = new Date();
+  const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+  return d.toDateString() === today.toDateString() ? `Today ${t}` : `${d.toLocaleDateString([], {day: 'numeric', month: 'short'})} ${t}`;
+}
+const ago = (iso) => iso ? dur((Date.now() - new Date(iso)) / 1000) + ' ago' : '—';
+const kv = (rows) => rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
+
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ---------- Home Assistant theme ----------
+// In the HA sidebar the page is an iframe on HA's own origin, so the theme's
+// CSS variables can be read from the parent page.
+function applyHaTheme() {
+  try {
+    const p = window.parent;
+    if (!p || p === window) return;
+    const cs = p.getComputedStyle(p.document.documentElement);
+    const v = (name) => cs.getPropertyValue(name).trim();
+    const map = {
+      '--bg': '--primary-background-color', '--card': '--card-background-color',
+      '--text': '--primary-text-color', '--text2': '--secondary-text-color',
+      '--divider': '--divider-color', '--primary': '--primary-color',
+      '--on-primary': '--text-primary-color', '--code': '--code-background-color',
+      '--ok': '--success-color', '--warn': '--warning-color', '--err': '--error-color', '--info': '--info-color',
+    };
+    let found = false;
+    for (const [ours, theirs] of Object.entries(map)) {
+      const val = v(theirs);
+      if (val) { document.documentElement.style.setProperty(ours, val); found = true; }
+    }
+    if (!found) return;
+    const m = v('--primary-background-color').match(/\d+/g);
+    if (m && m.length >= 3) {
+      const dark = (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) < 128;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.documentElement.style.setProperty('--hover', dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)');
+      if (!v('--code-background-color')) document.documentElement.style.setProperty('--code', dark ? '#262626' : '#f3f3f3');
+    }
+  } catch (e) { /* not in HA, or another origin */ }
+}
+
+// ---------- API ----------
+async function api(path, opts) {
+  const r = await fetch('./api/' + path, opts);
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try { const j = await r.json(); if (j.message) msg = j.message; } catch (e) {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+async function post(path, body) {
+  try {
+    await api(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)});
+    return true;
+  } catch (e) { toast('Failed: ' + e.message); return false; }
+}
+
+// ---------- tabs ----------
+const DIAG = ['health', 'debug'];  // the Diagnostics tab's sections
+function showTab(name) {
+  if (name === 'diagnostics') name = 'health';
+  if (!document.getElementById('tab-' + name)) name = 'overview';
+  activeTab = name;
+  const diag = DIAG.includes(name);
+  document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-selected',
+    b.dataset.tab === name || (diag && b.dataset.tab === 'diagnostics')));
+  $('diag-nav').hidden = !diag;
+  $('diag-nav').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.sub === name));
+  document.querySelectorAll('main > section').forEach((s) => s.hidden = s.id !== 'tab-' + name);
+  try { history.replaceState(null, '', '#' + name); } catch (e) {}
+  refreshTab(true);
+}
+$('tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
+$('diag-nav').addEventListener('click', (e) => { if (e.target.dataset.sub) showTab(e.target.dataset.sub); });
+$('status-btn').addEventListener('click', () => showTab('health'));
+
+// ---------- header status: anything that needs attention ----------
+const statusInfo = {health: null};
+async function pollStatus() {
+  try { statusInfo.health = await api('health'); } catch (e) {}
+  updateStatus();
+}
+// Add your own checks here: [level ('err' or 'warn'), text]
+function currentIssues() {
+  const out = [];
+  const ha = statusInfo.health && statusInfo.health.home_assistant;
+  if (ha && ha.available && !ha.connected) out.push(['warn', 'Home Assistant link down: your entities aren\'t updating' + (ha.error ? ` (${ha.error})` : '')]);
+  if (ha && !ha.available) out.push(['warn', 'Not running under Home Assistant: no entities']);
+  if (state && state.status === 'Waiting') out.push(['warn', state.reason]);
+  return out;
+}
+function updateStatus() {
+  const issues = currentIssues();
+  const level = issues.some((i) => i[0] === 'err') ? 'err' : issues.length ? 'warn' : 'ok';
+  $('status-btn').className = 'status-btn ' + (level === 'ok' ? '' : level);
+  $('status-dot').className = 'dot ' + level;
+  $('status-btn').title = level === 'ok' ? 'Healthy: everything is working. Open Diagnostics'
+    : `Unhealthy: ${issues.map((i) => i[1]).join('; ')}. Open Diagnostics`;
+  $('status-btn').setAttribute('aria-label', level === 'ok' ? 'Healthy. Open Diagnostics' : `Unhealthy, ${issues.length} issue${issues.length === 1 ? '' : 's'}. Open Diagnostics`);
+  $('h-issues-card').hidden = !issues.length;
+  $('h-issues').innerHTML = issues.map(([lvl, t]) => `<li><span class="chip ${lvl}">${lvl === 'err' ? 'Problem' : 'Check'}</span> ${esc(t)}</li>`).join('');
+}
+setInterval(() => { if (!document.hidden) pollStatus(); }, 30000);
+
+// ---------- live state (push, with polling as a fallback) ----------
+let es = null, lastEvent = 0, pollTimer = null;
+function setLive(kind, text) { $('live-dot').className = 'dot ' + kind; $('live-text').textContent = text; }
+function startPush() {
+  if (!window.EventSource) { startPolling(); return; }
+  try { es = new EventSource('./api/events'); } catch (e) { startPolling(); return; }
+  es.onmessage = (ev) => {
+    lastEvent = Date.now();
+    stopPolling();
+    setLive('ok', 'Live');
+    $('error').style.display = 'none';
+    try { renderState(JSON.parse(ev.data)); } catch (e) {}
+  };
+  es.onerror = () => {
+    setLive('warn', 'Reconnecting…'); startPolling();
+    // The browser retries on its own unless the stream was refused (e.g. an
+    // ingress hiccup): then it gives up, so open a new one shortly
+    if (es.readyState === EventSource.CLOSED) { es = null; setTimeout(() => { if (!es) startPush(); }, 10000); }
+  };
+}
+async function pollState() {
+  try {
+    renderState(await api('state'));
+    $('error').style.display = 'none';
+    if (Date.now() - lastEvent > 20000) setLive('warn', 'Polling');
+  } catch (e) {
+    $('error').style.display = 'block'; setLive('err', 'Offline');
+  }
+}
+function startPolling() { if (!pollTimer) { pollState(); pollTimer = setInterval(pollState, 5000); } }
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+// The stream sends at least every 10 s: if it goes quiet, poll instead
+setInterval(() => {
+  if (lastEvent && Date.now() - lastEvent > 25000) {
+    setLive('warn', 'Polling'); startPolling();
+    if (es && es.readyState !== EventSource.CONNECTING && Date.now() - lastEvent > 60000) {
+      es.close(); es = null; lastEvent = Date.now() - 25000; startPush();
+    }
+  }
+}, 5000);
+
+// ---------- Overview ----------
+const mi = (v) => v == null ? '—' : `${num(v, 0)} mi`;
+const degC = (v) => v == null ? '—' : `${num(v, 0)} °C`;
+const band = (b) => `${b} to ${b + 5} °C`;
+function renderState(s) {
+  const prevAt = state && state.stats_at;
+  state = s;
+  const b = s.brief || {}, now = b.now || {}, e = (b.efficiency || {}), h = b.health || {}, c = s.car || {};
+  const start = !s.trips;
+  $('o-start').hidden = !start;
+  if (start) $('o-start-text').textContent = s.status === 'Waiting' ? s.reason
+    : 'Recording: the figures fill in after a few trips. The car sends a trip when it stops (the Stellantis Vehicles integration fetches it), with the energy used; the add-on adds the temperature and the SoC.';
+  $('o-real').textContent = mi(now.real_full_mi);
+  $('o-real-sub').textContent = now.real_full_mi == null ? 'Needs a trip and the usable capacity'
+    : `At ${now.band != null ? band(now.band) : 'all temperatures'}: ${num(now.mi_per_kwh, 2)} mi/kWh × ${num(b.usable_kwh, 1)} kWh`;
+  const chips = [];
+  if (now.real_left_mi != null) chips.push(`<span class="chip info">${mi(now.real_left_mi)} left at ${num(now.soc, 0)}%</span>`);
+  if (now.car_full_mi != null) chips.push(`<span class="chip">Car says ${mi(now.car_full_mi)} at 100%</span>`);
+  $('o-real-chips').innerHTML = chips.join('');
+  const l30 = e.last30 || {}, all = e.overall || {};
+  $('o-eff').textContent = l30.mi_per_kwh != null ? `${num(l30.mi_per_kwh, 2)} mi/kWh` : '—';
+  $('o-eff-sub').textContent = l30.trips ? `${num(l30.mi, 0)} miles over ${l30.trips} trip${l30.trips === 1 ? '' : 's'}` + (all.trips > l30.trips ? ` · ${num(all.mi_per_kwh, 2)} mi/kWh all time` : '')
+    : 'No trips in the last 30 days yet';
+  $('o-soh').textContent = h.soh_capacity != null ? `${num(h.soh_capacity, 1)}%` : '—';
+  $('o-soh-sub').textContent = [h.soh_resistance != null ? `resistance ${num(h.soh_resistance, 1)}%` : null,
+    b.usable_kwh != null ? `${num(b.usable_kwh, 1)} kWh usable` : null].filter(Boolean).join(' · ') || 'The car hasn\'t sent its battery health yet';
+  $('o-car').innerHTML = kv([
+    ['Battery', c.soc != null ? `${num(c.soc, 0)}%` : '—'],
+    ['Range (car)', c.range_km != null ? mi(c.range_km / 1.609344) : '—'],
+    ['Temperature', degC(c.temp_c)],
+    ['Mileage', c.odometer_km != null ? mi(c.odometer_km / 1.609344) : '—'],
+    ['Trips recorded', String(s.trips || 0)],
+    ['Status', `${esc(s.status)}<div class="sub">${esc(s.reason || '')}</div>`],
+  ]);
+  if (s.stats_at !== prevAt || !stats.data) loadStats();
+}
+
+// ---------- Statistics (Temperature, Trips, Battery and the Overview's chart) ----------
+const stats = {data: null};
+async function loadStats() {
+  try { stats.data = await api('stats'); } catch (e) { return; }
+  drawStats();
+}
+function drawStats() {
+  const d = stats.data; if (!d) return;
+  rangeChart($('o-range-chart'), d.bands);
+  // Temperature
+  effChart($('t-eff-chart'), d.trips.filter((t) => t.kwh && t.temp_c != null && t.km / 1.609344 >= d.min_trip_mi), d.bands);
+  $('t-eff-note').textContent = `Each dot is a trip of ${num(d.min_trip_mi, 1)} miles or more, at the outside temperature during it. The line in each 5 °C band is its average (miles ÷ kWh over all its trips).`;
+  $('t-usable').textContent = d.usable_kwh != null ? `${num(d.usable_kwh, 1)} kWh, ${d.usable_from}` : 'not known yet';
+  $('t-bands').innerHTML = d.bands.length ? d.bands.slice().reverse().map((r) => `<tr><td>${band(r.from_c)}</td><td class="num">${r.trips || '—'}</td>
+    <td class="num">${r.mi ? num(r.mi, 0) : '—'}</td><td class="num">${r.mi_per_kwh != null ? num(r.mi_per_kwh, 2) : '—'}</td>
+    <td class="num"><b>${mi(r.real_full_mi)}</b></td><td class="num">${mi(r.soc_full_mi)}</td>
+    <td class="num">${mi(r.car_full_mi)}${r.car_full_mi && r.real_full_mi ? ` <span class="muted">(${r.car_full_mi > r.real_full_mi ? '+' : ''}${num((r.car_full_mi / r.real_full_mi - 1) * 100, 0)}%)</span>` : ''}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="empty">Nothing yet: trips fill this in.</td></tr>';
+  // Trips
+  $('r-count').textContent = `${d.trip_count} recorded`;
+  $('r-trips').innerHTML = d.trips.length ? d.trips.map((t) => {
+    const miles = t.km / 1.609344, short = miles < d.min_trip_mi;
+    return `<tr${short ? ' class="muted"' : ''}><td>${dateTime(t.end)}${t.source === 'history' ? ' <span class="muted">·&nbsp;history</span>' : ''}</td>
+    <td class="num">${num(miles, 1)}</td><td class="num">${t.duration_s ? dur(t.duration_s) : '—'}</td>
+    <td class="num">${t.avg_kmh != null ? num(t.avg_kmh / 1.609344, 0) : '—'}</td><td class="num">${t.kwh != null ? num(t.kwh, 2) : '—'}</td>
+    <td class="num">${t.kwh ? num(miles / t.kwh, 2) : '—'}</td><td class="num">${degC(t.temp_c)}</td>
+    <td class="num">${t.soc_start != null && t.soc_end != null ? `${num(t.soc_start, 0)} → ${num(t.soc_end, 0)}%` : '—'}</td></tr>`;
+  }).join('') : '<tr><td colspan="8" class="empty">No trips yet.</td></tr>';
+  $('r-note').textContent = `The latest 300, newest first. Greyed: shorter than ${num(d.min_trip_mi, 1)} miles, so not counted.` + (d.since ? ` Recording since ${dateTime(d.since)}.` : '');
+  // Battery
+  sohChart($('b-soh-chart'), d.health.history);
+  $('b-cap').textContent = d.health.soh_capacity != null ? `${num(d.health.soh_capacity, 1)}%` : '—';
+  $('b-res').textContent = d.health.soh_resistance != null ? `${num(d.health.soh_resistance, 1)}%` : '—';
+  $('b-usable').textContent = d.usable_kwh != null ? `${num(d.usable_kwh, 1)} kWh` : '—';
+  $('b-usable-sub').textContent = d.usable_from;
+  weekChart($('b-usable-chart'), d.health.usable);
+}
+
+// Charts: one y axis each, a hover tooltip on every mark
+function tipFor(box) {
+  let tip = box.querySelector('.tip');
+  if (!tip) { tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true; box.appendChild(tip); }
+  return tip;
+}
+function bindTips(box) {
+  const tip = tipFor(box);
+  box.querySelectorAll('[data-tip]').forEach((el) => {
+    el.addEventListener('mouseenter', () => {
+      tip.innerHTML = el.dataset.tip; tip.hidden = false;
+      const bb = box.getBoundingClientRect(), r = el.getBoundingClientRect();
+      const x = Math.min(Math.max(r.left + r.width / 2 - bb.left - tip.offsetWidth / 2, 0), bb.width - tip.offsetWidth);
+      tip.style.left = x + 'px'; tip.style.top = Math.max(0, r.top - bb.top - tip.offsetHeight - 8) + 'px';
+    });
+    el.addEventListener('mouseleave', () => { tip.hidden = true; });
+  });
+}
+const H = 220, P = {l: 44, r: 12, t: 12, b: 26};
+function frame(box) { return Math.max(300, box.clientWidth || 600); }
+// Round axis limits and a tick every 1, 2 or 5 × 10^n (at most ~5 ticks)
+function nice(lo, hi) {
+  if (!(hi > lo)) hi = lo + 1;
+  const raw = (hi - lo) / 4, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * p).find((x) => x >= raw);
+  return {lo: Math.floor(lo / step) * step, hi: Math.ceil(hi / step) * step, step};
+}
+function yGrid(W, lo, hi, Y, fmt, step) {
+  let out = '';
+  step = step || (hi - lo) / 4;
+  for (let i = 0; lo + i * step <= hi + 1e-9; i++) {
+    const v = lo + i * step;
+    out += `<line class="axis" x1="${P.l}" x2="${W - P.r}" y1="${Y(v)}" y2="${Y(v)}" opacity="${i ? .5 : 1}"/><text x="${P.l - 6}" y="${Y(v) + 4}" text-anchor="end">${fmt(v)}</text>`;
+  }
+  return out;
+}
+function finish(box, W, svg) {
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${svg}</svg>`;
+  bindTips(box);
+}
+// Real range (bars) and the car's estimate (dashed line, hollow dots) per temperature band
+function rangeChart(box, bands) {
+  const W = frame(box), rows = bands.filter((r) => r.real_full_mi != null || r.car_full_mi != null);
+  if (!rows.length) { box.innerHTML = '<div class="empty">Nothing yet: it fills in as you drive at different temperatures.</div>'; return; }
+  const ax = nice(0, Math.max(...rows.map((r) => Math.max(r.real_full_mi || 0, r.car_full_mi || 0))) * 1.05), hi = ax.hi;
+  const n = rows.length, slot = (W - P.l - P.r) / n, bw = Math.min(56, slot * 0.6);
+  const X = (i) => P.l + slot * i + slot / 2, Y = (v) => P.t + (H - P.t - P.b) * (1 - v / hi);
+  let svg = yGrid(W, 0, hi, Y, (v) => num(v, 0), ax.step), line = '', pts = '';
+  rows.forEach((r, i) => {
+    const x = X(i), tip = `<b>${band(r.from_c)}</b><br>Real: ${mi(r.real_full_mi)}${r.trips ? ` (${r.trips} trip${r.trips === 1 ? '' : 's'}, ${num(r.mi_per_kwh, 2)} mi/kWh)` : ''}<br>Car's estimate: ${mi(r.car_full_mi)}`;
+    svg += `<rect class="hit" x="${x - slot / 2}" y="${P.t}" width="${slot}" height="${H - P.t - P.b}" data-tip="${esc(tip)}"/>`;
+    if (r.real_full_mi != null) {
+      const y = Y(r.real_full_mi), h = H - P.b - y, rad = Math.min(4, bw / 2, h);
+      svg += `<path class="bar" d="M${x - bw / 2},${H - P.b} V${y + rad} Q${x - bw / 2},${y} ${x - bw / 2 + rad},${y} H${x + bw / 2 - rad} Q${x + bw / 2},${y} ${x + bw / 2},${y + rad} V${H - P.b} Z"/>`;
+      if (h > 22) svg += `<text class="inlbl" x="${x}" y="${y + 16}" text-anchor="middle">${num(r.real_full_mi, 0)}</text>`;
+    }
+    if (r.car_full_mi != null) { line += `${line ? 'L' : 'M'}${x},${Y(r.car_full_mi)} `; pts += `<circle class="carpt" cx="${x}" cy="${Y(r.car_full_mi)}" r="4.5"/>`; }
+    svg += `<text x="${x}" y="${H - 8}" text-anchor="middle">${r.from_c}–${r.from_c + 5}°</text>`;
+  });
+  finish(box, W, svg + `<path class="car" d="${line}"/>` + pts);
+}
+// Each trip's efficiency against the temperature, with each band's average
+function effChart(box, trips, bands) {
+  const W = frame(box);
+  if (!trips.length) { box.innerHTML = '<div class="empty">No trips with a temperature yet.</div>'; return; }
+  const effs = trips.map((t) => t.km / 1.609344 / t.kwh), temps = trips.map((t) => t.temp_c);
+  const lo = Math.floor(Math.min(...temps, 0) / 5) * 5, top = Math.ceil(Math.max(...temps, 20) / 5) * 5;
+  const ax = nice(Math.max(0, Math.min(...effs) - 0.3), Math.max(...effs) + 0.3);
+  const X = (t) => P.l + 8 + (W - P.l - P.r - 16) * (t - lo) / (top - lo), Y = (v) => P.t + (H - P.t - P.b) * (1 - (v - ax.lo) / (ax.hi - ax.lo));
+  let svg = yGrid(W, ax.lo, ax.hi, Y, (v) => num(v, 1), ax.step);
+  for (let t = lo; t <= top; t += 5) svg += `<text x="${X(t)}" y="${H - 8}" text-anchor="middle">${t}°</text>`;
+  trips.forEach((t, i) => {
+    const tip = `<b>${num(effs[i], 2)} mi/kWh</b> at ${degC(t.temp_c)}<br>${num(t.km / 1.609344, 1)} mi, ${num(t.kwh, 2)} kWh<br>${dateTime(t.end)}`;
+    svg += `<circle class="hit" cx="${X(t.temp_c)}" cy="${Y(effs[i])}" r="9" data-tip="${esc(tip)}"/><circle class="dot1" cx="${X(t.temp_c)}" cy="${Y(effs[i])}" r="5"/>`;
+  });
+  bands.filter((r) => r.mi_per_kwh != null).forEach((r) => {
+    const x1 = X(Math.max(lo, r.from_c)) + 3, x2 = X(Math.min(top, r.to_c)) - 3, y = Y(r.mi_per_kwh);
+    const tip = `<b>${band(r.from_c)}</b><br>${num(r.mi_per_kwh, 2)} mi/kWh over ${r.trips} trip${r.trips === 1 ? '' : 's'}`;
+    svg += `<rect class="hit" x="${x1}" y="${y - 6}" width="${x2 - x1}" height="12" data-tip="${esc(tip)}"/><line class="bandln" x1="${x1}" x2="${x2}" y1="${y}" y2="${y}"/>`;
+  });
+  finish(box, W, svg);
+}
+// The car's SoH figures over time: capacity (solid) and resistance (dashed), one % axis
+function sohChart(box, hist) {
+  const W = frame(box), pts = hist.filter((h) => h.soh_capacity != null || h.soh_resistance != null);
+  if (!pts.length) { box.innerHTML = '<div class="empty">The car hasn\'t sent its battery health yet.</div>'; return; }
+  const now = Date.now(), xs = pts.map((h) => new Date(h.at).getTime()), x0 = Math.min(...xs), x1 = Math.max(now, x0 + 86400000);
+  const vals = pts.flatMap((h) => [h.soh_capacity, h.soh_resistance]).filter((v) => v != null);
+  const ax = nice(Math.min(...vals) - 1, Math.max(...vals) + 1), lo = ax.lo, hi = ax.hi;
+  const X = (t) => P.l + 8 + (W - P.l - P.r - 16) * (t - x0) / (x1 - x0), Y = (v) => P.t + (H - P.t - P.b) * (1 - (v - lo) / (hi - lo));
+  const fmtD = (t) => new Date(t).toLocaleDateString([], {day: 'numeric', month: 'short', year: '2-digit'});
+  let svg = yGrid(W, lo, hi, Y, (v) => num(v, Number.isInteger(ax.step) ? 0 : 1) + '%', ax.step);
+  svg += `<text x="${X(x0)}" y="${H - 8}">${fmtD(x0)}</text><text x="${X(x1)}" y="${H - 8}" text-anchor="end">${fmtD(x1)}</text>`;
+  for (const [key, cls] of [['soh_capacity', 1], ['soh_resistance', 2]]) {
+    const ps = pts.filter((h) => h[key] != null);
+    if (!ps.length) continue;
+    let d = '';  // a step line: each value holds until the next, and to now
+    ps.forEach((h, i) => { const x = X(new Date(h.at).getTime()), y = Y(h[key]); d += i ? `H${x} V${y} ` : `M${x},${y} `; });
+    d += `H${X(x1)}`;
+    svg += `<path class="ln${cls}" d="${d}"/>`;
+    ps.forEach((h) => {
+      const x = X(new Date(h.at).getTime()), y = Y(h[key]);
+      svg += `<circle class="hit" cx="${x}" cy="${y}" r="9" data-tip="${esc(`<b>${cls === 1 ? 'Capacity' : 'Resistance'} ${num(h[key], 1)}%</b><br>${dateTime(h.at)}`)}"/><circle class="pt${cls}" cx="${x}" cy="${y}" r="4"/>`;
+    });
+  }
+  finish(box, W, svg);
+}
+// Measured usable capacity each week: a line (it moves a little, so not from zero)
+function weekChart(box, weeks) {
+  const W = frame(box);
+  if (!weeks.length) { box.innerHTML = '<div class="empty">No measurements yet: they need the Battery residual sensor.</div>'; return; }
+  const vals = weeks.map((w) => w.kwh), ax = nice(Math.min(...vals) - 1, Math.max(...vals) + 1);
+  const n = weeks.length, X = (i) => P.l + 12 + (W - P.l - P.r - 24) * (n === 1 ? 0.5 : i / (n - 1));
+  const Y = (v) => P.t + (H - P.t - P.b) * (1 - (v - ax.lo) / (ax.hi - ax.lo));
+  let svg = yGrid(W, ax.lo, ax.hi, Y, (v) => num(v, Number.isInteger(ax.step) ? 0 : 1), ax.step), d = '', pts = '';
+  weeks.forEach((w, i) => {
+    d += `${i ? 'L' : 'M'}${X(i)},${Y(w.kwh)} `;
+    const tip = `<b>${num(w.kwh, 1)} kWh</b><br>Week of ${new Date(w.week).toLocaleDateString([], {day: 'numeric', month: 'short'})} · ${w.n} reading${w.n === 1 ? '' : 's'}`;
+    pts += `<circle class="hit" cx="${X(i)}" cy="${Y(w.kwh)}" r="10" data-tip="${esc(tip)}"/><circle class="pt1" cx="${X(i)}" cy="${Y(w.kwh)}" r="4"/>`;
+  });
+  const lab = (w) => new Date(w.week).toLocaleDateString([], {day: 'numeric', month: 'short'});
+  svg += `<text x="${X(0)}" y="${H - 8}">${lab(weeks[0])}</text>` + (n > 1 ? `<text x="${X(n - 1)}" y="${H - 8}" text-anchor="end">${lab(weeks[n - 1])}</text>` : '');
+  finish(box, W, svg + `<path class="ln1" d="${d}"/>` + pts);
+}
+let resizeT = null;
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(drawStats, 200); });
+
+// ---------- Settings: your Home Assistant entities ----------
+const sim = {data: null, entities: [], edit: {}, entitiesAt: 0};
+async function refreshSensors(force) {
+  try { sim.data = await api('sensors'); } catch (e) { return; }
+  if (force || !sim.entities.length || Date.now() - sim.entitiesAt > 60000) {
+    try { sim.entities = (await api('sensors/entities')).entities; sim.entitiesAt = Date.now(); } catch (e) { sim.entities = []; }
+  }
+  sim.edit = {...sim.data.settings};
+  const typing = document.activeElement && document.activeElement.closest('.picker');
+  if (force || !typing) drawPickers();
+  drawSensors();
+}
+// Settings save as soon as they change
+async function saveSensors(patch, msg) {
+  try {
+    await api('sensors', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(patch)});
+    toast(msg);
+  } catch (e) { toast('Failed: ' + e.message); }
+  await refreshSensors(true);
+  pollState();
+}
+// <span class="picker" data-key="..." data-domain="sensor,..." [data-class="power"] [data-units="W,kW"] [data-none="None"]>
+function drawPickers() {
+  const all = $('sim-all').checked;
+  document.querySelectorAll('main .picker').forEach((span) => {
+    const key = span.dataset.key, domains = span.dataset.domain.split(',');
+    const classes = (span.dataset.class || '').split(',').filter(Boolean);
+    const units = (span.dataset.units || '').split(',').filter(Boolean);
+    const value = sim.edit[key] || '';
+    const fits = (e) => (!classes.length && !units.length) || classes.includes(e.device_class) || units.includes(e.unit || '');
+    let list = sim.entities.filter((e) => domains.some((d) => e.entity_id.startsWith(d + '.')));
+    if (!all) list = list.filter(fits);
+    if (!sim.entities.length) {
+      span.innerHTML = `<input type="text" data-key="${key}" value="${esc(value)}" placeholder="${domains[0]}.example" aria-label="${key}">`;
+      return;
+    }
+    if (value && !list.some((e) => e.entity_id === value)) {
+      const known = sim.entities.find((e) => e.entity_id === value);
+      list = [known || {entity_id: value, name: value, state: null}, ...list];
+    }
+    if (span.contains(document.activeElement)) return;  // don't redraw while someone is typing
+    const none = span.dataset.none || 'None';
+    const opts = [{value: '', label: none, sub: ''}, ...list.map((e) => ({
+      value: e.entity_id, label: e.name || e.entity_id,
+      sub: e.entity_id + (e.state == null ? '' : ` · ${e.state}${e.unit ? ' ' + e.unit : ''}`),
+    }))];
+    span.innerHTML = `<div class="combo"><input type="text" data-combo="${key}" role="combobox" aria-autocomplete="list"
+      aria-expanded="false" aria-controls="cl-${key}" aria-label="${key}" placeholder="Type to search…" autocomplete="off" spellcheck="false">
+      <ul class="combo-list" id="cl-${key}" role="listbox" hidden></ul></div>`
+      + (!all && !list.length ? '<div class="note">No matching entities. Tick "Show all entities in the lists" at the bottom of the Settings tab.</div>' : '');
+    setupCombo(span.querySelector('.combo'), key, opts);
+  });
+}
+// A text box that filters the list as you type (every word must match the
+// name, entity ID or reading). Arrow keys + Enter, or click, to choose.
+function setupCombo(box, key, opts) {
+  const input = box.querySelector('input'), ul = box.querySelector('ul');
+  let shown = [], active = -1;
+  const current = () => opts.find((o) => o.value === (sim.edit[key] || '')) || {value: sim.edit[key], label: sim.edit[key], sub: ''};
+  const showValue = () => { const c = current(); input.value = c.value ? `${c.label} (${c.value})` : ''; input.placeholder = c.value ? 'Type to search…' : c.label; };
+  const close = () => { ul.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); };
+  const setActive = (i) => {
+    active = i;
+    ul.querySelectorAll('li[role="option"]').forEach((li, n) => li.classList.toggle('active', n === i));
+    const li = ul.querySelector(`#co-${key}-${i}`);
+    if (li) { input.setAttribute('aria-activedescendant', li.id); li.scrollIntoView({block: 'nearest'}); }
+  };
+  const draw = (q) => {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    shown = opts.filter((o, n) => (n === 0 && !words.length) || (n > 0 && words.every((w) => (o.label + ' ' + o.sub).toLowerCase().includes(w))));
+    const sel = sim.edit[key] || '';
+    ul.innerHTML = shown.length ? shown.map((o, n) => `<li role="option" id="co-${key}-${n}" data-n="${n}" aria-selected="${o.value === sel}"
+      class="${o.value === sel ? 'sel' : ''}">${esc(o.label)}${o.sub ? `<div class="sub">${esc(o.sub)}</div>` : ''}</li>`).join('')
+      : '<li class="empty">No entities match</li>';
+    ul.hidden = false; input.setAttribute('aria-expanded', 'true');
+    setActive(shown.length ? Math.max(0, shown.findIndex((o) => o.value === sel)) : -1);
+  };
+  const choose = (o) => {
+    if ((sim.edit[key] || '') !== o.value) {
+      sim.edit[key] = o.value;
+      saveSensors({[key]: o.value}, o.value ? 'Entity saved' : 'Entity removed');
+    }
+    close(); showValue(); input.blur();
+  };
+  input.addEventListener('focus', () => { input.value = ''; draw(''); });
+  input.addEventListener('input', () => draw(input.value));
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (ul.hidden) { draw(input.value); return; }
+      if (shown.length) setActive((active + (ev.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length);
+    } else if (ev.key === 'Enter') {
+      ev.preventDefault();
+      if (active >= 0 && shown[active]) choose(shown[active]);
+      else if (/^[a-z_]+\.[a-z0-9_]+$/.test(input.value.trim())) choose({value: input.value.trim()});  // typed an entity ID
+    } else if (ev.key === 'Escape') { close(); showValue(); input.blur(); }
+  });
+  input.addEventListener('blur', () => { close(); showValue(); });
+  // mousedown, not click: it fires before the input loses focus
+  ul.addEventListener('mousedown', (ev) => {
+    const li = ev.target.closest('li[data-n]');
+    ev.preventDefault();
+    if (li) choose(shown[+li.dataset.n]);
+  });
+  showValue();
+}
+// Without Home Assistant's entity list (e.g. not connected) the pickers are plain text boxes
+document.addEventListener('change', (ev) => {
+  const key = ev.target.dataset && ev.target.dataset.key;
+  if (key && ev.target.closest('.picker')) saveSensors({[key]: ev.target.value.trim()}, 'Entity saved');
+});
+$('sim-all').addEventListener('change', drawPickers);
+function drawSensors() {}
+// The statistics' settings (src/app_settings.py), saved as they change
+async function refreshAppSettings() {
+  let a;
+  try { a = await api('settings'); } catch (e) { return; }
+  if (document.activeElement !== $('s-min')) $('s-min').value = a.min_trip_mi;
+  if (document.activeElement !== $('s-usable')) $('s-usable').value = a.usable_kwh;
+}
+for (const [id, key, label] of [['s-min', 'min_trip_mi', 'Shortest trip counted'], ['s-usable', 'usable_kwh', 'Usable capacity']]) {
+  $(id).addEventListener('change', async (ev) => {
+    if (await post('settings', {[key]: Number(ev.target.value)})) { toast(`${label} saved`); loadStats(); pollState(); }
+    refreshAppSettings();
+  });
+}
+
+// ---------- Diagnostics › Health ----------
+async function refreshHealth() {
+  let h;
+  try { h = await api('health'); } catch (e) { return; }
+  statusInfo.health = h; updateStatus();
+  $('h-addon').innerHTML = kv([
+    ['Version', esc(h.version)],
+    ['Running for', dur(h.uptime_s)],
+    ['Started', dateTime(h.started)],
+    ['Pages open', String((h.event_streams || {}).gui || 0)],
+  ]);
+  const ha = h.home_assistant;
+  $('h-ha').innerHTML = kv([
+    ['Link', !ha ? '—' : !ha.available ? '<span class="chip err">Not available</span><div class="sub">Not running under Home Assistant</div>'
+      : ha.connected ? '<span class="chip ok">Connected</span>' : `<span class="chip warn">Not connected</span><div class="sub">${esc(ha.error || '')}</div>`],
+  ]);
+  try {
+    const d = await api('sensors');
+    $('h-entities').innerHTML = kv([['Sensors', d.own_sensors.map((e) => `<code>${esc(e)}</code>`).join('<br>')]]);
+  } catch (e) { $('h-entities').innerHTML = '<span class="muted">—</span>'; }
+}
+
+// ---------- Diagnostics › Debug ----------
+async function refreshDebug() {
+  let i;
+  try { i = await api('debug/info?lines=200'); } catch (e) { return; }
+  $('d-level').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.level === i.log_level));
+  const pre = $('d-logs'), atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+  pre.textContent = i.logs.join('\n') || 'No log lines yet';
+  if (atEnd) pre.scrollTop = pre.scrollHeight;
+}
+$('d-level').addEventListener('click', async (e) => {
+  const level = e.target.dataset.level; if (!level) return;
+  if (await post('debug/log_level', {level})) { toast(`Log level: ${level[0].toUpperCase() + level.slice(1)}`); refreshDebug(); }
+});
+$('d-logs-refresh').addEventListener('click', refreshDebug);
+$('d-logs-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('d-logs').textContent); toast('Copied'); } catch (e) { toast("Couldn't copy"); }
+});
+// Two clicks for anything that can't be undone
+function confirmClick(btn, run) {
+  const label = btn.textContent;
+  btn.addEventListener('click', async () => {
+    clearTimeout(btn._reset);
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = '1'; btn.textContent = 'Click again to confirm';
+      btn._reset = setTimeout(() => { delete btn.dataset.armed; btn.textContent = label; }, 4000);
+      return;
+    }
+    delete btn.dataset.armed; btn.textContent = label;
+    await run();
+  });
+}
+confirmClick($('d-restart'), async () => { if (await post('debug/restart')) toast('Restarting the add-on: the page reconnects when it\'s back'); });
+$('d-bundle').addEventListener('click', async () => {
+  const btn = $('d-bundle'); btn.disabled = true;
+  const parts = {state: 'state', sensors: 'sensors', settings: 'settings', health: 'health', debug: 'debug/info?lines=500'};
+  const out = {generated: new Date().toISOString()};
+  for (const [k, p] of Object.entries(parts)) { try { out[k] = await api(p); } catch (e) { out[k] = {error: e.message}; } }
+  const blob = new Blob([JSON.stringify(out, null, 1)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `stellantis_ev_stats_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  btn.disabled = false;
+  toast('Diagnostics bundle downloaded');
+});
+
+// ---------- refresh loop ----------
+function refreshTab(full) {
+  if (activeTab === 'settings') { refreshSensors(full); refreshAppSettings(); }
+  else if (['overview', 'temperature', 'trips', 'battery'].includes(activeTab) && full) drawStats();
+  else if (activeTab === 'health') refreshHealth();
+  else if (activeTab === 'debug') refreshDebug();
+}
+setInterval(() => { if (!document.hidden) refreshTab(false); }, 10000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTab(false); });
+
+applyHaTheme();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyHaTheme);
+showTab((location.hash || '#overview').slice(1));
+window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t && t !== activeTab) showTab(t); });
+startPush();
+pollState();
+pollStatus();
+</script>
+</body>
+</html>
