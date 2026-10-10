@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2 — Settings fix
+
+- **Fix:** changing a setting gave "HTTP 500", and Home Assistant's history
+  was never read, the commute forecast never fetched and the figures only
+  updated when the car sent something: the web server took over the name
+  of the part that does the statistics when the add-on started. Live
+  readings and trips were still recorded.
+
 ## 0.2.1 — Lint fix
 
 - **Fix:** removed the empty `options` and `schema` from `config.yaml`

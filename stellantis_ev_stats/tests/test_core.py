@@ -125,3 +125,15 @@ def test_page_polling_is_kept_out_of_the_log():
     assert not f.filter(rec('1.2.3.4 "GET /api/state HTTP/1.1" 200 12'))
     assert f.filter(rec('1.2.3.4 "POST /api/sensors HTTP/1.1" 200 12'))
     assert f.filter(rec('1.2.3.4 "GET /api/state HTTP/1.1" 500 12'))
+
+
+def test_main_keeps_the_statistics_runner():
+    """__main__ once reused the name `runner` for the web server, so the statistics' Runner was lost
+    (settings gave HTTP 500 and the history was never read)."""
+    import ast
+    import pathlib
+
+    tree = ast.parse((pathlib.Path(__file__).parent.parent / "src" / "__main__.py").read_text())
+    assigned = [t.id for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                for t in node.targets if isinstance(t, ast.Name) and t.id == "runner"]
+    assert assigned == ["runner"]  # once: runner = Runner(...)

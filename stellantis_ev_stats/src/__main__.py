@@ -81,9 +81,9 @@ async def run() -> None:
     debug = DebugTools(config=config, log_buffer=log_buffer, settings=settings)
 
     app = create_api_app(state, ha_link=link, health=health, debug=debug, app_settings=settings, runner=runner)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    await web.TCPSite(runner, "0.0.0.0", PORT).start()
+    web_runner = web.AppRunner(app)  # (not `runner`: that's the statistics' Runner, used below)
+    await web_runner.setup()
+    await web.TCPSite(web_runner, "0.0.0.0", PORT).start()
     logger.info("Web page and API on port %d (version %s)", PORT, health.version)
 
     stop = asyncio.Event()
@@ -108,7 +108,7 @@ async def run() -> None:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        await runner.cleanup()
+        await web_runner.cleanup()
         logger.info("Stopped")
 
 
