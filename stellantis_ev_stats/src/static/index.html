@@ -188,6 +188,8 @@
   .chart .inlbl { fill: var(--on-primary); font-size: 11px; font-weight: 500; }
   .chart .hit { fill: transparent; cursor: default; }
   .chart .hit:hover + * { opacity: .75; }
+  /* the marks let the pointer through to their hover area (drawn just before each) */
+  .chart .bar, .chart .carpt, .chart .car, .chart .dot1, .chart .bandln, .chart .pt1, .chart .pt2, .chart .ln1, .chart .ln2, .chart .inlbl { pointer-events: none; }
   .tip { position: absolute; z-index: 3; pointer-events: none; background: var(--card); color: var(--text); font-size: 12px; line-height: 1.4;
     padding: 6px 9px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.25), 0 0 0 1px var(--divider); white-space: nowrap; }
   .legend { font-size: 12px; font-weight: 400; color: var(--text2); display: inline-flex; align-items: center; gap: 6px; }
@@ -750,7 +752,8 @@ function rangeChart(box, bands) {
   let svg = yGrid(W, 0, hi, Y, (v) => num(v, 0), ax.step), line = '', pts = '';
   rows.forEach((r, i) => {
     const x = X(i), tip = `<b>${band(r.from_c)}</b><br>Real: ${mi(r.real_full_mi)}${r.trips ? ` (${r.trips} trip${r.trips === 1 ? '' : 's'}, ${num(r.mi_per_kwh, 2)} mi/kWh)` : ''}<br>Car's estimate: ${mi(r.car_full_mi)}`;
-    svg += `<rect class="hit" x="${x - slot / 2}" y="${P.t}" width="${slot}" height="${H - P.t - P.b}" data-tip="${esc(tip)}"/>`;
+    const top = Math.min(...[r.real_full_mi, r.car_full_mi].filter((v) => v != null).map(Y)) - 8;
+    svg += `<rect class="hit" x="${x - bw / 2 - 4}" y="${top}" width="${bw + 8}" height="${H - P.b - top}" data-tip="${esc(tip)}"/>`;
     if (r.real_full_mi != null) {
       const y = Y(r.real_full_mi), h = H - P.b - y, rad = Math.min(4, bw / 2, h);
       svg += `<path class="bar" d="M${x - bw / 2},${H - P.b} V${y + rad} Q${x - bw / 2},${y} ${x - bw / 2 + rad},${y} H${x + bw / 2 - rad} Q${x + bw / 2},${y} ${x + bw / 2},${y + rad} V${H - P.b} Z"/>`;
@@ -775,7 +778,7 @@ function speedChart(box, speeds) {
     if (!r.trips) return;
     const y = Y(r.mi_per_kwh), h = H - P.b - y, rad = Math.min(4, bw / 2, h);
     const tip = `<b>${esc(r.name)}</b> (${r.to_mph ? `${r.from_mph}–${r.to_mph}` : `${r.from_mph}+`} mph)<br>${num(r.mi_per_kwh, 2)} mi/kWh · ${r.trips} trip${r.trips === 1 ? '' : 's'}, ${num(r.mi, 0)} mi`;
-    svg += `<rect class="hit" x="${x - slot / 2}" y="${P.t}" width="${slot}" height="${H - P.t - P.b}" data-tip="${esc(tip)}"/>`;
+    svg += `<rect class="hit" x="${x - bw / 2 - 4}" y="${y - 6}" width="${bw + 8}" height="${H - P.b - y + 6}" data-tip="${esc(tip)}"/>`;
     svg += `<path class="bar" d="M${x - bw / 2},${H - P.b} V${y + rad} Q${x - bw / 2},${y} ${x - bw / 2 + rad},${y} H${x + bw / 2 - rad} Q${x + bw / 2},${y} ${x + bw / 2},${y + rad} V${H - P.b} Z"/>`;
     if (h > 22) svg += `<text class="inlbl" x="${x}" y="${y + 16}" text-anchor="middle">${num(r.mi_per_kwh, 1)}</text>`;
   });

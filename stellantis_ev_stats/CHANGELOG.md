@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3 — Chart hover
+
+- **Fix:** on the range and speed charts, a bar lit up (and its details
+  showed) when the pointer was in the empty space above it, and went out
+  when it was on the bar. Now only the bar (and the car's estimate on it)
+  does. The dots on the other charts no longer flicker either.
+
 ## 0.2.2 — Settings fix
 
 - **Fix:** changing a setting gave "HTTP 500", and Home Assistant's history
