@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 — Lint fix
+
+- **Fix:** removed the empty `options` and `schema` from `config.yaml`
+  (the add-on has no options; the linter rejects defaults).
+
 ## 0.2.0 — Commute, speed and drain
 
 - **Feature:** commute planner. Set the distance, the time you leave, the
