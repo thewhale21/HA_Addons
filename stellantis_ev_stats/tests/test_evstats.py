@@ -263,3 +263,30 @@ def test_an_unchanged_soc_while_parked_is_no_drain():
     (p,) = s.parks
     assert p["soc_from"] == p["soc_to"] == 70 and p["plug_known"] is False
     assert s.summary(T0 + 3600 * 13)["drain"]["pct_per_day"] == 0
+
+
+def test_efficiency_now_from_the_weather_for_each_kind_of_driving():
+    from src.ha_entities import values
+
+    s = EvStats()
+    t = T0
+    for _ in range(2):
+        _trip_at(s, t, 16, 2, 3.0, mph=15)  # town, cold: 8 km/kWh
+        _trip_at(s, t + 7200, 48, 9, 3.0, mph=60)  # motorway, cold
+        _trip_at(s, t + 14400, 16, 1.6, 13.0, mph=15)  # town, mild: 10 km/kWh
+        t += 86400
+    # The car reads 20 °C (in the garage); the weather says 12 °C
+    sm = s.summary(t, {"usable_kwh": 50}, current={"temp_c": 20.0, "weather_temp_c": 12.0})
+    now = sm["now"]
+    assert now["temp_c"] == 12.0 and now["temp_from"] == "weather" and now["band"] == 10
+    sp = {x["name"]: x for x in now["by_speed"]}
+    assert sp["Town"]["mi_per_kwh"] == round(10 / KM_PER_MI, 2) and sp["Town"]["exact"]
+    assert sp["Motorway"]["band"] == 0 and not sp["Motorway"]["exact"]  # only cold motorway trips so far
+    assert sp["Mixed"]["mi_per_kwh"] is None
+    assert s.summary(t, {}, current={"temp_c": 4.0})["now"]["temp_from"] == "car"  # no weather: the car's
+
+    class St:
+        status, reason, trips = "Recording", "", 6
+        brief = {"now": now}
+    v = values(St())
+    assert v["efficiency_now_town"][0] == sp["Town"]["mi_per_kwh"] and v["efficiency_now_motorway"][1]["at_this_temperature"] is False

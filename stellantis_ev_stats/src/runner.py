@@ -112,7 +112,15 @@ class Runner:
         c = self.feed.cur
         return {"soc": c.get("soc"), "range_km": c.get("range"), "temp_c": c.get("temperature"),
                 "odometer_km": c.get("odometer"), "residual_kwh": c.get("residual"),
-                "capacity_kwh": c.get("capacity"), "forecast": self.forecast}
+                "capacity_kwh": c.get("capacity"), "forecast": self.forecast,
+                "weather_temp_c": self.weather_temp()}
+
+    def weather_temp(self) -> Optional[float]:
+        """The weather entity's temperature now (°C), if one's picked."""
+        st = self.link.states.get(self.link.settings.get("weather") or "") or {}
+        attrs = st.get("attributes") or {}
+        t = number(attrs.get("temperature"))
+        return None if t is None else round(to_c(t, attrs.get("temperature_unit")), 1)
 
     def summary(self, now: Optional[float] = None) -> dict:
         return self.stats.summary(time.time() if now is None else now, self.settings.data,

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 — Efficiency now, from the weather
+
+- **Feature:** an "Efficiency now" card on the Overview: the efficiency to
+  expect at the temperature now, overall and for each kind of driving
+  (town, mixed, faster roads, motorway), with the range on a full battery
+  for each. Each comes from your trips at that temperature, or the nearest
+  temperature with trips of that kind (shown when it is).
+- **Feature:** sensors for them: `sensor.stellantis_ev_stats_efficiency_now`
+  (overall) and `..._efficiency_now_town`, `..._mixed`, `..._faster_roads`
+  and `..._motorway`.
+- **Change:** the figures for now (real range, range left and the
+  efficiency now) use the weather entity's temperature when there is one,
+  rather than the car's (which reads high in a garage or after sitting in
+  the sun); the car's is used without one.
+
 ## 0.2.3 — Chart hover
 
 - **Fix:** on the range and speed charts, a bar lit up (and its details

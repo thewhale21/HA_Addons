@@ -29,7 +29,13 @@ SENSORS = {
     "car_range_full": (f"sensor.{PREFIX}_car_range_full",
                        _measure("Car's Range at 100%", "mi", "mdi:car-cruise-control", device_class="distance")),
     "efficiency": (f"sensor.{PREFIX}_efficiency", _measure("Efficiency (30 days)", "mi/kWh", "mdi:leaf")),
-    "efficiency_now": (f"sensor.{PREFIX}_efficiency_now", _measure("Efficiency at This Temperature", "mi/kWh", "mdi:thermometer")),
+    "efficiency_now": (f"sensor.{PREFIX}_efficiency_now", _measure("Efficiency Now", "mi/kWh", "mdi:thermometer")),
+    "efficiency_now_town": (f"sensor.{PREFIX}_efficiency_now_town", _measure("Efficiency Now Town", "mi/kWh", "mdi:city")),
+    "efficiency_now_mixed": (f"sensor.{PREFIX}_efficiency_now_mixed", _measure("Efficiency Now Mixed", "mi/kWh", "mdi:road-variant")),
+    "efficiency_now_faster_roads": (f"sensor.{PREFIX}_efficiency_now_faster_roads",
+                                    _measure("Efficiency Now Faster Roads", "mi/kWh", "mdi:road")),
+    "efficiency_now_motorway": (f"sensor.{PREFIX}_efficiency_now_motorway",
+                                _measure("Efficiency Now Motorway", "mi/kWh", "mdi:highway")),
     "usable_capacity": (f"sensor.{PREFIX}_usable_capacity",
                         _measure("Usable Capacity", "kWh", "mdi:car-battery", device_class="energy_storage")),
     "battery_soh": (f"sensor.{PREFIX}_battery_soh", _measure("Battery Health", "%", "mdi:battery-heart-variant")),
@@ -50,7 +56,7 @@ def values(state) -> dict:
     b = state.brief or {}
     now, eff, health = b.get("now") or {}, b.get("efficiency") or {}, b.get("health") or {}
     band = now.get("band")
-    at = {"temperature_c": now.get("temp_c"),
+    at = {"temperature_c": now.get("temp_c"), "temperature_from": now.get("temp_from"),
           "band": None if band is None else f"{band} to {band + 5} °C", "mi_per_kwh": now.get("mi_per_kwh")}
     return {
         "status": (state.status, {"reason": state.reason}),
@@ -59,7 +65,13 @@ def values(state) -> dict:
         "car_range_full": (now.get("car_full_mi"), {"car_range_mi": now.get("car_range_mi"), "soc": now.get("soc")}),
         "efficiency": ((eff.get("last30") or {}).get("mi_per_kwh"),
                        {"trips": (eff.get("last30") or {}).get("trips"), "miles": (eff.get("last30") or {}).get("mi")}),
-        "efficiency_now": (now.get("mi_per_kwh"), at),
+        "efficiency_now": (now.get("mi_per_kwh"), {**at, "trips": now.get("band_trips"),
+                                                   "real_range_full_mi": now.get("real_full_mi")}),
+        **{f"efficiency_now_{x['name'].lower().replace(' ', '_')}": (x.get("mi_per_kwh"), {
+            "temperature_c": now.get("temp_c"), "temperature_from": now.get("temp_from"),
+            "band": None if x.get("band") is None else f"{x['band']} to {x['band'] + 5} °C",
+            "at_this_temperature": x.get("exact"), "trips": x.get("trips"), "real_range_full_mi": x.get("real_full_mi")})
+           for x in _by_speed(now)},
         "usable_capacity": (b.get("usable_kwh"), {"from": b.get("usable_from")}),
         "battery_soh": (health.get("soh_capacity"), {"soh_resistance": health.get("soh_resistance")}),
         "commute_charge": ((b.get("commute") or {}).get("charge_to"), {
@@ -69,6 +81,14 @@ def values(state) -> dict:
                   {"mi_per_day": (b.get("drain") or {}).get("mi_per_day"), "spells": (b.get("drain") or {}).get("spells")}),
         "trips": state.trips,
     }
+
+
+def _by_speed(now: dict) -> list:
+    """Each kind of driving's estimate now (all of them, even before there's one)."""
+    from src.evstats import SPEED_BANDS
+
+    have = {x["name"]: x for x in now.get("by_speed") or []}
+    return [have.get(name) or {"name": name} for name, _, _ in SPEED_BANDS]
 
 
 class SensorPublisher:

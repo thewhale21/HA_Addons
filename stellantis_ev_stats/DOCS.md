@@ -56,6 +56,11 @@ switched off: the integration's wake-up automations help.
   more, the median for each band.
 - **Real range left:** the real range at 100% for today's temperature (the
   nearest band with trips) × the SoC.
+- **The temperature now:** the weather entity's (Settings, Commute), else
+  the car's outside temperature.
+- **Efficiency now:** overall, your trips in the band for the temperature
+  now; for each kind of driving, its trips in that band, or the nearest band
+  that has some (the Overview says when it's another band).
 - **Speed:** each trip's average speed puts it in a band: town (under 20
   mph), mixed (20–35), faster roads (35–50) and motorway (50+). Colder
   weather often comes with different driving, so compare a column of the
@@ -93,7 +98,8 @@ The add-on posts these to Home Assistant (unavailable while it's stopped):
 | `sensor.stellantis_ev_stats_real_range_left` | Real range left now (mi) |
 | `sensor.stellantis_ev_stats_car_range_full` | The car's estimate at 100% now (mi) |
 | `sensor.stellantis_ev_stats_efficiency` | Efficiency over the last 30 days (mi/kWh) |
-| `sensor.stellantis_ev_stats_efficiency_now` | Efficiency at today's temperature (mi/kWh) |
+| `sensor.stellantis_ev_stats_efficiency_now` | Efficiency to expect at the temperature now (mi/kWh) |
+| `sensor.stellantis_ev_stats_efficiency_now_town` (`_mixed`, `_faster_roads`, `_motorway`) | ...for each kind of driving (mi/kWh; the range on a full battery as an attribute) |
 | `sensor.stellantis_ev_stats_usable_capacity` | Usable capacity (kWh) |
 | `sensor.stellantis_ev_stats_battery_soh` | The car's battery health, capacity (%) |
 | `sensor.stellantis_ev_stats_commute_charge` | The charge to have for the next commute (%) |

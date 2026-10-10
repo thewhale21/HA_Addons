@@ -241,6 +241,12 @@
         <div class="row" style="margin-top:10px;gap:6px" id="o-real-chips"></div>
       </div>
       <div class="card">
+        <div class="label">Efficiency now (estimate)</div>
+        <div class="big" id="o-now-eff">—</div>
+        <div class="sub" id="o-now-eff-sub"></div>
+        <dl class="kv" id="o-now-speeds" style="margin-top:10px"></dl>
+      </div>
+      <div class="card">
         <div class="label">Efficiency: last 30 days</div>
         <div class="big" id="o-eff">—</div>
         <div class="sub" id="o-eff-sub"></div>
@@ -374,7 +380,7 @@
       <div class="row"><div class="grow">Arrive with<div class="note" style="margin:0">The SoC to have left when you get there: your margin.</div></div><input type="number" id="s-carr" min="0" max="80" step="1"> <span class="muted">%</span></div>
       <div class="row"><div class="grow">Leave at</div><input type="time" id="s-ctime" style="font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--divider);border-radius:8px;padding:6px 10px"></div>
       <div class="row"><div class="grow">On</div><div class="seg" id="s-cdays" role="group" aria-label="Commute days"><button data-d="0">Mon</button><button data-d="1">Tue</button><button data-d="2">Wed</button><button data-d="3">Thu</button><button data-d="4">Fri</button><button data-d="5">Sat</button><button data-d="6">Sun</button></div></div>
-      <div class="pk" style="margin-top:14px"><div>Weather forecast<div class="note" style="margin:0">For the temperature when you leave (Home Assistant's own is found by itself).</div></div><span class="picker" data-key="weather" data-domain="weather" style="margin-top:6px"></span></div>
+      <div class="pk" style="margin-top:14px"><div>Weather forecast<div class="note" style="margin:0">For the temperature when you leave, and the temperature now on the Overview (Home Assistant's own is found by itself).</div></div><span class="picker" data-key="weather" data-domain="weather" style="margin-top:6px"></span></div>
     </div>
     <div class="section-title">Statistics</div>
     <div class="card">
@@ -620,6 +626,14 @@ function renderState(s) {
   if (now.real_left_mi != null) chips.push(`<span class="chip info">${mi(now.real_left_mi)} left at ${num(now.soc, 0)}%</span>`);
   if (now.car_full_mi != null) chips.push(`<span class="chip">Car says ${mi(now.car_full_mi)} at 100%</span>`);
   $('o-real-chips').innerHTML = chips.join('');
+  $('o-now-eff').textContent = now.mi_per_kwh != null ? `${num(now.mi_per_kwh, 2)} mi/kWh` : '—';
+  $('o-now-eff-sub').textContent = now.temp_c == null ? 'Needs a temperature: pick a weather entity on the Settings tab'
+    : `At ${degC(now.temp_c)} (${now.temp_from === 'weather' ? 'the weather' : 'the car\'s reading'}): ` + (now.band != null
+      ? `your trips at ${band(now.band)}${now.band_trips ? ` (${now.band_trips})` : ''}` : 'all your trips');
+  $('o-now-speeds').innerHTML = (now.by_speed || []).some((x) => x.mi_per_kwh != null) ? kv(now.by_speed.map((x) => [x.name,
+    x.mi_per_kwh == null ? '<span class="muted">no trips yet</span>'
+      : `${num(x.mi_per_kwh, 2)} mi/kWh${x.real_full_mi != null ? ` <span class="muted">· ${mi(x.real_full_mi)} full</span>` : ''}`
+        + (x.exact ? '' : ` <span class="muted">(from ${band(x.band)})</span>`)])) : '';
   const l30 = e.last30 || {}, all = e.overall || {};
   $('o-eff').textContent = l30.mi_per_kwh != null ? `${num(l30.mi_per_kwh, 2)} mi/kWh` : '—';
   $('o-eff-sub').textContent = l30.trips ? `${num(l30.mi, 0)} miles over ${l30.trips} trip${l30.trips === 1 ? '' : 's'}` + (all.trips > l30.trips ? ` · ${num(all.mi_per_kwh, 2)} mi/kWh all time` : '')

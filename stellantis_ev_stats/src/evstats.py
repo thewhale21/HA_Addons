@@ -502,8 +502,11 @@ class EvStats:
                 "car_readings": len(car),
             })
 
-        # Now: the band for the current temperature (or the nearest with trips)
-        temp_now = current.get("temp_c")
+        # Now: the band for the current temperature (or the nearest with trips). The weather's
+        # temperature if there is one: the car's reads high in a garage or after sitting in the sun.
+        temp_now, temp_from = current.get("weather_temp_c"), "weather"
+        if temp_now is None:
+            temp_now, temp_from = current.get("temp_c"), "car"
         soc_now = current.get("soc")
         with_eff = [r for r in rows if r["mi_per_kwh"]]
         here = None
@@ -533,6 +536,19 @@ class EvStats:
                 cells[name] = {"trips": e["trips"], "mi_per_kwh": e["mi_per_kwh"]} if e["trips"] else None
             matrix.append({"from_c": r["from_c"], "cells": cells})
 
+        # The efficiency to expect now for each kind of driving: its trips in the band for the
+        # temperature now, else in the nearest band that has some
+        by_speed = []
+        for name, _, _ in SPEED_BANDS:
+            have = [(m["from_c"], m["cells"][name]) for m in matrix if m["cells"][name]]
+            if temp_now is None or not have:
+                by_speed.append({"name": name, "mi_per_kwh": None})
+                continue
+            b, cell = min(have, key=lambda x: (abs(x[0] + BAND_C / 2 - temp_now), -x[1]["trips"]))
+            by_speed.append({"name": name, "mi_per_kwh": cell["mi_per_kwh"], "band": b, "trips": cell["trips"],
+                             "exact": b <= temp_now < b + BAND_C,
+                             "real_full_mi": _r(cell["mi_per_kwh"] * usable, 0) if usable else None})
+
         # Drain while parked unplugged: SoC lost per day, overall and by temperature band
         parks = [p for p in self.parks if p["hours"] >= PARK_MIN_H]
 
@@ -558,7 +574,9 @@ class EvStats:
             "efficiency": {"overall": overall, "last30": last30},
             "bands": rows, "band_c": BAND_C, "min_trip_mi": float(s["min_trip_mi"]),
             "now": {
-                "temp_c": temp_now, "soc": soc_now, "band": here["from_c"] if here else None,
+                "temp_c": temp_now, "temp_from": temp_from if temp_now is not None else None,
+                "soc": soc_now, "band": here["from_c"] if here else None,
+                "band_trips": here["trips"] if here else None, "by_speed": by_speed,
                 "mi_per_kwh": _r(mpk_now, 2), "real_full_mi": _r(full_now, 0),
                 "real_left_mi": _r(full_now * soc_now / 100, 0) if full_now and soc_now is not None else None,
                 "car_range_mi": _r(car_range_mi, 0), "car_full_mi": _r(car_full_now, 0),
