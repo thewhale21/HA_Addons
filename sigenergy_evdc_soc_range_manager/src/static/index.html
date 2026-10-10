@@ -1505,7 +1505,7 @@ const RATES = [
 const STATS_SETTINGS = [
   ['capacity_min_span_pct', 'Capacity: SoC moved at least', '%', 'Shorter sessions are too rough to estimate the capacity from.'],
   ['clean_share_pct', 'Clean session: other DC flow under', '%', 'Solar and home battery under this share of the car\'s energy.'],
-  ['inverter_efficiency_pct', 'Inverter AC ↔ DC efficiency', '%', 'Each way, for the costs: the charger counts DC, you pay for AC.'],
+  ['inverter_efficiency_pct', 'Inverter AC ↔ DC efficiency', '%', 'Each way, for the costs: only for the energy that crossed between AC and DC (the grid and the house). Solar and the home battery are DC like the charger, so they have no conversion.'],
 ];
 const LISTS = [
   ['plugged_states', 'Plugged in', 'Running states that mean a car is plugged in.'],
@@ -1646,8 +1646,8 @@ async function refreshStats() {
     $('t-money-sub').textContent = m.margin_per_kwh != null ? `${m.margin_per_kwh >= 0 ? 'Earning' : 'Losing'} ${pp(Math.abs(m.margin_per_kwh))} on each kWh out of the car, after the losses`
       : 'Cash in and out so far (a margin needs the round trip, above)';
     $('t-money-kv').innerHTML = kv([
-      ['Charging', `${num(m.in_kwh, 1)} kWh at ${pp(m.in_price)} average · ${gbp(m.in_cost)}`],
-      ['Discharging', `${num(m.out_kwh, 1)} kWh worth ${pp(m.out_price)} average · ${gbp(m.out_value)}`],
+      ['Charging', `${num(m.in_kwh, 1)} kWh at ${pp(m.in_price)} average · ${gbp(m.in_cost)}${m.in_ac_share != null ? `<div class="sub">${num(m.in_ac_share * 100, 0)}% from the grid (AC); the rest solar or the home battery (DC)</div>` : ''}`],
+      ['Discharging', `${num(m.out_kwh, 1)} kWh worth ${pp(m.out_price)} average · ${gbp(m.out_value)}${m.out_ac_share != null ? `<div class="sub">${num(m.out_ac_share * 100, 0)}% to the house or grid (AC); the rest into the home battery (DC)</div>` : ''}`],
       ['Break-even', m.break_even_price != null ? `a kWh out must be worth at least ${pp(m.break_even_price)} <span class="muted">(${num(m.whole_round_trip * 100, 0)}% AC to AC)</span>` : '—'],
       ['The losses cost', m.loss_cost != null ? gbp(m.loss_cost) : '—'],
     ]);

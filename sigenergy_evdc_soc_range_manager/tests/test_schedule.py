@@ -177,3 +177,23 @@ def test_older_sessions_get_their_soc_steps_from_history(tmp_path):
     _short(tap, "discharge", range(70, 65, -1), 0.45, now, 100.0)
     rec.sessions = [dict(x, span_kwh=None) for x in tap.sessions]  # as recorded before 0.17.0
     assert rec.fill_spans(samples) == 1 and rec.sessions[0]["span_kwh"] == 1.35 and rec.spans_filled
+
+
+def test_only_energy_that_crosses_between_ac_and_dc_has_the_inverters_loss(tmp_path):
+    from src.stats import Sample, StatsRecorder
+
+    def run(pv_kw, ac_kw, batt_kw=0.0):
+        rec = StatsRecorder()
+        t = datetime.datetime(2026, 10, 7, 12, 0).timestamp()
+        e = 100.0
+        for i in range(11):  # 3 kW into the car for 10 minutes: 0.5 kWh
+            rec.feed(Sample(t + i * 60, "charge", 50, e, 0.0, 3.0, pv_kw, batt_kw, ac_kw, grid_kw=-1.0 if pv_kw else 3.0,
+                            import_price=0.20, export_price=0.15), {"inverter_efficiency_pct": 90})
+            e += 0.05
+        return rec.summary(64, now=t + 3600, settings={"inverter_efficiency_pct": 90})["money"]
+    solar = run(pv_kw=4.0, ac_kw=1.0)  # solar into the car (DC to DC), the rest exported
+    assert solar["in_ac_share"] == 0 and solar["in_cost"] == round(0.5 * 0.15, 2)  # the export given up, no loss
+    grid = run(pv_kw=0.0, ac_kw=-3.33)  # all from the grid: AC to DC
+    assert grid["in_ac_share"] == 1 and grid["in_cost"] == round(0.5 * 0.20 / 0.9, 2)
+    half = run(pv_kw=0.0, ac_kw=-1.5, batt_kw=-1.5)  # half from the home battery
+    assert half["in_ac_share"] == 0.5

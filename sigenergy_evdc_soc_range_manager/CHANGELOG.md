@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.18.0 — Conversion loss only where it happens
+
+- **Fix:** "Is it paying?" applied the inverter's AC ↔ DC efficiency to
+  every kWh into and out of the car. The DC charger is on the inverter's DC
+  side, so charging from solar or the home battery, and discharging into the
+  home battery, have no conversion. Now only the share that crossed between
+  AC and DC (charging from the grid, discharging to the house or the grid)
+  has it, worked out every few seconds from the inverter's AC power (or the
+  grid import and the home battery without it). The shares are shown under
+  Charging and Discharging. Days recorded before this are counted as before
+  (all crossing).
+- **Docs:** the round trip is all DC (the charger's counters), with no
+  conversion.
+
 ## 0.17.1 — Tidy up
 
 - **Change:** removed code nothing used any more: the capacity chart's

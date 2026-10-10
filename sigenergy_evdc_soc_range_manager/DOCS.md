@@ -248,9 +248,16 @@ you're importing, otherwise at the export rate you gave up; every kWh out
 at the import rate it saves, or the export rate when exporting. Over 30
 days it shows what charging cost, what discharging was worth, the margin
 on each kWh out after the losses, the break-even price a kWh out must be
-worth, and what the losses cost. The charger counts DC energy and you pay
-for AC, so the **Inverter AC ↔ DC efficiency** setting (96%, each way) is
-applied. Prices are recorded from when they're set.
+worth, and what the losses cost. The charger counts DC energy and sits on
+the inverter's DC side with the solar and the home battery, so only the
+energy that crossed between AC and DC has the **Inverter AC ↔ DC
+efficiency** (96%, each way): charging from the grid, and discharging to
+the house or the grid. Charging from solar or the home battery, and
+discharging into the home battery, stay DC. The share is worked out every
+few seconds from the inverter's AC power (or, without it, the grid import
+and the home battery) and shown under Charging and Discharging. The round
+trip itself is all DC (the charger's counters), with no conversion. Prices
+are recorded from when they're set.
 
 **Discharge dropouts.** Each time the car stops discharging by itself
 (not a stop from here, and not unplugging) is logged on the Overview and

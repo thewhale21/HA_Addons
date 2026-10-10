@@ -52,7 +52,9 @@ MAX_GAP_S = 120  # readings further apart than this aren't integrated across
 SAVE_EVERY_S = 300
 DAY_FIELDS = ("pv_kwh", "batt_in_kwh", "batt_out_kwh", "ac_in_kwh", "ac_out_kwh", "loss_kwh", "car_loss_kwh",
               "car_in_kwh", "car_out_kwh", "measured_h", "dropouts",
-              "in_cost", "in_priced_kwh", "out_value", "out_priced_kwh")
+              "in_cost", "in_priced_kwh", "out_value", "out_priced_kwh",
+              # the part that crossed between AC and DC (the rest stayed DC: solar or the home battery)
+              "in_ac_kwh", "in_ac_cost", "out_ac_kwh", "out_ac_value")
 
 
 @dataclass
@@ -92,6 +94,18 @@ def _price(s: Sample, charging: bool) -> Optional[float]:
     return s.export_price if grid < -0.05 and s.export_price is not None else s.import_price
 
 
+def _upgrade(row: dict) -> dict:
+    """A day saved by an older version: the missing fields, and (from before the AC share was
+    recorded, before 0.18.0) all of its priced energy counted as crossing between AC and DC, as it was."""
+    for k in DAY_FIELDS:
+        row.setdefault(k, 0.0)
+    if not row.get("ac_split"):
+        row["in_ac_kwh"], row["in_ac_cost"] = row["in_priced_kwh"], row["in_cost"]
+        row["out_ac_kwh"], row["out_ac_value"] = row["out_priced_kwh"], row["out_value"]
+        row["ac_split"] = 1
+    return row
+
+
 def _r(v: Optional[float], n: int = 3) -> Optional[float]:
     return None if v is None else round(v, n)
 
@@ -118,7 +132,7 @@ class StatsRecorder:
             with open(self._path, encoding="utf-8") as f:
                 data = json.load(f)
             self.sessions = list(data.get("sessions") or [])
-            self.days = dict(data.get("days") or {})
+            self.days = {k: _upgrade(v) for k, v in dict(data.get("days") or {}).items() if isinstance(v, dict)}
             self.started = data.get("started")
             self.backfilled = bool(data.get("backfilled"))
             self.spans_filled = bool(data.get("spans_filled"))
@@ -150,9 +164,7 @@ class StatsRecorder:
             if len(self.days) > MAX_DAYS:
                 for old in sorted(self.days)[:-MAX_DAYS]:
                     del self.days[old]
-        for k in DAY_FIELDS:
-            row.setdefault(k, 0.0)  # saved by an older version
-        return row
+        return _upgrade(row)
 
     def record_dropout(self, ts: float) -> None:
         self._dayrow(ts)["dropouts"] += 1
@@ -164,7 +176,7 @@ class StatsRecorder:
             self.started = s.now
         last = self.last
         if last is not None and s.now > last.now:
-            self._counters(last, s)
+            self._counters(last, s, bool(t["flip_inverter_power"]))
             if s.now - last.now <= MAX_GAP_S:
                 self._integrate(last, s.now - last.now, bool(t["flip_inverter_power"]))
         self._sessions(s, t)
@@ -172,20 +184,43 @@ class StatsRecorder:
         if live and s.now - self._saved_at >= SAVE_EVERY_S:
             self.save(s.now)
 
-    def _counters(self, a: Sample, b: Sample) -> None:
+    @staticmethod
+    def ac_share(s: Sample, charging: bool, flip: bool = False) -> float:
+        """How much of the car's energy crossed between AC and DC (0-1). The DC charger is on the
+        inverter's DC side: charging from solar or the home battery, or discharging into the home
+        battery, stays DC; only the grid and the house are AC. From the inverter's AC power (shared
+        out over everything on the DC side), else the grid import or the home battery."""
+        car = abs(s.car_kw or 0.0)
+        if car <= 0:
+            return 1.0
+        batt = s.batt_kw
+        if s.ac_kw is not None:
+            ac = -s.ac_kw if flip else s.ac_kw  # positive: DC -> AC
+            if charging:
+                loads = car + max(batt or 0.0, 0.0)
+                return min(1.0, max(0.0, -ac) / loads)
+            sources = car + max(s.pv_kw or 0.0, 0.0) + max(-(batt or 0.0), 0.0)
+            return min(1.0, max(0.0, ac) / sources)
+        if charging:
+            return min(1.0, max(0.0, s.grid_kw or 0.0) / car) if s.grid_kw is not None else 1.0
+        return 1.0 - min(1.0, max(batt or 0.0, 0.0) / car) if batt is not None else 1.0
+
+    def _counters(self, a: Sample, b: Sample, flip: bool = False) -> None:
         """The car's energy each day, from the charger's counters."""
         for field, x, y in (("car_in_kwh", a.e_in, b.e_in), ("car_out_kwh", a.e_out, b.e_out)):
             if x is not None and y is not None and 0 < y - x < 100:  # a reset or a glitch isn't energy
                 row = self._dayrow(b.now)
                 row[field] += y - x
-                price = _price(a, charging=field == "car_in_kwh")
+                charging = field == "car_in_kwh"
+                price = _price(a, charging=charging)
                 if price is not None:
-                    if field == "car_in_kwh":
-                        row["in_cost"] += (y - x) * price
-                        row["in_priced_kwh"] += y - x
-                    else:
-                        row["out_value"] += (y - x) * price
-                        row["out_priced_kwh"] += y - x
+                    kwh, share = y - x, self.ac_share(a, charging, flip)
+                    side = "in" if charging else "out"
+                    money = "in_cost" if charging else "out_value"
+                    row[money] += kwh * price
+                    row[f"{side}_priced_kwh"] += kwh
+                    row[f"{side}_ac_kwh"] += kwh * share
+                    row[f"{side}_ac_{'cost' if charging else 'value'}"] += kwh * share * price
 
     def _integrate(self, a: Sample, dt: float, flip: bool) -> None:
         """Loss over dt seconds from reading `a`: what went into the inverter's DC side
@@ -407,26 +442,35 @@ class StatsRecorder:
         battery_kwh = math.sqrt(pin["kwh"] * pout["kwh"]) * 100 if round_trip else None
         soc_loss = (lambda out: out * (1 / round_trip - 1)) if round_trip else None
 
-        # Money: the charger's counters are DC, the prices are for AC
+        # Money: the charger's counters are DC and the prices are for AC. Only the part that crossed
+        # between AC and DC (the grid and the house; not solar or the home battery) has the
+        # inverter's loss: it took more AC to put a kWh in, and a kWh out gave less AC.
         inv = float((settings or {}).get("inverter_efficiency_pct", STATS_DEFAULTS["inverter_efficiency_pct"])) / 100
         money = None
         if totals["in_priced_kwh"] > 0 or totals["out_priced_kwh"] > 0:
             in_avg = totals["in_cost"] / totals["in_priced_kwh"] if totals["in_priced_kwh"] else None
             out_avg = totals["out_value"] / totals["out_priced_kwh"] if totals["out_priced_kwh"] else None
+            f_in = totals["in_ac_kwh"] / totals["in_priced_kwh"] if totals["in_priced_kwh"] else 1.0
+            f_out = totals["out_ac_kwh"] / totals["out_priced_kwh"] if totals["out_priced_kwh"] else 1.0
+            in_cost = totals["in_cost"] - totals["in_ac_cost"] + totals["in_ac_cost"] / inv
+            out_value = totals["out_value"] - totals["out_ac_value"] + totals["out_ac_value"] * inv
+            e_in = 1 / (f_in / inv + 1 - f_in)  # DC into the car per kWh it cost
+            e_out = f_out * inv + 1 - f_out  # kWh it was worth per DC kWh out of the car
             money = {"in_kwh": round(totals["in_priced_kwh"], 2), "out_kwh": round(totals["out_priced_kwh"], 2),
-                     "in_cost": round(totals["in_cost"] / inv, 2), "out_value": round(totals["out_value"] * inv, 2),
-                     "in_price": _r(in_avg, 4), "out_price": _r(out_avg, 4)}
+                     "in_cost": round(in_cost, 2), "out_value": round(out_value, 2),
+                     "in_price": _r(in_avg, 4), "out_price": _r(out_avg, 4),
+                     "in_ac_share": _r(f_in, 3), "out_ac_share": _r(f_out, 3), "inverter_efficiency": inv}
             money["net"] = round(money["out_value"] - money["in_cost"], 2)
             if in_avg is not None and round_trip:
-                whole = round_trip * inv * inv  # AC in -> car -> AC out
+                whole = round_trip * e_in * e_out  # what was paid for in -> car -> what it was worth out
                 money["whole_round_trip"] = round(whole, 4)
                 money["break_even_price"] = round(in_avg / whole, 4)  # what a kWh out must be worth
                 if out_avg is not None:
-                    margin = out_avg * inv - in_avg / (inv * round_trip)  # per kWh out of the car
+                    margin = out_avg * e_out - in_avg / (e_in * round_trip)  # per kWh out of the car
                     money["margin_per_kwh"] = round(margin, 4)
                     money["profit"] = round(margin * totals["out_priced_kwh"], 2)
-                    # what the losses cost: the extra AC bought to get each kWh back out
-                    money["loss_cost"] = round(totals["out_priced_kwh"] * inv * in_avg * (1 / whole - 1), 2)
+                    # what the losses cost: the extra bought to get each kWh back out
+                    money["loss_cost"] = round(totals["out_priced_kwh"] * e_out * in_avg * (1 / whole - 1), 2)
         today = self.days.get(_day(now), {})
         return {
             "capacity_kwh": _r(capacity, 2), "nominal_kwh": nominal_kwh,
