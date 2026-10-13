@@ -76,8 +76,9 @@ SENSORS = {
 ALL_SENSORS = [entity_id for entity_id, _ in SENSORS.values()]
 
 REFRESH_S = 300  # everything posted again at least this often, even unchanged
-# The power flow changes all the time: posted at most this often (s)
-THROTTLE_S = {f"sensor.{PREFIX}_power_flow": 5}
+# The power flow changes all the time: posted at most this often (s). Just enough to fold
+# one burst of readings into one post; otherwise it follows the readings as they come.
+THROTTLE_S = {f"sensor.{PREFIX}_power_flow": 1}
 
 
 def _pct(fraction) -> Optional[float]:

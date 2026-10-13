@@ -35,6 +35,7 @@ SUPERVISOR_WS = "ws://supervisor/core/websocket"
 SUPERVISOR_API = "http://supervisor/core/api"
 RECONNECT_DELAYS = (2, 5, 10, 20, 30, 60)
 ENTITY_LIST_TTL_S = 30
+POST_CHECK_S = 0.25  # changed sensors are posted within this long of the add-on working them out
 PICKER_DOMAINS = ("sensor", "binary_sensor", "switch", "input_boolean", "input_number", "number",
                   "select", "input_select", "button", "input_button")
 
@@ -326,7 +327,7 @@ class HaLink:
                     if reader_task.done():
                         reader_task.result()  # raises why it ended
                     try:
-                        event = await asyncio.wait_for(events.get(), 1.0)
+                        event = await asyncio.wait_for(events.get(), POST_CHECK_S)
                     except asyncio.TimeoutError:
                         event = None
                     if event is not None:

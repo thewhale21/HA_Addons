@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.20.1 — A live power flow card
+
+- **Improvement:** the power flow card follows the readings live: its
+  sensor is posted about a second after your sensors change (at most once a
+  second), not every 5 seconds.
+
 ## 0.20.0 — The power flow as a dashboard card
 
 - **Feature:** the Overview's power flow diagram as a card for any

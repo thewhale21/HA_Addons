@@ -196,9 +196,19 @@ hand:
   `/local/evdc-power-flow-card.js` as a JavaScript module.
 
 It draws `sensor.evdc_soc_range_power_flow` (`entity:` picks another),
-which the add-on posts at most every 5 seconds. That sensor has no state
-class, so it isn't kept in the long-term statistics; to keep it out of the
-history altogether, exclude it in `recorder:`.
+which the add-on posts as the readings change (about a second after your
+sensors, at most once a second), so the card is as live as your Sigenergy
+sensors are: if they only update every few seconds, so does the card.
+That sensor has no state class, so it isn't kept in the long-term
+statistics; to keep it out of the history altogether (it changes often),
+exclude it in `recorder:`:
+
+```yaml
+recorder:
+  exclude:
+    entities:
+      - sensor.evdc_soc_range_power_flow
+```
 
 ## Limit schedule
 
