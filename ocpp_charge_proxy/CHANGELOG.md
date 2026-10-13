@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.40.1 — A charge that runs past a scheduled slot keeps its end
+
+- **Fix:** an auto plug-in (car plugged in, low SoC) or Charge now that
+  overlapped a scheduled slot but went on past it was cut short at the
+  slot's unplug. E.g. plugged in at 18:30 for a charge to 23:00, with a
+  19:00–21:00 slot: it became one slot to 21:00, and the ready time was set
+  for 21:00, not 23:00. Now the joined slot runs to whichever ends last
+  (here 23:00), and the scheduled slot's own plug-in and unplug inside it
+  are skipped that once. A charge that reaches one slot that meets the next
+  joins both.
+
 ## 2.40.0 — Scheduled unplugs aren't missed
 
 - **Fix:** an auto re-plug that started just before a scheduled unplug

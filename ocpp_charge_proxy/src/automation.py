@@ -948,7 +948,6 @@ class Automation:
         # up to 3 days on: the ones that can be trimmed
         later = [s for s in self._stretches(start_day, 5, active, self.skips)
                  if s["end"] > now and s["start"] < end + datetime.timedelta(days=3)]
-        nxt0 = later[0] if later else None
         if later and later[0]["start"] <= now:
             later = later[1:]  # one going now isn't trimmed
         can_trim = bool(later)
@@ -956,7 +955,7 @@ class Automation:
         def build(cuts: dict):
             """The entries and skips for the charge, with the first `cuts[i]`
             minutes of later slot i taken off (all of it: skipped)."""
-            added, skips, nxt, notes = list(seg_entries), list(self.skips), nxt0, []
+            added, skips, notes = list(seg_entries), list(self.skips), []
             for i, s in enumerate(later):
                 cut = cuts.get(i)
                 if not cut:
@@ -966,31 +965,40 @@ class Automation:
                 if new_start < s["end"]:
                     plug_later = one_off(new_start, "plug", s["plug"].get("source"))  # still that slot's own kind
                     added.append(plug_later)
-                    trimmed = dict(s, start=new_start, plug=plug_later)
                     notes.append(f"the {s['end'].strftime('%H:%M')} slot now starts at {new_start.strftime('%H:%M')}")
                 else:
                     skips.append({"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()})
                     notes.append(f"the {s['start'].strftime('%H:%M')}–{s['end'].strftime('%H:%M')} slot is skipped"
                                  + (f" ({s['start'].strftime('%a')})" if s["start"].date() != now.date() else ""))
-                    trimmed = None
-                if s is nxt0:
-                    nxt = trimmed
             note = "; ".join(notes) or None
-            combined = nxt is not None and end >= nxt["start"]
-            if combined:
-                # One slot: plugged in from now to the scheduled unplug
-                if nxt["start"] > now:
-                    if nxt["plug"] in added:
-                        added.remove(nxt["plug"])
+            # The schedule's own slots (as trimmed) that the charge meets or
+            # overlaps join it: one slot, plugged in until whichever ends last
+            # (not cut short at a slot's unplug when the charge goes on after it)
+            own = self._stretches(start_day, 5, active + [e for e in added if e not in seg_entries], skips)
+            slot_end, joined, grew = end, [], True
+            while grew:
+                grew = False
+                for s in own:
+                    if s in joined or s["end"] <= now or s["start"] > slot_end:
+                        continue
+                    joined.append(s)
+                    slot_end = max(slot_end, s["end"])
+                    grew = True
+            combined = bool(joined)
+            for s in joined:
+                # Its plug-in comes while the charge has it plugged in already: left
+                # out, or it'd set the ready time again (to its own, earlier unplug)
+                if s["start"] > now:
+                    if s["plug"] in added:
+                        added.remove(s["plug"])
                     else:
-                        skips.append({"entry_id": nxt["plug"]["id"], "date": nxt["start"].date().isoformat()})
-                slot_end = nxt["end"]
-            else:
-                added.append(unplug)
-                slot_end = end
+                        skips.append({"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()})
+            if not any(s["end"] == slot_end for s in joined):
+                added.append(unplug)  # the charge ends last: its own unplug
             # A scheduled unplug during the charge (e.g. an "unplug at 07:00
-            # every day") would end it early: skipped this once
-            parts = segments[:-1] + [(segments[-1][0], nxt["start"] if combined else end)]
+            # every day", or a joined slot's that ends before it) would end it
+            # early: skipped this once
+            parts = segments[:-1] + [(segments[-1][0], slot_end)]
             for t, e, skipped in self.timeline(now.date() - datetime.timedelta(days=1), 4, active, skips):
                 if not skipped and e["action"] == "unplug" and any(x < t < y for x, y in parts):
                     skips.append({"entry_id": e["id"], "date": t.date().isoformat()})
@@ -1052,7 +1060,8 @@ class Automation:
         if moved:
             notes.append(moved)
         if combined:
-            notes.append(f"joined with the scheduled slot until {slot_end.strftime('%H:%M')}")
+            notes.append(f"joined with the scheduled slot until {slot_end.strftime('%H:%M')}" if slot_end > end
+                         else "joined with the scheduled slot (it ends within this charge)")
         if splits:
             notes.append("a fresh charge from " + ", ".join(sorted({e["time"] for e in splits}))
                          + f" ({provider}'s daily limit resets then)")

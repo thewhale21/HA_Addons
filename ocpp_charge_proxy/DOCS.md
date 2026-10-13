@@ -104,8 +104,10 @@ works the same way. In each case:
   back, 23:30–05:30 is 7 hours (and 5 the night they go forward), so that
   night's slot shows in red; skip it and add a one-off 23:30–04:30, or
   leave it and Octopus schedules 6 of the 7.
-- If it meets or overlaps the next scheduled slot, they become one slot,
-  ending at the schedule's unplug.
+- If it meets or overlaps scheduled slots, they become one slot, ending at
+  whichever ends last: the charge's end, or the slot's unplug if that's
+  later. The slots' own plug-ins and unplugs inside it are skipped that
+  once (so they don't set the ready time back, or end the charge early).
 - The supplier's ready time is set to the end of the slot (E.ON Next has
   none to set).
 - Deleting the charge's slot puts back what it changed: a slot it trimmed

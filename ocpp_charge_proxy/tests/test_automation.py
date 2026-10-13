@@ -638,6 +638,36 @@ def _sat_slots(*pairs, start=None):
     return a, clock
 
 
+def test_auto_plug_longer_than_the_slot_it_joins_keeps_its_end():
+    """Plugged in at 18:30 for a charge to 23:00 over a 19:00-21:00 slot: one slot to
+    23:00. The 19:00 plug-in mustn't run (it would set the ready time back to 21:00),
+    nor the 21:00 unplug (it would end the charge two hours early)."""
+    from src.automation import auto_plug_charge
+    a, clock = _sat_slots(("19:00", "21:00"), start=_at(18, 30))
+    asked = []
+
+    async def set_ready(unplug):
+        asked.append(unplug.strftime("%H:%M"))
+        return {"ready": unplug.strftime("%H:%M"), "unplug": unplug.isoformat()}
+
+    out = _run(auto_plug_charge(a, 4.5, set_ready))
+    assert out["combined"] and out["end"].startswith("2026-10-03T23:00")
+    assert _today_windows(a, clock) == [("18:30", "23:00")]
+    assert asked == ["23:00"]
+    a.due()
+    for minutes, want in ((31, []), (151, []), (271, ["unplug"])):
+        clock.dt = _at(18, 30) + datetime.timedelta(minutes=minutes)
+        assert [e["action"] for e in a.due()] == want  # nothing at 19:00 or 21:00; unplugged at 23:00
+    # A charge that reaches one slot, which meets the next, joins both
+    b, clock_b = _sat_slots(("19:00", "20:00"), ("20:30", "22:00"), start=_at(18, 30))
+    assert b.plan_auto_plug(120)["end"].startswith("2026-10-03T22:00")  # to 20:30, then on to 22:00
+    assert _today_windows(b, clock_b) == [("18:30", "22:00")]
+    # One that ends inside a slot still runs to the slot's end, as before
+    c, clock_c = _sat_slots(("19:00", "21:00"), start=_at(18, 30))
+    assert c.plan_auto_plug(60)["end"].startswith("2026-10-03T21:00")
+    assert _today_windows(c, clock_c) == [("18:30", "21:00")]
+
+
 def test_auto_plug_over_the_cap_trims_just_enough():
     a, clock = _sat_slots(("18:00", "22:00"))
     out = a.plan_auto_plug(180, cap_min=360)  # 12-15 + 18-22 = 7 h: the slot loses 1 h
