@@ -200,12 +200,16 @@ def test_session_marked_against_supplier_slots(tmp_path):
 
 
 def test_plugged_in_stretches_are_kept(tmp_path):
+    import datetime as dt
+    # relative to now: stretches older than PLUGGED_KEEP_DAYS are trimmed
+    now = dt.datetime.now(dt.timezone.utc).replace(second=0, microsecond=0)
+    iso = lambda h: (now + dt.timedelta(hours=h)).isoformat()
     log = SessionLog(str(tmp_path))
-    log.plugged(True, "schedule", timestamp="2026-10-04T15:30:00+00:00")
-    log.plugged(False, "schedule", timestamp="2026-10-04T21:30:00+00:00")
-    log.plugged(True, "charge now", timestamp="2026-10-05T06:03:00+00:00")
+    log.plugged(True, "schedule", timestamp=iso(-38))
+    log.plugged(False, "schedule", timestamp=iso(-32))
+    log.plugged(True, "charge now", timestamp=iso(-1))
     snap = SessionLog(str(tmp_path)).snapshot()  # kept across restarts
-    assert snap["plugged"][0] == {"start": "2026-10-05T06:03:00+00:00", "by": "charge now", "end": None}
-    assert snap["plugged"][1] == {"start": "2026-10-04T15:30:00+00:00", "end": "2026-10-04T21:30:00+00:00",
+    assert snap["plugged"][0] == {"start": iso(-1), "by": "charge now", "end": None}
+    assert snap["plugged"][1] == {"start": iso(-38), "end": iso(-32),
                                   "by": "schedule", "unplugged_by": "schedule"}
     assert snap["plugged_since"]
