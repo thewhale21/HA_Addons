@@ -471,7 +471,7 @@ async def handle_get_sensors(request: web.Request) -> web.Response:
 
 
 async def handle_set_sensors(request: web.Request) -> web.Response:
-    """Any of power_entity, soc_entity, plug_entity, auto_plug, auto_plug_entity,
+    """Any of power_entity, soc_entity, plug_entity, plug_auto, auto_plug, auto_plug_entity,
     auto_plug_soc, auto_plug_ready, auto_plug_hours (only those sent change)."""
     link = request.app["ha_link"]
     if link is None:

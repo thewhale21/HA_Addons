@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.41.0 — A switch for Car plugged in
+
+- **Feature:** the Car plugged in card (Automations tab) has an on/off
+  switch, as Auto plug-in has: off, the sensor stays set but its turning
+  on doesn't plug in or add a charge. It's on unless you switch it off, so
+  nothing changes until you do.
+
 ## 2.40.1 — A charge that runs past a scheduled slot keeps its end
 
 - **Fix:** an auto plug-in (car plugged in, low SoC) or Charge now that

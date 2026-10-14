@@ -188,6 +188,27 @@ def test_supplier_daily_limit_and_ready_times(tmp_path):
     assert link._ready_entity_id(states, "binary_sensor.octopus_energy_x_intelligent_dispatching") == "select.mine_target_time"
 
 
+def test_car_plugged_in_can_be_switched_off_and_keeps_its_sensor():
+    link, fake = _link(plug_entity="binary_sensor.cable", plug_auto=False, plug_ready=True)
+    calls = []
+
+    async def planned(hours, source, plug_source):
+        calls.append(hours)
+
+    link.on_auto_plug = planned
+    assert link.settings["plug_entity"] == "binary_sensor.cable" and link.snapshot()["plug"]["on"] is False
+    _run(link.handle_entities_event(_added(**{"binary_sensor.cable": "off"})))
+    _run(link.handle_entities_event(_changed("binary_sensor.cable", "on")))
+    assert fake.plugs == 0 and calls == []  # off: nothing plugged in or added
+    # Back on: the next time it's connected plugs in (not the cable already connected)
+    _run(link.update_settings({"plug_auto": True, "plug_ready": False}))
+    assert fake.plugs == 0
+    _run(link.handle_entities_event(_changed("binary_sensor.cable", "off")))
+    _run(link.handle_entities_event(_changed("binary_sensor.cable", "on")))
+    assert fake.plugs == 1
+    assert _link()[0].settings["plug_auto"] is True  # on unless switched off, as before
+
+
 def test_car_plugged_in_sensor_can_add_a_charge():
     link, fake = _link(plug_entity="binary_sensor.cable", plug_ready=True, plug_hours=8)
     calls = []

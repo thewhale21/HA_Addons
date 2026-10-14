@@ -462,7 +462,9 @@
         <dl class="kv" id="sim-monitor" style="margin-top:14px"></dl>
       </div>
       <div class="card">
-        <h2>Car plugged in</h2>
+        <h2>Car plugged in<span class="spacer"></span>
+          <label class="switch"><input type="checkbox" id="plug-auto" aria-label="Car plugged in: plug in automatically"><span></span></label>
+        </h2>
         <div class="row"><div class="grow">Car plugged in sensor<div class="note" style="margin:0">Turns Plugged In on when your car's cable is connected. <details class="more"><summary>More</summary><div>A binary sensor such as your car's "charging cable connected". It never switches Plugged In off.</div></details></div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="plug_entity" data-domain="binary_sensor" data-class="plug,connectivity,battery_charging,power"></span></div>
         <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
@@ -1768,6 +1770,7 @@ function drawPickers() {
   $('sim-auto-ready').checked = !!sim.edit.auto_plug_ready;
   if (document.activeElement !== $('sim-auto-hours')) $('sim-auto-hours').value = sim.edit.auto_plug_hours ?? 3;
   $('sim-auto-hours-row').hidden = !sim.edit.auto_plug_ready;
+  $('plug-auto').checked = sim.edit.plug_auto !== false;
   $('plug-ready').checked = !!sim.edit.plug_ready;
   if (document.activeElement !== $('plug-hours')) $('plug-hours').value = sim.edit.plug_hours ?? 3;
   $('plug-hours-row').hidden = !sim.edit.plug_ready;
@@ -1867,6 +1870,8 @@ function drawSimulation() {
     ['Sensor', entityState(d.reporting_soc.entity)],
   ]);
   $('sim-plug').innerHTML = kv([
+    ['Status', !d.plug.entity ? '<span class="chip">No sensor</span>' : d.plug.on === false ? '<span class="chip">Off</span> <span class="muted">the sensor is kept, but doesn\'t plug in</span>'
+      : '<span class="chip ok">On</span> <span class="muted">plugs in when the sensor turns on</span>'],
     ['Sensor', entityState(d.plug.entity)],
     ['Plugged In', state && state.plugged_in ? '<span class="chip info">On</span>' : '<span class="chip">Off</span>'],
   ]);
@@ -1896,6 +1901,8 @@ const chargeHours = (key) => (e) => {
 };
 $('sim-auto-hours').addEventListener('change', chargeHours('auto_plug_hours'));
 $('plug-hours').addEventListener('change', chargeHours('plug_hours'));
+$('plug-auto').addEventListener('change', (e) => saveSensors({plug_auto: e.target.checked},
+  e.target.checked ? 'Car plugged in on: it plugs in when the sensor turns on' : 'Car plugged in off: the sensor is kept, but doesn\'t plug in'));
 $('plug-ready').addEventListener('change', (e) => {
   $('plug-hours-row').hidden = !e.target.checked;
   saveSensors({plug_ready: e.target.checked}, e.target.checked ? 'A charge is added when the car is plugged in' : 'Nothing is added when the car is plugged in');

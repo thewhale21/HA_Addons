@@ -6,6 +6,7 @@ the Automations tab (saved in /data/sensors.json):
 - power_entity:  real power (W or kW) reported instead of the simulation
 - soc_entity:    the car's SoC, reported to the supplier (and car full / taper)
 - plug_entity:   a car-connected binary sensor: off -> on switches Plugged In on
+                 (while plug_auto is on: switched off, it's kept but does nothing)
 - auto_plug:     switch Plugged In on when the watched SoC drops below
                  auto_plug_soc; it watches auto_plug_entity if set, else
                  soc_entity (the monitor sensor is never reported)
@@ -70,6 +71,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         out["auto_plug_soc"] = soc
     if "auto_plug_ready" in raw:
         out["auto_plug_ready"] = bool(raw["auto_plug_ready"])
+    if "plug_auto" in raw:  # the car plugged in sensor plugs in (off: kept, but does nothing)
+        out["plug_auto"] = bool(raw["plug_auto"])
     if "plug_ready" in raw:  # the car plugged in sensor adds a charge to the schedule
         out["plug_ready"] = bool(raw["plug_ready"])
     if "plug_hours" in raw:
@@ -165,6 +168,7 @@ def default_settings() -> dict:
         "voltage_entity": "", "voltage_v": None,  # supply voltage: a sensor, else this, else 230 V
         "auto_plug": False, "auto_plug_entity": "", "auto_plug_soc": DEFAULT_AUTO_PLUG_SOC,
         "auto_plug_ready": False, "auto_plug_hours": DEFAULT_AUTO_PLUG_HOURS,
+        "plug_auto": True,  # the car plugged in sensor plugs in (on, as before there was a switch)
         "plug_ready": False, "plug_hours": DEFAULT_AUTO_PLUG_HOURS,
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
@@ -347,7 +351,9 @@ class HaLink:
         plugged_in = bool(self._shared.plugged_in)
         if entity_id and entity_id == s["plug_entity"]:
             if self.car_connected.should_plug(state.get("state") if state else None, plugged_in):
-                if s.get("plug_ready") and self.on_auto_plug is not None:
+                if not s.get("plug_auto", True):
+                    logger.info("%s turned on: not plugging in (Car plugged in is switched off)", entity_id)
+                elif s.get("plug_ready") and self.on_auto_plug is not None:
                     logger.info("%s turned on: adding a %g-hour charge to the schedule", entity_id,
                                 s.get("plug_hours") or DEFAULT_AUTO_PLUG_HOURS)
                     try:
@@ -885,6 +891,7 @@ class HaLink:
             "plug": {
                 "entity": entity(s["plug_entity"]),
                 "last": self.car_connected.last,
+                "on": bool(s.get("plug_auto", True)),
             },
             "monitored_soc": {
                 "entity": monitor,

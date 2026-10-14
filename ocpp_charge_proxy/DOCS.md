@@ -79,7 +79,9 @@ drops below the level you set. With **Automatically adjust schedule to fit
 auto plug-in** on, it also adds the charge to the schedule as a one-off,
 for the hours you choose (**Charge for**, 0.5 to 12). The **Car plugged in**
 sensor (Automations tab) can do the same when it plugs in: turn on **Add a
-charge to the schedule** and set its own **Charge for**. **Charge now**
+charge to the schedule** and set its own **Charge for**. The switch on its
+card turns it off without forgetting the sensor (as the one on Auto
+plug-in does): the sensor turning on then does nothing. **Charge now**
 works the same way. In each case:
 
 - The slot runs from plugging in to the first ready time your supplier
