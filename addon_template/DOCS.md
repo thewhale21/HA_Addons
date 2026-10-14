@@ -68,6 +68,21 @@ Some recipes:
 The page follows Home Assistant's theme (light or dark) when opened from the
 sidebar, and works on a phone.
 
+## Issues: automatic triage
+
+Every new issue in the repository is read by GitHub Models (free, no key
+needed) with the add-on's README, its source files and latest changes, and
+gets a comment: what kind of issue it is, what's missing, the likely cause
+and a suggested fix, plus labels (bug, enhancement or question, and the
+add-on's folder). It's `.github/workflows/issue-triage.yaml`, with the
+prompt built by `.github/scripts/triage_prompt.py`; it finds the add-ons by
+their `config.yaml`, so a new add-on is covered as soon as it's in the
+repository. Keep the README's how-to (what it needs, how to set it up,
+troubleshooting) and each `src/` file's first docstring line up to date:
+they're what it works from. **Actions › Issue triage › Run workflow**
+triages an issue again. In another repository, copy those two files (and turn GitHub Models on
+for that repository if it's off).
+
 ## Releasing a change
 
 1. Make the change, and bump `version` in `config.yaml`.

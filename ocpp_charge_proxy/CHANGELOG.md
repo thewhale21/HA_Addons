@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.41.1 — A how-to README
+
+- **Docs:** a new README (the add-on's Info page in Home Assistant): what
+  it does and how it works, what you need, installing, the add-on options,
+  setting it up tab by tab, an automation to switch your charger, its
+  entities and troubleshooting.
+
 ## 2.41.0 — A switch for Car plugged in
 
 - **Feature:** the Car plugged in card (Automations tab) has an on/off

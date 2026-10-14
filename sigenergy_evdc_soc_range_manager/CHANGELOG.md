@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.20.3 — A how-to README
+
+- **Docs:** a new README (the add-on's Info page in Home Assistant): what
+  it does, what you need, installing, setting it up (the entities, the
+  helpers it makes, Watch only), how it decides, everyday use, Predbat, the
+  power flow card and troubleshooting.
+
 ## 0.20.2 — The SoC chart starts at the new reading
 
 - **Fix:** plugging a car in drew a jump on the Car SoC chart: from the last

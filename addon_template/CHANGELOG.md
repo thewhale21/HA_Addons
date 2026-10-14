@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3 — README as a how-to, and issue triage
+
+- **Docs:** the README is laid out as a how-to for users (what you need,
+  install, set it up, troubleshooting), ready to fill in for a new add-on:
+  the issue triage reads it.
+- **Docs:** DOCS.md says how issues are triaged (the repository's
+  `.github/workflows/issue-triage.yaml`, which covers every add-on in the
+  repository, a new one too) and how to take it to another repository.
+
 ## 0.1.2 — Passes the add-on linter
 
 - **Fix:** `panel_icon` is no longer set to its default (`mdi:puzzle`),
