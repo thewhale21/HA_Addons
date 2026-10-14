@@ -227,6 +227,21 @@ def test_last_known_soc_is_kept_and_saved(tmp_path):
     assert not again.soc_before_plug_in and again.soc == 64
 
 
+
+def test_a_start_just_after_plugging_in_is_marked_as_the_old_soc(tmp_path):
+    """The chart puts it at the first new reading, not the last car's SoC."""
+    p = Presses()
+    m = Manager(str(tmp_path), press=p.press)
+    ent, st = _entities(), _settings()
+    _run(m.step(_states(running="Idle", soc="95"), ent, st, now=10.0))
+    _run(m.step(_states(running="Idle", soc="0"), ent, st, now=20.0))
+    _run(m.step(_states(running="Occupied", soc="0"), ent, st, now=30.0))  # plugged in: no reading yet
+    entry = _run(m.act("start", "manual", "", ent, st))
+    assert entry["soc"] == 95 and entry["soc_from_before_plug_in"]
+    _run(m.step(_states(running="Charging", soc="37"), ent, st, now=40.0))
+    assert "soc_from_before_plug_in" not in _run(m.act("stop", "manual", "", ent, st))
+
+
 def test_v2x_mode_can_be_a_select_or_a_switch(tmp_path):
     m = Manager(str(tmp_path))
     st = _settings()

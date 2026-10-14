@@ -1253,7 +1253,12 @@ function drawSocChart() {
   }
   svg += `<path class="soc" d="${line}"/>`;
   // Starts, stops (hollow while watching only) and dropouts, at the SoC then
-  const socAt = (t) => { let v = null; for (const p of pts) { if (p[0] > t) break; if (p[1] != null) v = p[1]; } return v; };
+  // The SoC at a time; if there's no reading then (just plugged in), the first one after it
+  const socAt = (t) => {
+    let v = null;
+    for (const p of pts) { if (p[0] > t) break; v = p[1]; }
+    return v != null ? v : (pts.find((p) => p[0] > t && p[1] != null && p[4] !== 'unplugged') || [])[1] ?? null;
+  };
   const evs = (d.events || []).map((e) => ({...e, v: e.soc != null ? e.soc : socAt(e.t)}))
     .filter((e) => e.v != null || e.action === 'alarm' || e.action === 'alarm_cleared');
   for (const e of evs) {

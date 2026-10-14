@@ -95,7 +95,8 @@ to 8 hours or until a time. Each is a one-off schedule entry, so it ends
 by itself; the ✕ on its chip ends it early.
 
 The **Car SoC** chart shows the last 1, 3, 6, 12, 24 or 48 hours: the SoC (with a
-break while the car was unplugged), the limits as dashed lines (with
+break while the car was unplugged, starting again at the first reading after
+it's plugged in), the limits as dashed lines (with
 scheduled changes), the background shaded for charging, discharging and
 unplugged, and markers for starts, stops (hollow while watching only),
 dropouts and starts or stops by something else. Hover over it for the

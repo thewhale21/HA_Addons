@@ -93,7 +93,10 @@ class Runner:
                 self.stats.feed(sample, self.settings.data)
             i = self.manager.inputs
             if i is not None:
-                self.soc_history.add(now, self.manager.soc, i.high, i.low,
+                # Just plugged in, the SoC is the last car's (or this one's from before) until
+                # the charger reads it: left out of the chart, so it doesn't jump from that
+                stale = self.manager.soc_before_plug_in and i.plugged_in
+                self.soc_history.add(now, None if stale else self.manager.soc, i.high, i.low,
                                      soc_state(i.active, i.discharging, i.running_state, i.plugged_in, i.alarm))
             while self.manager.alarms:  # a charger alarm: say so, whatever the notification settings for starts and stops
                 try:
@@ -204,7 +207,10 @@ class Runner:
             except (KeyError, ValueError):
                 continue
             if at >= start:
-                events.append({"t": at, **{k: x.get(k) for k in ("action", "rule", "reason", "observe_only", "error", "soc")}})
+                ev = {"t": at, **{k: x.get(k) for k in ("action", "rule", "reason", "observe_only", "error", "soc")}}
+                if x.get("soc_from_before_plug_in"):
+                    ev["soc"] = None  # the old reading: the chart puts it at the first new one
+                events.append(ev)
         return {"now": now, "hours": hours, "points": self.soc_history.window(hours, now), "events": events}
 
     async def manual(self, action: str) -> dict:

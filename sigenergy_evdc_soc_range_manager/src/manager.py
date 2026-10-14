@@ -302,7 +302,8 @@ class Manager:
         button = entities.get("start_button" if action == "start" else "stop_button")
         watching = bool(settings.get("observe_only")) and rule != "manual"
         entry = {"at": _iso(now), "action": action, "rule": rule, "reason": reason,
-                 "soc": self.soc, "pressed": False, "observe_only": watching, "error": None, **self._limits_now()}
+                 "soc": self.soc, "pressed": False, "observe_only": watching, "error": None, **self._limits_now(),
+                 **({"soc_from_before_plug_in": True} if self.soc_before_plug_in else {})}
         self.last_press_at = now
         if not button:
             entry["error"] = f"No {action} button set on the Settings tab"
@@ -351,7 +352,8 @@ class Manager:
         self.log.append({"at": _iso(now), "action": f"elsewhere_{action}", "rule": f"elsewhere_{action}",
                          "reason": f"The charger {'started' if action == 'start' else 'stopped'} without this add-on "
                                    "(another automation, the Sigenergy app or the charger itself).",
-                         "soc": self.soc, "pressed": False, "observe_only": False, "error": None, **self._limits_now()})
+                         "soc": self.soc, "pressed": False, "observe_only": False, "error": None, **self._limits_now(),
+                         **({"soc_from_before_plug_in": True} if self.soc_before_plug_in else {})})
         self._save()
         logger.info("The charger %s without this add-on", "started" if action == "start" else "stopped")
 

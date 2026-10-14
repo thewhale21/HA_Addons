@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.2 — The SoC chart starts at the new reading
+
+- **Fix:** plugging a car in drew a jump on the Car SoC chart: from the last
+  SoC the add-on knew (the car's, or another car's, from before it was
+  unplugged) down or up to the new reading. Now the line starts at the
+  first reading after plugging in, and a start or stop before that reading
+  is marked there too.
+
 ## 0.20.1 — A live power flow card
 
 - **Improvement:** the power flow card follows the readings live: its
