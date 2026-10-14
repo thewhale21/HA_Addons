@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 — Issue triage with any AI provider
+
+- **Docs:** GitHub Models was retired on 30 July 2026, so issue triage now
+  works with any OpenAI-compatible API: set the `TRIAGE_API_KEY` secret and
+  the `TRIAGE_API_URL` and `TRIAGE_MODEL` variables. Until they're set it
+  skips, without failing.
+
 ## 0.1.3 — README as a how-to, and issue triage
 
 - **Docs:** the README is laid out as a how-to for users (what you need,

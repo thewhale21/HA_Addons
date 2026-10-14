@@ -70,18 +70,24 @@ sidebar, and works on a phone.
 
 ## Issues: automatic triage
 
-Every new issue in the repository is read by GitHub Models (free, no key
-needed) with the add-on's README, its source files and latest changes, and
-gets a comment: what kind of issue it is, what's missing, the likely cause
-and a suggested fix, plus labels (bug, enhancement or question, and the
-add-on's folder). It's `.github/workflows/issue-triage.yaml`, with the
-prompt built by `.github/scripts/triage_prompt.py`; it finds the add-ons by
-their `config.yaml`, so a new add-on is covered as soon as it's in the
+Every new issue in the repository is read by an AI model with the add-on's
+README, its source files and latest changes, and gets a comment: what kind
+of issue it is, what's missing, the likely cause and a suggested fix, plus
+labels (bug, enhancement or question, and the add-on's folder). It's
+`.github/workflows/issue-triage.yaml`, with the prompt built by
+`.github/scripts/triage_prompt.py`; it finds the add-ons by their
+`config.yaml`, so a new add-on is covered as soon as it's in the
 repository. Keep the README's how-to (what it needs, how to set it up,
 troubleshooting) and each `src/` file's first docstring line up to date:
-they're what it works from. **Actions › Issue triage › Run workflow**
-triages an issue again. In another repository, copy those two files (and turn GitHub Models on
-for that repository if it's off).
+they're what it works from.
+
+It works with any OpenAI-compatible chat completions API. Set it up under
+the repository's **Settings › Secrets and variables › Actions**: the secret
+`TRIAGE_API_KEY` (the provider's API key), and the variables
+`TRIAGE_API_URL` (its URL ending `/chat/completions`) and `TRIAGE_MODEL`.
+Until all three are set it skips, without failing. **Actions › Issue triage
+› Run workflow** triages an issue again. In another repository, copy those
+two files and set the same secret and variables.
 
 ## Releasing a change
 

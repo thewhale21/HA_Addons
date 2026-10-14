@@ -3,7 +3,7 @@
 Reads the issue from the environment (ISSUE_TITLE, ISSUE_BODY), works out which
 add-on it's about, and writes prompt.txt with the issue and that add-on's README,
 its source files (with what each one does) and its latest changelog entries, kept
-within the free GitHub Models request size. Also writes addon.txt (the add-on's
+within a free tier's request size. Also writes addon.txt (the add-on's
 folder, or nothing) for the labels.
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(".")
-MAX_CHARS = 22000  # GitHub Models' free tier takes about 8,000 tokens a request
+MAX_CHARS = 22000  # about 6,000 tokens, small enough for free tiers
 
 
 def addons() -> dict:
