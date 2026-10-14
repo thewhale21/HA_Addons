@@ -1,12 +1,17 @@
 name: Issue triage
 
-# On every new issue: GitHub Models (free, no key needed) reads the issue with the
-# add-on's README and source file list, then comments with what kind of issue it
-# is, what's missing, the likely cause and a suggested fix, and labels it.
+# On every new issue: an AI model reads the issue with the add-on's README and
+# source file list, then comments with what kind of issue it is, what's missing,
+# the likely cause and a suggested fix, and labels it.
 # The comment is a suggestion to check, not a change: nothing in the code is touched.
 # The prompt is built by .github/scripts/triage_prompt.py.
-# GitHub Models is called directly (not through actions/ai-inference), so any error
-# it gives is shown in the log as it is.
+#
+# Works with any OpenAI-compatible chat completions API (GitHub Models was retired
+# on 30 July 2026). Set up in the repository's Settings > Secrets and variables > Actions:
+#   secret   TRIAGE_API_KEY  the provider's API key
+#   variable TRIAGE_API_URL  its chat completions URL, ending /chat/completions
+#   variable TRIAGE_MODEL    the model to use
+# Until all three are set the workflow skips, without failing.
 
 on:
   issues:
@@ -20,16 +25,30 @@ on:
 permissions:
   contents: read
   issues: write
-  models: read
 
 jobs:
   triage:
     runs-on: ubuntu-latest
     steps:
+      - name: Check it's set up
+        id: setup
+        env:
+          KEY: ${{ secrets.TRIAGE_API_KEY }}
+          URL: ${{ vars.TRIAGE_API_URL }}
+          MODEL: ${{ vars.TRIAGE_MODEL }}
+        run: |
+          if [ -n "$KEY" ] && [ -n "$URL" ] && [ -n "$MODEL" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Issue triage isn't set up: add the TRIAGE_API_KEY secret and the TRIAGE_API_URL and TRIAGE_MODEL variables"
+          fi
+
       - name: Check out the repository
+        if: steps.setup.outputs.ready == 'true'
         uses: actions/checkout@v5
 
       - name: Read the issue
+        if: steps.setup.outputs.ready == 'true'
         id: issue
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,6 +58,7 @@ jobs:
           echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
 
       - name: Build the prompt
+        if: steps.setup.outputs.ready == 'true'
         run: |
           export ISSUE_TITLE="$(jq -r .title issue.json)"
           export ISSUE_BODY="$(jq -r '.body // ""' issue.json)"
@@ -46,10 +66,12 @@ jobs:
           echo "Add-on: $(cat addon.txt)"
           echo "Prompt: $(wc -c < prompt.txt) characters"
 
-      - name: Ask GitHub Models
+      - name: Ask the model
+        if: steps.setup.outputs.ready == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
-          MODEL: openai/gpt-4.1
+          KEY: ${{ secrets.TRIAGE_API_KEY }}
+          URL: ${{ vars.TRIAGE_API_URL }}
+          MODEL: ${{ vars.TRIAGE_MODEL }}
           SYSTEM_PROMPT: |
             You triage issues for Home Assistant add-ons. You're given the add-on's
             README, its source files with what each does, its latest changes, and an
@@ -72,25 +94,24 @@ jobs:
             '{model: $model, max_tokens: 1500, temperature: 0.2,
               messages: [{role: "system", content: $sys}, {role: "user", content: $user}]}' > request.json
           status=$(curl -sS -o reply.json -w '%{http_code}' -X POST \
-            https://models.github.ai/inference/chat/completions \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$URL" \
+            -H "Authorization: Bearer $KEY" \
             -H "Content-Type: application/json" \
             --data @request.json)
           if [ "$status" != "200" ]; then
-            echo "::error::GitHub Models answered HTTP $status"
+            echo "::error::The model's API answered HTTP $status"
             cat reply.json; echo
             exit 1
           fi
           jq -r '.choices[0].message.content // empty' reply.json > response.md 2>/dev/null || true
           if [ ! -s response.md ]; then
-            echo "::error::GitHub Models gave no reply text"
+            echo "::error::The model's API gave no reply text (check TRIAGE_API_URL ends /chat/completions)"
             cat reply.json; echo
             exit 1
           fi
 
       - name: Comment and label
+        if: steps.setup.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ steps.issue.outputs.number }}
@@ -103,7 +124,7 @@ jobs:
             *) label="" ;;
           esac
           {
-            echo "**Automatic triage** (an AI suggestion from GitHub Models, to be checked before anything is changed)"
+            echo "**Automatic triage** (an AI suggestion, to be checked before anything is changed)"
             echo
             if [ -n "$kind" ]; then tail -n +2 response.md; else cat response.md; fi
           } > comment.md
