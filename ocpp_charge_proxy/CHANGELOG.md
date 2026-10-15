@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.43.5 — Schedule view: slots whose unplug is skipped
+
+- **Fix:** the schedule view drew a slot to its own unplug even when that
+  was skipped, so a charge before a saving session that joined it looked
+  like nothing was added (16:30–17:30 plus a stray unplug at 18:00 instead
+  of 16:30–18:00), or like it stopped at the joined slot's end (16:00–17:30
+  instead of 16:00–18:00). A slot now runs to the next unplug that does
+  run, and that unplug isn't shown on its own. The schedule itself was
+  right.
+
 ## 2.43.4 — Saving sessions on the schedule
 
 - **Fix:** the schedule view showed a slot moved for a saving session

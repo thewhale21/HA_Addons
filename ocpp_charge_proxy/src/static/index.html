@@ -2214,7 +2214,7 @@ function deriveSlots(entries) {
     entries.forEach((u) => {
       if (u.action !== 'unplug' || !/^\d{2}:\d{2}$/.test(u.time)) return;
       // (a weekly unplug skipped that day doesn't end it, e.g. a slot moved for a saving session)
-      const cands = u.date ? [new Date(`${u.date}T${u.time}`)]
+      const cands = u.date ? (skipped.has(u.id + '|' + u.date) ? [] : [new Date(`${u.date}T${u.time}`)])
         : [0, 1, 2, 3, 4, 5, 6, 7].map((n) => addDays(p.date, n)).filter((iso) => u.days.includes(wdOf(iso)) && !skipped.has(u.id + '|' + iso))
           .map((iso) => new Date(`${iso}T${u.time}`));
       // a one-off unplug wins over a weekly one at the same time
@@ -2232,13 +2232,15 @@ function deriveSlots(entries) {
     const left = u.days.filter((d) => !(usage[u.id] && usage[u.id][d]));
     if (left.length) orphans.push({u, days: left});
   });
-  return {slots, orphans, usage};
+  return {slots, orphans, usage, entries};
 }
 
 // Each slot's runs from a week ago to a week on: [{a, b, i, date, udate, skipped}] (minutes from today 00:00)
 function occurrences(model) {
   const skips = new Set(((auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
   const saving = new Set(((auto.data && auto.data.schedule.saving_sessions) || []).flatMap((x) => (x.skips || []).map((k) => k.entry_id + '|' + k.date)));
+  const extendedBy = week.extendedBy = new Set();  // unplugs that end a slot whose own unplug is skipped
+  week.savingSkips = saving;
   const out = [];
   model.slots.forEach((s, i) => {
     const add = (n, iso) => {
@@ -2246,13 +2248,34 @@ function occurrences(model) {
       const a = n * DAY_MIN + tmin(s.start);
       const b = s.end ? (n + udays) * DAY_MIN + tmin(s.end) : 9 * DAY_MIN;
       const key = s.plug.id + '|' + iso;
+      let end = b, udate = s.end ? addDays(iso, udays) : null;
+      // Its unplug skipped that day (e.g. a charge before a saving session joined
+      // it): it ends at the next unplug that does run
+      if (s.unplug && udate && skips.has(s.unplug.id + '|' + udate) && !skips.has(key)) {
+        const next = nextUnplug(model.entries, skips, b);
+        if (next) { end = next.t; udate = addDays(iso, Math.floor(next.t / DAY_MIN) - n); extendedBy.add(next.key); }
+      }
       // skipped for a saving session: not drawn (its moved times are)
-      out.push({a, b, i, date: iso, udate: s.end ? addDays(iso, udays) : null, skipped: skips.has(key), hidden: saving.has(key)});
+      out.push({a, b: end, i, date: iso, udate, skipped: skips.has(key), hidden: saving.has(key)});
     };
     if (s.kind === 'weekly') { for (let n = -7; n <= 6; n++) { const iso = isoAt(n); if (s.days.includes(wdOf(iso))) add(n, iso); } }
     else { const n = dayIndex(s.date); if (n >= -8 && n <= 7) add(n, s.date); }
   });
   return out;
+}
+
+// The first unplug after `after` (minutes from today 00:00) that isn't skipped: {t, key}
+function nextUnplug(entries, skips, after) {
+  let best = null;
+  for (let n = Math.floor(after / DAY_MIN) - 1; n <= Math.floor(after / DAY_MIN) + 2; n++) {
+    const iso = isoAt(n);
+    entries.forEach((u) => {
+      if (u.action !== 'unplug' || !u.enabled || (u.date ? u.date !== iso : !u.days.includes(wdOf(iso)))) return;
+      const t = n * DAY_MIN + tmin(u.time), key = u.id + '|' + iso;
+      if (t > after && !skips.has(key) && (!best || t < best.t)) best = {t, key};
+    });
+  }
+  return best;
 }
 
 const week = {model: null, occ: [], edit: null};
@@ -2341,6 +2364,8 @@ function drawWeek() {
         data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${red ? 'background:var(--err);' : ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}"></div>`;
     }).join('');
     const ticks = d < 0 ? '' : model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
+      // not one that ends a slot (its own unplug skipped), or one skipped for a saving session
+      .filter(([o]) => { const k = o.u.id + '|' + (o.date || isoAt(d)); return !(week.extendedBy || new Set()).has(k) && !(week.savingSkips || new Set()).has(k); })
       .map(([o, j]) => `<div class="tick ${!on || !o.u.enabled ? 'off' : ''}" data-orphan="${j}" data-row="${d}" style="left:${tmin(o.u.time) / 14.4}%"
         title="${dayLabel(d)} ${o.u.time}: unplug${o.date ? ' (One-off)' : ''}"></div>`).join('');
     const planned = (sc ? sc.periods || [] : []).map((p) => [(new Date(p.start) - day0) / 60000, (new Date(p.end) - day0) / 60000])
