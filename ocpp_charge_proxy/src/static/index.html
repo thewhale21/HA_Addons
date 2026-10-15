@@ -207,49 +207,71 @@
   @media (max-width: 700px) { .sess .shead { grid-template-columns: 1fr auto; } .sess .tags { grid-column: 1 / -1; order: 3; } .sess .energy { grid-column: 1 / -1; order: 4; } }
   .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; }
   .spark { width: 100%; height: 60px; display: block; }
-  .week { display: grid; grid-template-columns: 52px 1fr; gap: 6px 8px; align-items: center; }
-  .week .track .seg.skip { opacity: 1; background: repeating-linear-gradient(135deg, var(--divider) 0 6px, transparent 6px 12px) !important;
-    outline: 1px dashed var(--text2); outline-offset: -1px; }
-  .week .track .seg.picked { box-shadow: 0 0 0 2px var(--text); }
-  .slot-pop { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 10px;
-    border-radius: 8px; background: var(--hover); }
-  .week .dl { font-size: 12px; color: var(--text2); }
-  .week .dl.today { color: var(--primary); font-weight: 500; }
-  .week .track { position: relative; height: 18px; background: var(--hover); border-radius: 4px; overflow: hidden;
-    touch-action: pan-y; cursor: copy; }
-  .week .track .seg { position: absolute; top: 0; bottom: 0; background: var(--primary); opacity: .8; cursor: pointer; }
-  .week .track .seg.off { opacity: .35; }
-  .week .track .seg.ghost { opacity: .45; pointer-events: none; }
-  .week .track.past { cursor: default; }
-  .week .track.past .seg { opacity: .45; cursor: default; }
+  /* Automations › Schedule: the last 3 days as they happened, then the next 7 */
+  .week { display: grid; grid-template-columns: 78px 1fr; gap: 7px 12px; align-items: center; }
+  .week .dl { font-size: 13px; font-weight: 500; line-height: 1.2; }
+  .week .dl small { display: block; font-size: 11px; font-weight: 400; color: var(--text2); }
+  .week .dl.today { color: var(--primary); }
+  .week .dl.past { color: var(--text2); }
+  .week .track { position: relative; height: 38px; border-radius: 10px; overflow: hidden; touch-action: pan-y; cursor: copy;
+    background: var(--hover) repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), var(--divider) calc(12.5% - 1px) 12.5%); }
+  .week .track.today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 45%, transparent); }
+  .week .track.past { cursor: default; height: 30px; opacity: .9; }
+  .week .track .seg { position: absolute; top: 4px; bottom: 12px; border-radius: 6px; background: var(--primary); opacity: .9; cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,.15); overflow: hidden; z-index: 1; }
+  .week .track .seg:hover { filter: brightness(1.08); }
+  .week .track .seg .sl { display: block; color: #fff; font-size: 11px; font-weight: 500; line-height: 22px; padding: 0 7px; white-space: nowrap; overflow: hidden; text-overflow: clip; pointer-events: none; }
+  .week .track.past .seg { top: 4px; bottom: 10px; opacity: .55; cursor: default; box-shadow: none; }
+  .week .track.past .seg .sl { line-height: 16px; }
   .week .track.past .seg[data-ses] { cursor: pointer; }
-  .week .dl.past { opacity: .7; }
-  .week .ses { position: absolute; bottom: 0; height: 6px; background: var(--ok); border-radius: 3px; cursor: pointer; z-index: 2; }
-  .week .ses:hover { height: 9px; }
+  .week .track .seg.off { opacity: .35; filter: grayscale(.5); }
+  .week .track .seg.ghost { opacity: .4; pointer-events: none; box-shadow: none; }
+  .week .track .seg.skip { opacity: 1; box-shadow: none; background: repeating-linear-gradient(135deg, var(--divider) 0 6px, transparent 6px 12px) !important;
+    outline: 1px dashed var(--text2); outline-offset: -1px; }
+  .week .track .seg.skip .sl { color: var(--text2); text-decoration: line-through; }
+  .week .track .seg.picked { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); opacity: 1; z-index: 3; }
+  .week .track .seg.linked { box-shadow: inset 0 0 0 2px rgba(255,255,255,.55), 0 1px 2px rgba(0,0,0,.15); }
+  .week .track .seg.linked.picked { box-shadow: inset 0 0 0 2px rgba(255,255,255,.55), 0 0 0 2px var(--card), 0 0 0 4px var(--text); }
+  .week .ses { position: absolute; bottom: 3px; height: 6px; background: var(--ok); border-radius: 3px; cursor: pointer; z-index: 2; }
+  .week .ses:hover { height: 8px; }
+  .week .sup { position: absolute; top: 2px; bottom: 10px; box-sizing: border-box; border: 2px solid; border-radius: 8px; pointer-events: none; z-index: 2; }
+  .week .blk { position: absolute; top: 0; bottom: 0; cursor: pointer;
+    background: repeating-linear-gradient(45deg, rgba(84,110,122,.42) 0 4px, rgba(84,110,122,.14) 4px 8px); }
+  .week .blk.picked { box-shadow: inset 0 0 0 2px var(--text); }
+  .week .tick { position: absolute; top: 3px; bottom: 3px; width: 12px; margin-left: -6px; cursor: pointer; z-index: 2;
+    background: linear-gradient(var(--text2), var(--text2)) center / 3px 100% no-repeat; }
+  .week .tick::after { content: ''; position: absolute; top: -1px; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--text2); }
+  .week .tick.off { opacity: .35; }
+  .week .gone { position: absolute; top: 0; bottom: 0; left: 0; background: var(--card); opacity: .45; pointer-events: none; z-index: 2; }
+  .week .now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--err); z-index: 4; pointer-events: none; }
+  .week .now::before { content: ''; position: absolute; top: -1px; left: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--err); }
+  .week .sep { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: 6px 0 0; font-size: 11px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .5px; color: var(--text2); }
+  .week .sep::after { content: ''; flex: 1; border-top: 1px solid var(--divider); }
+  .week .sep.past { margin-top: 0; }
+  .week .axis { grid-column: 2; position: relative; height: 14px; font-size: 11px; color: var(--text2); }
+  .week .axis span { position: absolute; transform: translateX(-50%); }
+  .week .axis span:first-child { transform: none; } .week .axis span:last-child { transform: translateX(-100%); }
   tr.srow.flash > td, .sess.flash { animation: flash 2s ease-out; }
   @keyframes flash { from { background: color-mix(in srgb, var(--ok) 25%, transparent); } to { background: transparent; } }
   #w-types { display: contents; }
-  .week .blk { position: absolute; top: 0; bottom: 0; cursor: pointer; border-radius: 4px;
-    background: repeating-linear-gradient(45deg, rgba(84,110,122,.6) 0 4px, rgba(84,110,122,.22) 4px 8px); }
-  .week .blk.picked { box-shadow: 0 0 0 2px var(--text); }
-
-  .week .sep { grid-column: 1 / -1; border-top: 1px dashed var(--divider); margin: 2px 0; }
-  .week .tick { position: absolute; top: -3px; bottom: -3px; width: 12px; margin-left: -6px; cursor: pointer;
-    background: linear-gradient(var(--text2), var(--text2)) center / 3px 100% no-repeat; }
-  .week .tick.off { opacity: .35; }
-  .slot-pop .ed { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; width: 100%; }
+  /* The slot editor, under the day it's on */
+  .slot-pop { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px;
+    border-radius: 12px; background: var(--card); border: 1px solid var(--divider); box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+  .slot-pop .ed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; width: 100%; }
+  .slot-pop .ed > b:first-child { font-size: 14px; margin-right: 4px; }
   .slot-pop .ed .acts { display: flex; gap: 6px; margin-left: auto; }
-  .slot-pop .ed .seg button { padding: 3px 8px; }
+  .slot-pop .ed .seg button { padding: 4px 10px; }
   .slot-pop .ed .switch { margin-right: 4px; }
   .slot-pop #w-err { flex-basis: 100%; margin: 0; }
   .slot-pop #w-err:empty { display: none; }
   .week .slot-pop.top { margin-bottom: 4px; }
-  .slot-pop select, .slot-pop input[type="date"] { padding: 4px 6px; }
-  .week .track .seg.linked { box-shadow: inset 0 0 0 2px var(--text2); }
-  .week .sup { position: absolute; top: 0; bottom: 0; box-sizing: border-box; border: 2px solid; border-radius: 4px;
-    pointer-events: none; }
-  .week .now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--err); }
-  .week .axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); }
+  .slot-pop select, .slot-pop input[type="date"] { padding: 5px 8px; border-radius: 8px; }
+  /* the schedule's header: next action and the legend */
+  .nextline { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--hover); font-size: 13px; margin: 0; }
+  .nextline:empty { display: none; }
+  .wlegend { display: flex; gap: 8px 16px; flex-wrap: wrap; font-size: 12px; color: var(--text2); margin-top: 14px; }
+  .wlegend b.band { display: inline-block; width: 14px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; opacity: .9; }
   .daybars { display: flex; align-items: flex-end; gap: 6px; height: 150px; padding-top: 18px; }
   .daybars .d { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; min-width: 0; cursor: pointer; }
   .daybars .bw { flex: 1; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; min-height: 0; }
@@ -414,15 +436,15 @@
         <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
       </h2>
       <div class="note" style="margin:0 0 10px">Plugs in and unplugs at set times, so <span class="supn" data-f="your supplier">your supplier</span> can charge then. <details class="more"><summary>More</summary><div>Each slot runs from a plug-in to its unplug, every week on the days you pick, or once on a date. Times are in your Home Assistant time zone. A time missed while the add-on is stopped isn't run later; if it starts inside a slot, it plugs in straight away. Unplugging during a session ends it. Two slots that meet (e.g. 06:00–12:00 and 12:00–18:00) unplug and plug straight back in where they meet, so each is its own charge with its own ready time (Octopus: 6 hours before a 12:00 reset and 6 after). With Force schedule on, a slot longer than the daily limit across its reset time is split there the same way, as is a charge from auto plug-in, the car plugged in sensor or Charge now. Skip a slot to stop it running once. A <b>no-charging time</b> (add one the same way, choosing No-charging time) keeps the schedule out of, for example, your off-peak hours: it unplugs at its start (in case the car is plugged in by hand), slots can't go in it, and auto plug-in, the car plugged in sensor and Charge now unplug for it and plug back in after, carrying on that much later so they keep their hours.</div></details></div>
-      <div class="sub" id="a-next" style="margin-bottom:6px"></div>
-      <div class="row" style="margin:0 0 12px">
-        <div class="note grow" style="margin:0">The last 3 days as they happened, then the next 7. Click a slot to change, delete or skip it, or click or drag across a day to add one, or a no-charging time.</div>
+      <div class="row" style="margin:0 0 10px;align-items:center">
+        <div class="grow"><div class="nextline" id="a-next"></div></div>
         <button class="btn small primary" id="w-add">+ Add a slot</button>
       </div>
+      <div class="note" style="margin:0 0 12px">Click a slot to change, skip or delete it; click or drag across a day to add a slot or a no-charging time.</div>
       <div class="week" id="w-grid"></div>
       <div class="empty" id="w-empty" hidden>No times yet: click or drag across a day above to add a slot, e.g. 23:30 to 07:00.</div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
-      <div class="legend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-types"></span><span><b class="band" style="background:var(--ok);height:4px;opacity:1"></b>Charged</span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="opacity:1;background:repeating-linear-gradient(45deg, rgba(84,110,122,.7) 0 2px, rgba(84,110,122,.25) 2px 4px)"></b>No-charging time</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
+      <div class="legend wlegend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-types"></span><span><b class="band" style="background:var(--ok);height:4px;opacity:1"></b>Charged</span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="opacity:1;background:repeating-linear-gradient(45deg, rgba(84,110,122,.7) 0 2px, rgba(84,110,122,.25) 2px 4px)"></b>No-charging time</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
       <div class="note" id="a-tz"></div>
     </div>
     <div class="card">
@@ -2393,7 +2415,7 @@ function drawWeek() {
         + (got.length ? '\n' + got.map((z) => sesText(z.x)).join('\n') : '');
       const ty = typeOf(s);
       return `<div class="seg ${o.skipped ? 'skip' : ''} ${!on || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''}"
-        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${red ? 'background:var(--err);' : ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}"></div>`;
+        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${red ? 'background:var(--err);' : ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${x1 - x0 > 9 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}</span>` : ''}</div>`;
     }).join('');
     const ticks = d < 0 ? '' : model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
       // not one that ends a slot (its own unplug skipped), or one skipped for a saving session
@@ -2410,11 +2432,16 @@ function drawWeek() {
       return `<div class="ses" data-ses="${z.n}" style="left:${x0}%;width:${Math.max(0.3, x1 - x0)}%" title="${esc(sesText(z.x))} · click to open it"></div>`;
     }).join('');
     if (d === -3 && ed && ed.top) html += '<div class="slot-pop top" id="w-pop"></div>';
-    if (d === 0) html += '<div class="sep"></div>';
-    html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${d === 0 ? 'Today' : dayLabel(d)}</div><div class="track ${d < 0 ? 'past' : ''}" data-row="${d}"${before ? ' title="Not recorded: the add-on keeps when the car was plugged in from 2.27.0 on"' : ''}>${blk}${bars}${ticks}${planned}${charged}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
+    if (d === 0) html += '<div class="sep"><span>Coming up</span></div>';
+    if (d === -3) html += '<div class="sep past"><span>As it happened</span></div>';
+    const dd = new Date(day0); dd.setDate(day0.getDate() + d);
+    const dname = d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : d === -1 ? 'Yesterday' : dd.toLocaleDateString([], {weekday: 'short'});
+    html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${dname}<small>${dd.toLocaleDateString([], {day: 'numeric', month: 'short'})}</small></div>`
+      + `<div class="track ${d < 0 ? 'past' : ''} ${d === 0 ? 'today' : ''}" data-row="${d}"${before ? ' title="Not recorded: the add-on keeps when the car was plugged in from 2.27.0 on"' : ''}>${blk}${bars}${ticks}${planned}${charged}`
+      + `${d === 0 ? `<div class="gone" style="width:${nowMin / 14.4}%"></div><div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
     if (ed && !ed.top && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
   }
-  html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
+  html += '<div></div><div class="axis">' + [0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => `<span style="left:${h / 24 * 100}%">${String(h % 24).padStart(2, '0')}:00</span>`).join('') + '</div>';
   // past days can show types the schedule has no slots of now
   ['auto_plug', 'charge_now', 'car_plugged'].forEach((k) => { if (seenPast.has(k) && !seen.has(k)) $('w-types').innerHTML += `<span><b class="band" style="background:${TYPE[k][0]};opacity:.8"></b>${TYPE[k][1]}</span>`; });
   if (seenPast.has('other')) $('w-types').innerHTML += '<span><b class="band" style="background:#9e9e9e;opacity:.8"></b>Plugged in another way</span>';

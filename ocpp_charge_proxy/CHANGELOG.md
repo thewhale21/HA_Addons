@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.45.0 — The schedule redesigned
+
+- **Improvement:** the Automations tab's schedule is easier to read (the
+  way it works is unchanged): "As it happened" and "Coming up" sections,
+  each day with its name (Yesterday, Today, Tomorrow...) and date, taller
+  rows with gridlines and times every 3 hours, slots as rounded blocks
+  labelled with their times, what was charged as a green line under them,
+  your supplier's planned slots outlined, the past of today dimmed and a
+  marker for now. The next action is shown as a pill above, the slot editor
+  opens as a card under its day, and the legend is clearer.
+
 ## 2.44.0 — Recent sessions redesigned
 
 - **Improvement:** the Sessions tab's Recent sessions are now a row each
