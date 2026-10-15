@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.43.3 — Saving sessions: no start in the past
+
+- **Fix:** if starting a slot earlier for a saving session would put its
+  start in the past, it keeps its start and ends later instead (15:30–21:30
+  with an 18:00–19:00 session found at 14:40: 15:30–18:00 and 19:00–22:30),
+  not in a no-charging time and joining the next slot if it meets it. A
+  slot already running carries on after the session the same way, instead
+  of being cut short.
+
 ## 2.43.2 — Saving sessions: charge before only when needed
 
 - **Fix:** Plug in before a session adds nothing if the schedule already

@@ -1270,9 +1270,11 @@ class Automation:
         keeps its end (its ready time) and its length, and is not plugged in
         during the session, so it starts that much earlier (e.g. 15:30–21:30
         with an 18:00–19:00 session: 14:30–18:00 and 19:00–21:30), around any
-        other no-charging time. A slot already running unplugs at the session
-        (or now, if it's begun) and plugs back in after it, still ending at its
-        own time. Recorded in r["changes"], so it can be put back."""
+        other no-charging time. If that start would be in the past, it keeps
+        its start and ends that much later instead (15:30–18:00, 19:00–22:30),
+        unplugging at a ready time your supplier accepts (with Force schedule
+        on). A slot already running unplugs at the session (or now) and carries
+        on after it the same way. Recorded in r["changes"], so it can be put back."""
         sa, sb = _parse_iso(r["start"]), _parse_iso(r["end"])
         moved = False
         for _ in range(10):
@@ -1299,40 +1301,61 @@ class Automation:
             cuts = self.block_windows(hit["start"].date() - datetime.timedelta(days=1), 4)
             added, skips = [], []
             running = hit["start"] <= now
+            c = max(cut_from, hit["start"])
+            needed = hit["end"] - (c if running else hit["start"])
             if running:
                 # plugged in already: until the session (or now), then what's left of it after
-                c = max(cut_from, hit["start"])
                 added.append(one_off(c, "unplug"))
-                segs = self._place_back(hit["end"], hit["end"] - c, cuts, c)
             else:
                 skips.append(key(hit["plug"], hit["start"]))
-                segs = self._place_back(hit["end"], hit["end"] - hit["start"], cuts, soon)
             skips.append(key(hit["unplug"], hit["end"]))
-            # An earlier slot it now meets or runs into joins it (plugged in from its start)
-            earlier = next((s for s in stretches if s is not hit and segs and s["end"] >= segs[0][0]
-                            and s["start"] < segs[0][0] and s["end"] <= hit["start"]), None)
+            # Keep its end, starting earlier; if that would start in the past (or
+            # it's running), keep its start and carry on after its end instead
+            segs = [] if running else self._place_back(hit["end"], needed, cuts, soon)
+            later_end = sum((y - x for x, y in segs), datetime.timedelta(0)) < needed
+            if later_end:
+                segs = self._place(c if running else max(hit["start"], soon), needed, cuts)
+                if segs and self.ready_time and ready_times:
+                    ready = self.first_ready_at(segs[-1][1], ready_times)
+                    if ready is not None and ready > segs[-1][1]:
+                        segs[-1] = (segs[-1][0], ready)
+            # A slot it now meets or runs into joins it: the one before (plugged in
+            # from its start) or, ending later, the one after (until its end)
+            earlier = None if later_end else next(
+                (s for s in stretches if s is not hit and segs and s["end"] >= segs[0][0]
+                 and s["start"] < segs[0][0] and s["end"] <= hit["start"]), None)
+            after = None if not later_end or not segs else next(
+                (s for s in stretches if s is not hit and s["start"] >= hit["end"]
+                 and s["start"] <= segs[-1][1]), None)
             for n, (x, y) in enumerate(segs):
                 if not (n == 0 and earlier is not None):
                     added.append(one_off(x, "plug"))
-                added.append(one_off(y, "unplug"))
+                if not (n == len(segs) - 1 and after is not None and after["end"] > y):
+                    added.append(one_off(y, "unplug"))
             if earlier is not None:
                 skips.append(key(earlier["unplug"], earlier["end"]))
+            if after is not None:
+                skips.append(key(after["plug"], after["start"]))
+                if after["end"] <= segs[-1][1]:
+                    skips.append(key(after["unplug"], after["end"]))
             skips = [k for k in skips if k not in self.skips]
             self.entries = self.entries + added
             self.skips = self.skips + skips
             r["changes"]["added"] += [e["id"] for e in added]
             r["changes"]["skips"] += skips
             parts = ([(hit["start"], c)] if running else []) + segs
+            if parts and parts[0][1] == (parts[1][0] if len(parts) > 1 else None):
+                parts = [(parts[0][0], parts[1][1])] + parts[2:]
             if earlier is not None and parts:
                 parts[0] = (earlier["start"], parts[0][1])
+            if after is not None and parts and after["end"] > parts[-1][1]:
+                parts[-1] = (parts[-1][0], after["end"])
             span = ", ".join(f"{x.strftime('%H:%M')}–{y.strftime('%H:%M')}" for x, y in parts)
-            lost = (hit["end"] - hit["start"]) - sum((y - x for x, y in parts), datetime.timedelta(0))
-            if earlier is not None:
-                lost += earlier["end"] - earlier["start"]
             note = (f"the {hit['start'].strftime('%H:%M')}–{hit['end'].strftime('%H:%M')} slot is now {span}"
                     + (" (joined with the slot before)" if earlier is not None else "")
-                    + (f", {int(lost.total_seconds() // 60)} min shorter (it had begun)"
-                       if lost > datetime.timedelta(0) else ""))
+                    + (" (joined with the next slot)" if after is not None else "")
+                    + ((" (ends later: it had begun)" if running else " (ends later: starting earlier would be in the past)")
+                       if later_end else ""))
             r["notes"] = (r.get("notes") or []) + [note]
             logger.info("Saving session %s–%s: %s", sa.strftime("%a %H:%M"), sb.strftime("%H:%M"), note)
             moved = True

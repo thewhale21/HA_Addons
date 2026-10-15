@@ -156,8 +156,8 @@ def test_session_already_running_unplugs_now():
     clock.dt = _at(5, 16, 30)
     a.sync_saving_sessions([_session(5, 16, 17)], block=True)
     w = [(x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in a.windows() if y > _at(5, 15)]
-    assert w[:2] == [("15:00", "16:31"), ("17:00", "18:00")]  # it had begun: what's left after the session
-    assert "min shorter" in a.saving_sessions[0]["notes"][0]
+    assert w[:2] == [("15:00", "16:31"), ("17:00", "18:29")]  # it had begun: carries on after its end
+    assert "ends later" in a.saving_sessions[0]["notes"][0]
 
 
 def test_turning_it_off_clears_everything():
@@ -202,3 +202,24 @@ def test_charge_before_a_session_only_adds_what_the_schedule_doesnt_cover():
     plan = b.plan_auto_plug(minutes, source=SAVING_SOURCE)
     assert plan["end"][11:16] == "18:00"
     assert [w for w in _windows(b) if w[0].startswith("05")] == [("05 16:00", "05 18:00")]
+
+
+def test_start_in_the_past_ends_later_instead():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    clock.dt = _at(5, 14, 40)  # 14:30 has gone
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True)
+    assert [w for w in _windows(a) if w[0].startswith("05")] == [("05 15:30", "05 18:00"), ("05 19:00", "05 22:30")]
+    assert "ends later" in a.saving_sessions[0]["notes"][0]
+
+
+def test_ending_later_goes_around_a_no_charging_time_and_joins_the_next_slot():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"},
+                                          {"time": "23:00", "action": "plug"}, {"time": "23:30", "action": "unplug"}],
+                   blocks=[{"start": "21:30", "end": "22:00"}])
+    clock.dt = _at(5, 14, 40)
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True)
+    assert [w for w in _windows(a) if w[0].startswith("05")] == [
+        ("05 15:30", "05 18:00"), ("05 19:00", "05 21:30"), ("05 22:00", "05 23:30")]
+    assert "joined with the next slot" in a.saving_sessions[0]["notes"][0]
