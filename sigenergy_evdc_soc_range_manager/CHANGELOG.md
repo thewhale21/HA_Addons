@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.23.0 — Helpers named like the sensors
+
+- **Change:** the helpers the add-on makes are named like its sensors:
+  **EVDC SoC Range High Limit** (`input_number.evdc_soc_range_high_limit`),
+  **EVDC SoC Range Low Limit** (`input_number.evdc_soc_range_low_limit`) and
+  **EVDC SoC Range Vehicle Battery Capacity**
+  (`input_number.evdc_soc_range_vehicle_battery_capacity`). The charging
+  mode select keeps its name.
+- **Change:** if a helper with an old name is picked on the Settings tab,
+  it's moved to the new name at its value, and the old one is removed
+  (unless it's from YAML). Update any dashboard or automation that used the
+  old entity IDs.
+
 ## 0.22.2 — Limit helpers made again straight away
 
 - **Fix:** deleting the add-on's **EVDC SoC High Limit** or **Low Limit**

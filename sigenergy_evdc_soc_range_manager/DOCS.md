@@ -69,10 +69,10 @@ The differences:
    turn on **Show the ones set up automatically** to see or change them.
 3. The first time it connects to Home Assistant it makes helpers for
    anything left empty (**Settings › Devices & services › Helpers**):
-   - **EVDC SoC High Limit** and **EVDC SoC Low Limit** (input numbers, %).
+   - **EVDC SoC Range High Limit** and **EVDC SoC Range Low Limit** (input numbers, %).
      If you already have `input_number.v2x_cut_off_threshold_high` and
      `input_number.v2x_cut_off_threshold`, they start at the same values.
-   - **EVDC Vehicle Battery Capacity** (kWh), for the energy sensors. It
+   - **EVDC SoC Range Vehicle Battery Capacity** (kWh), for the energy sensors. It
      starts at your `input_number.vehicle_max_capacity` if you have one,
      otherwise 0 (set it to see the energy sensors).
    - **SigEnergy EVDC Charging Mode** (`input_select.sigenergy_evdc_charging_mode`:
@@ -90,6 +90,12 @@ The differences:
 
    You can point any of these at a helper you already have instead; the
    add-on then leaves it alone.
+
+   Before 0.23.0 they were called **EVDC SoC High Limit**, **EVDC SoC Low
+   Limit** and **EVDC Vehicle Battery Capacity**. If one of those is picked,
+   it's moved to the new name at its value, and the old helper is removed
+   (unless it's from YAML). Update any dashboard or automation that used the
+   old entity IDs.
 4. Optional: a **charge signal**, e.g. `binary_sensor.predbat_charging`.
    While it's on, the car is charged if there's room, and isn't stopped at
    the low limit.
@@ -245,7 +251,7 @@ on; they're the limit helpers, so a dashboard or automation can change
 them too. **Car battery capacity** below them is the car's usable kWh for
 the virtual battery sensors (the capacity helper picked on the Settings
 tab). If the capacity comes from a sensor, or nothing's picked, entering a
-value makes the **EVDC Vehicle Battery Capacity** helper (or finds it) and
+value makes the **EVDC SoC Range Vehicle Battery Capacity** helper (or finds it) and
 uses that instead. **Now** shows the limits in use and where each comes from.
 The schedule below changes the high and/or low limit for a while, every
 week or once. Each entry sets the high limit, the low limit or both. Its week view shows today and the next 6 days, with high

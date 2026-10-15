@@ -386,16 +386,16 @@ def test_missing_helpers_are_found_or_made(tmp_path):
             return {"id": made_id}
 
     link = FakeLink({"input_select.sigenergy_evdc_charging_mode": "V2X", "input_number.v2x_cut_off_threshold": "35",
-                     "input_number.evdc_vehicle_battery_capacity": "64"}, tmp_path / "a",
+                     "input_number.evdc_soc_range_vehicle_battery_capacity": "64"}, tmp_path / "a",
                     ui=["sigenergy_evdc_charging_mode"])
     done = _run(ensure_helpers(link))
     assert link.settings["v2x_mode"] == "input_select.sigenergy_evdc_charging_mode"  # already there
-    assert link.settings["capacity"] == "input_number.evdc_vehicle_battery_capacity"  # already there
-    assert link.settings["soc_high"] == "input_number.evdc_soc_high_limit"
+    assert link.settings["capacity"] == "input_number.evdc_soc_range_vehicle_battery_capacity"  # already there
+    assert link.settings["soc_high"] == "input_number.evdc_soc_range_high_limit"
     made = {p["name"]: p for p in link.made}
-    assert set(made) == {"EVDC SoC High Limit", "EVDC SoC Low Limit"}
-    assert made["EVDC SoC Low Limit"]["initial"] == 35.0  # from the automation's own helper
-    assert made["EVDC SoC High Limit"]["initial"] == 80 and made["EVDC SoC High Limit"]["type"] == "input_number/create"
+    assert set(made) == {"EVDC SoC Range High Limit", "EVDC SoC Range Low Limit"}
+    assert made["EVDC SoC Range Low Limit"]["initial"] == 35.0  # from the automation's own helper
+    assert made["EVDC SoC Range High Limit"]["initial"] == 80 and made["EVDC SoC Range High Limit"]["type"] == "input_number/create"
     assert len(done) == 4 and _run(ensure_helpers(link)) == []  # nothing left to do
 
     fresh = FakeLink({}, tmp_path / "b")
@@ -618,24 +618,24 @@ def test_the_limits_are_the_add_ons_own_helpers_too(tmp_path):
     # The limit helpers were picked but have gone: made again, at the V2X automation's values
     link = FakeLink({"input_select.sigenergy_evdc_charging_mode": "V2X", "input_number.v2x_cut_off_threshold": "40",
                      "input_number.v2x_cut_off_threshold_high": "99"}, tmp_path / "a")
-    link.settings.update({"soc_high": "input_number.evdc_soc_high_limit", "soc_low": "input_number.evdc_soc_low_limit",
+    link.settings.update({"soc_high": "input_number.evdc_soc_range_high_limit", "soc_low": "input_number.evdc_soc_range_low_limit",
                           "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "capacity": "input_number.c",
                           "import_rate": "sensor.r"})
     notes = []
     _run(ensure_helpers(link, notes))
     made = {p["name"]: p for p in link.made}
-    assert set(made) == {"EVDC SoC High Limit", "EVDC SoC Low Limit"}  # not the charging mode (from YAML)
-    assert made["EVDC SoC High Limit"]["initial"] == 99.0 and made["EVDC SoC Low Limit"]["initial"] == 40.0
+    assert set(made) == {"EVDC SoC Range High Limit", "EVDC SoC Range Low Limit"}  # not the charging mode (from YAML)
+    assert made["EVDC SoC Range High Limit"]["initial"] == 99.0 and made["EVDC SoC Range Low Limit"]["initial"] == 40.0
     assert notes == []
     # A limit helper with the add-on's name in YAML: used, with a note to remove it there
-    yaml = FakeLink({"input_number.evdc_soc_high_limit": "90", "input_number.evdc_soc_low_limit": "40"},
+    yaml = FakeLink({"input_number.evdc_soc_range_high_limit": "90", "input_number.evdc_soc_range_low_limit": "40"},
                     tmp_path / "b")
-    yaml.settings.update({"soc_high": "input_number.evdc_soc_high_limit", "soc_low": "input_number.my_low",
+    yaml.settings.update({"soc_high": "input_number.evdc_soc_range_high_limit", "soc_low": "input_number.my_low",
                           "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "capacity": "input_number.c",
                           "import_rate": "sensor.r"})
     notes = []
     _run(ensure_helpers(yaml, notes))
-    assert yaml.made == [] and len(notes) == 1 and "evdc_soc_high_limit is defined in YAML" in notes[0]
+    assert yaml.made == [] and len(notes) == 1 and "evdc_soc_range_high_limit is defined in YAML" in notes[0]
     # Something else picked for both limits: left alone
     mine = FakeLink({}, tmp_path / "c")
     mine.settings.update({"soc_high": "input_number.my_high", "soc_low": "input_number.my_low",
@@ -656,4 +656,58 @@ def test_the_limits_are_the_add_ons_own_helpers_too(tmp_path):
     finally:
         logging.getLogger("src.helpers").removeHandler(grab)
     assert mine.made == []
-    assert any("high limit uses input_number.my_high" in m and "evdc_soc_high_limit isn't made" in m for m in seen)
+    assert any("high limit uses input_number.my_high" in m and "evdc_soc_range_high_limit isn't made" in m for m in seen)
+
+
+def test_helpers_with_the_old_names_are_moved_to_the_new_ones(tmp_path):
+    from src.ha_link import HaLink
+    from src.helpers import ensure_helpers
+    from src.shared_state import SharedState
+
+    class FakeLink(HaLink):
+        def __init__(self, existing, folder, ui):
+            folder.mkdir()
+            super().__init__(str(folder), SharedState(), token="")
+            self.existing, self.queries, self.ui = existing, [], list(ui)
+
+        async def all_states(self, fresh=False):
+            return [{"entity_id": e, "state": v} for e, v in self.existing.items()]
+
+        async def query(self, payload, timeout=30):
+            self.queries.append(payload)
+            if payload["type"].endswith("/list"):
+                return [{"id": i} for i in self.ui]
+            if payload["type"] == "get_config":
+                return {"state": "RUNNING"}
+            if payload["type"].endswith("/create"):
+                made = payload["name"].lower().replace(" ", "_")
+                self.ui.append(made)
+                return {"id": made}
+            return None
+
+    link = FakeLink({"input_number.evdc_soc_high_limit": "95", "input_number.evdc_soc_low_limit": "35",
+                     "input_number.evdc_vehicle_battery_capacity": "42.5",
+                     "input_select.sigenergy_evdc_charging_mode": "V2X"}, tmp_path / "a",
+                    ui=["evdc_soc_high_limit", "evdc_soc_low_limit", "evdc_vehicle_battery_capacity"])
+    link.settings.update({"soc_high": "input_number.evdc_soc_high_limit", "soc_low": "input_number.evdc_soc_low_limit",
+                          "capacity": "input_number.evdc_vehicle_battery_capacity",
+                          "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "import_rate": "sensor.r"})
+    done = _run(ensure_helpers(link))
+    assert link.settings["soc_high"] == "input_number.evdc_soc_range_high_limit"
+    assert link.settings["soc_low"] == "input_number.evdc_soc_range_low_limit"
+    assert link.settings["capacity"] == "input_number.evdc_soc_range_vehicle_battery_capacity"
+    made = {q["name"]: q["initial"] for q in link.queries if q["type"] == "input_number/create"}
+    assert made == {"EVDC SoC Range High Limit": 95.0, "EVDC SoC Range Low Limit": 35.0,
+                    "EVDC SoC Range Vehicle Battery Capacity": 42.5}  # at the old ones' values
+    deleted = {q["input_number_id"] for q in link.queries if q["type"] == "input_number/delete"}
+    assert deleted == {"evdc_soc_high_limit", "evdc_soc_low_limit", "evdc_vehicle_battery_capacity"}
+    assert link.settings["v2x_mode"] == "input_select.sigenergy_evdc_charging_mode"  # not renamed
+    assert any("in place of input_number.evdc_soc_high_limit" in line for line in done)
+
+    # An old one from YAML is left in Home Assistant (only the add-on's own are removed)
+    yaml = FakeLink({"input_number.evdc_soc_high_limit": "90"}, tmp_path / "b", ui=[])
+    yaml.settings.update({"soc_high": "input_number.evdc_soc_high_limit", "soc_low": "input_number.mine",
+                          "capacity": "input_number.c", "v2x_mode": "input_select.m", "import_rate": "sensor.r"})
+    _run(ensure_helpers(yaml))
+    assert yaml.settings["soc_high"] == "input_number.evdc_soc_range_high_limit"
+    assert not [q for q in yaml.queries if q["type"].endswith("/delete")]

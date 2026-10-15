@@ -63,8 +63,8 @@ you want to keep for driving.
 
    | Helper | What to do |
    | --- | --- |
-   | **EVDC SoC High Limit** / **EVDC SoC Low Limit** | Your default limits, e.g. 80% and 40%. Copied from the V2X automation's thresholds if you have them |
-   | **EVDC Vehicle Battery Capacity** | Your car's battery size (kWh): needed for the energy sensors and the virtual battery |
+   | **EVDC SoC Range High Limit** / **EVDC SoC Range Low Limit** | Your default limits, e.g. 80% and 40%. Copied from the V2X automation's thresholds if you have them |
+   | **EVDC SoC Range Vehicle Battery Capacity** | Your car's battery size (kWh): needed for the energy sensors and the virtual battery |
    | **SigEnergy EVDC Charging Mode** | V2X, Solar Surplus or Fast Charging. The add-on only runs the charger in **V2X** |
 
    The two limits are made again if they go missing, and can be changed from

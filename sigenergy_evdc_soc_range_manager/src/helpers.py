@@ -17,13 +17,13 @@ logger = logging.getLogger(__name__)
 # key -> (helper type, what to make)
 HELPERS = {
     "soc_high": ("input_number", {
-        "name": "EVDC SoC High Limit", "min": 21, "max": 99, "step": 1, "mode": "slider",
+        "name": "EVDC SoC Range High Limit", "min": 21, "max": 99, "step": 1, "mode": "slider",
         "unit_of_measurement": "%", "icon": "mdi:battery-arrow-up", "initial": 80}),
     "soc_low": ("input_number", {
-        "name": "EVDC SoC Low Limit", "min": 20, "max": 98, "step": 1, "mode": "slider",
+        "name": "EVDC SoC Range Low Limit", "min": 20, "max": 98, "step": 1, "mode": "slider",
         "unit_of_measurement": "%", "icon": "mdi:battery-arrow-down", "initial": 40}),
     "capacity": ("input_number", {
-        "name": "EVDC Vehicle Battery Capacity", "min": 0, "max": 200, "step": 0.1, "mode": "box",
+        "name": "EVDC SoC Range Vehicle Battery Capacity", "min": 0, "max": 200, "step": 0.1, "mode": "box",
         "unit_of_measurement": "kWh", "icon": "mdi:car-battery", "initial": 0}),
     "v2x_mode": ("input_select", {
         "name": "SigEnergy EVDC Charging Mode", "options": ["V2X", "Solar Surplus", "Fast Charging"],
@@ -55,7 +55,7 @@ def capacity_target(entity_id: str, value) -> tuple:
 
 
 async def make_capacity_helper(link, kwh: float) -> str:
-    """The add-on's EVDC Vehicle Battery Capacity helper, found or made at `kwh`, and
+    """The add-on's EVDC SoC Range Vehicle Battery Capacity helper, found or made at `kwh`, and
     picked on the Settings tab. Returns its entity ID."""
     kind, spec = HELPERS["capacity"]
     entity_id = f"{kind}.{slugify(spec['name'])}"
@@ -106,6 +106,51 @@ def find_rates(states: dict) -> dict:
     return found
 
 
+# The helpers' names before 0.23.0 (now named like the sensors, "EVDC SoC Range ..."): one of
+# these picked on the Settings tab is moved to the new name, at its value, and the old one removed
+LEGACY = {
+    "soc_high": "input_number.evdc_soc_high_limit",
+    "soc_low": "input_number.evdc_soc_low_limit",
+    "capacity": "input_number.evdc_vehicle_battery_capacity",
+}
+
+
+async def rename_legacy(link, states: dict) -> list[str]:
+    """Move any picked helper with an old name (LEGACY) to its new name, keeping its value.
+    Returns what was done, for the log."""
+    done, changes, ui = [], {}, None
+    for key, old in LEGACY.items():
+        if link.settings.get(key) != old:
+            continue
+        kind, spec = HELPERS[key]
+        new = f"{kind}.{slugify(spec['name'])}"
+        old_st = states.get(old)
+        if new in states:
+            done.append(f"{spec['name']}: using {new} in place of {old}")
+        else:
+            spec = dict(spec)
+            for source in (old, KNOWN_VALUES.get(key, "")):  # its value, else the V2X helper's
+                try:
+                    spec["initial"] = float((states.get(source) or {}).get("state"))
+                    break
+                except (TypeError, ValueError):
+                    pass
+            result = await link.query({"type": f"{kind}/create", **spec})
+            new = f"{kind}.{(result or {}).get('id') or slugify(spec['name'])}"
+            states[new] = {"entity_id": new, "state": str(spec["initial"])}
+            done.append(f"{spec['name']}: made {new} at {spec['initial']:g}, in place of {old}")
+        changes[key] = new
+        if old_st is not None:
+            if ui is None:
+                ui = {item.get("id") for item in (await link.query({"type": f"{kind}/list"}) or [])}
+            if old.split(".", 1)[1] in ui:  # the add-on's own (UI) helper: removed, not one from YAML
+                await link.query({"type": f"{kind}/delete", f"{kind}_id": old.split(".", 1)[1]})
+                done.append(f"removed the old {old}")
+    if changes:
+        await link.update_settings(changes)
+    return done
+
+
 # Helpers the add-on makes and owns as its own (UI) helpers, not ones from YAML, so they can be
 # changed in Home Assistant: the high and low limits. (The charging mode is only made if its
 # picker is empty, like the capacity: it's often kept in YAML.)
@@ -147,14 +192,17 @@ async def ensure_helpers(link, notes: Optional[list] = None) -> list[str]:
     missing = [key for key in HELPERS if not link.settings.get(key)]
     rates_missing = not link.settings.get("import_rate") and not link.settings.get("export_rate")
     states = {st.get("entity_id"): st for st in await link.all_states(fresh=True)}
+    renamed = await rename_legacy(link, states)
     make = set()
     for key in OWNED:  # "ok" / "yaml": an empty picker is filled with it below, as for the others
         if await _owned_helper(link, key, states, notes) == "make":
             make.add(key)
     missing = list(dict.fromkeys(missing + sorted(make)))
     if not missing and not rates_missing:
-        return []
-    changes, done = {}, []
+        for line in renamed:
+            logger.info("Helpers: %s", line)
+        return renamed
+    changes, done = {}, list(renamed)
     if rates_missing:
         for key, entity_id in find_rates(states).items():
             changes[key] = entity_id
