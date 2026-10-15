@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -105,14 +106,48 @@ def find_rates(states: dict) -> dict:
     return found
 
 
-async def ensure_helpers(link) -> list[str]:
-    """Fill any empty helper picker: an existing helper of the same name, or a new one.
-    Returns what was done, for the log."""
+# Helpers the add-on makes and owns as its own (UI) helpers, not ones from YAML, so they can be
+# changed in Home Assistant: the high and low limits. (The charging mode is only made if its
+# picker is empty, like the capacity: it's often kept in YAML.)
+OWNED = ("soc_high", "soc_low")
+
+
+async def _owned_helper(link, key: str, states: dict, notes: list) -> Optional[str]:
+    """For an owned helper whose picker is empty or on the add-on's own entity ID: "ok" if
+    Home Assistant has it as a UI helper, "yaml" if only YAML defines it (a note says to remove
+    it there), "make" if there's none at all (and Home Assistant has finished starting).
+    None: leave it alone."""
+    kind, spec = HELPERS[key]
+    own = f"{kind}.{slugify(spec['name'])}"
+    if link.settings.get(key) not in (None, "", own):
+        return None  # something else is picked: that's the user's choice
+    ui = {item.get("id") for item in (await link.query({"type": f"{kind}/list"}) or [])}
+    if own.split(".", 1)[1] in ui:
+        return "ok"
+    if own in states:
+        notes.append(f"{own} is defined in YAML. Remove it from your YAML and restart Home Assistant: "
+                     f"the add-on then makes it as a helper of its own ({spec['name']}).")
+        return "yaml"
+    config = await link.query({"type": "get_config"}) or {}
+    return "make" if config.get("state", "RUNNING") == "RUNNING" else None
+
+
+async def ensure_helpers(link, notes: Optional[list] = None) -> list[str]:
+    """Fill any empty helper picker: an existing helper of the same name, or a new one. The
+    limits (OWNED) are the add-on's own UI helpers: made if they're missing, even if the picker
+    still names them (unless something else is picked). Returns what was done, for the log; `notes` gets anything the
+    user needs to do."""
+    notes = [] if notes is None else notes
     missing = [key for key in HELPERS if not link.settings.get(key)]
     rates_missing = not link.settings.get("import_rate") and not link.settings.get("export_rate")
+    states = {st.get("entity_id"): st for st in await link.all_states(fresh=True)}
+    make = set()
+    for key in OWNED:  # "ok" / "yaml": an empty picker is filled with it below, as for the others
+        if await _owned_helper(link, key, states, notes) == "make":
+            make.add(key)
+    missing = list(dict.fromkeys(missing + sorted(make)))
     if not missing and not rates_missing:
         return []
-    states = {st.get("entity_id"): st for st in await link.all_states(fresh=True)}
     changes, done = {}, []
     if rates_missing:
         for key, entity_id in find_rates(states).items():
@@ -121,7 +156,7 @@ async def ensure_helpers(link) -> list[str]:
     for key in missing:
         kind, spec = HELPERS[key]
         existing = f"{kind}.{slugify(spec['name'])}"
-        if existing in states:
+        if existing in states and key not in make:
             changes[key] = existing
             done.append(f"{spec['name']}: using {existing}")
             continue
@@ -138,4 +173,6 @@ async def ensure_helpers(link) -> list[str]:
         await link.update_settings(changes)
     for line in done:
         logger.info("Helpers: %s", line)
+    for line in notes:
+        logger.warning("Helpers: %s", line)
     return done

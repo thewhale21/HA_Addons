@@ -67,7 +67,9 @@ you want to keep for driving.
    | **EVDC Vehicle Battery Capacity** | Your car's battery size (kWh): needed for the energy sensors and the virtual battery |
    | **SigEnergy EVDC Charging Mode** | V2X, Solar Surplus or Fast Charging. The add-on only runs the charger in **V2X** |
 
-   Already have helpers for these? Pick them on the Settings tab instead.
+   The two limits are made again if they go missing, and can be changed from
+   any dashboard or automation. Already have helpers for
+   these? Pick them on the Settings tab instead.
 3. **Turn on Watch only** (Settings) for a day or two. It logs what it
    *would* do, marked hollow on the SoC chart and in the History, without
    pressing anything.

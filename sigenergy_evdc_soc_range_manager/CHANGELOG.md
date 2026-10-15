@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.22.0 — The add-on's own limit helpers
+
+- **Feature:** the high and low limits are the add-on's own Home Assistant
+  helpers (**EVDC SoC High Limit** and **EVDC SoC Low Limit**), which you
+  can change from any dashboard or automation. Each time it connects it
+  checks for them, and makes any that have gone again, even if the
+  Settings tab still names them (at your `v2x_cut_off_threshold` helpers'
+  values, if you have them).
+- **Improvement:** if a limit helper with the add-on's name is defined in
+  YAML, it's still used, and the Overview says to remove it from your YAML
+  and restart Home Assistant so the add-on can make it as its own.
+- **Change:** limit helpers you've picked yourself on the Settings tab, and
+  the charging mode select (e.g. kept in your YAML), are left alone, as
+  before.
+
 ## 0.21.0 — Battery capacity on the Schedule tab
 
 - **Feature:** the car's battery capacity (usable kWh, for the virtual
