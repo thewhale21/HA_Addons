@@ -14,7 +14,7 @@ and its sensors. In short: enter your Octopus API key on the
    (with its local date, start and end as the date and time sensors give
    them) and next charge, each with its own planned dispatches.
 2. **Settings** has the device and read interval (both drop-downs, applied
-   at once) and the Octopus connection.
+   at once).
 3. **Diagnostics** has its health, the sensors it posts, the log
    and a diagnostics bundle (the API key is always hidden).
 

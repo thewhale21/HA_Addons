@@ -229,11 +229,7 @@
           <option value="300">5 minutes</option><option value="600">10 minutes</option><option value="900">15 minutes</option>
           <option value="1800">30 minutes</option><option value="3600">1 hour</option>
         </select></div>
-    </div>
-    <div class="card">
-      <h2>Octopus</h2>
-      <div class="note" style="margin:0 0 10px">Your API key is set on the add-on's <b>Configuration</b> tab in Home Assistant (restart the add-on after changing it).</div>
-      <dl class="kv" id="s-octopus"></dl>
+      <div class="note" style="margin:14px 0 0">Your Octopus API key is set on the add-on's <b>Configuration</b> tab in Home Assistant (restart the add-on after changing it).</div>
     </div>
     <input type="checkbox" id="sim-all" checked hidden><!-- the template's entity pickers: none here -->
   </section>
@@ -474,11 +470,6 @@ function renderState(s) {
       .map((d) => `<tr><td>${esc(dateTime(d.start))}</td><td>${esc(dateTime(d.end))}</td><td class="num">${num(d.energyAddedKwh, 2)} kWh</td></tr>`);
     $(id).innerHTML = rows.join('') || `<tr><td colspan="3" class="muted">${s.last_update ? 'None planned' : 'Not read yet'}</td></tr>`;
   }
-  $('s-octopus').innerHTML = kv([
-    ['Device', s.device_id ? `<code>${esc(s.device_id)}</code>` : '<span class="muted">not picked yet</span>'],
-    ['Read every', `${s.poll_seconds} s`],
-    ['Last read', s.last_update ? ago(s.last_update) : '—'],
-  ]);
   drawDevicePicker(s);
 }
 const deviceLabel = (d) => [d.name || d.deviceType || 'Device', d.name && d.deviceType ? d.deviceType : '', d.provider || ''].filter(Boolean).join(' · ');

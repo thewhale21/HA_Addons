@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 — Tidier Settings tab
+
+- **Change:** the Settings tab's Octopus card (device ID, read interval and
+  last read) is gone: the Device card's drop-downs already show them. Its
+  API key note moves into the Device card.
+
 ## 0.4.0 — Overview layout
 
 - **Change:** the Overview has the status full width across the top, then
