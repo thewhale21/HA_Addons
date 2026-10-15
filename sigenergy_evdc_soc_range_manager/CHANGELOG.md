@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.23.1 — Chart markers on the SoC line
+
+- **Fix:** on the SoC chart, a start or stop just after plugging in was
+  drawn at the SoC from before the car was unplugged (e.g. at the top of the
+  chart) instead of on the line. Markers now sit on the SoC line where it
+  is at that time, and where the line starts again after plugging in.
+
 ## 0.23.0 — Helpers named like the sensors
 
 - **Change:** the helpers the add-on makes are named like its sensors:

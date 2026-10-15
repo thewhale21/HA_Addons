@@ -1270,13 +1270,18 @@ function drawSocChart() {
   }
   svg += `<path class="soc" d="${line}"/>`;
   // Starts, stops (hollow while watching only) and dropouts, at the SoC then
-  // The SoC at a time; if there's no reading then (just plugged in), the first one after it
+  // Where the SoC line is at a time (between two readings, on the line joining them), so a
+  // marker sits on it. Just plugged in (the reading before is from before it was unplugged,
+  // or there's none): the first reading after it, where the line starts again
+  const ok = (p) => p && p[1] != null && p[4] !== 'unplugged';
   const socAt = (t) => {
-    let v = null;
-    for (const p of pts) { if (p[0] > t) break; v = p[1]; }
-    return v != null ? v : (pts.find((p) => p[0] > t && p[1] != null && p[4] !== 'unplugged') || [])[1] ?? null;
+    let i = -1;
+    for (let k = 0; k < pts.length && pts[k][0] <= t; k++) i = k;
+    const p = pts[i], q = pts[i + 1];
+    if (ok(p)) return ok(q) && q[0] > p[0] ? p[1] + (q[1] - p[1]) * (t - p[0]) / (q[0] - p[0]) : p[1];
+    return (pts.slice(i + 1).find(ok) || [])[1] ?? null;
   };
-  const evs = (d.events || []).map((e) => ({...e, v: e.soc != null ? e.soc : socAt(e.t)}))
+  const evs = (d.events || []).map((e) => { const v = socAt(e.t); return {...e, v: v != null ? v : e.soc}; })
     .filter((e) => e.v != null || e.action === 'alarm' || e.action === 'alarm_cleared');
   for (const e of evs) {
     const x = X(e.t), y = Y(e.v);
