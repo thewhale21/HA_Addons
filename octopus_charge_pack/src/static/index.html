@@ -93,6 +93,7 @@
     font-size: 12px; font-weight: 500; background: var(--hover); color: var(--text2); white-space: nowrap;
   }
   .chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.err { color: var(--err); } .chip.info { color: var(--info); }
+  .chip.dis { color: var(--violet); } .chip.chg { color: var(--info); }
   .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
   .kv dt { color: var(--text2); } .kv dd { margin: 0; overflow-wrap: anywhere; }
   .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -199,12 +200,12 @@
         <div class="sub" id="o-status-sub"></div>
       </div>
       <div class="card">
-        <div class="label">Next discharge</div>
+        <div class="label"><span class="chip dis">Discharge</span> Next</div>
         <div class="big" id="o-dis">—</div>
         <div class="sub" id="o-dis-sub"></div>
       </div>
       <div class="card">
-        <div class="label">Next charge</div>
+        <div class="label"><span class="chip chg">Charge</span> Next</div>
         <div class="big" id="o-chg">—</div>
         <div class="sub" id="o-chg-sub"></div>
       </div>
@@ -459,6 +460,12 @@ function span(start, end) {
   const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   return `${dateTime(start)}${end ? '–' + t(end) : ''}`;
 }
+function kindChip(d) {
+  const kwh = Number(d.energyAddedKwh);
+  if (kwh > 0) return '<span class="chip dis">Discharge</span>';
+  if (kwh < 0) return '<span class="chip chg">Charge</span>';
+  return '<span class="chip">Neither</span>';
+}
 function renderState(s) {
   state = s;
   const m = s.summary || {};
@@ -468,7 +475,7 @@ function renderState(s) {
   $('o-dis-sub').textContent = m.discharge_start ? `${m.discharge_start_date} ${m.discharge_start_time} – ${m.discharge_end_date === m.discharge_start_date ? '' : m.discharge_end_date + ' '}${m.discharge_end_time}${m.discharge_kwh != null ? ' · ' + num(m.discharge_kwh, 2) + ' kWh' : ''}` : '';
   $('o-chg').textContent = m.charge_start ? span(m.charge_start, m.charge_end) : 'None planned';
   $('o-chg-sub').textContent = m.charge_start ? `${m.charge_start_date} ${m.charge_start_time} – ${m.charge_end_date === m.charge_start_date ? '' : m.charge_end_date + ' '}${m.charge_end_time}${m.charge_kwh != null ? ' · ' + num(m.charge_kwh, 2) + ' kWh' : ''}` : '';
-  const rows = (m.dispatches || []).map((d) => `<tr><td>${esc(dateTime(d.start))}</td><td>${esc(dateTime(d.end))}</td><td>${esc(d.type || '')}</td><td class="num">${d.energyAddedKwh == null ? '—' : num(d.energyAddedKwh, 2) + ' kWh'}</td></tr>`);
+  const rows = (m.dispatches || []).map((d) => `<tr><td>${esc(dateTime(d.start))}</td><td>${esc(dateTime(d.end))}</td><td>${kindChip(d)}${d.type ? ' <span class="muted">' + esc(d.type) + '</span>' : ''}</td><td class="num">${d.energyAddedKwh == null ? '—' : num(d.energyAddedKwh, 2) + ' kWh'}</td></tr>`);
   $('o-list').innerHTML = rows.join('') || `<tr><td colspan="4" class="muted">${s.last_update ? 'None planned' : 'Not read yet'}</td></tr>`;
   $('s-octopus').innerHTML = kv([
     ['Device', s.device_id ? `<code>${esc(s.device_id)}</code>` : '<span class="muted">not picked yet</span>'],

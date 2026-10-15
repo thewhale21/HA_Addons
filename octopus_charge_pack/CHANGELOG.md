@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 — Charge and discharge chips
+
+- **Improvement:** the Overview marks dispatches with a coloured chip,
+  Discharge or Charge, on the next discharge and charge cards and on each
+  row of the planned dispatches (Octopus's own type is shown beside it).
+
 ## 0.3.0 — Device and interval on the Overview
 
 - **Feature:** the device is a drop-down on the Overview, listing the
