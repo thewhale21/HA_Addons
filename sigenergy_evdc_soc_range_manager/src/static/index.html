@@ -194,21 +194,58 @@
   .meter > div { height: 100%; width: 0; border-radius: 999px; background: var(--primary); transition: width .4s; }
   /* Schedule week view (like the OCPP add-on's) */
   :root { --w-high: #039be5; --w-low: #f57c00; }
-  .week { display: grid; grid-template-columns: 52px 1fr; gap: 6px 8px; align-items: center; }
-  .week .dl { font-size: 12px; color: var(--text2); }
-  .week .dl.today { color: var(--primary); font-weight: 500; }
-  .week .track { position: relative; height: 30px; background: var(--hover); border-radius: 4px; overflow: hidden; touch-action: pan-y; cursor: copy; }
-  .week .track::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--card); pointer-events: none; }
-  .week .wbar { position: absolute; height: 50%; opacity: .85; cursor: pointer; color: #fff; font-size: 10.5px; line-height: 15px;
-    padding: 0 4px; overflow: hidden; white-space: nowrap; box-sizing: border-box; }
-  .week .wbar.hi { top: 0; background: var(--w-high); }
-  .week .wbar.lo { top: 50%; background: var(--w-low); color: #212121; }
-  .week .wbar.off { opacity: .3; }
-  .week .wbar.skipped { opacity: .25; text-decoration: line-through; background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.5) 4px 6px); }
-  .week .wbar.picked { box-shadow: inset 0 0 0 2px var(--text); opacity: 1; }
-  .week .wbar.ghost { top: 0; height: 100%; background: var(--primary); opacity: .4; pointer-events: none; }
-  .week .now { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--err); z-index: 2; }
-  .week .axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); }
+  /* Schedule: one row a day, the high limit's lane on top and the low limit's below */
+  .week { display: grid; grid-template-columns: 72px 1fr; gap: 8px 12px; align-items: center; }
+  .week .dl { font-size: 13px; font-weight: 500; line-height: 1.2; }
+  .week .dl small { display: block; font-weight: 400; font-size: 11px; color: var(--text2); }
+  .week .dl.today { color: var(--primary); }
+  .week .track { position: relative; height: 48px; border-radius: 10px; background: var(--hover); overflow: hidden; touch-action: pan-y; cursor: copy; }
+  .week .track.today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 45%, transparent); }
+  .week .lane { position: absolute; left: 0; right: 0; height: 50%; pointer-events: none; }
+  .week .lane.hi { top: 0; background: color-mix(in srgb, var(--w-high) 6%, transparent); }
+  .week .lane.lo { top: 50%; background: color-mix(in srgb, var(--w-low) 6%, transparent); }
+  .week .g3 { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--divider); pointer-events: none; }
+  .week .past { position: absolute; top: 0; bottom: 0; left: 0; background: var(--card); opacity: .5; pointer-events: none; z-index: 2; }
+  .week .wbar { position: absolute; height: calc(50% - 5px); border-radius: 6px; cursor: pointer; color: #fff; font-size: 11px; font-weight: 500;
+    line-height: 19px; padding: 0 7px; overflow: hidden; white-space: nowrap; box-sizing: border-box; box-shadow: 0 1px 2px rgba(0,0,0,.15); z-index: 1;
+    display: flex; align-items: center; gap: 3px; }
+  .week .wbar.hi { top: 3px; background: linear-gradient(135deg, #29b6f6, var(--w-high)); }
+  .week .wbar.lo { bottom: 3px; background: linear-gradient(135deg, #ffb74d, var(--w-low)); color: #3e2723; }
+  .week .wbar.off { opacity: .35; filter: grayscale(.6); }
+  .week .wbar.skipped { opacity: .45; text-decoration: line-through; background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.45) 4px 6px); }
+  .week .wbar.picked { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); opacity: 1; z-index: 3; }
+  .week .wbar:hover { filter: brightness(1.07); }
+  .week .wbar.ghost { top: 3px; bottom: 3px; height: auto; background: var(--primary); opacity: .35; pointer-events: none; box-shadow: none; }
+  .week .now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--err); z-index: 4; pointer-events: none; }
+  .week .now::before { content: ''; position: absolute; top: -1px; left: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--err); }
+  .week .axis { grid-column: 2; position: relative; height: 14px; font-size: 11px; color: var(--text2); }
+  .week .axis span { position: absolute; transform: translateX(-50%); }
+  .week .axis span:first-child { transform: none; } .week .axis span:last-child { transform: translateX(-100%); }
+  /* All entries: one row each */
+  .entries { display: grid; gap: 8px; }
+  .entry { display: grid; grid-template-columns: 6px minmax(0, 1.4fr) 120px minmax(0, 1fr) 250px; gap: 14px; align-items: center;
+           padding: 10px 12px 10px 0; border: 1px solid var(--divider); border-radius: 12px; cursor: pointer; overflow: hidden; }
+  .entry:hover { background: var(--hover); }
+  .entry.off { opacity: .6; }
+  .entry .stripe { align-self: stretch; margin: -10px 0; }
+  .entry .when b { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .entry .when .elabel { display: block; font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .daydots { display: flex; gap: 3px; margin-top: 5px; }
+  .daydots span { width: 20px; height: 18px; border-radius: 5px; font-size: 10px; display: grid; place-items: center; background: var(--hover); color: var(--text2); }
+  .daydots span.on { background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); font-weight: 600; }
+  .lims { display: flex; flex-direction: column; gap: 4px; }
+  .lim { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+  .lim i { width: 8px; height: 8px; border-radius: 50%; }
+  .status .sub { margin-top: 3px; }
+  .entry .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .pill.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+  .pill.info { background: color-mix(in srgb, var(--info, #039be5) 14%, transparent); color: var(--info, #039be5); }
+  .pill.none { background: var(--hover); color: var(--text2); }
+  .pill .pdot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (max-width: 760px) { .entry { grid-template-columns: 6px 1fr auto; } .entry .lims { grid-column: 2; } .entry .status { grid-column: 3; grid-row: 1; }
+    .entry .acts { grid-column: 2 / -1; justify-content: flex-start; } }
   .slot-pop { grid-column: 1 / -1; padding: 8px 10px; border-radius: 8px; background: var(--hover); }
   .slot-pop.top { margin-bottom: 4px; }
   .slot-pop .ed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
@@ -388,19 +425,12 @@
       <div class="row" id="hold-now" style="margin-top:10px;gap:6px" hidden></div>
     </div>
     <div class="card">
-      <h2>Schedule</h2>
-      <div class="note" style="margin:0 0 6px">Change the high and/or low limit for a while, every week or once: e.g. Tue and Thu 23:00–08:00 high 50%, or tomorrow 06:00–10:00 low 95%. Any limit an entry doesn't set, and any time nothing's on, uses the defaults. Where entries overlap, the one that started last wins.</div>
-      <div class="row" style="margin:0 0 12px">
-        <div class="note grow" style="margin:0">The next 7 days. Click an entry to change or delete it, or click or drag across a day to add one. High limits are the top half of each day, low limits the bottom half.</div>
-        <button class="btn small primary" id="w-add">+ Add</button>
-      </div>
+      <h2>Schedule<span class="spacer"></span><button class="btn small primary" id="w-add">+ Add</button></h2>
+      <div class="note" style="margin:0 0 14px">Change the high and/or low limit for a while, every week or once. Click or drag across a day to add an entry, click one to change it. <details class="more"><summary>More</summary><div>For example, Tue and Thu 23:00–08:00 high 50%, or tomorrow 06:00–10:00 low 95%. Each day shows the high limit's entries on top and the low limit's below. Any limit an entry doesn't set, and any time nothing's on, uses the defaults. Where entries overlap, the one that started last wins.</div></details></div>
       <div class="week" id="w-grid"></div>
-      <div class="legend"><span><b class="band" style="background:var(--w-high);opacity:.85"></b>High limit</span><span><b class="band" style="background:var(--w-low);opacity:.85"></b>Low limit</span><span><b class="band" style="background:var(--text2);opacity:.3"></b>Paused</span><span><b class="band" style="background:repeating-linear-gradient(45deg,var(--w-high) 0 3px,transparent 3px 5px);opacity:.5"></b>Skipped this once</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span><span id="w-defaults"></span></div>
-      <h2 style="margin-top:18px">All entries</h2>
-      <div class="table-wrap"><table>
-        <thead><tr><th>When</th><th>Limits</th><th>Next</th><th class="num"></th></tr></thead>
-        <tbody id="o-sched"></tbody>
-      </table></div>
+      <div class="legend" style="margin-top:12px"><span><b class="band" style="background:var(--w-high)"></b>High limit (top)</span><span><b class="band" style="background:var(--w-low)"></b>Low limit (bottom)</span><span><b class="band" style="background:var(--text2);opacity:.3"></b>Paused</span><span><b class="band" style="background:repeating-linear-gradient(45deg,var(--w-high) 0 3px,transparent 3px 5px);opacity:.6"></b>Skipped this once</span><span><b class="band" style="background:var(--err);width:2px"></b>Now</span><span id="w-defaults"></span></div>
+      <h2 style="margin-top:22px">All entries</h2>
+      <div class="entries" id="o-sched"></div>
     </div>
     <div class="card">
       <h2>History<span class="spacer"></span>
@@ -948,14 +978,31 @@ function drawSchedule(v) {
   const next = Object.fromEntries((v.upcoming || []).map((u) => [u.id, u.starts]));
   const on = new Set((v.active || []).map((a) => a.id));
   const onStart = Object.fromEntries((v.active || []).map((a) => [a.id, a.started]));
-  $('o-sched').innerHTML = (v.entries || []).length ? v.entries.map((e) => `<tr class="${e.enabled ? '' : 'off'}" data-open="${e.id}" style="cursor:pointer">
-      <td>${e.kind === 'weekly' ? e.days.map((d) => DAYNAMES[d]).join(', ') : new Date(e.date).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} ${esc(e.start)}–${esc(e.end)}${e.label ? `<div class="sub">${esc(e.label)}</div>` : ''}${(e.skips || []).filter((d) => d >= isoAt(-1)).map((d) => `<div class="sub">Skipping ${new Date(d + 'T12:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} <a href="#" class="unskip" data-id="${e.id}" data-date="${d}">undo</a></div>`).join('')}</td>
-      <td>${[e.high != null ? `High ${num(e.high, 0)}%` : '', e.low != null ? `Low ${num(e.low, 0)}%` : ''].filter(Boolean).join(' · ')}</td>
-      <td>${on.has(e.id) ? '<span class="chip info">On now</span>' : e.enabled ? (next[e.id] ? whenLocal(next[e.id]) : '—') : '<span class="muted">Paused</span>'}</td>
-      <td class="num acts">${e.kind === 'weekly' && e.enabled && (on.has(e.id) ? onStart[e.id] : next[e.id]) ? `<button class="btn small" data-skip-next="${e.id}" data-date="${(on.has(e.id) ? onStart[e.id] : next[e.id]).slice(0, 10)}" title="Leave out ${on.has(e.id) ? 'the one on now' : 'the next one'} only">${on.has(e.id) ? 'Skip this one' : 'Skip next'}</button>` : ''}
+  // One row per entry: when (days as dots, or the date), its limits, whether it's on or when
+  // it's next, and what you can do with it. Click a row to open it in the week above.
+  const fmtDay = (iso) => new Date(iso + 'T12:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
+  $('o-sched').innerHTML = (v.entries || []).length ? v.entries.map((e) => {
+    const stripe = e.high != null && e.low != null ? `linear-gradient(var(--w-high) 50%, var(--w-low) 50%)` : e.high != null ? 'var(--w-high)' : 'var(--w-low)';
+    const nextDay = tmin(e.end) <= tmin(e.start);
+    const when = e.kind === 'weekly'
+      ? `<div class="daydots">${WD.map((d) => `<span class="${e.days.includes(d) ? 'on' : ''}">${DAYNAMES[d].slice(0, 2)}</span>`).join('')}</div>`
+      : `<div class="daydots"><span class="on" style="width:auto;padding:0 8px">Once · ${fmtDay(e.date)}</span></div>`;
+    const lims = [e.high != null ? `<span class="lim"><i style="background:var(--w-high)"></i>High <b>${num(e.high, 0)}%</b></span>` : '',
+      e.low != null ? `<span class="lim"><i style="background:var(--w-low)"></i>Low <b>${num(e.low, 0)}%</b></span>` : ''].join('');
+    const skips = (e.skips || []).filter((d) => d >= isoAt(-1)).map((d) => `<div class="sub">Skipping ${fmtDay(d)} · <a href="#" class="unskip" data-id="${e.id}" data-date="${d}">undo</a></div>`).join('');
+    const status = on.has(e.id) ? '<span class="pill ok"><span class="pdot"></span>On now</span>'
+      : !e.enabled ? '<span class="pill none">Paused</span>'
+      : next[e.id] ? `<span class="pill info">Next ${esc(whenLocal(next[e.id]))}</span>` : '<span class="pill none">Nothing coming</span>';
+    const skipAt = e.kind === 'weekly' && e.enabled && (on.has(e.id) ? onStart[e.id] : next[e.id]);
+    return `<div class="entry ${e.enabled ? '' : 'off'}" data-open="${e.id}">
+      <div class="stripe" style="background:${stripe}"></div>
+      <div class="when"><b>${esc(e.start)}–${esc(e.end)}</b>${nextDay ? ' <span class="muted" style="font-size:12px">next day</span>' : ''}${e.label ? `<span class="elabel">${esc(e.label)}</span>` : ''}${when}</div>
+      <div class="lims">${lims}</div>
+      <div class="status">${status}${skips}</div>
+      <div class="acts">${skipAt ? `<button class="btn small" data-skip-next="${e.id}" data-date="${skipAt.slice(0, 10)}" title="Leave out ${on.has(e.id) ? 'the one on now' : 'the next one'} only">${on.has(e.id) ? 'Skip this one' : 'Skip next'}</button>` : ''}
         <button class="btn small" data-toggle="${e.id}" data-on="${e.enabled ? 1 : 0}">${e.enabled ? 'Pause' : 'Resume'}</button>
-        <button class="btn small" data-del="${e.id}">Delete</button></td></tr>`).join('')
-    : '<tr><td colspan="4" class="empty">Nothing scheduled: the default limits are always used</td></tr>';
+        <button class="btn small" data-del="${e.id}">Delete</button></div></div>`;
+  }).join('') : '<div class="empty">Nothing scheduled: the default limits are always used. Click or drag across a day above to add an entry.</div>';
 }
 async function refreshSchedule() {
   try { drawSchedule(await api('schedule')); } catch (e) {}
@@ -1038,7 +1085,9 @@ function drawDefaultsNote() {
 }
 function drawWeek() {
   const ed = week.edit, now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  const short = (d) => d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : dateAt(d).toLocaleDateString([], {weekday: 'short'});
   const label = (d) => d === 0 ? 'Today' : `${dateAt(d).toLocaleDateString([], {weekday: 'short'})} ${dateAt(d).getDate()}`;
+  const lanes = '<div class="lane hi"></div><div class="lane lo"></div>' + [3, 6, 9, 12, 15, 18, 21].map((h) => `<div class="g3" style="left:${h / 24 * 100}%"></div>`).join('');
   let html = ed && ed.top ? '<div class="slot-pop top" id="w-pop"></div>' : '';
   for (let d = 0; d < 7; d++) {
     let bars = '';
@@ -1047,16 +1096,20 @@ function drawWeek() {
         const skipped = e.kind === 'weekly' && (e.skips || []).includes(occ);
         const w = (b - a) / 14.4, left = a / 14.4, picked = ed && ed.id === e.id && (!ed.occ || ed.occ === occ);
         const when = `${label(d)} ${hhmm(a)}–${b >= DAY_MIN ? '24:00' : hhmm(b)}`;
-        const title = (lim) => `${when}: ${lim}${e.label ? ' · ' + e.label : ''}${e.enabled ? '' : ' (paused)'}${skipped ? ' (skipped this once)' : ''}${e.kind === 'once' ? ' · once' : ' · every week'}`;
+        const title = (lim) => `${when}: ${lim}${e.label ? ' · ' + e.label : ''}${e.enabled ? '' : ' (paused)'}${skipped ? ' (skipped this once)' : ''}${e.kind === 'once' ? ' · once' : ' · every week'} · click to change`;
         const cls = `${e.enabled ? '' : 'off'} ${skipped ? 'skipped' : ''} ${picked ? 'picked' : ''}`;
-        if (e.high != null) bars += `<div class="wbar hi ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`high ${num(e.high, 0)}%`))}">${w > 4 ? `${num(e.high, 0)}%` : ''}</div>`;
-        if (e.low != null) bars += `<div class="wbar lo ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`low ${num(e.low, 0)}%`))}">${w > 4 ? `${num(e.low, 0)}%` : ''}</div>`;
+        // as much of a label as fits: "High 50% · Cheap night", "50%", or nothing
+        const text = (kind, v) => w > 20 && e.label ? `${kind} ${num(v, 0)}% · ${esc(e.label)}` : w > 9 ? `${kind} ${num(v, 0)}%` : w > 3.5 ? `${num(v, 0)}%` : '';
+        if (e.high != null) bars += `<div class="wbar hi ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`high ${num(e.high, 0)}%`))}">${text('↑ High', e.high)}</div>`;
+        if (e.low != null) bars += `<div class="wbar lo ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`low ${num(e.low, 0)}%`))}">${text('↓ Low', e.low)}</div>`;
       }
     });
-    html += `<div class="dl ${d === 0 ? 'today' : ''}">${label(d)}</div><div class="track" data-row="${d}">${bars}${d === 0 ? `<div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
+    const extra = d === 0 ? `<div class="past" style="width:${nowMin / 14.4}%"></div><div class="now" style="left:${nowMin / 14.4}%"></div>` : '';
+    html += `<div class="dl ${d === 0 ? 'today' : ''}">${short(d)}<small>${dateAt(d).toLocaleDateString([], {day: 'numeric', month: 'short'})}</small></div>`
+      + `<div class="track ${d === 0 ? 'today' : ''}" data-row="${d}">${lanes}${bars}${extra}</div>`;
     if (ed && !ed.top && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
   }
-  html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
+  html += '<div></div><div class="axis">' + [0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => `<span style="left:${h / 24 * 100}%">${String(h % 24).padStart(2, '0')}:00</span>`).join('') + '</div>';
   $('w-grid').innerHTML = html;
   drawDefaultsNote();
   drawEditor();
@@ -1190,7 +1243,7 @@ $('o-sched').addEventListener('click', (ev) => {
   if (u) { ev.preventDefault(); skipOccurrence(u.dataset.id, u.dataset.date, false); return; }
   const t = ev.target.closest('button');
   if (!t) {
-    const tr = ev.target.closest('tr[data-open]'), e = tr && week.entries.find((x) => x.id === tr.dataset.open);
+    const tr = ev.target.closest('[data-open]'), e = tr && week.entries.find((x) => x.id === tr.dataset.open);
     if (e) { let row = 0; while (row < 6 && !occOn(e, row).length) row++; openEditor(row, e); $('w-pop') && $('w-pop').scrollIntoView({block: 'nearest', behavior: 'smooth'}); }
     return;
   }

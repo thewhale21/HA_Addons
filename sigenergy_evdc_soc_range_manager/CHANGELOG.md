@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.24.0 — The schedule redesigned
+
+- **Improvement:** the Schedule tab's week view is easier to read: taller
+  rows with the day and date, each split into a tinted high-limit lane on
+  top and low-limit lane below, gridlines and times every 3 hours, entries
+  as rounded blocks labelled with the limit (and the entry's label when it
+  fits), the past of today dimmed, a marker for now, and the picked entry
+  outlined.
+- **Improvement:** All entries is a row per entry instead of a table: its
+  times (and "next day"), label, the days it runs as Mo–Su dots (or the
+  date, for a one-off), its limits with their colours, a status label (On
+  now, Next…, Paused) with any skipped days, and its buttons. A coloured
+  edge shows which limits it sets. Click a row to open it in the week, as
+  before.
+
 ## 0.23.1 — Chart markers on the SoC line
 
 - **Fix:** on the SoC chart, a start or stop just after plugging in was
