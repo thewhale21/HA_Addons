@@ -7,8 +7,9 @@ settings and diagnostics, so a new add-on only needs its own work adding.
 ## Using it
 
 1. Install the add-on and start it. Open it from the sidebar.
-2. **Overview** shows what it's doing: its status, the example entity's
-   reading and the example option.
+2. **Overview** shows what it's doing in a banner at the top: its status,
+   the example entity's reading and the example option. Each tab has one;
+   Settings › **Appearance** switches them to plain cards (**Basic**).
 3. **Settings** has the example entity picker: type to search Home
    Assistant's entities, pick one, and its reading appears on the Overview
    and updates live.

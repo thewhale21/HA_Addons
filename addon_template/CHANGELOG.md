@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.5 — The banner theme
+
+- **New:** the page has the same look as the other add-ons: a coloured
+  banner at the top of each tab (Overview: the status with the example
+  values as tiles; Settings; Diagnostics › Health: **All good**, or orange
+  or red when something needs attention), fading from `--primary` to
+  `--hero2`.
+- **New:** Settings › **Appearance**: **Colourful** (the banners) or
+  **Basic** (plain cards), saved in each browser.
+- **For new add-ons:** the banner classes (`.bnr`, `.top`, `.ttl`,
+  `.main`, `.lead`, `.ring`, `.hb`, `.side`, `.stats`/`.stat`) and
+  `.masonry` (cards side by side without gaps) are ready to reuse.
+
 ## 0.1.4 — Issue triage with any AI provider
 
 - **Docs:** GitHub Models was retired on 30 July 2026, so issue triage now

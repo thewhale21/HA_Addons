@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>try { if (localStorage.getItem('addon-template-theme') === 'basic') document.documentElement.classList.add('basic'); } catch (e) {}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Add-on Template</title>
@@ -168,6 +169,91 @@
   }
   .logs { max-height: 60vh; overflow: auto; white-space: pre; }
 
+
+  /* ===== The overhaul: banners at the top of each tab, calmer cards, less to scan ===== */
+  :root { --hero2: #5c6bc0; }  /* the banners fade from --primary to this */
+  .card h2 { font-size: 15px; letter-spacing: .1px; }
+  .card > .note:first-of-type { line-height: 1.5; }
+  .stack { gap: 18px; }
+  .section-title { margin: 14px 2px -6px; }
+  /* Cards that sit side by side without stretching to each other's height */
+  .masonry { columns: 2 440px; column-gap: 16px; }
+  .masonry.three { columns: 3 320px; }
+  .masonry > .card { break-inside: avoid; margin: 0 0 16px; display: block; width: 100%; }
+  .masonry > .card:last-child { margin-bottom: 0; }
+  /* The banner */
+  .bnr { position: relative; isolation: isolate; color: #fff; border-radius: var(--radius); padding: 16px 20px 18px;
+    background: linear-gradient(120deg, var(--primary) 0%, color-mix(in srgb, var(--hero2) 82%, #000) 100%);
+    box-shadow: 0 4px 18px -6px color-mix(in srgb, var(--primary) 55%, transparent); }
+  .bnr::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit;
+    background: radial-gradient(circle at 92% -30%, rgba(255,255,255,.28), transparent 45%), radial-gradient(circle at 0% 130%, rgba(255,255,255,.14), transparent 40%); }
+  .bnr.warn { background: linear-gradient(120deg, #fb8c00, #c62828); }
+  .bnr.err { background: linear-gradient(120deg, #e53935, #6a1b1b); }
+  .bnr.good { background: linear-gradient(120deg, #43a047, color-mix(in srgb, var(--hero2) 75%, #000)); }
+  .bnr.charging { background: linear-gradient(120deg, #43a047, color-mix(in srgb, var(--hero2) 80%, #000)); }
+  .bnr.idle { background: linear-gradient(120deg, #607d8b, #37474f); }
+  .bnr svg { width: 18px; height: 18px; flex: none; }
+  .bnr .top { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .bnr .top .spacer { flex: 1; }
+  .bnr .ttl { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 500; }
+  .bnr .main { display: flex; gap: 18px 28px; flex-wrap: wrap; align-items: stretch; }
+  .bnr .lead { flex: 1 1 300px; display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
+  .bnr .ring { width: 54px; height: 54px; flex: none; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(255,255,255,.18); box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); }
+  .bnr .ring svg { width: 26px; height: 26px; }
+  .bnr .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+  .bnr .hb { font-size: 28px; font-weight: 500; line-height: 1.15; margin: 2px 0 4px; }
+  .bnr .sm { font-size: 12.5px; opacity: .9; line-height: 1.45; }
+  .bnr .side { flex: 1 1 300px; padding-left: 26px; border-left: 1px solid rgba(255,255,255,.25); min-width: 0; }
+  @media (max-width: 720px) { .bnr .side { padding-left: 0; border-left: 0; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.25); flex-basis: 100%; } }
+  .bnr .label, .bnr .sub, .bnr .note, .bnr .muted, .bnr .range-labels { color: rgba(255,255,255,.85); }
+  :root:not(.basic) .bnr .big, :root:not(.basic) .bnr #o-status { color: #fff; }
+  :root:not(.basic) .bnr .chip { background: rgba(255,255,255,.94); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .bnr .chip:not(.ok):not(.warn):not(.err):not(.info) { color: #455a64; }
+  .bnr .btn { background: rgba(255,255,255,.14); color: #fff; border-color: rgba(255,255,255,.4); border-radius: 999px; }
+  .bnr .btn:hover:not(:disabled) { background: #fff; color: color-mix(in srgb, var(--primary) 70%, #000); }
+  .bnr .btn.primary { background: #fff; color: color-mix(in srgb, var(--primary) 75%, #000); border-color: #fff; }
+  .bnr .seg { border: 0; gap: 6px; overflow: visible; }
+  .bnr .seg button { border: 1px solid rgba(255,255,255,.38) !important; border-radius: 999px; color: #fff; background: rgba(255,255,255,.12); padding: 5px 12px; }
+  .bnr .seg button[aria-pressed="true"] { background: #fff; color: color-mix(in srgb, var(--primary) 75%, #000); }
+  .bnr select, .bnr input[type="number"] { background: rgba(255,255,255,.95); color: #263238; border-color: transparent; }
+  .bnr details.more > summary { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
+  .bnr .kv dt { color: rgba(255,255,255,.8); } .bnr .kv dd { color: #fff; }
+  .bnr .kv { gap: 7px 18px; font-size: 14px; }
+  .bnr .range { background: rgba(255,255,255,.22); box-shadow: none; height: 12px; }
+  .bnr .range .win { background: rgba(255,255,255,.6); }
+  .bnr .range .mark { background: #fff; box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 60%, #000); }
+  .bnr .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .bnr .stat { background: rgba(255,255,255,.14); border-radius: 12px; padding: 10px 14px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); min-width: 0; }
+  .bnr .stat .big { font-size: 24px; }
+  .bnr .stat .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bnr .hold { gap: 8px; }
+  .bnr .ctl .btn { min-width: 116px; }
+  .bnr-result:empty, .bnr-result[hidden] { display: none; }
+  /* Debug: long log lines wrap */
+  .logs { white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* The basic theme (Settings › Appearance): the banners as plain cards */
+  .basic .bnr, .basic .bnr.warn, .basic .bnr.err, .basic .bnr.good, .basic .bnr.idle { background: var(--card); color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--divider); }
+  .basic .bnr::before { display: none; }
+  .basic .bnr .label, .basic .bnr .sub, .basic .bnr .note, .basic .bnr .muted, .basic .bnr .range-labels, .basic .bnr .kv dt { color: var(--text2); }
+  .basic .bnr .kv dd { color: var(--text); }
+  .basic .bnr .sm, .basic .bnr .k { opacity: 1; color: var(--text2); }
+  .basic .bnr .ring { background: var(--hover); box-shadow: none; color: var(--primary); }
+  .basic .bnr.warn .ring { color: var(--warn); } .basic .bnr.err .ring { color: var(--err); } .basic .bnr.good .ring, .basic .bnr.charging .ring { color: var(--ok); }
+  .basic .bnr .side { border-color: var(--divider); }
+  .basic .bnr .stat { background: var(--hover); box-shadow: none; }
+  .basic .bnr .btn { background: var(--card); color: var(--primary); border-color: var(--divider); border-radius: 8px; }
+  .basic .bnr .btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  .basic .bnr .seg { border: 1px solid var(--divider); gap: 0; overflow: hidden; }
+  .basic .bnr .seg button { border: 0 !important; border-radius: 0; color: var(--text); background: none; }
+  .basic .bnr .seg button + button { border-left: 1px solid var(--divider) !important; }
+  .basic .bnr .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  .basic .bnr select, .basic .bnr input[type="number"] { background: var(--bg); color: var(--text); border-color: var(--divider); }
+  .basic .bnr details.more > summary { color: var(--primary); text-decoration: none; }
+  .basic .bnr .range { background: var(--hover); box-shadow: inset 0 0 0 1px var(--divider); }
+  .basic .bnr .range .win { background: color-mix(in srgb, var(--ok) 35%, transparent); }
+  .basic .bnr .range .mark { background: var(--text); box-shadow: none; }
 </style>
 </head>
 <body>
@@ -192,21 +278,24 @@
 
   <!-- ============ Overview: what the add-on is doing (renderState) ============ -->
   <section id="tab-overview" class="stack">
-    <div class="grid">
-      <div class="card">
-        <div class="label">Status</div>
-        <div class="big" id="o-status">—</div>
-        <div class="sub" id="o-status-sub"></div>
-      </div>
-      <div class="card">
-        <div class="label">Example entity</div>
-        <div class="big" id="o-entity">—</div>
-        <div class="sub" id="o-entity-sub">Pick one on the Settings tab</div>
-      </div>
-      <div class="card">
-        <div class="label">Example option</div>
-        <div class="big" id="o-option">—</div>
-        <div class="sub">From the add-on's Configuration tab in Home Assistant</div>
+    <!-- The banner: the tab's main answer first (Settings › Appearance › Basic shows it as a plain card) -->
+    <div class="bnr" id="o-bnr">
+      <div class="top"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21Z"/></svg>Right now</span></div>
+      <div class="main">
+        <div class="lead">
+          <div class="ring"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21Z"/></svg></div>
+          <div style="min-width:0">
+            <div class="k">Status</div>
+            <div class="hb" id="o-status">—</div>
+            <div class="sm" id="o-status-sub"></div>
+          </div>
+        </div>
+        <div class="side">
+          <div class="stats">
+            <div class="stat"><div class="label">Example entity</div><div class="big" id="o-entity">—</div><div class="sub" id="o-entity-sub">Pick one on the Settings tab</div></div>
+            <div class="stat"><div class="label">Example option</div><div class="big" id="o-option">—</div><div class="sub">From the add-on's Configuration tab</div></div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -217,8 +306,20 @@
 
   <!-- ============ Settings ============ -->
   <section id="tab-settings" class="stack" hidden>
+    <div class="bnr">
+      <div class="top" style="margin-bottom:8px"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>Settings</span></div>
+      <div class="sm" style="margin-left:26px">How it runs, and the Home Assistant entities it reads. Changes are saved as you make them.</div>
+    </div>
+    <div class="section-title">How it looks</div>
+    <div class="masonry">
+      <div class="card">
+        <h2>Appearance</h2>
+        <div class="row" style="margin-top:0"><div class="grow">Theme<div class="note" style="margin:0">Colourful puts a coloured banner at the top of each tab; Basic keeps them as plain cards. Saved in this browser.</div></div></div>
+        <div class="row" style="margin-top:8px"><div class="seg" id="c-theme" role="group" aria-label="Theme"><button data-theme="colour">Colourful</button><button data-theme="basic">Basic</button></div></div>
+      </div>
+    </div>
     <div class="section-title">Your Home Assistant entities</div>
-    <div class="grid">
+    <div class="masonry">
       <div class="card">
         <h2>Example entity</h2>
         <div class="row"><div class="grow">Entity<div class="note" style="margin:0">Followed live and shown on the Overview. <details class="more"><summary>More</summary><div>Any sensor, binary sensor, switch, input boolean, input number or light. Add more pickers like this one: see <code>ENTITY_KEYS</code> in <code>src/ha_link.py</code>.</div></details></div></div></div>
@@ -263,6 +364,10 @@
 
   <!-- ============ Diagnostics › Health ============ -->
   <section id="tab-health" class="stack" hidden>
+    <div class="bnr good" id="h-bnr">
+      <div class="top"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>Diagnostics</span></div>
+      <div class="lead" id="h-bnr-lead"></div>
+    </div>
     <div class="card" id="h-issues-card" hidden><h2>Needs attention</h2><ul class="issues" id="h-issues"></ul></div>
     <div class="grid">
       <div class="card"><h2>Add-on</h2><dl class="kv" id="h-addon"></dl></div>
@@ -279,6 +384,19 @@
 
 <script>
 'use strict';
+// ---------- Theme (Settings › Appearance): colourful banners or basic cards, per browser ----------
+function drawTheme() {
+  const basic = document.documentElement.classList.contains('basic');
+  document.querySelectorAll('#c-theme button').forEach((b) => b.setAttribute('aria-pressed', (b.dataset.theme === 'basic') === basic));
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#c-theme button'); if (!b) return;
+  const basic = b.dataset.theme === 'basic';
+  document.documentElement.classList.toggle('basic', basic);
+  try { localStorage.setItem('addon-template-theme', basic ? 'basic' : 'colour'); } catch (e2) {}
+  drawTheme();
+});
+document.addEventListener('DOMContentLoaded', drawTheme);
 const $ = (id) => document.getElementById(id);
 let state = null;          // latest /api/state
 let activeTab = 'overview';
@@ -400,6 +518,13 @@ function updateStatus() {
     : `Unhealthy: ${issues.map((i) => i[1]).join('; ')}. Open Diagnostics`;
   $('status-btn').setAttribute('aria-label', level === 'ok' ? 'Healthy. Open Diagnostics' : `Unhealthy, ${issues.length} issue${issues.length === 1 ? '' : 's'}. Open Diagnostics`);
   $('h-issues-card').hidden = !issues.length;
+  $('h-bnr').className = 'bnr ' + (level === 'ok' ? 'good' : level);
+  const nErr = issues.filter((i) => i[0] === 'err').length;
+  $('h-bnr-lead').innerHTML = `<div class="ring">${level === 'ok'
+    ? '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>'}</div><div style="min-width:0">`
+    + `<div class="k">Health</div><div class="hb">${level === 'ok' ? 'All good' : `${issues.length} thing${issues.length === 1 ? ' needs' : 's need'} attention`}</div>`
+    + `<div class="sm">${level === 'ok' ? 'The add-on and Home Assistant are both working.' : nErr ? `${nErr} problem${nErr === 1 ? '' : 's'}: see below` : 'See below'}</div></div>`;
   $('h-issues').innerHTML = issues.map(([lvl, t]) => `<li><span class="chip ${lvl}">${lvl === 'err' ? 'Problem' : 'Check'}</span> ${esc(t)}</li>`).join('');
 }
 setInterval(() => { if (!document.hidden) pollStatus(); }, 30000);
