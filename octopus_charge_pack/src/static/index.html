@@ -143,14 +143,27 @@
   .combo-list li.active { background: var(--hover); box-shadow: inset 3px 0 0 var(--primary); }
   .combo-list li.sel { font-weight: 600; }
   .combo-list li.empty { color: var(--text2); cursor: default; }
-  .tl { display: grid; grid-template-columns: 70px 1fr; gap: 6px 10px; align-items: center; font-size: 12px; }
-  .tl .track { position: relative; height: 26px; background: var(--hover); border-radius: 6px; overflow: hidden; }
-  .tl .blk { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; opacity: .85; }
-  .tl .blk.discharge { background: var(--violet); } .tl .blk.charge { background: var(--info); }
-  .tl .blk.idle { background: repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px); opacity: .35; }
-  .tl .blk.done { outline: 2px solid var(--ok); outline-offset: -2px; }
-  .tl .now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--err); }
-  .tl .axis { display: flex; justify-content: space-between; color: var(--text2); font-size: 11px; }
+  /* Today and tomorrow: a timeline per day */
+  .tl { display: grid; grid-template-columns: 64px 1fr; gap: 10px 12px; align-items: center; }
+  .tl .day { font-size: 13px; font-weight: 500; line-height: 1.2; }
+  .tl .day small { display: block; font-weight: 400; color: var(--text2); font-size: 11px; }
+  .tl .track { position: relative; height: 40px; border-radius: 10px; background: var(--hover); overflow: hidden; }
+  .tl .grid3 { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--divider); }
+  .tl .past { position: absolute; top: 0; bottom: 0; left: 0; background: var(--card); opacity: .55; pointer-events: none; z-index: 2; }
+  .tl .idle { position: absolute; top: 14px; bottom: 14px; border-radius: 6px; background: var(--text2); opacity: .16; }
+  .tl .blk { position: absolute; top: 5px; bottom: 5px; border-radius: 7px; color: #fff; font-size: 11px; font-weight: 500;
+             display: flex; align-items: center; gap: 4px; padding: 0 7px; overflow: hidden; white-space: nowrap;
+             box-shadow: 0 1px 2px rgba(0,0,0,.18); z-index: 1; }
+  .tl .blk.discharge { background: linear-gradient(135deg, #ab47bc, var(--violet)); }
+  .tl .blk.charge { background: linear-gradient(135deg, #29b6f6, var(--info)); }
+  .tl .blk .tick { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: rgba(255,255,255,.3); font-size: 10px; }
+  .tl .now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--err); z-index: 3; }
+  .tl .now::before { content: ''; position: absolute; top: -1px; left: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--err); }
+  .tl .axis { position: relative; height: 14px; color: var(--text2); font-size: 11px; }
+  .tl .axis span { position: absolute; transform: translateX(-50%); }
+  .tl .axis span:first-child { transform: none; } .tl .axis span:last-child { transform: translateX(-100%); }
+  .tl-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 12px; color: var(--text2); }
+  .tl-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
   .switch { position: relative; width: 44px; height: 24px; flex: none; }
   .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
   .switch span { position: absolute; inset: 0; background: var(--divider); border-radius: 999px; transition: background .15s; }
@@ -189,6 +202,7 @@
   </div>
   <nav role="tablist" id="tabs">
     <button role="tab" data-tab="overview"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg><span>Overview</span></button>
+    <button role="tab" data-tab="history"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg><span>History</span></button>
     <button role="tab" data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg><span>Settings</span></button>
     <button role="tab" data-tab="diagnostics"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>Diagnostics</span></button>
   </nav>
@@ -210,7 +224,7 @@
     <div class="card">
       <h2>Today and tomorrow</h2>
       <div class="tl" id="o-tl"></div>
-      <div class="note" style="margin:8px 0 0"><span class="chip dis">Discharge</span> <span class="chip chg">Charge</span> <span class="chip">Idle</span> as planned; outlined in green: completed. The red line is now.</div>
+      <div class="tl-legend"><span><i style="background:var(--violet)"></i>Discharge</span><span><i style="background:var(--info)"></i>Charge</span><span><i style="background:var(--text2);opacity:.3"></i>Idle</span><span>✓ Completed</span><span><i style="background:var(--err);width:2px;border-radius:0"></i>Now</span></div>
     </div>
     <div class="grid">
       <div class="card">
@@ -228,11 +242,12 @@
         <table><thead><tr><th>Start</th><th>End</th><th class="num">Energy</th></tr></thead><tbody id="o-chg-list"></tbody></table>
       </div>
     </div>
-    <div class="card">
-      <div class="label"><span class="chip">Idle</span> No charge or discharge</div>
-      <table style="margin-top:8px"><thead><tr><th>Start</th><th>End</th><th class="num">Energy</th></tr></thead><tbody id="o-idle-list"></tbody></table>
-    </div>
     <div class="note" style="margin:0">From Octopus's planned dispatches for your device: energy above 0 counts as a discharge, below 0 as a charge, and 0 as idle (dispatches Octopus plans with no energy, e.g. to hold the battery).</div>
+  </section>
+
+  <!-- ============ Settings ============ -->
+  <!-- ============ History ============ -->
+  <section id="tab-history" class="stack" hidden>
     <div class="card">
       <h2>Completed sessions</h2>
       <table><thead><tr><th>Date</th><th>Time</th><th>Type</th><th class="num">Energy</th></tr></thead><tbody id="o-done"></tbody></table>
@@ -245,7 +260,6 @@
     </div>
   </section>
 
-  <!-- ============ Settings ============ -->
   <section id="tab-settings" class="stack" hidden>
     <div class="card">
       <h2>Device</h2>
@@ -500,7 +514,7 @@ function renderState(s) {
   $('o-dis-sub').textContent = m.discharge_start ? `${m.discharge_start_date} ${m.discharge_start_time} – ${m.discharge_end_date === m.discharge_start_date ? '' : m.discharge_end_date + ' '}${m.discharge_end_time}${m.discharge_kwh != null ? ' · ' + num(m.discharge_kwh, 2) + ' kWh' : ''}` : '';
   $('o-chg').textContent = m.charge_start ? span(m.charge_start, m.charge_end) : 'None planned';
   $('o-chg-sub').textContent = m.charge_start ? `${m.charge_start_date} ${m.charge_start_time} – ${m.charge_end_date === m.charge_start_date ? '' : m.charge_end_date + ' '}${m.charge_end_time}${m.charge_kwh != null ? ' · ' + num(m.charge_kwh, 2) + ' kWh' : ''}` : '';
-  for (const [kind, id] of [['discharge', 'o-dis-list'], ['charge', 'o-chg-list'], ['idle', 'o-idle-list']]) {
+  for (const [kind, id] of [['discharge', 'o-dis-list'], ['charge', 'o-chg-list']]) {
     const rows = (m.dispatches || []).filter((d) => { const e = Number(d.energyAddedKwh) || 0; return kind === 'discharge' ? e > 0 : kind === 'charge' ? e < 0 : e === 0; })
       .map((d) => `<tr><td>${esc(dateTime(d.start))}</td><td>${esc(dateTime(d.end))}</td><td class="num">${num(d.energyAddedKwh, 2)} kWh</td></tr>`);
     $(id).innerHTML = rows.join('') || `<tr><td colspan="3" class="muted">${s.last_update ? 'None planned' : 'Not read yet'}</td></tr>`;
@@ -564,30 +578,41 @@ $('o-device').addEventListener('change', (ev) => {
 });
 $('s-cal').addEventListener('change', (ev) => saveSetting({calendar: ev.target.checked},
   ev.target.checked ? 'The calendar is kept up to date' : 'The calendar is no longer updated'));
-// Today and tomorrow: the planned dispatches (and the completed ones), local time
+// Today and tomorrow: the planned dispatches (and the completed ones), local time. One
+// row a day; charges and discharges as labelled blocks, idle as a soft band, the past dimmed
 function drawTimeline(dispatches, completed) {
   const day0 = new Date(); day0.setHours(0, 0, 0, 0);
   const DAY = 86400000, now = Date.now();
+  const t = (ms) => new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   const doneKeys = new Set(completed.map((c) => new Date(c.start).getTime() + '|' + new Date(c.end).getTime()));
-  const items = [...dispatches.map((d) => ({a: new Date(d.start).getTime(), b: new Date(d.end).getTime(), e: Number(d.energyAddedKwh) || 0})),
-    ...completed.map((c) => ({a: new Date(c.start).getTime(), b: new Date(c.end).getTime(), e: Number(c.energyAddedKwh) || 0}))];
-  const seen = new Set();
+  const all = new Map();
+  [...completed, ...dispatches].forEach((d) => {
+    const a = new Date(d.start).getTime(), b = new Date(d.end).getTime(), e = Number(d.energyAddedKwh) || 0;
+    all.set(a + '|' + b, {a, b, e, kind: e > 0 ? 'discharge' : e < 0 ? 'charge' : 'idle', done: doneKeys.has(a + '|' + b)});
+  });
   let html = '';
   for (let n = 0; n < 2; n++) {
     const lo = day0.getTime() + n * DAY, hi = lo + DAY;
-    const blocks = items.filter((x) => x.b > lo && x.a < hi).filter((x) => { const k = n + '|' + x.a + '|' + x.b; if (seen.has(k)) return false; seen.add(k); return true; }).map((x) => {
-      const kind = x.e > 0 ? 'discharge' : x.e < 0 ? 'charge' : 'idle';
-      const l = (Math.max(x.a, lo) - lo) / DAY * 100, w = (Math.min(x.b, hi) - Math.max(x.a, lo)) / DAY * 100;
-      const done = doneKeys.has(x.a + '|' + x.b);
-      const t = (ms) => new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
-      const title = `${kind === 'idle' ? 'Idle' : kind === 'charge' ? 'Charge' : 'Discharge'} ${t(x.a)}–${t(x.b)}${kind !== 'idle' ? ' · ' + num(x.e, 2) + ' kWh' : ''}${done ? ' · completed' : ''}`;
-      return `<div class="blk ${kind}${done ? ' done' : ''}" style="left:${l}%;width:${Math.max(w, 0.3)}%" title="${esc(title)}"></div>`;
-    }).join('');
-    const nowLine = now >= lo && now < hi ? `<div class="now" style="left:${(now - lo) / DAY * 100}%"></div>` : '';
-    const label = n === 0 ? 'Today' : new Date(lo).toLocaleDateString([], {weekday: 'short', day: 'numeric'});
-    html += `<div>${label}</div><div class="track">${blocks}${nowLine}</div>`;
+    const pct = (ms) => (Math.min(Math.max(ms, lo), hi) - lo) / DAY * 100;
+    let inner = [3, 6, 9, 12, 15, 18, 21].map((h) => `<div class="grid3" style="left:${h / 24 * 100}%"></div>`).join('');
+    for (const x of [...all.values()].filter((x) => x.b > lo && x.a < hi).sort((p, q) => p.a - q.a)) {
+      const l = pct(x.a), w = Math.max(pct(x.b) - l, 0.4);
+      if (x.kind === 'idle') {
+        inner += `<div class="idle" style="left:${l}%;width:${w}%" title="Idle ${t(x.a)}–${t(x.b)}"></div>`;
+        continue;
+      }
+      const kwh = `${num(Math.abs(x.e), 1)} kWh`, title = `${x.kind === 'charge' ? 'Charge' : 'Discharge'} ${t(x.a)}–${t(x.b)} · ${kwh}${x.done ? ' · completed' : ''}`;
+      // a label as long as it fits: times and kWh, else kWh, else nothing
+      const label = w > 16 ? `${t(x.a)}–${t(x.b)} · ${kwh}` : w > 6 ? kwh : '';
+      inner += `<div class="blk ${x.kind}" style="left:${l}%;width:${w}%" title="${esc(title)}">${x.done ? '<span class="tick">✓</span>' : ''}${esc(label)}</div>`;
+    }
+    if (now > lo) inner += `<div class="past" style="width:${pct(now)}%"></div>`;
+    if (now >= lo && now < hi) inner += `<div class="now" style="left:${pct(now)}%" title="Now ${t(now)}"></div>`;
+    const d = new Date(lo);
+    const name = n === 0 ? 'Today' : 'Tomorrow';
+    html += `<div class="day">${name}<small>${d.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})}</small></div><div class="track">${inner}</div>`;
   }
-  html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
+  html += '<div></div><div class="axis">' + [0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => `<span style="left:${h / 24 * 100}%">${String(h % 24).padStart(2, '0')}:00</span>`).join('') + '</div>';
   $('o-tl').innerHTML = html;
 }
 $('o-poll').addEventListener('change', (ev) => saveSetting({poll_seconds: Number(ev.target.value)}, `Read every ${ev.target.selectedOptions[0].textContent}`));

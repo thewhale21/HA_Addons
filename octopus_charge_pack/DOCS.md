@@ -11,13 +11,15 @@ and its sensors. In short: enter your Octopus API key on the
 **Configuration** tab and start it.
 
 1. **Overview** shows its status and what it's doing now, a timeline of
-   today and tomorrow, then the next discharge (with its local date, start
-   and end as the date and time sensors give them) and next charge, each
-   with its own planned dispatches, the idle ones (0 kWh), the completed
-   sessions of the last 30 days and the plan's changes of the last 7.
-2. **Settings** has the device and read interval (both drop-downs, applied
+   today and tomorrow (charges and discharges, idle time, completed ones
+   ticked), then the next discharge (with its local date, start and end as
+   the date and time sensors give them) and next charge, each with its own
+   planned dispatches.
+2. **History** has the completed sessions of the last 30 days and the
+   plan's changes of the last 7.
+3. **Settings** has the device and read interval (both drop-downs, applied
    at once) and the calendar switch.
-3. **Diagnostics** has its health, the sensors it posts, the log
+4. **Diagnostics** has its health, the sensors it posts, the log
    and a diagnostics bundle (the API key is always hidden).
 
 ## How it works

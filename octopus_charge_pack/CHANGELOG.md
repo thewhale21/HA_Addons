@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.2 — A History tab and a clearer timeline
+
+- **Change:** Completed sessions and Plan changes move to a new History
+  tab, and the Idle card is gone from the Overview (idle time still shows
+  on the timeline).
+- **Improvement:** the Today and tomorrow timeline is easier to read:
+  taller rows with the day and date, hour gridlines and times every 3
+  hours, charges and discharges as labelled blocks (times and kWh when they
+  fit) with a tick once completed, idle time as a soft band, the past
+  dimmed and a marker for now.
+
 ## 0.6.1 — The 2nd and 3rd discharges
 
 - **Feature:** sensors for the 2nd and 3rd planned discharges, the same set
