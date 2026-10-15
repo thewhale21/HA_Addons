@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.22.1 — Says why a limit helper isn't made
+
+- **Improvement:** when a limit picker on the Settings tab names a helper
+  of your own (e.g. `input_number.v2x_cut_off_threshold_high`), the log says
+  so each time it connects, and that clearing the picker and restarting
+  the add-on makes the add-on's own **EVDC SoC High Limit** / **Low Limit**
+  helper instead.
+
 ## 0.22.0 — The add-on's own limit helpers
 
 - **Feature:** the high and low limits are the add-on's own Home Assistant

@@ -119,8 +119,14 @@ async def _owned_helper(link, key: str, states: dict, notes: list) -> Optional[s
     None: leave it alone."""
     kind, spec = HELPERS[key]
     own = f"{kind}.{slugify(spec['name'])}"
-    if link.settings.get(key) not in (None, "", own):
-        return None  # something else is picked: that's the user's choice
+    picked = link.settings.get(key)
+    if picked not in (None, "", own):
+        # Something else is picked: that's the user's choice. Said in the log, as it's why the
+        # add-on's own helper isn't made
+        logger.info("Helpers: %s uses %s (picked on the Settings tab), so %s isn't made. Clear it there "
+                    "and restart the add-on to use the add-on's own helper.", key.replace("soc_", "") + " limit",
+                    picked, own)
+        return None
     ui = {item.get("id") for item in (await link.query({"type": f"{kind}/list"}) or [])}
     if own.split(".", 1)[1] in ui:
         return "ok"

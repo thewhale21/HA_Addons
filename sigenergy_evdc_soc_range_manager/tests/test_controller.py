@@ -641,5 +641,19 @@ def test_the_limits_are_the_add_ons_own_helpers_too(tmp_path):
     mine.settings.update({"soc_high": "input_number.my_high", "soc_low": "input_number.my_low",
                           "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "capacity": "input_number.c",
                           "import_rate": "sensor.r"})
-    _run(ensure_helpers(mine))
+    import logging
+    seen = []
+
+    class Grab(logging.Handler):
+        def emit(self, record):
+            seen.append(record.getMessage())
+
+    grab = Grab()
+    logging.getLogger("src.helpers").addHandler(grab)
+    logging.getLogger("src.helpers").setLevel(logging.INFO)
+    try:
+        _run(ensure_helpers(mine))
+    finally:
+        logging.getLogger("src.helpers").removeHandler(grab)
     assert mine.made == []
+    assert any("high limit uses input_number.my_high" in m and "evdc_soc_high_limit isn't made" in m for m in seen)
