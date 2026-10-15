@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.47.0 — Charge now in the schedule, and a colourful theme
+
+- **Improvement:** on the Automations tab, **Charge now** and the
+  **Schedule** are one card. Its banner shows what the schedule does next
+  (e.g. **Unplug at 21:30**, with how long until and what it did last; grey
+  and **Paused** when the schedule is off), the schedule's On switch, and
+  the Charge now buttons.
+- **New:** a coloured banner at the top of each tab, from blue to your
+  supplier's colour (Octopus purple, E.ON red, EDF amber): the charger state
+  on Overview, the totals on Sessions, and on Diagnostics the overall health
+  (green when all is well, orange or red when something needs attention).
+- **New:** Settings › **Appearance**: choose **Colourful** (the banners) or
+  **Basic** (plain cards). Saved in each browser.
+
 ## 2.46.0 — Recent sessions with a 7-day timeline
 
 - **Improvement:** the Sessions tab's **Recent sessions** card opens with a

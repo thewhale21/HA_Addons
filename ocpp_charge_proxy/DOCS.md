@@ -413,7 +413,9 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   plugged in, and whether auto re-plug gave up on it or it was unplugged
   first.
 - **Automations:**
-  - **Charge now** (at the top): click how long to plug in for (1, 2, 3, 4, 6, 8 or 12
+  - The **Schedule** card's banner: what the schedule does next (and how
+    long until, and what it did last), its On switch, and **Charge now**.
+  - **Charge now** (in the banner): click how long to plug in for (1, 2, 3, 4, 6, 8 or 12
     hours). It plugs in straight away and adjusts the schedule the same way
     auto plug-in does (see [Auto plug-in](#auto-plug-in)): a one-off slot
     in the schedule below, the ready time set to its end, and it unplugs
@@ -424,7 +426,9 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   - The plug-in schedule (see below): today and the next 6 days of when it
     has the car plugged in; Force schedule on supplier; auto
     plug-in, the car plugged in sensor and auto re-plug.
-- **Settings:** controls for Plugged In, max current and **Continue session
+- **Settings:** **Appearance**: **Colourful** (a coloured banner at the top
+  of each tab, from blue to your supplier's colour, the default) or
+  **Basic** (plain cards), saved in each browser; controls for Plugged In, max current and **Continue session
   after a restart**; the simulated car's start delay and ramp-up; your
   power and SoC sensors, with their live values; the **Voltage** card (a
   voltage sensor, or a set supply voltage; 230 V if neither) used to turn

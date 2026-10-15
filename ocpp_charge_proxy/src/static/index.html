@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>try { if (localStorage.getItem('ocpp-charge-proxy-theme') === 'basic') document.documentElement.classList.add('basic'); } catch (e) {}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OCPP Charge Proxy</title>
@@ -291,6 +292,61 @@
   .week .slot-pop.top { margin-bottom: 4px; }
   .slot-pop select, .slot-pop input[type="date"] { padding: 5px 8px; border-radius: 8px; }
   /* the schedule's header: next action and the legend */
+  .sched-card { padding-top: 0; overflow: hidden; }
+  .bnr { margin: 0 -16px 14px; padding: 16px 20px 18px; color: #fff; position: relative; isolation: isolate;
+    background: linear-gradient(120deg, var(--primary) 0%, color-mix(in srgb, var(--hero2, #5c6bc0) 80%, #000) 100%); transition: background .3s; }
+  .bnr::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(circle at 92% -30%, rgba(255,255,255,.28), transparent 45%), radial-gradient(circle at 0% 130%, rgba(255,255,255,.14), transparent 40%); }
+  .bnr.off { background: linear-gradient(120deg, #78909c, #455a64); }
+  .bnr svg { width: 18px; height: 18px; flex: none; }
+  .hero-top { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .hero-title { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 500; }
+  .hero-on { font-size: 13px; opacity: .85; }
+  .hero-off { font-size: 12px; padding: 2px 10px; border-radius: 999px; background: rgba(0,0,0,.18); }
+  .hero-off:empty { display: none; }
+  .bnr .switch span { background: rgba(255,255,255,.3); }
+  .bnr .switch input:checked + span { background: rgba(255,255,255,.95); }
+  .bnr .switch input:checked + span::after { background: var(--primary); }
+  .hero-main { display: flex; gap: 18px 28px; flex-wrap: wrap; align-items: stretch; }
+  .hero-next { flex: 1 1 260px; display: flex; gap: 14px; align-items: center; min-width: 0; }
+  .hero-next .ring { width: 54px; height: 54px; flex: none; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(255,255,255,.18); box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); }
+  .hero-next .ring svg { width: 26px; height: 26px; }
+  .hero-next .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+  .hero-next .k b { font-weight: 600; letter-spacing: 0; text-transform: none; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: rgba(255,255,255,.22); }
+  .hero-next .big { font-size: 26px; font-weight: 500; line-height: 1.2; margin: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hero-next .sm { font-size: 12px; opacity: .85; }
+  .hero-charge { flex: 0 1 auto; padding-left: 26px; border-left: 1px solid rgba(255,255,255,.25); min-width: 0; }
+  @media (max-width: 700px) { .hero-charge { padding-left: 0; border-left: 0; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.25); flex-basis: 100%; } }
+  .hero-charge .hk { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; margin-bottom: 8px; }
+  .hero-charge .hk-sub { font-weight: 400; font-size: 12px; opacity: .8; }
+  .bnr .seg { border: 0; gap: 6px; overflow: visible; }
+  .bnr .seg button { border: 1px solid rgba(255,255,255,.35) !important; border-radius: 999px; color: #fff; background: rgba(255,255,255,.12);
+    padding: 6px 13px; font-weight: 500; transition: background .15s, transform .1s; font-variant-numeric: tabular-nums; }
+  .bnr .seg button:hover:not(:disabled) { background: #fff; color: color-mix(in srgb, var(--hero2, #5c6bc0) 70%, #000); }
+  .bnr .seg button:active:not(:disabled) { transform: scale(.96); }
+  .bnr .seg button:disabled { opacity: .55; cursor: wait; }
+  .hero-cap { font-size: 11.5px; opacity: .85; margin-top: 8px; }
+  .hero-result:empty { display: none; }
+  .hero-result { font-size: 13px; padding: 10px 12px; margin: 0 0 12px; border-radius: 10px; background: var(--hover);
+    border-left: 3px solid var(--primary); }
+  .hero-top .spacer { flex: 1; }
+  .hero-help { display: block; font-size: 11.5px; margin-top: 6px; opacity: .9; max-width: 460px; line-height: 1.45; }
+  .bnr details.more > summary { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
+  .bnr .supn { color: inherit; }
+  .bnr.solo { margin: 0; border-radius: var(--radius); box-shadow: 0 4px 18px -6px color-mix(in srgb, var(--primary) 55%, transparent); }
+  .bnr.warn { background: linear-gradient(120deg, #fb8c00, #c62828); }
+  .bnr.err { background: linear-gradient(120deg, #e53935, #6a1b1b); }
+  .bnr.ok-state { background: linear-gradient(120deg, #43a047, color-mix(in srgb, var(--hero2, #5c6bc0) 70%, #000)); }
+  .bnr .label, .bnr .sub, .bnr .note { color: rgba(255,255,255,.82); }
+  :root:not(.basic) .bnr .state, :root:not(.basic) .bnr .big { color: #fff; }
+  .bnr .hero-sub { font-size: 13px; opacity: .85; margin: -6px 0 0 26px; }
+  .bnr .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .bnr .stat { background: rgba(255,255,255,.14); border-radius: 12px; padding: 10px 14px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); }
+  .bnr .stat .big { font-size: 24px; }
+  .bnr.ov .hero { position: relative; }
+  .bnr .dot { box-shadow: 0 0 0 2px rgba(255,255,255,.7); }
+  :root:not(.basic) .bnr .chip { background: rgba(255,255,255,.94); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
   .nextline { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--hover); font-size: 13px; margin: 0; }
   .nextline:empty { display: none; }
   .wlegend { display: flex; gap: 8px 16px; flex-wrap: wrap; font-size: 12px; color: var(--text2); margin-top: 14px; }
@@ -329,6 +385,25 @@
     .big { font-size: 22px; }
     .hero .state { font-size: 24px; }
   }
+  /* The basic theme (Settings › Appearance): the banners as plain cards */
+  .basic .bnr, .basic .bnr.warn, .basic .bnr.err, .basic .bnr.ok-state, .basic .bnr.off { background: var(--card); color: var(--text); }
+  .basic .bnr::before { display: none; }
+  .basic .bnr.solo { box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--divider); }
+  .basic .sched-card .bnr { border-bottom: 1px solid var(--divider); }
+  .basic .bnr .label, .basic .bnr .sub, .basic .bnr .note, .basic .bnr .hero-sub { color: var(--text2); opacity: 1; }
+  .basic .bnr .ring { background: var(--hover); box-shadow: none; color: var(--primary); }
+  .basic .bnr.warn .ring { color: var(--warn); } .basic .bnr.err .ring { color: var(--err); } .basic .bnr.ok-state .ring { color: var(--ok); }
+  .basic .bnr .stat { background: var(--hover); box-shadow: none; }
+  .basic .bnr .seg button { border-color: var(--divider) !important; color: var(--text); background: none; }
+  .basic .bnr .seg button:hover:not(:disabled) { background: var(--primary); color: var(--on-primary); }
+  .basic .bnr .switch span { background: var(--divider); }
+  .basic .bnr .switch input:checked + span { background: var(--primary); }
+  .basic .bnr .switch input:checked + span::after { background: #fff; }
+  .basic .bnr details.more > summary { color: var(--primary); text-decoration: none; }
+  .basic .hero-charge { border-color: var(--divider); }
+  .basic .hero-next .k b, .basic .hero-off { background: var(--hover); }
+  .basic .hero-next .sm, .basic .hero-cap, .basic .hero-on, .basic .hero-help { opacity: 1; color: var(--text2); }
+  .basic .bnr .dot { box-shadow: none; }
 </style>
 </head>
 <body>
@@ -354,7 +429,7 @@
   </div>
   <!-- ============ Overview ============ -->
   <section id="tab-overview" class="stack">
-    <div class="card">
+    <div class="bnr solo ov">
       <div class="hero">
         <div>
           <div class="label">Charger state</div>
@@ -421,7 +496,10 @@
 
   <!-- ============ Sessions ============ -->
   <section id="tab-sessions" class="stack" hidden>
-    <div class="grid tiles" id="s-totals"></div>
+    <div class="bnr solo">
+      <div class="hero-top"><span class="hero-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>Sessions</span></div>
+      <div class="stats" id="s-totals"></div>
+    </div>
     <div class="card">
       <h2>Recent sessions<span class="spacer"></span><span id="s-filter"></span><span class="muted" style="font-size:12px;font-weight:400">Click a day to filter, or a charge to open it</span></h2>
       <div class="stl" id="s-tl"></div>
@@ -433,25 +511,31 @@
 
   <!-- ============ Automations (tab id "automation") ============ -->
   <section id="tab-automation" class="stack" hidden>
-    <div class="card">
-      <h2>Charge now</h2>
-      <div class="note" style="margin:0 0 10px">Plug in now for this long. <details class="more"><summary>More</summary><div>The schedule is adjusted the same way as for auto plug-in: the charge is added as a one-off slot (shown in the schedule below, where you can change it) that unplugs at the first ready time <span class="supn" data-f="your supplier">your supplier</span> accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one. With Force schedule on <span class="supn" data-f="supplier">supplier</span> on, if it would take a day over the daily limit (Settings › Your supplier), you're asked first, and the next scheduled slot then starts just late enough to stay within it (and later ones too, if skipping it isn't enough).</div></details></div>
-      <div class="row" style="margin-top:0"><div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div></div>
-      <div class="note" id="c-charge-cap" hidden style="margin:4px 0 0"></div>
-      <div class="sub" id="c-charge-note"></div>
-    </div>
-    <div class="card">
-      <h2>Schedule<span class="spacer"></span>
-        <span class="muted" style="font-size:12px;font-weight:400;margin-right:10px" id="w-note"></span>
-        <span class="muted" style="font-size:13px;font-weight:400">On</span>
-        <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
-      </h2>
+    <div class="card sched-card">
+      <div class="bnr" id="a-hero">
+        <div class="hero-top">
+          <span class="hero-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm0-18a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm.5 5v5.25l4.5 2.67-.75 1.23L11 13V7h1.5Z"/></svg>Schedule</span>
+          <span class="spacer"></span>
+          <span class="hero-off" id="w-note"></span>
+          <span class="hero-on">On</span>
+          <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
+        </div>
+        <div class="hero-main">
+          <div class="hero-next" id="a-next"></div>
+          <div class="hero-charge">
+            <div class="hk"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21Z"/></svg>Charge now <span class="hk-sub">plug in for</span></div>
+            <div class="seg" id="c-charge" role="group" aria-label="Charge now for"></div>
+            <div class="hero-cap" id="c-charge-cap" hidden></div>
+            <details class="more hero-help"><summary>How it works</summary><div>It's added to the schedule as a one-off slot (shown below, where you can change it) that unplugs at the first ready time <span class="supn" data-f="your supplier">your supplier</span> accepts after these hours, and the ready time is set to it. If it meets a scheduled slot they become one. With Force schedule on <span class="supn" data-f="supplier">supplier</span> on, if it would take a day over the daily limit (Settings › Your supplier), you're asked first, and the next scheduled slot then starts just late enough to stay within it (and later ones too, if skipping it isn't enough).</div></details>
+          </div>
+        </div>
+      </div>
+      <div class="hero-result" id="c-charge-note"></div>
       <div class="note" style="margin:0 0 10px">Plugs in and unplugs at set times, so <span class="supn" data-f="your supplier">your supplier</span> can charge then. <details class="more"><summary>More</summary><div>Each slot runs from a plug-in to its unplug, every week on the days you pick, or once on a date. Times are in your Home Assistant time zone. A time missed while the add-on is stopped isn't run later; if it starts inside a slot, it plugs in straight away. Unplugging during a session ends it. Two slots that meet (e.g. 06:00–12:00 and 12:00–18:00) unplug and plug straight back in where they meet, so each is its own charge with its own ready time (Octopus: 6 hours before a 12:00 reset and 6 after). With Force schedule on, a slot longer than the daily limit across its reset time is split there the same way, as is a charge from auto plug-in, the car plugged in sensor or Charge now. Skip a slot to stop it running once. A <b>no-charging time</b> (add one the same way, choosing No-charging time) keeps the schedule out of, for example, your off-peak hours: it unplugs at its start (in case the car is plugged in by hand), slots can't go in it, and auto plug-in, the car plugged in sensor and Charge now unplug for it and plug back in after, carrying on that much later so they keep their hours.</div></details></div>
       <div class="row" style="margin:0 0 10px;align-items:center">
-        <div class="grow"><div class="nextline" id="a-next"></div></div>
+        <div class="grow note" style="margin:0">Click a slot to change, skip or delete it; click or drag across a day to add a slot or a no-charging time.</div>
         <button class="btn small primary" id="w-add">+ Add a slot</button>
       </div>
-      <div class="note" style="margin:0 0 12px">Click a slot to change, skip or delete it; click or drag across a day to add a slot or a no-charging time.</div>
       <div class="week" id="w-grid"></div>
       <div class="empty" id="w-empty" hidden>No times yet: click or drag across a day above to add a slot, e.g. 23:30 to 07:00.</div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
@@ -571,7 +655,18 @@
 
   <!-- ============ Settings ============ -->
   <section id="tab-settings" class="stack" hidden>
+    <div class="bnr solo">
+      <div class="hero-top" style="margin-bottom:10px"><span class="hero-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>Settings</span></div>
+      <div class="hero-sub">How the simulated charger behaves, and how it works with <span class="supn" data-f="your supplier">your supplier</span> and Home Assistant.</div>
+    </div>
     <div class="grid">
+      <div class="card">
+        <h2>Appearance</h2>
+        <div class="row">
+          <div class="grow"><div>Theme</div><div class="note" style="margin:0">Colourful puts a coloured banner at the top of each tab, tinted with <span class="supn" data-f="your supplier">your supplier</span>'s colour; Basic keeps them as plain cards. Saved in this browser.</div></div>
+        </div>
+        <div class="row" style="margin-top:6px"><div class="seg" id="c-theme" role="group" aria-label="Theme"><button data-theme="colour">Colourful</button><button data-theme="basic">Basic</button></div></div>
+      </div>
       <div class="card">
         <h2>Controls</h2>
         <div class="row">
@@ -746,6 +841,10 @@
   </section>
 
   <section id="tab-health" class="stack" hidden>
+    <div class="bnr solo ok-state" id="h-bnr">
+      <div class="hero-top"><span class="hero-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>Diagnostics</span></div>
+      <div class="hero-next" id="h-bnr-next"></div>
+    </div>
     <div class="card" id="h-issues-card" hidden><h2>Needs attention</h2><ul class="issues" id="h-issues"></ul></div>
     <div class="grid">
       <div class="card"><h2>Add-on</h2><dl class="kv" id="h-addon"></dl></div>
@@ -790,6 +889,19 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ---------- Theme (Settings › Appearance): colourful banners or basic cards, per browser ----------
+function drawTheme() {
+  const basic = document.documentElement.classList.contains('basic');
+  document.querySelectorAll('#c-theme button').forEach((b) => b.setAttribute('aria-pressed', (b.dataset.theme === 'basic') === basic));
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#c-theme button'); if (!b) return;
+  const basic = b.dataset.theme === 'basic';
+  document.documentElement.classList.toggle('basic', basic);
+  try { localStorage.setItem('ocpp-charge-proxy-theme', basic ? 'basic' : 'colour'); } catch (e2) {}
+  drawTheme();
+});
+document.addEventListener('DOMContentLoaded', drawTheme);
 'use strict';
 const $ = (id) => document.getElementById(id);
 // View options remembered in this browser (kept across restarts and reloads).
@@ -951,6 +1063,13 @@ function updateStatus() {
     : `Unhealthy: ${issues.map((i) => i[1]).join('; ')}. Open Diagnostics`;
   $('status-btn').setAttribute('aria-label', level === 'ok' ? 'Healthy. Open Diagnostics' : `Unhealthy, ${issues.length} issue${issues.length === 1 ? '' : 's'}. Open Diagnostics`);
   $('h-issues-card').hidden = !issues.length;
+  $('h-bnr').className = 'bnr solo ' + (level === 'ok' ? 'ok-state' : level);
+  const nErr = issues.filter((i) => i[0] === 'err').length;
+  $('h-bnr-next').innerHTML = `<div class="ring">${level === 'ok'
+    ? '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>'}</div><div style="min-width:0">`
+    + `<div class="k">Health</div><div class="big">${level === 'ok' ? 'All good' : `${issues.length} thing${issues.length === 1 ? ' needs' : 's need'} attention`}</div>`
+    + `<div class="sm">${level === 'ok' ? 'The charger, your supplier and Home Assistant are all working.' : nErr ? `${nErr} problem${nErr === 1 ? '' : 's'}: see below` : 'See below'}</div></div>`;
   $('h-issues').innerHTML = issues.map(([lvl, t]) => `<li><span class="chip ${lvl}">${lvl === 'err' ? 'Problem' : 'Check'}</span> ${esc(t)}</li>`).join('');
 }
 setInterval(() => { if (!document.hidden) pollStatus(); }, 30000);
@@ -1590,7 +1709,7 @@ async function refreshSessions() {
     ['Energy (last 7 days)', num(week, 1) + ' kWh'],
     ['Energy (all kept)', num(total, 1) + ' kWh'],
     ['Average session', avg === null ? '—' : num(avg, 1) + ' kWh'],
-  ].map(([l, v]) => `<div class="card"><div class="label">${l}</div><div class="big">${v}</div></div>`).join('');
+  ].map(([l, v]) => `<div class="stat"><div class="label">${l}</div><div class="big">${v}</div></div>`).join('');
 }
 // The last 7 days, newest at the top: when the car was plugged in (a soft band, coloured
 // by what plugged it in) and when it charged (green blocks with their kWh), with each
@@ -2053,6 +2172,25 @@ $('sim-all').addEventListener('change', drawPickers);
 // ---------- Automation ----------
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const auto = {data: null, entries: []};
+// The schedule card's banner: what happens next, how long until, and what happened last
+const HERO_ICON = {
+  plug: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M16 7V3h-2v4h-4V3H8v4c-1 0-2 1-2 2v5.5L9.5 18v3h5v-3l3.5-3.5V9c0-1-1-2-2-2Z"/></svg>',
+  unplug: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M20.84 22.73 16.29 18.18 15 19.5V22H9v-2.5L5.5 16V10c0-.55.2-1.05.5-1.45L1.11 3.66 2.39 2.39l19.73 19.73-1.28.61ZM18.5 16 9.5 7H16V2h2v5c1 0 2 1 2 2v5.5l-1.5 1.5ZM10 2v3.5l-2-2V2h2Z"/></svg>',
+  none: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 16H5V9h14v11Z"/></svg>',
+};
+function drawHeroNext(d) {
+  const n = d.schedule.next, on = d.schedule.enabled, lr = d.schedule.last_run;
+  $('a-hero').classList.toggle('off', !on);
+  const until = (iso) => { const m = Math.max(0, Math.round((new Date(iso) - Date.now()) / 60000)); return m < 1 ? 'now' : 'in ' + hmDur(m * 60); };
+  const last = lr ? `Last: ${lr.action === 'plug' ? 'plugged in' : 'unplugged'} ${ago(lr.timestamp)}${lr.startup ? ' (when the add-on started)' : ''}` : '';
+  const what = !on ? ['none', 'Schedule', 'Paused', 'Turn it on to run the slots below'] : !n ? ['none', 'Next', 'Nothing scheduled', 'Add a slot below'] : null;
+  $('a-next').innerHTML = what
+    ? `<div class="ring">${HERO_ICON[what[0]]}</div><div style="min-width:0"><div class="k">${what[1]}</div><div class="big">${what[2]}</div><div class="sm">${what[3]}${last ? ' · ' + last : ''}</div></div>`
+    : `<div class="ring">${HERO_ICON[n.action === 'plug' ? 'plug' : 'unplug']}</div><div style="min-width:0">`
+      + `<div class="k">Next<b>${until(n.time)}</b></div>`
+      + `<div class="big">${n.action === 'plug' ? 'Plug in' : 'Unplug'} ${esc(whenText(n.time))}</div>`
+      + `<div class="sm">${last || 'Nothing run yet'}</div></div>`;
+}
 function whenText(iso) {
   if (!iso) return '';
   const d = new Date(iso), now = new Date();
@@ -2081,9 +2219,7 @@ async function refreshAutomation(force) {
   else refreshSmart(false);  // the supplier's slots on the week view
   drawReadyStatus(d);
   const n = d.schedule.next;
-  $('a-next').innerHTML = !d.schedule.enabled ? 'The schedule is off.' :
-    n ? `Next: <b>${n.action === 'plug' ? 'plug in' : 'unplug'}</b> ${esc(whenText(n.time))}` : 'Nothing scheduled.';
-  if (d.schedule.last_run) $('a-next').innerHTML += ` · last: ${d.schedule.last_run.action === 'plug' ? 'plugged in' : 'unplugged'} ${ago(d.schedule.last_run.timestamp)}${d.schedule.last_run.startup ? ' (when the add-on started)' : ''}`;
+  drawHeroNext(d);
   $('a-tz').innerHTML = `Times are in ${esc(d.timezone)} (now ${d.now ? d.now.slice(11, 16) : '—'}).`;
   if (document.activeElement !== $('a-rp-after')) $('a-rp-after').value = d.replug.after_min;
   if (document.activeElement !== $('a-rp-tries')) $('a-rp-tries').value = d.replug.attempts;
@@ -2370,6 +2506,7 @@ function drawWeek() {
   $('w-label').textContent = linked ? `Plugged in by the schedule, ready time sent to ${sc.provider}` : 'Plugged in by the schedule';
   const supColor = sc ? providerColor(sc.provider) : null;
   $('w-sup-legend').hidden = !sc;
+  document.documentElement.style.setProperty('--hero2', supColor || '#5c6bc0');
   if (sc) { $('w-sup-swatch').style.borderColor = supColor; $('w-sup-label').textContent = `Planned by ${sc.provider}`; }
   const plan = weekPlan(undefined, null, !!week.forceErr);  // while turning Force on failed, show what's over
   const model = deriveSlots(auto.entries || []);
@@ -2927,6 +3064,7 @@ async function chargeNow(h, confirm) {
       toast(from ? `Plugs in at ${from}, until ${until}` : until ? `Plugged in until ${until}` : 'Plugged in');
       $('c-charge-note').innerHTML = until ? `Plugged in until <b>${until}</b>${r.plan.notes && r.plan.notes.length ? ' (' + esc(r.plan.notes.join('; ')) + ')' : ''}. `
         + 'Shown in the schedule below.' : '';
+      if (from) $('c-charge-note').innerHTML = `Plugs in at <b>${from}</b>, until <b>${until}</b>. Shown in the schedule below.`;
       pollState(); refreshAutomation(true);
     }
   } catch (err) { toast('Failed: ' + err.message); }
@@ -2939,7 +3077,7 @@ function drawChargeConfirm(h, p) {
     + (o.left > 0 ? `, but with what's already been charged it's still ${hmDur(o.left * 60)} over ${limitReset() ? 'in one day' : `in one ${limitHours()} hours`}.`
       : o.after > cap ? `, back to the schedule's own ${hmDur(o.after * 60)}.` : ` to stay within ${cap / 60} hours.`);
   else msg += ` There's no scheduled slot after it that shortening would help: it'd be ${hmDur(o.added * 60)} over.`;
-  $('c-charge-note').innerHTML = `<div style="margin-top:8px"><span class="chip warn">Over ${cap / 60} hours</span> ${msg}`
+  $('c-charge-note').innerHTML = `<div><span class="chip warn">Over ${cap / 60} hours</span> ${msg}`
     + '<div class="row" style="margin-top:8px"><button class="btn small primary" id="c-charge-yes">Charge anyway</button>'
     + '<button class="btn small" id="c-charge-no">Cancel</button></div></div>';
   $('c-charge-yes').onclick = () => chargeNow(h, true);
