@@ -207,7 +207,7 @@
   @media (max-width: 700px) { .sess .shead { grid-template-columns: 1fr auto; } .sess .tags { grid-column: 1 / -1; order: 3; } .sess .energy { grid-column: 1 / -1; order: 4; } }
   .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; }
   .spark { width: 100%; height: 60px; display: block; }
-  /* Automations › Schedule: the last 3 days as they happened, then the next 7 */
+  /* Automations › Schedule: today and the next 6 days */
   .week { display: grid; grid-template-columns: 78px 1fr; gap: 7px 12px; align-items: center; }
   .week .dl { font-size: 13px; font-weight: 500; line-height: 1.2; }
   .week .dl small { display: block; font-size: 11px; font-weight: 400; color: var(--text2); }
@@ -2373,7 +2373,7 @@ function drawWeek() {
   const ses = (week.sessions || []).map((x, n) => ({a: (new Date(x.start) - day0) / 60000, b: ((x.stop ? new Date(x.stop) : new Date()) - day0) / 60000, n, x}));
   const sesText = (x) => `Charged ${dateTime(x.start)}–${x.stop ? hm(x.stop) : 'now'} · ${num(x.energy_kwh, 2)} kWh · ${dur(x.duration_s)}`
     + (x.peak_power_kw != null ? ` · peak ${num(x.peak_power_kw, 1)} kW` : '') + (x.stop ? ` · ended by ${reasonText(x.reason)}` : ' (charging now)');
-  for (let d = -3; d < 7; d++) {
+  for (let d = 0; d < 7; d++) {  // (the past: the Sessions tab)
     const lo = d * DAY_MIN, hi = lo + DAY_MIN;
     const span = (a, b) => ({x0: (Math.max(a, lo) - lo) / 14.4, x1: (Math.min(b, hi) - lo) / 14.4});
     // Past days: when the car was actually plugged in (and by what), not the schedule as it is now
@@ -2431,9 +2431,7 @@ function drawWeek() {
       const {x0, x1} = span(z.a, z.b);
       return `<div class="ses" data-ses="${z.n}" style="left:${x0}%;width:${Math.max(0.3, x1 - x0)}%" title="${esc(sesText(z.x))} · click to open it"></div>`;
     }).join('');
-    if (d === -3 && ed && ed.top) html += '<div class="slot-pop top" id="w-pop"></div>';
-    if (d === 0) html += '<div class="sep"><span>Coming up</span></div>';
-    if (d === -3) html += '<div class="sep past"><span>As it happened</span></div>';
+    if (d === 0 && ed && ed.top) html += '<div class="slot-pop top" id="w-pop"></div>';
     const dd = new Date(day0); dd.setDate(day0.getDate() + d);
     const dname = d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : d === -1 ? 'Yesterday' : dd.toLocaleDateString([], {weekday: 'short'});
     html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${dname}<small>${dd.toLocaleDateString([], {day: 'numeric', month: 'short'})}</small></div>`

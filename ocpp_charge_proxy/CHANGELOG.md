@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.45.1 — The schedule without the past days
+
+- **Change:** the Automations tab's schedule shows today and the next 6
+  days only. The last 3 days (when the car was actually plugged in, which
+  could look out of line with the schedule, e.g. an unplug that waited for
+  your supplier) are gone from it; past sessions are on the Sessions tab.
+
 ## 2.45.0 — The schedule redesigned
 
 - **Improvement:** the Automations tab's schedule is easier to read (the

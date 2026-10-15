@@ -180,17 +180,14 @@ is read every 5 minutes, up to 8 days ahead.
 
 ### Schedule, auto re-plug and start-up
 
-- **Schedule** (**Automations** tab): the last 3 days and the next 7 are
+- **Schedule** (**Automations** tab): today and the next 6 days are
   shown as slots, each running from a plug-in to its unplug, coloured by
   type: weekly (blue), one-off (teal), auto plug-in (orange) and Charge now
-  (pink). **+ Add a slot** starts a new one from the next half hour. The
-  last 3 days are for looking back: they show when the car was actually
-  plugged in (coloured by what plugged it in: the schedule, auto plug-in,
-  Charge now, or grey for another way such as by hand; hover for who
-  unplugged it), not the schedule as it is now. A green line shows when it
-  actually charged (hover for the session's energy, length and what ended
-  it; click to open it on the Sessions tab), and your supplier's slots are
-  outlined. Click or drag across a day to add a slot; click a slot to change its times, the days it repeats on
+  (pink). **+ Add a slot** starts a new one from the next half hour. A
+  green line shows when it has charged today (hover for the session's
+  energy, length and what ended it; click to open it on the Sessions tab),
+  and your supplier's slots are outlined. Earlier days are on the Sessions
+  tab. Click or drag across a day to add a slot; click a slot to change its times, the days it repeats on
   (**Every week**) or its date (**Once**), turn it off, delete it, or skip
   it once (its plug-in and unplug both don't run; it shows hatched, and
   **Undo skip** puts it back). Changes are saved straight away. An unplug
@@ -422,8 +419,8 @@ follows your Home Assistant theme. Settings save as soon as you change them.
     supplier on, if it would take any 24 hours (the previous 24 included)
     over the limit, it asks first, saying what would change; **Charge
     anyway** then goes ahead.
-  - The plug-in schedule (see below), with the last 3 days and the next 7
-    of when it has the car plugged in; Force schedule on supplier; auto
+  - The plug-in schedule (see below): today and the next 6 days of when it
+    has the car plugged in; Force schedule on supplier; auto
     plug-in, the car plugged in sensor and auto re-plug.
 - **Settings:** controls for Plugged In, max current and **Continue session
   after a restart**; the simulated car's start delay and ramp-up; your
