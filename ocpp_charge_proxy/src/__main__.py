@@ -18,7 +18,7 @@ from src.app_settings import AppSettings
 from src.config import load_config, starting_current_amps
 from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_files, sample_loop
 from src.ha_history import ChartHistory
-from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, SAVING_SOURCE, Automation, auto_plug_charge, automation_loop
+from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, auto_plug_charge, automation_loop
 from src.ha_link import HaLink
 from src import log_filters
 from src.persistence import Persistence
@@ -286,7 +286,7 @@ async def run() -> None:
     async def saving_sessions_loop() -> None:
         """Saving sessions (Automations tab): read the calendar every few
         minutes (and straight after a setting changes), keep the schedule
-        clear of them, and add a charge before each if that's on."""
+        clear of them, and add a charge before each to the schedule if that's on."""
         last_read, sessions, last_settings = 0.0, None, None
         while True:
             try:
@@ -296,7 +296,7 @@ async def run() -> None:
                         automation.publish(shared_state)
                     sessions, last_settings = None, None
                 else:
-                    wanted = (s.get("saving_entity"), s.get("saving_block"))
+                    wanted = (s.get("saving_entity"), s.get("saving_block"), s.get("saving_plug"), s.get("saving_plug_hours"))
                     if wanted != last_settings or time.monotonic() - last_read >= SAVING_READ_S:
                         found = await ha_link.read_saving_sessions()
                         last_read, last_settings = time.monotonic(), wanted
@@ -305,21 +305,10 @@ async def run() -> None:
                     sc = ha_link.smart_charging()
                     automation.limit_reset = sc.get("limit_reset")
                     cap = sc.get("limit_min") if automation.ready_time and not automation.override_guards else None
+                    plug_hours = float(s.get("saving_plug_hours") or 2) if s.get("saving_plug") else None
                     if automation.sync_saving_sessions(sessions, bool(s.get("saving_block")), ha_link.ready_times,
-                                                       cap, sc.get("provider") or "your supplier"):
+                                                       cap, sc.get("provider") or "your supplier", plug_hours):
                         automation.publish(shared_state)
-                    due = automation.saving_precharge_due(float(s.get("saving_plug_hours") or 2)) \
-                        if s.get("saving_plug") else None
-                    if due:
-                        record, minutes = due
-                        logger.info("Saving session at %s: charging for %dh %02dm before it", record["start"][11:16],
-                                    minutes // 60, minutes % 60)
-                        try:
-                            out = await charge(minutes / 60, SAVING_SOURCE, "saving session")
-                        except Exception as err:
-                            logger.warning("Charge before the saving session not planned: %s", err)
-                            out = {}
-                        automation.mark_precharged(record, out.get("plan"))
             except Exception:
                 logger.warning("Saving sessions cycle failed", exc_info=True)
             await asyncio.sleep(SAVING_TICK_S)

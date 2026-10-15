@@ -490,7 +490,7 @@
           <label class="switch"><input type="checkbox" id="save-block" aria-label="No charging during a saving session"><span></span></label>
         </div>
         <div class="row">
-          <div class="grow">Plug in before a session<div class="note" style="margin:0">Adds a charge that ends as the session starts. <details class="more"><summary>More</summary><div>The hours below before each session, if the schedule doesn't already have the car plugged in for them, a charge is added as Charge now adds one (joining any slot that covers part of that time, so only the missing hours are added): a one-off slot until the session starts, with the ready time set to its end, kept within the daily limit as Charge now is. If the session is found later than that, it charges for the time that's left (not if that's under 15 minutes).</div></details></div></div>
+          <div class="grow">Plug in before a session<div class="note" style="margin:0">Adds a charge to the schedule that ends as the session starts. <details class="more"><summary>More</summary><div>As soon as a session is known, the hours below before it are added to the schedule (purple), for the time the schedule doesn't already have the car plugged in: nothing if a slot already covers it, and joining a slot it meets. Not in a no-charging time or in the past (a session found late gets what's left, not under 15 minutes). With Force schedule on <span class="supn" data-f="supplier">supplier</span>, if that takes a day over the daily limit, the next slot after the session starts that much later, as for a car plugged in. Turning this off or changing the hours takes it out or redoes it.</div></details></div></div>
           <label class="switch"><input type="checkbox" id="save-plug" aria-label="Plug in before a saving session"><span></span></label>
         </div>
         <div class="row" id="save-hours-row">
@@ -2186,6 +2186,7 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
 // date) they run. Unplug times no slot ends at are "unplug only" ticks.
 function deriveSlots(entries) {
   const slots = [], usage = {}, usedOnce = new Set();
+  const skipped = new Set(((auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
   const weeklyU = entries.filter((e) => e.action === 'unplug' && !e.date && /^\d{2}:\d{2}$/.test(e.time));
   const groups = new Map();
   entries.forEach((p) => {
@@ -2212,10 +2213,12 @@ function deriveSlots(entries) {
     let best = null;
     entries.forEach((u) => {
       if (u.action !== 'unplug' || !/^\d{2}:\d{2}$/.test(u.time)) return;
+      // (a weekly unplug skipped that day doesn't end it, e.g. a slot moved for a saving session)
       const cands = u.date ? [new Date(`${u.date}T${u.time}`)]
-        : [0, 1, 2, 3, 4, 5, 6, 7].map((n) => addDays(p.date, n)).filter((iso) => u.days.includes(wdOf(iso)))
+        : [0, 1, 2, 3, 4, 5, 6, 7].map((n) => addDays(p.date, n)).filter((iso) => u.days.includes(wdOf(iso)) && !skipped.has(u.id + '|' + iso))
           .map((iso) => new Date(`${iso}T${u.time}`));
-      cands.forEach((t) => { if (t > t0 && (!best || t < best.t)) best = {u, t}; });
+      // a one-off unplug wins over a weekly one at the same time
+      cands.forEach((t) => { if (t > t0 && (!best || t < best.t || (+t === +best.t && u.date && !best.u.date))) best = {u, t}; });
     });
     if (best && best.u.date) usedOnce.add(best.u.id);
     slots.push({kind: 'once', plug: p, unplug: best ? best.u : null, date: p.date, start: p.time,
@@ -2235,13 +2238,16 @@ function deriveSlots(entries) {
 // Each slot's runs from a week ago to a week on: [{a, b, i, date, udate, skipped}] (minutes from today 00:00)
 function occurrences(model) {
   const skips = new Set(((auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
+  const saving = new Set(((auto.data && auto.data.schedule.saving_sessions) || []).flatMap((x) => (x.skips || []).map((k) => k.entry_id + '|' + k.date)));
   const out = [];
   model.slots.forEach((s, i) => {
     const add = (n, iso) => {
       const udays = s.kind === 'weekly' ? s.offset : (s.unplugDate ? dayIndex(s.unplugDate) - dayIndex(s.date) : 0);
       const a = n * DAY_MIN + tmin(s.start);
       const b = s.end ? (n + udays) * DAY_MIN + tmin(s.end) : 9 * DAY_MIN;
-      out.push({a, b, i, date: iso, udate: s.end ? addDays(iso, udays) : null, skipped: skips.has(s.plug.id + '|' + iso)});
+      const key = s.plug.id + '|' + iso;
+      // skipped for a saving session: not drawn (its moved times are)
+      out.push({a, b, i, date: iso, udate: s.end ? addDays(iso, udays) : null, skipped: skips.has(key), hidden: saving.has(key)});
     };
     if (s.kind === 'weekly') { for (let n = -7; n <= 6; n++) { const iso = isoAt(n); if (s.days.includes(wdOf(iso))) add(n, iso); } }
     else { const n = dayIndex(s.date); if (n >= -8 && n <= 7) add(n, s.date); }
@@ -2273,8 +2279,11 @@ function drawWeek() {
   let html = '';
   // Slot colours by type (weekly ones stay blue)
   const TYPE = {once: ['#00897b', 'One-off'], auto_plug: ['#f57c00', 'Auto plug-in'], charge_now: ['#d81b60', 'Charge now'],
-    car_plugged: ['#6d4c41', 'Car plugged in'], saving_session: ['#5e35b1', 'Before a saving session']};
-  const typeOf = (s) => s.source && TYPE[s.source] ? s.source : s.kind === 'once' ? 'once' : null;
+    car_plugged: ['#6d4c41', 'Car plugged in'], saving_session: ['#5e35b1', 'Before a saving session'],
+    saving_move: ['#8e24aa', 'Moved for a saving session']};
+  const movedIds = new Set(((auto.data && auto.data.schedule.saving_sessions) || []).flatMap((x) => x.moved || []));
+  const typeOf = (s) => s.kind === 'once' && movedIds.has(s.plug.id) ? 'saving_move'
+    : s.source && TYPE[s.source] ? s.source : s.kind === 'once' ? 'once' : null;
   const seen = new Set(model.slots.map(typeOf).filter(Boolean));
   // Past days' colours, by what plugged in
   const PAST = (by) => !by ? 'other' : by === 'schedule' ? 'schedule' : by.startsWith('auto plug-in') ? 'auto_plug' : by === 'charge now' ? 'charge_now' : by === 'car plugged in sensor' ? 'car_plugged' : 'other';
@@ -2317,12 +2326,12 @@ function drawWeek() {
       return `<div class="blk" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="Saving session ${esc(hm(x.start))}–${esc(hm(x.end))}: nothing is plugged in then"></div>`;
     }).join(''));
     const before = d < 0 && week.pluggedSince && new Date(week.pluggedSince) > new Date(day0.getTime() + hi * 60000);
-    const bars = d < 0 ? pastBars : occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi).map(([o, k]) => {
+    const bars = d < 0 ? pastBars : occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi && !o.hidden).map(([o, k]) => {
       const s = model.slots[o.i];
       const {x0, x1} = span(o.a, o.b);
       const red = !o.skipped && plan.bad.some(([x, y]) => x < o.b && y > o.a);
       const picked = ed && ed.mode === 'slot' && ed.k === k;
-      const who = s.source && TYPE[s.source] ? ` (${TYPE[s.source][1]})` : s.kind === 'once' ? ' (One-off)' : '';
+      const ty0 = typeOf(s), who = ty0 && ty0 !== 'once' ? ` (${TYPE[ty0][1]})` : s.kind === 'once' ? ' (One-off)' : '';
       const got = ses.filter((z) => z.a < o.b && z.b > o.a);
       const title = `${dayLabel(d)} ${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${who}`
         + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ` (over ${limitText()} a day)` : '')

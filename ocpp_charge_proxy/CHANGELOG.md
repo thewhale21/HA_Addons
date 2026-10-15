@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.43.4 — Saving sessions on the schedule
+
+- **Fix:** the schedule view showed a slot moved for a saving session
+  under the weekly slot it replaces that day, as one slot (and paired the
+  moved part with the weekly unplug it skips). The weekly slot isn't drawn
+  that day now, and the moved times show in purple as "Moved for a saving
+  session".
+- **Change:** Plug in before a session adds its charge to the schedule as
+  soon as the session is known (shown in purple), not only when its time
+  comes, for the time the schedule doesn't already cover; over the daily
+  limit, the next slot after the session starts later. Turning it off or
+  changing the hours takes it out or redoes it.
+
 ## 2.43.3 — Saving sessions: no start in the past
 
 - **Fix:** if starting a slot earlier for a saving session would put its

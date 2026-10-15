@@ -122,34 +122,6 @@ def test_saving_a_schedule_isnt_refused_for_a_session():
     assert _windows(a)[:2] == [("05 15:00", "05 17:00"), ("05 18:00", "05 19:00")]
 
 
-def test_charge_before_a_session(tmp_path):
-    a, clock = _automation(tmp_path, start=_at(5, 14, 0))
-    a.sync_saving_sessions([_session(5, 17, 18)], block=True)
-    assert a.saving_precharge_due(2) is None  # 3 hours away
-    clock.dt = _at(5, 15, 0)
-    record, minutes = a.saving_precharge_due(2)
-    assert minutes == 120
-    plan = a.plan_auto_plug(minutes, source=SAVING_SOURCE)
-    assert plan["end"][11:16] == "17:00"
-    a.mark_precharged(record, plan)
-    assert a.saving_precharge_due(2) is None
-    assert "charge before it from 15:00 to 17:00" in a.saving_sessions[0]["notes"]
-    # remembered after a restart
-    b = Automation(str(tmp_path), ReplugOptions(), now=clock.now, clock=clock.epoch,
-                   localize=lambda naive: naive.replace(tzinfo=TZ))
-    assert b.saving_sessions[0]["precharged"] and b.saving_block
-
-
-def test_session_found_late_charges_for_what_is_left():
-    a, clock = _automation(start=_at(5, 16, 20))
-    a.sync_saving_sessions([_session(5, 17, 18)], block=True)
-    assert a.saving_precharge_due(2)[1] == 40
-    clock.dt = _at(5, 16, 50)
-    b, _ = _automation(start=_at(5, 16, 50))
-    b.sync_saving_sessions([_session(5, 17, 18)], block=True)
-    assert b.saving_precharge_due(2) is None and b.saving_sessions[0]["precharged"]  # 10 minutes: too close
-
-
 def test_session_already_running_unplugs_now():
     a, clock = _automation(start=_at(5, 16, 0))
     a.set_schedule(enabled=True, entries=[{"time": "15:00", "action": "plug"}, {"time": "18:00", "action": "unplug"}])
@@ -186,24 +158,6 @@ def test_slots_moved_by_2_43_0_are_moved_again():
     assert _windows(a)[:2] == [("05 14:30", "05 18:00"), ("05 19:00", "05 21:30")]
 
 
-def test_charge_before_a_session_only_adds_what_the_schedule_doesnt_cover():
-    a, clock = _automation(start=_at(5, 12, 0))
-    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
-    a.sync_saving_sessions([_session(5, 18, 19)], block=True)  # 14:30-18:00, 19:00-21:30
-    clock.dt = _at(5, 16, 0)
-    assert a.saving_precharge_due(2) is None  # plugged in already
-    assert a.saving_sessions[0]["precharged"] and "already" in a.saving_sessions[0]["notes"][-1]
-    # partly covered: the charge joins the slot, adding only the missing hour
-    b, clock = _automation(start=_at(5, 12, 0))
-    b.set_schedule(enabled=True, entries=[{"time": "17:00", "action": "plug"}, {"time": "18:00", "action": "unplug"}])
-    b.sync_saving_sessions([_session(5, 18, 19)], block=True)
-    clock.dt = _at(5, 16, 0)
-    record, minutes = b.saving_precharge_due(2)
-    plan = b.plan_auto_plug(minutes, source=SAVING_SOURCE)
-    assert plan["end"][11:16] == "18:00"
-    assert [w for w in _windows(b) if w[0].startswith("05")] == [("05 16:00", "05 18:00")]
-
-
 def test_start_in_the_past_ends_later_instead():
     a, clock = _automation(start=_at(5, 12, 0))
     a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
@@ -223,3 +177,57 @@ def test_ending_later_goes_around_a_no_charging_time_and_joins_the_next_slot():
     assert [w for w in _windows(a) if w[0].startswith("05")] == [
         ("05 15:30", "05 18:00"), ("05 19:00", "05 21:30"), ("05 22:00", "05 23:30")]
     assert "joined with the next slot" in a.saving_sessions[0]["notes"][0]
+
+
+def _today(a, day=5):
+    return [w for w in _windows(a) if w[0].startswith(f"{day:02d}")]
+
+
+def test_charge_before_a_session_is_added_when_its_found(tmp_path):
+    a, clock = _automation(tmp_path, start=_at(5, 12, 0))
+    a.sync_saving_sessions([_session(5, 17, 18)], block=True, plug_hours=2)
+    assert _today(a) == [("05 15:00", "05 17:00")]
+    assert a.saving_sessions[0]["notes"] == ["charge before it: 15:00–17:00"]
+    assert not a.sync_saving_sessions([_session(5, 17, 18)], block=True, plug_hours=2)  # done once
+    # remembered after a restart
+    b = Automation(str(tmp_path), ReplugOptions(), now=clock.now, clock=clock.epoch,
+                   localize=lambda naive: naive.replace(tzinfo=TZ))
+    assert b.saving_sessions[0]["pre"]["hours"] == 2 and b.saving_block
+    # other hours: redone; off: taken out
+    a.sync_saving_sessions([_session(5, 17, 18)], block=True, plug_hours=1)
+    assert _today(a) == [("05 16:00", "05 17:00")]
+    a.sync_saving_sessions([_session(5, 17, 18)], block=True, plug_hours=None)
+    assert _today(a) == [] and a.saving_sessions[0]["notes"] == []
+
+
+def test_charge_before_only_adds_what_the_schedule_doesnt_cover():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True, plug_hours=2)  # moved: 14:30-18:00, 19:00-21:30
+    assert _today(a) == [("05 14:30", "05 18:00"), ("05 19:00", "05 21:30")]
+    assert "already" in a.saving_sessions[0]["notes"][-1]
+    # partly covered: joins the slot, adding only the missing hour
+    b, clock = _automation(start=_at(5, 12, 0))
+    b.set_schedule(enabled=True, entries=[{"time": "17:00", "action": "plug"}, {"time": "18:00", "action": "unplug"}])
+    b.sync_saving_sessions([_session(5, 18, 19)], block=True, plug_hours=2)
+    assert _today(b) == [("05 16:00", "05 18:00")]
+    assert "16:00–17:00 (joined" in b.saving_sessions[0]["notes"][-1]
+
+
+def test_charge_before_found_late_and_too_close():
+    a, clock = _automation(start=_at(5, 16, 20))
+    a.sync_saving_sessions([_session(5, 17, 18)], block=True, plug_hours=2)
+    assert _today(a) == [("05 16:21", "05 17:00")]
+    b, _ = _automation(start=_at(5, 16, 50))
+    b.sync_saving_sessions([_session(5, 17, 18)], block=True, plug_hours=2)
+    assert _today(b) == [] and "too close" in b.saving_sessions[0]["notes"][-1]
+
+
+def test_charge_before_takes_the_daily_limit_off_the_next_slot():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.ready_time = True
+    a.set_schedule(enabled=True, entries=[{"time": "19:00", "action": "plug"}, {"time": "23:00", "action": "unplug"}])
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True, plug_hours=3, cap_min=360)
+    assert _today(a) == [("05 15:00", "05 18:00"), ("05 20:00", "05 23:00")]
+    assert "starts at 20:00" in a.saving_sessions[0]["notes"][-1]
+
