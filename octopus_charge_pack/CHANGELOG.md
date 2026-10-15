@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.3 — A calendar each for charges and discharges
+
+- **Change:** two calendars instead of one: Octopus Charge Pack Charge
+  (`calendar.octopus_charge_pack_charge`) and Octopus Charge Pack Discharge
+  (`calendar.octopus_charge_pack_discharge`), made the first time. The
+  0.6.0 calendar (`calendar.octopus_charge_pack`) is no longer updated: delete
+  it in Settings > Devices & services > Local Calendar if you don't want it.
+
 ## 0.6.2 — A History tab and a clearer timeline
 
 - **Change:** Completed sessions and Plan changes move to a new History

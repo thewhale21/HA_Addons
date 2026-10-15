@@ -274,9 +274,9 @@
       <div class="note" style="margin:14px 0 0">Your Octopus API key is set on the add-on's <b>Configuration</b> tab in Home Assistant (restart the add-on after changing it).</div>
     </div>
     <div class="card">
-      <h2>Calendar<span class="spacer"></span>
+      <h2>Calendars<span class="spacer"></span>
         <label class="switch"><input type="checkbox" id="s-cal" aria-label="Calendar of dispatches"><span></span></label></h2>
-      <div class="note" style="margin:0 0 10px">Keeps a Home Assistant calendar of the planned charges and discharges, for HA's calendar and calendar triggers (e.g. 15 minutes before a discharge). <details class="more"><summary>More</summary><div>A Local Calendar called Octopus Charge Pack (<code>calendar.octopus_charge_pack</code>), made the first time. Charges and discharges still to come are added as Octopus plans them, and taken out if Octopus drops them before they start; ones that have started stay, as a history. Idle dispatches aren't added. Only the add-on's own events are changed, so you can add yours. Turning this off leaves the calendar as it is.</div></details></div>
+      <div class="note" style="margin:0 0 10px">Keeps two Home Assistant calendars, one of the planned charges and one of the planned discharges, for HA's calendar and calendar triggers (e.g. 15 minutes before a discharge). <details class="more"><summary>More</summary><div>Local Calendars called Octopus Charge Pack Charge (<code>calendar.octopus_charge_pack_charge</code>) and Octopus Charge Pack Discharge (<code>calendar.octopus_charge_pack_discharge</code>), made the first time. Charges and discharges still to come are added as Octopus plans them, and taken out if Octopus drops them before they start; ones that have started stay, as a history. Idle dispatches aren't added. Only the add-on's own events are changed, so you can add yours. Turning this off leaves the calendar as it is.</div></details></div>
       <dl class="kv" id="s-cal-info"></dl>
     </div>
     <input type="checkbox" id="sim-all" checked hidden><!-- the template's entity pickers: none here -->
@@ -537,11 +537,12 @@ function renderState(s) {
   // Calendar (Settings)
   const cal = s.calendar || {};
   if (document.activeElement !== $('s-cal')) $('s-cal').checked = cal.enabled !== false;
-  $('s-cal-info').innerHTML = cal.enabled === false ? kv([['Status', '<span class="chip">Off</span>']]) : kv([
-    ['Calendar', cal.entity_id ? `<code>${esc(cal.entity_id)}</code>` : '<span class="muted">Not made yet</span>'],
-    ['Status', cal.error ? `<span class="chip warn">Not updated</span> <span class="muted">${esc(cal.error)}</span>`
-      : cal.synced_at ? `<span class="chip ok">Up to date</span> <span class="muted">checked ${ago(cal.synced_at)}</span>` : '<span class="chip">Waiting</span>'],
-  ]);
+  const calRow = (c) => !c ? '—' : (c.entity_id ? `<code>${esc(c.entity_id)}</code> ` : '<span class="muted">Not made yet</span> ')
+    + (c.error ? `<span class="chip warn">Not updated</span><div class="sub">${esc(c.error)}</div>`
+      : c.synced_at ? `<span class="chip ok">Up to date</span> <span class="muted">checked ${ago(c.synced_at)}</span>` : '<span class="chip">Waiting</span>');
+  const cals = cal.calendars || {};
+  $('s-cal-info').innerHTML = cal.enabled === false ? kv([['Status', '<span class="chip">Off</span>']])
+    : kv([['Charges', calRow(cals.charge)], ['Discharges', calRow(cals.discharge)]]);
   const done = s.completed || [];
   $('o-done').innerHTML = done.map((c) => {
     const chip = c.kind === 'discharge' ? '<span class="chip dis">Discharge</span>' : c.kind === 'charge' ? '<span class="chip chg">Charge</span>' : '<span class="chip">Dispatch</span>';

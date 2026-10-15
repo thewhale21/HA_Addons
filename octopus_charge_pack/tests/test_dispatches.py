@@ -279,6 +279,11 @@ def test_the_calendar_follows_the_plan():
               ev("2026-10-15T21:00:00+01:00", "2026-10-15T22:00:00+01:00", "Dinner", "4", "mine")]  # not ours
     delete, add = plan(events, [a, b, idle], _at(15, 30))
     assert [e["uid"] for e in delete] == ["2"] and add == [b]
+    # one calendar each: charges and discharges
+    delete, add = plan(events, [a, b, idle], _at(15, 30), "discharge")
+    assert [e["uid"] for e in delete] == ["2"] and add == []
+    delete, add = plan([], [a, b, idle], _at(15, 30), "charge")
+    assert delete == [] and add == [b]
 
 
 def test_the_2nd_and_3rd_discharges():

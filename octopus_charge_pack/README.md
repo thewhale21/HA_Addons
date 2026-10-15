@@ -62,7 +62,7 @@ it's used until you pick one.
 | --- | --- |
 | `sensor.octopus_charge_pack_status` | OK, or what's wrong (attributes: `error`, `device_id`, `last_update`) |
 | `sensor.octopus_charge_pack_now` | What Octopus has the battery doing now: `charging`, `discharging`, `idle` or `none` (attributes: `start`, `end`, `energy_kwh`, `minutes_left`) |
-| `calendar.octopus_charge_pack` | The planned charges and discharges as calendar events (a Local Calendar the add-on makes; can be turned off on the Settings tab). Use it in calendar triggers, e.g. 15 minutes before a discharge |
+| `calendar.octopus_charge_pack_charge` / `_discharge` | The planned charges, and the planned discharges, as calendar events (Local Calendars the add-on makes; can be turned off on the Settings tab). Use them in calendar triggers, e.g. 15 minutes before a discharge |
 | `sensor.octopus_planned_dispatches` | How many dispatches are planned; attribute `flexPlannedDispatches` (start, end, type, energyAddedKwh) |
 | `sensor.next_charge_dispatch_start` / `_end` | The next charge dispatch (timestamps) |
 | `sensor.next_discharge_dispatch_start` / `_end` | The next discharge dispatch (timestamps) |

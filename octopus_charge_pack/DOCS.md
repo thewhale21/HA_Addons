@@ -48,12 +48,13 @@ and its sensors. In short: enter your Octopus API key on the
 - Plan changes: each read is compared with the last (dispatches matched by
   their start): one that's new, gone or has another end or energy is a
   change. One that has ended dropping off isn't. Kept for 7 days.
-- `src/calendar_sync.py`: the calendar. The first time, it makes a Local
-  Calendar called Octopus Charge Pack (`calendar.octopus_charge_pack`), then
-  after each read adds the charges and discharges still to come and removes
-  any of its own that Octopus dropped before they started (ones that have
-  started stay, as a history). Idle dispatches aren't added; events it
-  didn't add are never touched. Checked against the calendar when the plan
+- `src/calendar_sync.py`: the calendars. The first time, it makes two Local
+  Calendars, Octopus Charge Pack Charge (`calendar.octopus_charge_pack_charge`)
+  and Octopus Charge Pack Discharge (`calendar.octopus_charge_pack_discharge`),
+  then after each read adds the charges (or discharges) still to come and
+  removes any of its own that Octopus dropped before they started (ones that
+  have started stay, as a history). Idle dispatches aren't added; events it
+  didn't add are never touched. Checked against the calendars when the plan
   changes, and every 10 minutes.
 - `src/dispatches.py`: the logic of the old template sensors, with no I/O:
   the next charge (energyAddedKwh < 0) and discharge (> 0) that hasn't

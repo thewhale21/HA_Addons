@@ -1,10 +1,11 @@
-"""A Home Assistant calendar of the planned charges and discharges, so they
-can be seen in HA's calendar and used in calendar triggers ("15 minutes
-before a discharge...").
+"""Home Assistant calendars of the planned charges and of the planned
+discharges, so they can be seen in HA's calendar and used in calendar
+triggers ("15 minutes before a discharge...").
 
-The calendar is a Local Calendar the add-on makes (Settings > Devices &
-services > Local Calendar, "Octopus Charge Pack": calendar.octopus_charge_pack)
-the first time, and keeps in step with the plan: a charge or discharge still
+Each is a Local Calendar the add-on makes the first time (Settings > Devices
+& services > Local Calendar): "Octopus Charge Pack Charge"
+(calendar.octopus_charge_pack_charge) and "Octopus Charge Pack Discharge"
+(calendar.octopus_charge_pack_discharge). Each is kept in step with the plan: a charge or discharge still
 to come is added, and one Octopus takes off the plan before it starts is
 removed. Ones that have started are left as they are, so the calendar keeps
 the history. Idle dispatches (no energy) aren't added. Only the add-on's own
@@ -23,8 +24,11 @@ from src.dispatches import _kwh, kind_of, parse_time
 
 logger = logging.getLogger(__name__)
 
-NAME = "Octopus Charge Pack"
-ENTITY_ID = "calendar.octopus_charge_pack"
+# kind -> (calendar name, the entity ID HA gives it)
+CALENDARS = {
+    "charge": ("Octopus Charge Pack Charge", "calendar.octopus_charge_pack_charge"),
+    "discharge": ("Octopus Charge Pack Discharge", "calendar.octopus_charge_pack_discharge"),
+}
 MARK = "Planned by Octopus (added by the Octopus Charge Pack add-on)"
 RESYNC_S = 600  # checked against the calendar this often even with no change to the plan
 CREATE_RETRY_S = 3600  # making the calendar failed: try again after this long
@@ -43,11 +47,12 @@ def _utc(value) -> Optional[str]:
     return t.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M") if t else None
 
 
-def wanted(dispatches: list, now: datetime.datetime) -> dict:
-    """The events the calendar should have from now on: {(start, end, summary): dispatch}."""
+def wanted(dispatches: list, now: datetime.datetime, kind: Optional[str] = None) -> dict:
+    """The events a calendar should have from now on (`kind`: only charges or
+    only discharges): {(start, end, summary): dispatch}."""
     out = {}
     for d in dispatches or []:
-        if not isinstance(d, dict) or kind_of(d) == "idle":
+        if not isinstance(d, dict) or kind_of(d) == "idle" or (kind and kind_of(d) != kind):
             continue
         end = parse_time(d.get("end"))
         if end is None or end <= now:
@@ -56,10 +61,10 @@ def wanted(dispatches: list, now: datetime.datetime) -> dict:
     return out
 
 
-def plan(events: list, dispatches: list, now: datetime.datetime) -> tuple[list, list]:
-    """What to do to the calendar: (events to delete (theirs, by uid), dispatches to add).
+def plan(events: list, dispatches: list, now: datetime.datetime, kind: Optional[str] = None) -> tuple[list, list]:
+    """What to do to a calendar: (events to delete (theirs, by uid), dispatches to add).
     Only the add-on's own events, and only ones that haven't started, are deleted."""
-    want = wanted(dispatches, now)
+    want = wanted(dispatches, now, kind)
     have = {}
     delete = []
     for e in events or []:
@@ -76,44 +81,60 @@ def plan(events: list, dispatches: list, now: datetime.datetime) -> tuple[list, 
 
 
 class CalendarSync:
+    """Both calendars (one Calendar per kind)."""
+
     def __init__(self, link, state) -> None:
-        self._link = link
+        self._one = {kind: Calendar(link, kind) for kind in CALENDARS}
         self._state = state
+        state.calendar = {"enabled": True, "calendars": {k: c.info for k, c in self._one.items()}}
+
+    async def sync(self, dispatches: list, now: datetime.datetime, enabled: bool = True) -> None:
+        self._state.calendar["enabled"] = enabled
+        if not enabled:
+            return
+        for cal in self._one.values():
+            await cal.sync(dispatches, now)
+
+
+class Calendar:
+    def __init__(self, link, kind: str) -> None:
+        self._link = link
+        self.kind = kind
+        self.name, self.default_id = CALENDARS[kind]
         self.entity_id: Optional[str] = None
         self._synced: Optional[tuple] = None  # (what was wanted, when)
         self._create_failed_at = 0.0
-        state.calendar = {"enabled": True, "entity_id": None, "error": None, "synced_at": None}
+        self.info = {"name": self.name, "entity_id": None, "error": None, "synced_at": None}
 
     async def _find(self) -> Optional[str]:
         states = await self._link.all_states()
         for st in states:
             eid = st.get("entity_id", "")
-            if eid == ENTITY_ID or (eid.startswith("calendar.")
-                                    and (st.get("attributes") or {}).get("friendly_name") == NAME):
+            if eid == self.default_id or (eid.startswith("calendar.")
+                                          and (st.get("attributes") or {}).get("friendly_name") == self.name):
                 return eid
         return None
 
     async def _create(self) -> None:
-        """A Local Calendar called NAME, through its config flow."""
+        """A Local Calendar called self.name, through its config flow."""
         flow = await self._link.rest("POST", "config/config_entries/flow", {"handler": "local_calendar"})
         if (flow or {}).get("type") != "form":
             raise RuntimeError(f"Local Calendar couldn't be set up ({(flow or {}).get('reason') or (flow or {}).get('type')})")
         fields = {f.get("name") for f in flow.get("data_schema") or []}
-        data = {"calendar_name": NAME}
+        data = {"calendar_name": self.name}
         if "import" in fields:
             data["import"] = "create_empty"
         done = await self._link.rest("POST", f"config/config_entries/flow/{flow['flow_id']}", data)
         if (done or {}).get("type") != "create_entry":
             raise RuntimeError(f"Local Calendar couldn't be set up ({(done or {}).get('reason') or (done or {}).get('errors') or (done or {}).get('type')})")
-        logger.info("Made the %s calendar (Local Calendar)", NAME)
+        logger.info("Made the %s calendar (Local Calendar)", self.name)
         self._link.forget_states()
 
-    async def sync(self, dispatches: list, now: datetime.datetime, enabled: bool = True) -> None:
-        info = self._state.calendar
-        info["enabled"] = enabled
-        if not enabled or not self._link.connected:
+    async def sync(self, dispatches: list, now: datetime.datetime) -> None:
+        info = self.info
+        if not self._link.connected:
             return
-        sig = hashlib.sha1(json.dumps(sorted(map(str, wanted(dispatches, now))), default=str).encode()).hexdigest()
+        sig = hashlib.sha1(json.dumps(sorted(map(str, wanted(dispatches, now, self.kind))), default=str).encode()).hexdigest()
         if self._synced and self._synced[0] == sig and time.time() - self._synced[1] < RESYNC_S and self.entity_id:
             return
         try:
@@ -133,7 +154,7 @@ class CalendarSync:
             lo = (now - datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
             hi = (now + datetime.timedelta(days=4)).strftime("%Y-%m-%dT%H:%M:%SZ")
             events = await self._link.rest("GET", f"calendars/{self.entity_id}?start={lo}&end={hi}") or []
-            delete, add = plan(events, dispatches, now)
+            delete, add = plan(events, dispatches, now, self.kind)
             for e in delete:
                 await self._link.query({"type": "calendar/event/delete", "entity_id": self.entity_id, "uid": e["uid"]})
                 logger.info("Calendar: removed %s %s (off the plan)", e.get("summary"), _utc(e.get("start")))
@@ -146,5 +167,5 @@ class CalendarSync:
         except Exception as err:
             message = str(err) or type(err).__name__
             if info.get("error") != message:
-                logger.warning("Couldn't update the calendar: %s", message)
+                logger.warning("Couldn't update the %s calendar: %s", self.name, message)
             info["error"] = message
