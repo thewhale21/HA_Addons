@@ -145,7 +145,8 @@ def _short(d: dict) -> dict:
 def plan_changes(previous: Optional[list], dispatches: list, now: datetime.datetime) -> list:
     """What changed between two reads of the plan (dispatches matched by their start):
     [{"change": "added" | "removed" | "changed", "dispatch", "was"}]. Dispatches that
-    have ended aren't counted (Octopus drops them then). No previous read: nothing."""
+    have ended aren't counted (Octopus drops them then), nor idle ones (no energy:
+    one that becomes a charge or discharge is "added"). No previous read: nothing."""
     if previous is None:
         return []
 
@@ -153,7 +154,7 @@ def plan_changes(previous: Optional[list], dispatches: list, now: datetime.datet
         out = {}
         for d in ds or []:
             end = parse_time((d or {}).get("end")) if isinstance(d, dict) else None
-            if end is not None and end > now and d.get("start"):
+            if end is not None and end > now and d.get("start") and kind_of(d) != "idle":
                 out[d["start"]] = _short(d)
         return out
 
@@ -177,7 +178,8 @@ def track_changes(kept: dict, dispatches: list, now: datetime.datetime) -> list:
     new = plan_changes(kept.get("plan"), dispatches, now)
     kept["plan"] = [_short(d) for d in dispatches or [] if isinstance(d, dict)]
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    changes = [dict(c, at=stamp) for c in new] + list(kept.get("changes") or [])
+    changes = [dict(c, at=stamp) for c in new] + [c for c in kept.get("changes") or []
+                                                  if (c.get("dispatch") or {}).get("kind") != "idle"]
     cutoff = now - datetime.timedelta(days=CHANGES_KEEP_DAYS)
     kept["changes"] = [c for c in changes if (parse_time(c.get("at")) or now) >= cutoff][:CHANGES_MAX]
     return new

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 — Plan changes without idle slots
+
+- **Change:** Plan changes leaves out idle dispatches (0 kWh): only charges
+  and discharges added, moved or taken off are listed (an idle slot that
+  becomes a charge or discharge shows as added). Idle ones already listed
+  are cleared.
+
 ## 0.7.0 — Did the battery really discharge?
 
 - **Feature:** pick your home battery's SoC sensor on the Settings tab

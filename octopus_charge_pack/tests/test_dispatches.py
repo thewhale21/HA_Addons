@@ -325,3 +325,15 @@ def test_soc_shows_whether_a_session_happened():
     assert completed[1]["soc_result"] == "no_data" and len(asked) == 1  # too old for HA's history
     assert not _run(check_sessions(completed, "sensor.soc", query, _at(19, 6)))  # checked once
     assert not _run(check_sessions(completed, "", query, _at(19, 6)))
+
+
+def test_idle_dispatches_arent_plan_changes():
+    from src.dispatches import track_changes
+    kept = {"changes": [{"at": "2026-10-15T11:00:00Z", "change": "added",
+                         "dispatch": {"start": "x", "end": "y", "energyAddedKwh": 0.0, "kind": "idle"}}]}
+    idle = _d("2026-10-15T15:00:00Z", "2026-10-15T16:00:00Z", 0.0)
+    track_changes(kept, [idle], _at(12))
+    assert track_changes(kept, [dict(idle, end="2026-10-15T17:00:00Z")], _at(13)) == []  # idle moved
+    assert track_changes(kept, [], _at(13, 30)) == []  # idle taken off
+    new = track_changes(kept, [dict(idle, energyAddedKwh=2.0)], _at(14))  # now a discharge
+    assert [c["change"] for c in new] == ["added"] and kept["changes"][-1]["dispatch"]["kind"] == "discharge"

@@ -558,7 +558,7 @@ function renderState(s) {
   // Plan changes
   const KCHIP = {discharge: '<span class="chip dis">Discharge</span>', charge: '<span class="chip chg">Charge</span>', idle: '<span class="chip">Idle</span>'};
   const span2 = (d) => `${hm(d.start)}–${hm(d.end)}${d.kind !== 'idle' ? ' (' + num(d.energyAddedKwh, 2) + ' kWh)' : ''}`;
-  $('o-changes').innerHTML = (s.changes || []).slice(0, 60).map((c) => {
+  $('o-changes').innerHTML = (s.changes || []).filter((c) => (c.dispatch || {}).kind !== 'idle').slice(0, 60).map((c) => {
     const d = c.dispatch, day = new Date(d.start).toLocaleDateString([], {weekday: 'short'});
     const what = c.change === 'added' ? `Added ${day} ${span2(d)}` : c.change === 'removed' ? `Taken off ${day} ${span2(d)}`
       : `Changed ${day} ${span2(c.was)} → ${span2(d)}`;
