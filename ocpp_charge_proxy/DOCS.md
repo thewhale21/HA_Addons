@@ -309,6 +309,7 @@ The add-on creates its own entities (no integration needed):
 | Entity | Type | Description |
 |--------|------|-------------|
 | `input_boolean.ocpp_charge_proxy_plugged_in` | Helper (toggle) | Plugged In: turn on/off to plug in or unplug. Kept in step with the add-on's own Plugged In |
+| `input_button.ocpp_charge_proxy_charge_now_1h` … `_12h` | Helpers (buttons) | Charge now for 1, 2, 3, 4, 6, 8 or 12 hours, as the Automations tab's Charge now buttons |
 | `sensor.ocpp_charge_proxy_power` | Sensor | Current power draw (kW) |
 | `sensor.ocpp_charge_proxy_energy` | Sensor | Cumulative energy (kWh, works with the Energy dashboard) |
 | `sensor.ocpp_charge_proxy_current` | Sensor | Current draw (A) |
@@ -321,6 +322,13 @@ The add-on creates its own entities (no integration needed):
 - The Plugged In helper is a normal helper. While the add-on is stopped,
   toggling it does nothing, and it's set back to the add-on's value when the
   add-on starts.
+- The Charge now buttons are normal helpers too: press one, or call
+  `input_button.press` on it from an automation. It's added to the schedule
+  as a one-off, as the web page's button does. An automation can't answer
+  the page's "over the daily limit?" question, so a press always goes ahead
+  (as auto plug-in does); the log says what was planned. Presses while the
+  add-on is stopped are ignored. A deleted button comes back when the
+  add-on reconnects to Home Assistant.
 - If the old OCPP Charge Proxy integration (1.x) is still installed, the
   add-on leaves the sensors alone until you remove it (Settings > Devices &
   services). `sensor.ocpp_charge_proxy_energy` keeps its entity ID, so its

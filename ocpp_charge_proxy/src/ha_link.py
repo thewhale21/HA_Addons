@@ -30,8 +30,9 @@ from src import suppliers
 from src.ready_time import ALL_DAY_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity
 from src.smart_charging import find_dispatch_sensors, provider_name, smart_charging
 from src.ha_entities import (
-    ALL_SENSORS, HELPER_ICON, HELPER_ID, HELPER_NAME, PluggedInSync, SensorPublisher,
-    helper_entity_id, integration_entities,
+    ALL_SENSORS, CHARGE_NOW_HOURS, CHARGE_NOW_ICON, HELPER_ICON, HELPER_ID, HELPER_NAME,
+    ButtonPresses, PluggedInSync, SensorPublisher, charge_now_entities, charge_now_helper_id,
+    charge_now_helper_name, helper_entity_id, integration_entities,
 )
 
 logger = logging.getLogger(__name__)
@@ -226,6 +227,10 @@ class HaLink:
         # plug-in or the car plugged in sensor with "adjust the schedule" on:
         # it plugs in and plans the charge (set by __main__)
         self.on_auto_plug = None
+        # Called (hours) when a Charge now button is pressed in HA (set by __main__)
+        self.on_charge_now = None
+        self.charge_buttons: dict[str, int] = {}  # entity_id -> hours
+        self.presses = ButtonPresses()
         self._session = None
         # The add-on's own HA entities (src/ha_entities.py)
         self.plug_sync = PluggedInSync()
@@ -333,6 +338,9 @@ class HaLink:
     async def _entity_changed(self, entity_id: str, initial: bool = False) -> None:
         s = self.settings
         state = self.states.get(entity_id)
+        if entity_id and entity_id in self.charge_buttons:
+            if self.presses.pressed(entity_id, state.get("state") if state else None) and not initial:
+                await self._charge_now_pressed(entity_id, self.charge_buttons[entity_id])
         if entity_id and entity_id == self.plug_sync.entity_id:
             action = self.plug_sync.from_ha(state.get("state") if state else None, bool(self._shared.plugged_in))
             if action == "plug":
@@ -380,6 +388,22 @@ class HaLink:
                             self.auto_plug.armed = True
                 elif not await self._safe_plug("auto plug-in (low SoC)"):
                     self.auto_plug.armed = True  # try again on the next reading
+
+    async def _charge_now_pressed(self, entity_id: str, hours: int) -> None:
+        if self.on_charge_now is None:
+            return
+        logger.info("%s pressed in Home Assistant: charging now for %d h", entity_id, hours)
+        try:
+            out = await self.on_charge_now(hours) or {}
+        except Exception as err:
+            logger.warning("Charge now from %s failed: %s", entity_id, err)
+            return
+        plan = out.get("plan") or {}
+        if plan.get("nothing"):
+            logger.info("Charge now: nothing scheduled (%s)", "; ".join(plan.get("notes") or []))
+        elif plan.get("end"):
+            logger.info("Charge now: plugged in until %s%s", plan["end"],
+                        f" ({'; '.join(plan['notes'])})" if plan.get("notes") else "")
 
     async def _safe_plug(self, source: str) -> bool:
         try:
@@ -503,7 +527,9 @@ class HaLink:
                 self.car_connected = CarConnected()
                 self.auto_plug.armed = False
                 self.plug_sync.reset()
+                self.presses.reset()
                 ids = self.watched + ([self.plug_sync.entity_id] if self.plug_sync.entity_id else [])
+                ids += list(self.charge_buttons)
                 ids += self.dispatch_entities[:1]
                 ids += [self.ready_entity] if self.ready_entity else []
                 if ids:
@@ -569,6 +595,20 @@ class HaLink:
             self.plug_sync.entity_id = None
             self.entities_error = f"Couldn't set up the Plugged In helper: {err}"
             logger.warning("%s", self.entities_error)
+        try:
+            buttons = {b.get("id") for b in (await call({"type": "input_button/list"}) or [])}
+            missing = [h for h in CHARGE_NOW_HOURS if charge_now_helper_id(h) not in buttons]
+            for hours in missing:
+                await call({"type": "input_button/create", "name": charge_now_helper_name(hours), "icon": CHARGE_NOW_ICON})
+            if missing:
+                logger.info("Created the Charge now buttons for %s h", ", ".join(str(h) for h in missing))
+                registry = await call({"type": "config/entity_registry/list"}, timeout=30) or registry
+            self.charge_buttons = charge_now_entities(registry)
+        except Exception as err:
+            self.charge_buttons = {}
+            msg = f"Couldn't set up the Charge now buttons: {err}"
+            self.entities_error = f"{self.entities_error}; {msg}" if self.entities_error else msg
+            logger.warning("%s", msg)
 
     async def _sync_entities(self, call) -> None:
         # Plugged In: add-on -> HA
@@ -865,6 +905,7 @@ class HaLink:
             "configured": self.configured,
             "ha_entities": {
                 "plugged_in": self.plug_sync.entity_id,
+                "charge_now": [{"entity_id": e, "hours": h} for e, h in self.charge_buttons.items()],
                 "sensors": list(ALL_SENSORS),
                 "publishing": self.publishing,
                 "integration_conflict": self.integration_conflict,

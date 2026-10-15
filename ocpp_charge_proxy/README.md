@@ -146,11 +146,20 @@ mode: queued
 | Entity | |
 | --- | --- |
 | `input_boolean.ocpp_charge_proxy_plugged_in` | **Plugged In**: turn on to plug in, off to unplug (use it on a dashboard or in automations) |
+| `input_button.ocpp_charge_proxy_charge_now_1h` … `_12h` | **Charge now** for 1, 2, 3, 4, 6, 8 or 12 hours: press one (or `input_button.press` it from an automation) to do what the web page's Charge now button does |
 | `sensor.ocpp_charge_proxy_status` | Available, Preparing, **Charging**, Scheduled, Waiting for supplier… |
 | `sensor.ocpp_charge_proxy_power` | Power now (kW): above 0 while charging |
 | `sensor.ocpp_charge_proxy_energy` | Energy total (kWh), for the Energy dashboard |
 | `sensor.ocpp_charge_proxy_current` | Current (A) |
 | `sensor.ocpp_charge_proxy_current_limit` | The current in use, with your max and the supplier's limit |
+
+For example, charge for 2 hours when you get home:
+
+```yaml
+action: input_button.press
+target:
+  entity_id: input_button.ocpp_charge_proxy_charge_now_2h
+```
 
 ## Troubleshooting
 

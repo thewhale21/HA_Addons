@@ -5,8 +5,8 @@ import sys
 import types
 
 from src.ha_entities import (
-    HELPER_ID, LIVE_INTERVAL_S, REFRESH_S, PluggedInSync, SensorPublisher,
-    helper_entity_id, integration_entities,
+    CHARGE_NOW_HOURS, HELPER_ID, LIVE_INTERVAL_S, REFRESH_S, ButtonPresses, PluggedInSync, SensorPublisher,
+    charge_now_entities, charge_now_helper_id, helper_entity_id, integration_entities,
 )
 from src.shared_state import SharedState
 
@@ -118,6 +118,7 @@ class FakeHA:
         self.registry = registry or []
         self.helper_state = helper_state
         self.posted = []
+        self.buttons = []  # input_button helper IDs
 
     # aiohttp ClientSession bits
     def ws_connect(self, *a, **kw):
@@ -147,7 +148,14 @@ class FakeHA:
         result, ok = None, True
         if t == "config/entity_registry/list":
             result = self.registry + ([{"entity_id": f"input_boolean.{HELPER_ID}", "platform": "input_boolean",
-                                        "unique_id": HELPER_ID}] if self.helpers else [])
+                                        "unique_id": HELPER_ID}] if self.helpers else []) + [
+                {"entity_id": f"input_button.{b}", "platform": "input_button", "unique_id": b} for b in self.buttons]
+        elif t == "input_button/list":
+            result = [{"id": b} for b in self.buttons]
+        elif t == "input_button/create":
+            bid = msg["name"].lower().replace(" ", "_")
+            self.buttons.append(bid)
+            result = {"id": bid}
         elif t == "get_states":
             result = getattr(self, "all_states", [])
         elif t == "input_boolean/list":
@@ -165,7 +173,8 @@ class FakeHA:
             known = {st["entity_id"]: st for st in getattr(self, "all_states", [])}
             self.inbox.put_nowait(Msg({"type": "event", "id": i, "event": {"a": {
                 e: ({"s": known[e]["state"], "a": known[e]["attributes"]} if e in known else
-                    {"s": self.helper_state if e.startswith("input_boolean") else "50", "a": {}})
+                    {"s": self.helper_state if e.startswith("input_boolean") else
+                     "unknown" if e.startswith("input_button") else "50", "a": {}})
                 for e in msg["entity_ids"]}}}))
             return
         self.inbox.put_nowait(Msg({"type": "result", "id": i, "success": ok, "result": result}))
@@ -174,6 +183,10 @@ class FakeHA:
         self.helper_state = state
         self.inbox.put_nowait(Msg({"type": "event", "id": self.sub, "event": {
             "c": {f"input_boolean.{HELPER_ID}": {"+": {"s": state}}}}}))
+
+    def user_presses(self, entity_id, when):
+        self.inbox.put_nowait(Msg({"type": "event", "id": self.sub, "event": {
+            "c": {entity_id: {"+": {"s": when}}}}}))
 
     def __aiter__(self):
         return self
@@ -193,7 +206,7 @@ class FakeResp:
         pass
 
 
-def _scenario(fake, steps):
+def _scenario(fake, steps, on_charge_now=None):
     state = SharedState(power_kw=1.37, current_a=5.96, energy_kwh=6612.5, plugged_in=False)
     calls = []
 
@@ -209,6 +222,7 @@ def _scenario(fake, steps):
         pass
 
     link = HaLink(None, state, lambda kw: None, set_soc, plug, token="t", unplug=unplug)
+    link.on_charge_now = on_charge_now
 
     async def main():
         link._session = fake
@@ -303,3 +317,49 @@ def test_no_supplier_sensor():
     link, _, _ = _scenario(fake, [])
     assert link.smart_charging() == {"found": False} and link.scheduled() is None and link.slot_now() is None
     assert link.smart_charging_health()["found"] is False
+
+
+# --- Charge now buttons ------------------------------------------------------------
+
+
+def test_button_presses_ignore_the_state_on_subscribe():
+    p = ButtonPresses()
+    assert not p.pressed("input_button.x", "2026-10-15T08:00:00+00:00")  # what it was before we looked
+    assert p.pressed("input_button.x", "2026-10-15T09:00:00+00:00")
+    assert not p.pressed("input_button.x", "2026-10-15T09:00:00+00:00")  # same again
+    assert not p.pressed("input_button.x", "unavailable")
+    p.reset()
+    assert not p.pressed("input_button.x", "2026-10-15T10:00:00+00:00")
+
+
+def test_charge_now_entities_follow_renames():
+    reg = [{"entity_id": "input_button.charge_2", "platform": "input_button", "unique_id": charge_now_helper_id(2)}]
+    found = charge_now_entities(reg)
+    assert found["input_button.charge_2"] == 2
+    assert found[f"input_button.{charge_now_helper_id(12)}"] == 12
+    assert sorted(found.values()) == list(CHARGE_NOW_HOURS)
+
+
+def test_charge_now_buttons_created_and_pressing_one_charges():
+    fake = FakeHA(helper_exists=True)
+    asked = []
+
+    async def charge_now(hours):
+        asked.append(hours)
+        return {"plan": {"end": "2026-10-15T12:00:00+01:00", "notes": []}}
+
+    link, _, _ = _scenario(fake, [
+        lambda f, s: f.user_presses("input_button.ocpp_charge_proxy_charge_now_2h", "2026-10-15T09:00:00+00:00"),
+    ], on_charge_now=charge_now)
+    assert sorted(fake.buttons) == sorted(charge_now_helper_id(h) for h in CHARGE_NOW_HOURS)
+    sub = [m for m in fake.sent if m.get("type") == "subscribe_entities"][-1]
+    assert "input_button.ocpp_charge_proxy_charge_now_12h" in sub["entity_ids"]
+    assert asked == [2]
+    assert len(link.snapshot()["ha_entities"]["charge_now"]) == len(CHARGE_NOW_HOURS)
+
+
+def test_charge_now_buttons_not_created_twice():
+    fake = FakeHA(helper_exists=True)
+    fake.buttons = [charge_now_helper_id(h) for h in CHARGE_NOW_HOURS]
+    _scenario(fake, [])
+    assert "input_button/create" not in [m.get("type") for m in fake.sent]

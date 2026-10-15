@@ -10,6 +10,12 @@
   (sensor.ocpp_charge_proxy_power / _energy / _current), with the device and
   state classes the Energy dashboard needs. They're "unavailable" while the
   add-on is stopped, and re-posted when it (or HA) restarts.
+- Charge now: input_button helpers the add-on creates, one per length the
+  web page offers (input_button.ocpp_charge_proxy_charge_now_1h ... _12h).
+  Pressing one (from the UI or an automation's input_button.press) does what
+  the page's Charge now button does, going ahead even over the supplier's
+  daily limit, as auto plug-in does. Presses while the add-on is stopped are
+  ignored.
 - Status (the OCPP state: Charging, Preparing..., or Waiting for supplier /
   Scheduled while plugged
   in with a slot planned by your supplier) and Current limit (the
@@ -60,6 +66,47 @@ LIMIT_ATTRS = {
 }
 ALL_SENSORS = [e for e, _, _ in SENSORS.values()] + [STATUS_SENSOR, LIMIT_SENSOR]
 
+CHARGE_NOW_HOURS = (1, 2, 3, 4, 6, 8, 12)  # as the web page's Charge now buttons
+CHARGE_NOW_ICON = "mdi:ev-station"
+
+
+def charge_now_helper_id(hours) -> str:
+    return f"ocpp_charge_proxy_charge_now_{hours}h"
+
+
+def charge_now_helper_name(hours) -> str:
+    # HA makes the helper's ID from its name, so this gives charge_now_helper_id()
+    return f"OCPP Charge Proxy Charge Now {hours}h"
+
+
+def charge_now_entities(registry: list[dict]) -> dict[str, int]:
+    """entity_id -> hours, for each Charge now button (the user may have renamed them)."""
+    by_unique = {e.get("unique_id"): e.get("entity_id") for e in registry if e.get("platform") == "input_button"}
+    out = {}
+    for hours in CHARGE_NOW_HOURS:
+        hid = charge_now_helper_id(hours)
+        out[by_unique.get(hid) or f"input_button.{hid}"] = hours
+    return out
+
+
+
+class ButtonPresses:
+    """Tells a press of an input_button (its state becomes the press time)
+    from the state it already had when the add-on (re)subscribed."""
+
+    def __init__(self) -> None:
+        self.seen: dict[str, Optional[str]] = {}
+
+    def reset(self) -> None:
+        self.seen = {}
+
+    def pressed(self, entity_id: str, state: Optional[str]) -> bool:
+        first = entity_id not in self.seen
+        before = self.seen.get(entity_id)
+        self.seen[entity_id] = state
+        if first or state in (None, "unknown", "unavailable"):
+            return False
+        return state != before
 
 
 class PluggedInSync:

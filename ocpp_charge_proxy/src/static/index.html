@@ -1851,6 +1851,9 @@ function drawSimulation() {
     ? `<dt>Old integration</dt><dd><span class="chip err">Still installed</span><div class="sub">Remove the OCPP Charge Proxy integration in Settings › Devices &amp; services, then restart this add-on. Until then the sensors below aren't updated by the add-on.</div></dd>` : '') + kv([
     ['Plugged In', e.plugged_in ? `<code>${esc(e.plugged_in)}</code> <span class="muted">(helper, toggle it to plug in / unplug)</span>`
       : `<span class="chip warn">Not set up</span>${e.error ? '<div class="sub">' + esc(e.error) + '</div>' : ''}`],
+    ['Charge now', (e.charge_now || []).length ? e.charge_now.map((b) => `<code>${esc(b.entity_id)}</code>`).join('<br>')
+      + ' <div class="muted">(buttons: press one, or call <code>input_button.press</code> from an automation, to charge now for that long)</div>'
+      : '<span class="chip warn">Not set up</span>'],
     ['Sensors', sensorList + (e.publishing ? ' <div><span class="chip ok">Updating</span></div>' : ' <div><span class="chip">Not updating</span></div>')],
   ]);
   const socTxt = (entity, soc) => !entity ? 'not set' : soc == null ? 'no reading' : `${Math.round(soc * 10) / 10}%`;

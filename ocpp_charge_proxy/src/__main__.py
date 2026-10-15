@@ -279,6 +279,9 @@ async def run() -> None:
         return await charge(hours, CHARGE_NOW_SOURCE, "charge now", confirm)
 
     ha_link.on_auto_plug = on_auto_plug
+    # A Charge now button pressed in HA: an automation can't answer "are you
+    # sure?", so it goes ahead over the daily limit, as auto plug-in does
+    ha_link.on_charge_now = lambda hours: charge_now(hours, confirm=True)
 
     async def supplier_marks_loop() -> None:
         """Mark how much of each session was in the supplier's dispatch slots."""

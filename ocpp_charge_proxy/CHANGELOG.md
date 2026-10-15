@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.42.0 — Charge now buttons in Home Assistant
+
+- **Feature:** the Charge now buttons are Home Assistant entities:
+  `input_button.ocpp_charge_proxy_charge_now_1h`, `_2h`, `_3h`, `_4h`,
+  `_6h`, `_8h` and `_12h`, created by the add-on. Press one, or call
+  `input_button.press` from an automation, to charge now for that long,
+  as the web page's button does. From Home Assistant it goes ahead even
+  over the supplier's daily limit, as auto plug-in does.
+- **Improvement:** Diagnostics › Health lists the Charge now buttons with the
+  add-on's other entities.
+
 ## 2.41.2 — Unused code removed
 
 - **Change:** removed code nothing used any more: the old idle and
