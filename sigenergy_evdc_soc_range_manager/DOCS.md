@@ -76,10 +76,19 @@ The differences:
      starts at your `input_number.vehicle_max_capacity` if you have one,
      otherwise 0 (set it to see the energy sensors).
    - **SigEnergy EVDC Charging Mode** (`input_select.sigenergy_evdc_charging_mode`:
-     V2X, Solar Surplus, Fast Charging), unless you already have it. It
-     only manages the charger in V2X.
+     V2X, Solar Surplus, Fast Charging), unless you already have it (e.g. in
+     your YAML). It only manages the charger in V2X.
 
-   You can point any of these at a helper you already have instead.
+   The two limits are the add-on's own helpers, so you can change them
+   anywhere in Home Assistant (a dashboard, an automation). It checks for
+   them each time it connects: if one has gone, it's made again (at your
+   `v2x_cut_off_threshold` helpers' values, if you have them). If one with
+   the add-on's name is defined in YAML, it's used, and the Overview says to
+   remove it from your YAML and restart Home Assistant, so the add-on can
+   make it as its own.
+
+   You can point any of these at a helper you already have instead; the
+   add-on then leaves it alone.
 4. Optional: a **charge signal**, e.g. `binary_sensor.predbat_charging`.
    While it's on, the car is charged if there's room, and isn't stopped at
    the low limit.
@@ -359,7 +368,9 @@ capacity estimates; the losses are recorded from then on.
 ## Diagnostics
 
 **Diagnostics › Health** shows the link to Home Assistant and anything
-needing attention (also the coloured dot by the title). **Diagnostics ›
+needing attention (also the coloured dot by the title). It also lists the
+helpers in use (the limits, battery capacity and charging mode, and whether
+each is the add-on's own or yours) and the add-on's own sensors. **Diagnostics ›
 Debug** has the log level, recent log lines, a diagnostics bundle to
 download and a restart button.
 

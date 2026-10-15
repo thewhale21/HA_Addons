@@ -1754,7 +1754,16 @@ async function refreshHealth() {
   ]);
   try {
     const d = await api('sensors');
-    $('h-entities').innerHTML = kv([['Sensors', d.own_sensors.map((e) => `<code>${esc(e)}</code>`).join('<br>')]]);
+    // The helpers it uses (editable in Home Assistant): its own, or ones picked on the Settings tab
+    const helpers = [['soc_high', 'High limit'], ['soc_low', 'Low limit'], ['capacity', 'Battery capacity'], ['v2x_mode', 'Charging mode']]
+      .map(([k, label]) => {
+        const id = (d.settings || {})[k];
+        if (!id) return `${label}: <span class="muted">not set</span>`;
+        const missing = d.entities && d.entities[k] && d.entities[k].state == null;
+        return `${label}: <code>${esc(id)}</code> <span class="muted">· ${(d.automatic || {})[k] ? 'made by the add-on' : 'yours'}${missing ? ', not found in Home Assistant' : ''}</span>`;
+      });
+    $('h-entities').innerHTML = kv([['Helpers', helpers.join('<br>')],
+      ['Sensors', d.own_sensors.map((e) => `<code>${esc(e)}</code>`).join('<br>')]]);
   } catch (e) { $('h-entities').innerHTML = '<span class="muted">—</span>'; }
 }
 

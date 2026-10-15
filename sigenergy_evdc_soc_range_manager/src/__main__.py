@@ -258,10 +258,11 @@ async def run() -> None:
             runner.wake.set()
 
     async def connected() -> None:
-        """Make any helpers that aren't set yet (the limits, capacity, V2X mode)."""
+        """Make any helpers that aren't set yet, and the limit helpers if they're missing."""
         try:
-            await ensure_helpers(link)
-            state.setup_note = None
+            notes: list = []
+            await ensure_helpers(link, notes)
+            state.setup_note = " ".join(notes) or None
         except Exception as err:
             state.setup_note = (f"Couldn't make the helpers ({err}). Make them in Home Assistant "
                                 "(Settings › Devices & services › Helpers) and pick them on the Settings tab.")
