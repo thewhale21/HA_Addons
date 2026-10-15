@@ -13,7 +13,8 @@ from typing import Callable, Optional
 logger = logging.getLogger(__name__)
 
 LEVELS = ("debug", "info", "warning", "error")
-DEFAULTS = {"log_level": "info", "device_id": "", "poll_seconds": 60}  # device_id "": not picked yet
+DEFAULTS = {"log_level": "info", "device_id": "", "poll_seconds": 60,  # device_id "": not picked yet
+            "calendar": True}  # keep a Home Assistant calendar of the dispatches
 DEVICE_ID_MAX = 100
 POLL_MIN_S, POLL_MAX_S = 30, 3600
 
@@ -43,6 +44,10 @@ class AppSettings:
     @property
     def poll_seconds(self) -> int:
         return self.data["poll_seconds"]
+
+    @property
+    def calendar(self) -> bool:
+        return bool(self.data["calendar"])
 
     def adopt_options(self, config) -> None:
         """Once: a device_id or poll_seconds set in the add-on's options before 0.3.0 (when they
@@ -85,6 +90,10 @@ class AppSettings:
             if not POLL_MIN_S <= seconds <= POLL_MAX_S:
                 raise ValueError(f"Read every {POLL_MIN_S} to {POLL_MAX_S} seconds")
             out["poll_seconds"] = seconds
+        if "calendar" in body:
+            if not isinstance(body["calendar"], bool):
+                raise ValueError("calendar must be true or false")
+            out["calendar"] = body["calendar"]
         return out
 
     def update(self, body) -> dict:

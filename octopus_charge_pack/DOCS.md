@@ -10,13 +10,13 @@ See the README (the add-on's **Info** tab) for setting it up, its options
 and its sensors. In short: enter your Octopus API key on the
 **Configuration** tab and start it.
 
-1. **Overview** shows its status across the top, then the next discharge
-   (with its local date, start and end as the date and time sensors give
-   them) and next charge, each with its own planned dispatches, the idle
-   ones (0 kWh), and the
-   completed sessions of the last 30 days.
+1. **Overview** shows its status and what it's doing now, a timeline of
+   today and tomorrow, then the next discharge (with its local date, start
+   and end as the date and time sensors give them) and next charge, each
+   with its own planned dispatches, the idle ones (0 kWh), the completed
+   sessions of the last 30 days and the plan's changes of the last 7.
 2. **Settings** has the device and read interval (both drop-downs, applied
-   at once).
+   at once) and the calendar switch.
 3. **Diagnostics** has its health, the sensors it posts, the log
    and a diagnostics bundle (the API key is always hidden).
 
@@ -43,6 +43,16 @@ and its sensors. In short: enter your Octopus API key on the
   end. One taken off the plan earlier didn't happen. Kept in
   `/data/state.json` for 30 days; one ending while the add-on is stopped
   isn't counted.
+- Plan changes: each read is compared with the last (dispatches matched by
+  their start): one that's new, gone or has another end or energy is a
+  change. One that has ended dropping off isn't. Kept for 7 days.
+- `src/calendar_sync.py`: the calendar. The first time, it makes a Local
+  Calendar called Octopus Charge Pack (`calendar.octopus_charge_pack`), then
+  after each read adds the charges and discharges still to come and removes
+  any of its own that Octopus dropped before they started (ones that have
+  started stay, as a history). Idle dispatches aren't added; events it
+  didn't add are never touched. Checked against the calendar when the plan
+  changes, and every 10 minutes.
 - `src/dispatches.py`: the logic of the old template sensors, with no I/O:
   the next charge (energyAddedKwh < 0) and discharge (> 0) that hasn't
   ended, and each one's local date and times.

@@ -21,6 +21,9 @@ TIMESTAMP = {"device_class": "timestamp"}
 SENSORS = {
     "status": (f"sensor.{PREFIX}_status", {
         "friendly_name": "Octopus Charge Pack Status", "icon": "mdi:ev-station"}),
+    "now": (f"sensor.{PREFIX}_now", {
+        "friendly_name": "Octopus Charge Pack Now", "icon": "mdi:home-battery",
+        "device_class": "enum", "options": ["charging", "discharging", "idle", "none"]}),
     "planned": ("sensor.octopus_planned_dispatches", {
         "friendly_name": "Octopus Planned Dispatches", "icon": "mdi:calendar-clock"}),
     "charge_start": ("sensor.next_charge_dispatch_start", {
@@ -66,7 +69,9 @@ def values(state) -> dict:
     if not s:
         return {**out, **{key: None for key in SENSORS if key != "status"}}
     out["planned"] = (s.get("count"), {"flexPlannedDispatches": s.get("dispatches") or []})
-    for key in [k for k in SENSORS if k not in ("status", "planned")]:
+    out["now"] = (s.get("now") or "none", {"start": s.get("now_start"), "end": s.get("now_end"),
+                                          "energy_kwh": s.get("now_kwh"), "minutes_left": s.get("now_minutes_left")})
+    for key in [k for k in SENSORS if k not in ("status", "planned", "now")]:
         out[key] = s.get(key)
     return out
 

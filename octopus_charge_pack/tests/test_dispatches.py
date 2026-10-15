@@ -232,3 +232,50 @@ def test_idle_dispatches_arent_sessions():
     kept = {}
     track_completed(kept, [_d("2026-10-15T15:00:00Z", "2026-10-15T16:00:00Z", 0.0)], at(15, 59), 180)
     assert track_completed(kept, [], at(16, 1), 180) == [] and kept["completed"] == []
+
+
+# --- now, plan changes, the calendar -------------------------------------------------
+
+def _at(hh, mm=0, day=15):
+    return datetime.datetime(2026, 10, day, hh, mm, tzinfo=datetime.timezone.utc)
+
+
+def test_what_its_doing_now():
+    from src.dispatches import now_values
+    plan = [_d("2026-10-15T15:00:00+00:00", "2026-10-15T16:00:00+00:00", 0.0),
+            _d("2026-10-15T22:30:00+00:00", "2026-10-15T23:00:00+00:00", "-0.5995")]
+    assert now_values(plan, _at(15, 20))["now"] == "idle"
+    v = now_values(plan, _at(22, 40))
+    assert v["now"] == "charging" and v["now_minutes_left"] == 20 and v["now_kwh"] == -0.5995
+    assert now_values(plan, _at(19))["now"] == "none"
+
+
+def test_changes_to_the_plan_are_logged():
+    from src.dispatches import track_changes
+    kept = {}
+    a = _d("2026-10-15T18:00:00Z", "2026-10-15T19:00:00Z", 4.4)
+    b = _d("2026-10-15T22:30:00Z", "2026-10-15T23:00:00Z", -0.6)
+    assert track_changes(kept, [a, b], _at(12)) == []  # the first read isn't a change
+    a2 = dict(a, end="2026-10-15T19:30:00Z")
+    c = _d("2026-10-16T00:30:00Z", "2026-10-16T01:30:00Z", 4.4)
+    new = track_changes(kept, [a2, c], _at(13))
+    assert [(x["change"], x["dispatch"]["start"]) for x in new] == [
+        ("changed", "2026-10-15T18:00:00Z"), ("added", "2026-10-16T00:30:00Z"), ("removed", "2026-10-15T22:30:00Z")]
+    assert new[0]["was"]["end"] == "2026-10-15T19:00:00Z" and kept["changes"][0]["at"] == "2026-10-15T13:00:00Z"
+    # one that's ended dropping off isn't a change
+    assert track_changes(kept, [c], _at(19, 31)) == []
+
+
+def test_the_calendar_follows_the_plan():
+    from src.calendar_sync import MARK, plan, summary
+    a = _d("2026-10-15T18:00:00+00:00", "2026-10-15T19:00:00+00:00", 4.4)
+    b = _d("2026-10-15T22:30:00+00:00", "2026-10-15T23:00:00+00:00", -0.6)
+    idle = _d("2026-10-15T15:00:00+00:00", "2026-10-15T16:00:00+00:00", 0.0)
+    assert summary(a) == "Discharge 4.40 kWh" and summary(b) == "Charge 0.60 kWh"
+    ev = lambda s, e, t, uid, desc=MARK: {"start": {"dateTime": s}, "end": {"dateTime": e}, "summary": t, "uid": uid, "description": desc}
+    events = [ev("2026-10-15T19:00:00+01:00", "2026-10-15T20:00:00+01:00", "Discharge 4.40 kWh", "1"),  # = a, in BST
+              ev("2026-10-15T20:00:00+01:00", "2026-10-15T21:00:00+01:00", "Discharge 2.00 kWh", "2"),  # off the plan
+              ev("2026-10-15T16:00:00+01:00", "2026-10-15T17:00:00+01:00", "Discharge 1.00 kWh", "3"),  # started: kept
+              ev("2026-10-15T21:00:00+01:00", "2026-10-15T22:00:00+01:00", "Dinner", "4", "mine")]  # not ours
+    delete, add = plan(events, [a, b, idle], _at(15, 30))
+    assert [e["uid"] for e in delete] == ["2"] and add == [b]

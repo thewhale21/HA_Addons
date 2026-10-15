@@ -11,7 +11,7 @@ import os
 import time
 from typing import Optional
 
-from src.dispatches import summarise, track_completed
+from src.dispatches import summarise, track_changes, track_completed
 from src.octopus import AuthError, OctopusClient
 from src.shared_state import SharedState
 
@@ -59,6 +59,8 @@ async def read_once(state: SharedState, client: OctopusClient, kept: dict, wante
         raise ValueError("Pick your device on the Settings tab (your account has "
                          f"{len(state.devices) or 'no'} device{'' if len(state.devices) == 1 else 's'})")
     if device != state.device_id:
+        if state.device_id is not None:
+            kept.pop("plan", None)  # another device: its plan isn't a change to this one's
         logger.info("Following device %s", device)
         state.device_id, state.summary = device, {}
     dispatches = await client.planned_dispatches(device)
@@ -70,16 +72,21 @@ async def read_once(state: SharedState, client: OctopusClient, kept: dict, wante
     for c in track_completed(kept, dispatches, now, grace_s=2 * (state.poll_seconds or 60) + 60):
         logger.info("Completed %s: %s to %s (%s kWh)", c["kind"] or "dispatch", c["start"], c["end"], c["energyAddedKwh"])
     state.completed = list(kept.get("completed") or [])
+    for c in track_changes(kept, dispatches, now):
+        d = c["dispatch"]
+        logger.info("Plan change: %s %s %s to %s (%s kWh)", c["change"], d["kind"], d["start"], d["end"], d["energyAddedKwh"])
+    state.changes = list(kept.get("changes") or [])
     state.last_update = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 async def worker(state: SharedState, config, data_dir: Optional[str], settings=None,
-                 wake: Optional[asyncio.Event] = None) -> None:
+                 wake: Optional[asyncio.Event] = None, after_read=None) -> None:
     """Every poll_seconds (or when the device or interval picked on the page changes): read the planned
     dispatches and work out the sensors. The account's devices are read again every DEVICES_EVERY_S."""
     path = os.path.join(data_dir, "state.json") if data_dir else None
     kept = _load(path)
     state.completed = list(kept.get("completed") or [])
+    state.changes = list(kept.get("changes") or [])
     wake = wake or asyncio.Event()
     if not config.api_key:
         state.status, state.error = "Needs an API key", "Set your Octopus API key on the add-on's Configuration tab"
@@ -101,6 +108,11 @@ async def worker(state: SharedState, config, data_dir: Optional[str], settings=N
                     logger.info("Reading the dispatches again")
                 state.status, state.error = "OK", None
                 _save(path, kept)
+                if after_read is not None:
+                    try:
+                        await after_read((state.summary or {}).get("dispatches") or [])
+                    except Exception:
+                        logger.warning("After reading the dispatches", exc_info=True)
             except AuthError as err:
                 if state.error != str(err):
                     logger.warning("Octopus refused the API key: %s", err)

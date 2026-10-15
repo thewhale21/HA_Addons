@@ -300,6 +300,23 @@ class HaLink:
             payload["target"] = target
         return await self.query(payload)
 
+    async def rest(self, method: str, path: str, body: Optional[dict] = None):
+        """A request to HA's REST API (e.g. "GET", "calendars/calendar.x?start=..."): its JSON. Raises if it fails."""
+        if self._session is None:
+            raise ConnectionError("Not connected to Home Assistant")
+        import aiohttp
+
+        async with self._session.request(
+            method, f"{SUPERVISOR_API}/{path}", headers={"Authorization": f"Bearer {self._token}"},
+            json=body, timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status >= 400:
+                raise RuntimeError(f"{method} {path.split('?')[0]}: HTTP {resp.status} {(await resp.text())[:200]}")
+            return await resp.json(content_type=None)
+
+    def forget_states(self) -> None:
+        self._states_cache = (0.0, [])  # read them again next time
+
     async def _post_state(self, entity_id: str, state: str, attrs: dict) -> None:
         if self._session is None:
             return

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 — Now, a calendar, plan changes and a timeline
+
+- **Feature:** `sensor.octopus_charge_pack_now`: what Octopus has the
+  battery doing now (charging, discharging, idle or none), with the
+  dispatch's start, end, energy and minutes left. Also on the Overview.
+- **Feature:** a calendar of the planned charges and discharges
+  (`calendar.octopus_charge_pack`, a Local Calendar the add-on makes), kept
+  in step with the plan, for HA's calendar and calendar triggers. On by
+  default; a switch on the Settings tab.
+- **Feature:** a Plan changes card: what Octopus added, moved or took off
+  the plan, and when (the last 7 days).
+- **Feature:** a timeline of today and tomorrow on the Overview: charges,
+  discharges and idle time, completed ones outlined, and now.
+
 ## 0.5.2 — Its own icon
 
 - **Change:** a Charge Pack icon and logo in the add-on store (a battery

@@ -143,6 +143,14 @@
   .combo-list li.active { background: var(--hover); box-shadow: inset 3px 0 0 var(--primary); }
   .combo-list li.sel { font-weight: 600; }
   .combo-list li.empty { color: var(--text2); cursor: default; }
+  .tl { display: grid; grid-template-columns: 70px 1fr; gap: 6px 10px; align-items: center; font-size: 12px; }
+  .tl .track { position: relative; height: 26px; background: var(--hover); border-radius: 6px; overflow: hidden; }
+  .tl .blk { position: absolute; top: 3px; bottom: 3px; border-radius: 4px; opacity: .85; }
+  .tl .blk.discharge { background: var(--violet); } .tl .blk.charge { background: var(--info); }
+  .tl .blk.idle { background: repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px); opacity: .35; }
+  .tl .blk.done { outline: 2px solid var(--ok); outline-offset: -2px; }
+  .tl .now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--err); }
+  .tl .axis { display: flex; justify-content: space-between; color: var(--text2); font-size: 11px; }
   .switch { position: relative; width: 44px; height: 24px; flex: none; }
   .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
   .switch span { position: absolute; inset: 0; background: var(--divider); border-radius: 999px; transition: background .15s; }
@@ -197,6 +205,12 @@
       <div class="label">Status</div>
       <div class="big" id="o-status">—</div>
       <div class="sub" id="o-status-sub"></div>
+      <div style="margin-top:10px" id="o-now"></div>
+    </div>
+    <div class="card">
+      <h2>Today and tomorrow</h2>
+      <div class="tl" id="o-tl"></div>
+      <div class="note" style="margin:8px 0 0"><span class="chip dis">Discharge</span> <span class="chip chg">Charge</span> <span class="chip">Idle</span> as planned; outlined in green: completed. The red line is now.</div>
     </div>
     <div class="grid">
       <div class="card">
@@ -224,6 +238,11 @@
       <table><thead><tr><th>Date</th><th>Time</th><th>Type</th><th class="num">Energy</th></tr></thead><tbody id="o-done"></tbody></table>
       <div class="note" style="margin:8px 0 0">Octopus changes its plan a lot, but a session that happens stays in it until its end: one still planned when it ended (within two reads) counts as completed. The last 30 days.</div>
     </div>
+    <div class="card">
+      <h2>Plan changes</h2>
+      <table><thead><tr><th>When</th><th>Type</th><th>Change</th></tr></thead><tbody id="o-changes"></tbody></table>
+      <div class="note" style="margin:8px 0 0">What Octopus added, moved or took off the plan between reads (dispatches that have ended dropping off aren't changes). The last 7 days.</div>
+    </div>
   </section>
 
   <!-- ============ Settings ============ -->
@@ -239,6 +258,12 @@
           <option value="1800">30 minutes</option><option value="3600">1 hour</option>
         </select></div>
       <div class="note" style="margin:14px 0 0">Your Octopus API key is set on the add-on's <b>Configuration</b> tab in Home Assistant (restart the add-on after changing it).</div>
+    </div>
+    <div class="card">
+      <h2>Calendar<span class="spacer"></span>
+        <label class="switch"><input type="checkbox" id="s-cal" aria-label="Calendar of dispatches"><span></span></label></h2>
+      <div class="note" style="margin:0 0 10px">Keeps a Home Assistant calendar of the planned charges and discharges, for HA's calendar and calendar triggers (e.g. 15 minutes before a discharge). <details class="more"><summary>More</summary><div>A Local Calendar called Octopus Charge Pack (<code>calendar.octopus_charge_pack</code>), made the first time. Charges and discharges still to come are added as Octopus plans them, and taken out if Octopus drops them before they start; ones that have started stay, as a history. Idle dispatches aren't added. Only the add-on's own events are changed, so you can add yours. Turning this off leaves the calendar as it is.</div></details></div>
+      <dl class="kv" id="s-cal-info"></dl>
     </div>
     <input type="checkbox" id="sim-all" checked hidden><!-- the template's entity pickers: none here -->
   </section>
@@ -317,6 +342,7 @@ function dateTime(iso) {
 }
 const ago = (iso) => iso ? dur((Date.now() - new Date(iso)) / 1000) + ' ago' : '—';
 const kv = (rows) => rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
+const hm = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '—';
 
 function toast(text) {
   const t = $('toast'); t.textContent = text; t.classList.add('show');
@@ -479,6 +505,29 @@ function renderState(s) {
       .map((d) => `<tr><td>${esc(dateTime(d.start))}</td><td>${esc(dateTime(d.end))}</td><td class="num">${num(d.energyAddedKwh, 2)} kWh</td></tr>`);
     $(id).innerHTML = rows.join('') || `<tr><td colspan="3" class="muted">${s.last_update ? 'None planned' : 'Not read yet'}</td></tr>`;
   }
+  // Now
+  const NOWCHIP = {charging: '<span class="chip chg">Charging</span>', discharging: '<span class="chip dis">Discharging</span>', idle: '<span class="chip">Idle</span>'};
+  $('o-now').innerHTML = !s.last_update ? '' : m.now && m.now !== 'none'
+    ? `Now: ${NOWCHIP[m.now]} until ${esc(hm(m.now_end))} · ${m.now_minutes_left} min left${m.now_kwh ? ' · ' + num(m.now_kwh, 2) + ' kWh' : ''}`
+    : 'Now: <span class="chip">Nothing planned</span>';
+  drawTimeline(m.dispatches || [], s.completed || []);
+  // Plan changes
+  const KCHIP = {discharge: '<span class="chip dis">Discharge</span>', charge: '<span class="chip chg">Charge</span>', idle: '<span class="chip">Idle</span>'};
+  const span2 = (d) => `${hm(d.start)}–${hm(d.end)}${d.kind !== 'idle' ? ' (' + num(d.energyAddedKwh, 2) + ' kWh)' : ''}`;
+  $('o-changes').innerHTML = (s.changes || []).slice(0, 60).map((c) => {
+    const d = c.dispatch, day = new Date(d.start).toLocaleDateString([], {weekday: 'short'});
+    const what = c.change === 'added' ? `Added ${day} ${span2(d)}` : c.change === 'removed' ? `Taken off ${day} ${span2(d)}`
+      : `Changed ${day} ${span2(c.was)} → ${span2(d)}`;
+    return `<tr><td>${esc(dateTime(c.at))}</td><td>${KCHIP[d.kind] || ''}</td><td>${esc(what)}</td></tr>`;
+  }).join('') || '<tr><td colspan="3" class="muted">No changes yet: they show here as Octopus changes its plan</td></tr>';
+  // Calendar (Settings)
+  const cal = s.calendar || {};
+  if (document.activeElement !== $('s-cal')) $('s-cal').checked = cal.enabled !== false;
+  $('s-cal-info').innerHTML = cal.enabled === false ? kv([['Status', '<span class="chip">Off</span>']]) : kv([
+    ['Calendar', cal.entity_id ? `<code>${esc(cal.entity_id)}</code>` : '<span class="muted">Not made yet</span>'],
+    ['Status', cal.error ? `<span class="chip warn">Not updated</span> <span class="muted">${esc(cal.error)}</span>`
+      : cal.synced_at ? `<span class="chip ok">Up to date</span> <span class="muted">checked ${ago(cal.synced_at)}</span>` : '<span class="chip">Waiting</span>'],
+  ]);
   const done = s.completed || [];
   $('o-done').innerHTML = done.map((c) => {
     const chip = c.kind === 'discharge' ? '<span class="chip dis">Discharge</span>' : c.kind === 'charge' ? '<span class="chip chg">Charge</span>' : '<span class="chip">Dispatch</span>';
@@ -513,6 +562,34 @@ async function saveSetting(body, text) {
 $('o-device').addEventListener('change', (ev) => {
   if (ev.target.value) saveSetting({device_id: ev.target.value}, `Device: ${ev.target.selectedOptions[0].textContent}`);
 });
+$('s-cal').addEventListener('change', (ev) => saveSetting({calendar: ev.target.checked},
+  ev.target.checked ? 'The calendar is kept up to date' : 'The calendar is no longer updated'));
+// Today and tomorrow: the planned dispatches (and the completed ones), local time
+function drawTimeline(dispatches, completed) {
+  const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+  const DAY = 86400000, now = Date.now();
+  const doneKeys = new Set(completed.map((c) => new Date(c.start).getTime() + '|' + new Date(c.end).getTime()));
+  const items = [...dispatches.map((d) => ({a: new Date(d.start).getTime(), b: new Date(d.end).getTime(), e: Number(d.energyAddedKwh) || 0})),
+    ...completed.map((c) => ({a: new Date(c.start).getTime(), b: new Date(c.end).getTime(), e: Number(c.energyAddedKwh) || 0}))];
+  const seen = new Set();
+  let html = '';
+  for (let n = 0; n < 2; n++) {
+    const lo = day0.getTime() + n * DAY, hi = lo + DAY;
+    const blocks = items.filter((x) => x.b > lo && x.a < hi).filter((x) => { const k = n + '|' + x.a + '|' + x.b; if (seen.has(k)) return false; seen.add(k); return true; }).map((x) => {
+      const kind = x.e > 0 ? 'discharge' : x.e < 0 ? 'charge' : 'idle';
+      const l = (Math.max(x.a, lo) - lo) / DAY * 100, w = (Math.min(x.b, hi) - Math.max(x.a, lo)) / DAY * 100;
+      const done = doneKeys.has(x.a + '|' + x.b);
+      const t = (ms) => new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+      const title = `${kind === 'idle' ? 'Idle' : kind === 'charge' ? 'Charge' : 'Discharge'} ${t(x.a)}–${t(x.b)}${kind !== 'idle' ? ' · ' + num(x.e, 2) + ' kWh' : ''}${done ? ' · completed' : ''}`;
+      return `<div class="blk ${kind}${done ? ' done' : ''}" style="left:${l}%;width:${Math.max(w, 0.3)}%" title="${esc(title)}"></div>`;
+    }).join('');
+    const nowLine = now >= lo && now < hi ? `<div class="now" style="left:${(now - lo) / DAY * 100}%"></div>` : '';
+    const label = n === 0 ? 'Today' : new Date(lo).toLocaleDateString([], {weekday: 'short', day: 'numeric'});
+    html += `<div>${label}</div><div class="track">${blocks}${nowLine}</div>`;
+  }
+  html += '<div></div><div class="axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>';
+  $('o-tl').innerHTML = html;
+}
 $('o-poll').addEventListener('change', (ev) => saveSetting({poll_seconds: Number(ev.target.value)}, `Read every ${ev.target.selectedOptions[0].textContent}`));
 
 // ---------- Settings: your Home Assistant entities ----------

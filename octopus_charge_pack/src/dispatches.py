@@ -86,7 +86,82 @@ def summarise(dispatches: list, now: datetime.datetime, tz: Optional[datetime.tz
         out[f"{kind}_kwh"] = _kwh(d) if d else None
         times = dispatch_times(d, tz, {"start_time": previous.get(f"{kind}_start_time")})
         out.update({f"{kind}_{k}": v for k, v in times.items()})
+    out.update(now_values(dispatches, now))
     return out
+
+
+def kind_of(d: Optional[dict]) -> str:
+    """"charge", "discharge" or "idle" (no energy)."""
+    kwh = _kwh(d or {})
+    return "charge" if kwh < 0 else "discharge" if kwh > 0 else "idle"
+
+
+NOW_STATES = {"charge": "charging", "discharge": "discharging", "idle": "idle"}
+
+
+def now_values(dispatches: list, now: datetime.datetime) -> dict:
+    """What Octopus has the device doing right now: the dispatch running now
+    ("now": charging, discharging, idle, or none), with its start, end and
+    energy and the minutes left in it."""
+    for d in dispatches or []:
+        if not isinstance(d, dict):
+            continue
+        start, end = parse_time(d.get("start")), parse_time(d.get("end"))
+        if start is not None and end is not None and start <= now < end:
+            return {"now": NOW_STATES[kind_of(d)], "now_start": d.get("start"), "now_end": d.get("end"),
+                    "now_kwh": _kwh(d), "now_minutes_left": int((end - now).total_seconds() // 60)}
+    return {"now": "none", "now_start": None, "now_end": None, "now_kwh": None, "now_minutes_left": None}
+
+
+# --- changes to the plan -----------------------------------------------------------
+
+CHANGES_KEEP_DAYS = 7
+CHANGES_MAX = 300
+
+
+def _short(d: dict) -> dict:
+    return {"start": d.get("start"), "end": d.get("end"), "energyAddedKwh": _kwh(d), "kind": kind_of(d)}
+
+
+def plan_changes(previous: Optional[list], dispatches: list, now: datetime.datetime) -> list:
+    """What changed between two reads of the plan (dispatches matched by their start):
+    [{"change": "added" | "removed" | "changed", "dispatch", "was"}]. Dispatches that
+    have ended aren't counted (Octopus drops them then). No previous read: nothing."""
+    if previous is None:
+        return []
+
+    def live(ds):
+        out = {}
+        for d in ds or []:
+            end = parse_time((d or {}).get("end")) if isinstance(d, dict) else None
+            if end is not None and end > now and d.get("start"):
+                out[d["start"]] = _short(d)
+        return out
+
+    before, after = live(previous), live(dispatches)
+    out = []
+    for start, d in sorted(after.items()):
+        was = before.get(start)
+        if was is None:
+            out.append({"change": "added", "dispatch": d})
+        elif (was["end"], round(was["energyAddedKwh"], 3)) != (d["end"], round(d["energyAddedKwh"], 3)):
+            out.append({"change": "changed", "dispatch": d, "was": was})
+    for start, was in sorted(before.items()):
+        if start not in after:
+            out.append({"change": "removed", "dispatch": was})
+    return out
+
+
+def track_changes(kept: dict, dispatches: list, now: datetime.datetime) -> list:
+    """Log the plan's changes since the last read in kept["changes"] (newest first,
+    each with "at"); kept["plan"] is the plan as last read. Returns the new ones."""
+    new = plan_changes(kept.get("plan"), dispatches, now)
+    kept["plan"] = [_short(d) for d in dispatches or [] if isinstance(d, dict)]
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    changes = [dict(c, at=stamp) for c in new] + list(kept.get("changes") or [])
+    cutoff = now - datetime.timedelta(days=CHANGES_KEEP_DAYS)
+    kept["changes"] = [c for c in changes if (parse_time(c.get("at")) or now) >= cutoff][:CHANGES_MAX]
+    return new
 
 
 # --- completed sessions -----------------------------------------------------------

@@ -5,6 +5,7 @@ Assistant stops the add-on.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 import os
 import signal
@@ -15,6 +16,7 @@ from aiohttp import web
 from src import log_filters
 from src.api import create_api_app
 from src.app_settings import AppSettings
+from src.calendar_sync import CalendarSync
 from src.config import load_config
 from src.debug_tools import DebugTools, install_log_buffer
 from src.ha_link import HaLink
@@ -60,8 +62,15 @@ async def run() -> None:
 
     wake = asyncio.Event()  # the device picked on the page changed: read it now
     settings.adopt_options(config)  # device_id / poll_seconds from the options, before they moved to the page
-    settings.on_change = lambda changes: wake.set() if {"device_id", "poll_seconds"} & set(changes) else None
-    tasks = [asyncio.create_task(link.run()), asyncio.create_task(worker(state, config, data_dir, settings, wake))]
+    settings.on_change = lambda changes: wake.set() if {"device_id", "poll_seconds", "calendar"} & set(changes) else None
+    calendar = CalendarSync(link, state)
+
+    async def after_read(dispatches: list) -> None:
+        # The calendar of dispatches (Settings tab: on by default)
+        await calendar.sync(dispatches, datetime.datetime.now(datetime.timezone.utc), settings.calendar)
+
+    tasks = [asyncio.create_task(link.run()),
+             asyncio.create_task(worker(state, config, data_dir, settings, wake, after_read))]
     try:
         await stop.wait()
         logger.info("Stopping")

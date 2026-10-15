@@ -16,6 +16,8 @@ class SharedState:
     poll_seconds: int = 60
     summary: dict = field(default_factory=dict)  # src/dispatches.py summarise(): what the sensors show
     completed: list = field(default_factory=list)  # completed sessions, newest first (src/dispatches.py)
+    changes: list = field(default_factory=list)  # changes to the plan, newest first (src/dispatches.py)
+    calendar: dict = field(default_factory=dict)  # the calendar of dispatches (src/calendar_sync.py)
 
     def to_dict(self) -> dict:
         return asdict(self)
