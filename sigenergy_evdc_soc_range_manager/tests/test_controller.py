@@ -230,6 +230,21 @@ def test_manager_stops_charging_above_high_after_a_minute_then_waits_for_the_hou
     assert later.rule == "house_needs_power" and len(p.pressed) == 2
 
 
+def test_after_a_charging_stop_a_new_spell_of_importing_gets_a_fresh_try(tmp_path):
+    # The plant swings between importing and exporting: each import may start it to discharge
+    p = Presses()
+    m = Manager(str(tmp_path), press=p.press)
+    ent, st = _entities(), _settings()
+    _run(m.step(_states(running="Charging", soc="95", grid="9", battery="0"), ent, st, now=1000.0))
+    _run(m.step(_states(running="Charging", soc="95", grid="9", battery="0"), ent, st, now=1061.0))
+    assert len(p.pressed) == 1  # stopped: it charged
+    held = _run(m.step(_states(running="Occupied", soc="95", grid="0.5"), ent, st, now=1300.0))
+    assert held.rule == "held_high" and len(p.pressed) == 1  # the same spell of importing: held
+    _run(m.step(_states(running="Occupied", soc="95", grid="-3", export="3"), ent, st, now=1310.0))  # exporting
+    again = _run(m.step(_states(running="Occupied", soc="95", grid="0.5"), ent, st, now=1490.0))  # after the restart wait
+    assert again.rule == "house_needs_power" and len(p.pressed) == 2  # importing again: a fresh try
+
+
 def test_manager_backs_off_when_the_charger_doesnt_respond(tmp_path):
     p = Presses()
     m = Manager(str(tmp_path), press=p.press)

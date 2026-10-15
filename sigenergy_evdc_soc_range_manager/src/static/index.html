@@ -1533,7 +1533,7 @@ const TUNING = [
   ['export_kw', 'Spare power: export', 'kW', 'Exporting more than this means there\'s spare power to charge the car from…'],
   ['margin_pct', 'Margin', '%', 'Starts need the SoC this far inside the limits; stops are at the limits. Stops it bouncing on and off at a limit. 0 = off.'],
   ['charge_stop_s', 'Charging above the high limit', 's', 'Charging at or above the high limit this long: it\'s stopped, whatever the grid is doing.'],
-  ['house_retry_s', 'House retry wait', 's', 'After that, how long before it\'s started for the house above the high limit again (so it doesn\'t start, charge and stop every few minutes).'],
+  ['house_retry_s', 'House retry wait', 's', 'After that, the longest before it\'s started for the house above the high limit again. Sooner once the house stops needing power (e.g. exports) and needs it again.'],
   ['press_gap_s', 'Between button presses', 's', 'At least this long before pressing the same button again, so the charger has time to respond. The other button isn\'t held up.'],
 ];
 const RATES = [

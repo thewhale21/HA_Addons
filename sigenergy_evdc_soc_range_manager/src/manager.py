@@ -14,9 +14,10 @@ import logging
 import os
 import time
 from collections import deque
+from dataclasses import replace
 from typing import Awaitable, Callable, Optional
 
-from src.controller import RULES, Decision, Inputs, bound_limits, decide
+from src.controller import RULES, Decision, Inputs, bound_limits, decide, house_needs_power
 from src.flow import flows, house_load
 from src.rates import battery_rates
 from src.schedule import describe
@@ -256,6 +257,11 @@ class Manager:
             charging_for=None if self.charging_since is None else now - self.charging_since,
             charge_stopped_ago=None if self.charge_stopped_at is None else now - self.charge_stopped_at,
         )
+        # The house stopped needing power (e.g. exporting): the next time it does, the car may be
+        # started for it again, even above the high limit
+        if self.charge_stopped_at is not None and not house_needs_power(self.inputs, settings):
+            self.charge_stopped_at = None
+            self.inputs = replace(self.inputs, charge_stopped_ago=None)
         self.readings = {
             "base_high": base_high, "base_low": base_low,
             "scheduled": [{"id": e["id"], "kind": e["kind"], "high": e["high"], "low": e["low"], "until": e["until"],

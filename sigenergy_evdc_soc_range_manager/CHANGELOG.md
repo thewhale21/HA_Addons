@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.6 — A fresh try for each spell of importing
+
+- **Improvement:** after a stop for charging above the high limit, the car
+  can be started for the house again as soon as the house has stopped
+  needing power (e.g. exported) and needs it again, not only after the
+  30-minute house retry wait. For plants that swing between importing and
+  exporting, each spell of importing can still start the car to discharge.
+
 ## 0.20.5 — No start-stop cycles
 
 - **Improvement:** charging at or above the high limit is stopped after a

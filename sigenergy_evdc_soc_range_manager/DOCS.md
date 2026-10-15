@@ -26,8 +26,11 @@ If the car charges at or above the high limit for a minute, it's stopped
 whatever the grid is doing: the import that charging causes doesn't count
 as the house needing power. (A minute, so a moment's "Charging" as the
 charger starts isn't stopped.) It then isn't started for the house above
-the high limit for the **house retry wait** (30 minutes), so it doesn't
-start, charge and stop every few minutes.
+the high limit again until the house has stopped needing power (e.g. it's
+exporting) and needs it again, or the **house retry wait** (30 minutes) is
+over. So if your system swings between importing and exporting, each new
+spell of importing can still start the car to discharge, but one long spell
+doesn't start, charge and stop it every few minutes.
 
 If the charger doesn't respond to 3 presses of the same button in a row
 (e.g. the car won't start), it's only pressed every 15 minutes until it
@@ -133,7 +136,7 @@ maximum rate, today's kWh in and out, and the car's capacity and health. **Start
 | Spare power: export | 0.5 kW | Exporting more than this… |
 | Margin | 0% | Starts need the SoC this far inside the limits (stops are at the limits). 1 or 2 stops it bouncing at a limit |
 | Charging above the high limit | 60 s | Charging at or above the high limit this long: stopped |
-| House retry wait | 1800 s | After that, how long before it's started for the house above the high limit again |
+| House retry wait | 1800 s | After that, the longest before it's started for the house above the high limit again (sooner once the house stops needing power and needs it again) |
 | Between button presses | 60 s | At least this long before pressing the same button again |
 | Watch only | off | Decide and log, but don't press anything |
 | Notify service | none | e.g. `notify.mobile_app_your_phone`: told on every start and stop |

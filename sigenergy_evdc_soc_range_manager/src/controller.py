@@ -11,8 +11,9 @@ high limits:
   charging there (for a minute: not a moment's "Charging" as it starts), it's
   stopped whatever the grid's doing: the import that charging causes isn't the
   house needing power. It isn't then started for the house above the high limit
-  for a while (the house retry wait), so it doesn't start, charge and stop
-  every few minutes.
+  again until the house has stopped needing power (e.g. it's exported) and
+  needs it again, or the house retry wait is over, so it doesn't start, charge
+  and stop every few minutes. Each new spell of importing gets a fresh try.
 - At or below the low limit it only runs when there's spare power to charge
   from (exporting, or a "charge now" signal such as Predbat charging), and
   is stopped if it starts discharging.
@@ -111,6 +112,16 @@ def _pct(v: float) -> str:
     return f"{v:g}%"
 
 
+def house_needs_power(i: Inputs, tuning: Optional[dict] = None) -> bool:
+    """The home battery is discharging, or the grid importing for the house: not while the
+    home battery charges or a charge signal is on (that's a grid charge)."""
+    t = {**TUNING_DEFAULTS, **(tuning or {})}
+    battery_charging = i.battery_kw is not None and i.battery_kw > t["house_battery_kw"]
+    return i.charge_signal is not True and (
+        (i.battery_kw is not None and i.battery_kw < -t["house_battery_kw"])
+        or (i.grid_kw is not None and i.grid_kw > t["house_grid_kw"] and not battery_charging))
+
+
 def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
     t = {**TUNING_DEFAULTS, **(tuning or {})}
     if i.alarm:
@@ -134,14 +145,10 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
     soc, high, low, margin = i.soc, i.high, i.low, float(t["margin_pct"])
     wait = float(t["restart_wait_s"])
     rested = not i.active and i.inactive_for is not None and i.inactive_for >= wait
-    # Importing while the home battery charges (or a charge signal is on) is a grid
-    # charge, not the house needing the car's power
-    battery_charging = i.battery_kw is not None and i.battery_kw > t["house_battery_kw"]
-    house_needs = i.charge_signal is not True and (
-        (i.battery_kw is not None and i.battery_kw < -t["house_battery_kw"])
-        or (i.grid_kw is not None and i.grid_kw > t["house_grid_kw"] and not battery_charging))
+    house_needs = house_needs_power(i, t)
     charging = i.active and not i.discharging and (i.running_state or "").strip().lower() == "charging"
-    # Stopped for charging above the high limit not long ago: the house's need doesn't start it there
+    # Stopped for charging above the high limit in this spell of the house needing power (the
+    # manager forgets the stop once the house stops needing power): it isn't started there for it
     retry_wait = (i.charge_stopped_ago is not None and i.charge_stopped_ago < float(t["house_retry_s"])
                   and soc >= high - margin)
     house_quiet = (i.battery_kw is not None and i.battery_kw > -t["house_battery_kw"]
@@ -199,8 +206,9 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
         if retry_wait and house_needs:
             left = round((float(t["house_retry_s"]) - i.charge_stopped_ago) / 60)
             return Decision(None, "held_high", "Held at the high limit",
-                            f"The car is at {_pct(soc)}. It charged instead of discharging when last started for "
-                            f"the house, so it's started for the house again in {left} min.")
+                            f"The car is at {_pct(soc)}. It charged instead of discharging when started for "
+                            f"the house, so it's started for the house again once the house stops needing "
+                            f"power and needs it again, or in {left} min.")
         return Decision(None, "held_high", "Held at the high limit",
                         f"The car is at {_pct(soc)}: it starts again when the house needs power.")
     if soc <= low + margin:
