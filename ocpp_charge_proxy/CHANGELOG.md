@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.44.0 — Recent sessions redesigned
+
+- **Improvement:** the Sessions tab's Recent sessions are now a row each
+  instead of a table: the day and times, how it started (Charge now, Auto
+  plug-in, your supplier's slot...), the energy with a bar against the
+  biggest session shown, its length and peak, and how it ended as a
+  coloured label (charging now, stopped by your supplier, unplugged, an
+  add-on restart...). Plug-ins that never got a session are greyed. Click a
+  row for its details and power curve, as before.
+
 ## 2.43.8 — Charges keep their hours around no-charging times
 
 - **Change:** auto plug-in, the car plugged in sensor and Charge now carry

@@ -182,10 +182,29 @@
   .legend i.dash { border-top-style: dashed; }
   .legend b.band { display: inline-block; width: 12px; height: 10px; border-radius: 2px; opacity: .35; vertical-align: middle; margin-right: 5px; }
   /* Sessions */
-  tr.no-session td { color: var(--text2); }
-  #s-rows tr.srow { cursor: pointer; }
-  #s-rows tr.srow:hover td { background: var(--hover); }
-  #s-rows tr.detail td { background: var(--hover); padding: 12px 14px; }
+  /* Recent sessions: one row each (click for details) */
+  .sess-list { display: grid; gap: 8px; }
+  .sess { border: 1px solid var(--divider); border-radius: 12px; overflow: hidden; }
+  .sess .shead { display: grid; grid-template-columns: 116px minmax(0, 1fr) minmax(150px, 1.1fr) 150px; gap: 14px; align-items: center;
+               padding: 10px 12px; cursor: pointer; }
+  .sess .shead:hover { background: var(--hover); }
+  .sess.open { border-color: var(--primary); }
+  .sess .when { font-size: 13px; font-weight: 500; line-height: 1.25; } .sess .when small { display: block; font-weight: 400; color: var(--text2); }
+  .sess .tags { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 12px; color: var(--text2); min-width: 0; }
+  .sess .kwh { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .sess .kwh small { font-size: 12px; font-weight: 400; color: var(--text2); margin-left: 6px; }
+  .ebar { height: 6px; border-radius: 3px; background: var(--hover); margin-top: 5px; overflow: hidden; }
+  .ebar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #66bb6a, var(--ok)); }
+  .sess .end { justify-self: end; text-align: right; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .pill.ok { background: rgba(67,160,71,.14); color: var(--ok); } .pill.warn { background: rgba(245,124,0,.14); color: var(--warn); }
+  .pill.info { background: rgba(3,155,229,.14); color: var(--info); } .pill.none { background: var(--hover); color: var(--text2); }
+  .sess .pdot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .sess.nosess .when, .sess.nosess .kwh { color: var(--text2); }
+  .sess .sdetail { background: var(--hover); padding: 12px 14px; border-top: 1px solid var(--divider); }
+  .sess.flash { animation: flash 2s ease-out; }
+  @media (max-width: 700px) { .sess .shead { grid-template-columns: 1fr auto; } .sess .tags { grid-column: 1 / -1; order: 3; } .sess .energy { grid-column: 1 / -1; order: 4; } }
   .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; }
   .spark { width: 100%; height: 60px; display: block; }
   .week { display: grid; grid-template-columns: 52px 1fr; gap: 6px 8px; align-items: center; }
@@ -207,7 +226,7 @@
   .week .dl.past { opacity: .7; }
   .week .ses { position: absolute; bottom: 0; height: 6px; background: var(--ok); border-radius: 3px; cursor: pointer; z-index: 2; }
   .week .ses:hover { height: 9px; }
-  tr.srow.flash > td { animation: flash 2s ease-out; }
+  tr.srow.flash > td, .sess.flash { animation: flash 2s ease-out; }
   @keyframes flash { from { background: color-mix(in srgb, var(--ok) 25%, transparent); } to { background: transparent; } }
   #w-types { display: contents; }
   .week .blk { position: absolute; top: 0; bottom: 0; cursor: pointer; border-radius: 4px;
@@ -374,12 +393,7 @@
     </div>
     <div class="card">
       <h2>Recent sessions<span class="spacer"></span><span id="s-filter"></span><span class="muted" style="font-size:12px;font-weight:400">Click a row for details</span></h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Started</th><th class="num">Duration</th><th class="num">Energy</th><th class="num">Peak</th><th>Ended by</th></tr></thead>
-          <tbody id="s-rows"></tbody>
-        </table>
-      </div>
+      <div class="sess-list" id="s-rows"></div>
       <div class="note">The last 20 sessions and the last 20 plug-ins that never got a session are kept, across restarts.</div>
     </div>
   </section>
@@ -1482,33 +1496,50 @@ async function refreshSessions() {
   const all = (sessionsData.history || []).filter((x) => onDay(x.start));
   const h = all.filter((s) => s.type !== 'no_session');
   const failed = all.filter((s) => s.type === 'no_session');
+  // One row per session: when, how it started (tags), energy (a bar against the biggest
+  // shown), and how it ended. Click a row for the details and power curve.
   const rows = [];
-  const by = (src) => src ? ` <span class="muted">· plugged in by ${esc(src)}</span>` : '';
+  const maxKwh = Math.max(0.1, ...h.map((s) => s.energy_kwh || 0), sessionsData.current ? sessionsData.current.energy_kwh || 0 : 0);
+  const hmT = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '';
+  const dayOf = (iso) => new Date(iso).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
+  const by = (src) => src ? `<span>plugged in by ${esc(src)}</span>` : '';
+  const row = ({key, cls = '', start, stop, tags, kwh, sub, end, detail}) => {
+    const open = key && sessionsOpen.has(key);
+    const energy = kwh == null ? `<div class="kwh">—<small>${sub || ''}</small></div>`
+      : `<div class="kwh">${num(kwh, 2)} kWh<small>${sub || ''}</small></div><div class="ebar"><i style="width:${Math.max(2, kwh / maxKwh * 100)}%"></i></div>`;
+    rows.push(`<div class="sess ${cls} ${open ? 'open' : ''}" ${key ? `data-key="${esc(key)}"` : ''}><div class="shead">`
+      + `<div class="when">${esc(dayOf(start))}<small>${esc(hmT(start))}${stop ? '–' + esc(hmT(stop)) : ' – now'}</small></div>`
+      + `<div class="tags">${tags || ''}</div><div class="energy">${energy}</div><div class="end">${end}</div></div>`
+      + (open && detail ? `<div class="sdetail">${detail()}</div>` : '') + '</div>');
+  };
+  const subOf = (s) => [hmDur(s.duration_s || 0), s.peak_power_kw ? `peak ${num(s.peak_power_kw, 1)} kW` : ''].filter(Boolean).join(' · ');
   if (sessionsData.current && onDay(sessionsData.current.start)) {
     const c = sessionsData.current;
-    rows.push(`<tr class="srow" data-key="${esc(c.start)}"><td>${dateTime(c.start)} <span class="chip ok">charging now</span>${tag(c.start)}${supTag(c)}</td><td class="num">${dur(c.duration_s)}</td><td class="num">${num(c.energy_kwh, 2)} kWh</td><td class="num">${num(c.peak_power_kw, 1)} kW</td><td class="muted">—</td></tr>`);
-    if (sessionsOpen.has(c.start)) rows.push(`<tr class="detail"><td colspan="5">${sessionDetail({...c, current: true})}</td></tr>`);
+    row({key: c.start, start: c.start, stop: null, tags: tag(c.start) + supTag(c), kwh: c.energy_kwh, sub: subOf(c),
+      end: '<span class="pill ok"><span class="pdot"></span>Charging now</span>', detail: () => sessionDetail({...c, current: true})});
   } else if (sessionsData.waiting && onDay(sessionsData.waiting.plugged_at)) {
     const w = sessionsData.waiting;
-    rows.push(`<tr><td>${dateTime(w.plugged_at)} <span class="chip warn">waiting for a session</span></td><td class="num">${dur(w.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td class="muted">Plugged in${w.plugged_by ? ' by ' + esc(w.plugged_by) : ''}, no session yet</td></tr>`);
+    row({cls: 'nosess', start: w.plugged_at, stop: null, tags: by(w.plugged_by), kwh: null, sub: hmDur(w.duration_s || 0) + ' so far',
+      end: '<span class="pill warn">Waiting for a session</span>'});
   }
-  all.forEach((s, i) => {
-    const open = sessionsOpen.has(s.start);
+  all.forEach((s) => {
     if (s.type === 'no_session') {
-      const why = s.reason === 'replugged'
-        ? `No session from ${sup('your supplier')}: re-plugged`
-        : `Unplugged before a session started${s.unplugged_by ? ' (' + esc(s.unplugged_by) + ')' : ''}`;
-      rows.push(`<tr class="no-session srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)} <span class="chip">no session</span>${tag(s.start)}</td><td class="num">${dur(s.duration_s)}</td><td class="num muted">—</td><td class="num muted">—</td><td>${why}${by(s.plugged_by)}</td></tr>`);
+      const why = s.reason === 'replugged' ? 'Re-plugged' : 'Unplugged first';
+      row({key: s.start, cls: 'nosess', start: s.start, stop: s.stop, tags: '<span class="chip">No session</span>' + tag(s.start) + by(s.plugged_by),
+        kwh: null, sub: `waited ${hmDur(s.duration_s || 0)}`, end: `<span class="pill none" title="${s.reason === 'replugged' ? `No session from ${esc(supName() || 'your supplier')}: re-plugged` : 'Unplugged before a session started' + (s.unplugged_by ? ' (' + esc(s.unplugged_by) + ')' : '')}">${why}</span>`,
+        detail: () => sessionDetail(s)});
     } else {
-      rows.push(`<tr class="srow" data-key="${esc(s.start)}"><td>${dateTime(s.start)}${tag(s.start)}${supTag(s)}</td><td class="num">${dur(s.duration_s)}</td><td class="num">${num(s.energy_kwh, 2)} kWh</td><td class="num">${num(s.peak_power_kw, 1)} kW</td><td>${esc(reasonText(s.reason))}</td></tr>`);
+      const ended = s.reason === 'Remote' ? ['ok', `✓ Stopped by ${esc(supName() || 'supplier')}`] : s.reason === 'EVDisconnected' ? ['info', 'Unplugged']
+        : ['Reboot', 'PowerLoss', 'HardReset', 'SoftReset'].includes(s.reason) ? ['warn', esc(reasonText(s.reason))] : ['none', esc(reasonText(s.reason))];
+      row({key: s.start, start: s.start, stop: s.stop, tags: (tag(s.start) + supTag(s)) || '<span class="muted">Session</span>', kwh: s.energy_kwh || 0, sub: subOf(s),
+        end: `<span class="pill ${ended[0]}">${ended[1]}</span>`, detail: () => sessionDetail(s)});
     }
-    if (open) rows.push(`<tr class="detail"><td colspan="5">${sessionDetail(s)}</td></tr>`);
   });
   $('s-filter').innerHTML = sessDay
     ? `<span class="chip info" style="margin-right:8px">${new Date(sessDay + 'T12:00:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} <a href="#" id="s-filter-clear" style="margin-left:4px">Show all</a></span>` : '';
-  $('s-rows').innerHTML = rows.join('') || `<tr><td colspan="5" class="empty">${sessDay ? 'No sessions kept for this day.' : `No sessions yet. They appear here once ${sup('your supplier')} starts one.`}</td></tr>`;
+  $('s-rows').innerHTML = rows.join('') || `<div class="empty">${sessDay ? 'No sessions kept for this day.' : `No sessions yet. They appear here once ${sup('your supplier')} starts one.`}</div>`;
   if (sessionsFocus) {
-    const row = [...document.querySelectorAll('#s-rows tr.srow')].find((r) => r.dataset.key === sessionsFocus);
+    const row = [...document.querySelectorAll('#s-rows .sess[data-key]')].find((r) => r.dataset.key === sessionsFocus);
     sessionsFocus = null;
     if (row) { row.scrollIntoView({block: 'center', behavior: 'smooth'}); row.classList.add('flash'); }
   }
@@ -1538,7 +1569,8 @@ function openSession(x) {
   showTab('sessions');
 }
 $('s-rows').addEventListener('click', (ev) => {
-  const tr = ev.target.closest('tr.srow'); if (!tr) return;
+  if (ev.target.closest('.sdetail')) return;  // (the details: select text, etc.)
+  const tr = ev.target.closest('.sess[data-key]'); if (!tr) return;
   const k = tr.dataset.key;
   if (sessionsOpen.has(k)) sessionsOpen.delete(k); else sessionsOpen.add(k);
   refreshSessions();
