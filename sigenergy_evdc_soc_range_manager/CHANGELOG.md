@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.22.2 — Limit helpers made again straight away
+
+- **Fix:** deleting the add-on's **EVDC SoC High Limit** or **Low Limit**
+  helper in Home Assistant now makes it again within a few seconds, not
+  only when the add-on next restarts or reconnects.
+
 ## 0.22.1 — Says why a limit helper isn't made
 
 - **Improvement:** when a limit picker on the Settings tab names a helper

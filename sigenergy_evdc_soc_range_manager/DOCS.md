@@ -81,7 +81,8 @@ The differences:
 
    The two limits are the add-on's own helpers, so you can change them
    anywhere in Home Assistant (a dashboard, an automation). It checks for
-   them each time it connects: if one has gone, it's made again (at your
+   them each time it connects, and if one is deleted it's made again within
+   a few seconds (at your
    `v2x_cut_off_threshold` helpers' values, if you have them). If one with
    the add-on's name is defined in YAML, it's used, and the Overview says to
    remove it from your YAML and restart Home Assistant, so the add-on can

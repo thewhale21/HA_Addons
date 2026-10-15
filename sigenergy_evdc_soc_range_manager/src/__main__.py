@@ -25,7 +25,7 @@ from src.debug_tools import DebugTools, install_log_buffer
 from src.ha_link import HaLink
 from src.health import Health
 from src.card import install as install_card
-from src.helpers import ensure_helpers
+from src.helpers import OWNED, ensure_helpers
 from src.manager import Manager, samples_from_history, soc_points_from_history, soc_state
 from src.soc_history import SocHistory
 from src.schedule import Schedule
@@ -41,6 +41,7 @@ CHECK_INTERVAL_S = 5  # look at least this often
 STATS_BRIEF_S = 60  # the statistics sensors are worked out this often
 HISTORY_DAYS = 30  # how far back the statistics look in Home Assistant's history, once
 SETTLE_S = 1  # after a change, wait this long for related changes before looking
+REMAKE_WAIT_S = 10  # a limit helper deleted in Home Assistant is made again after this long
 
 
 class Runner:
@@ -253,7 +254,29 @@ async def run() -> None:
     manager.schedule = schedule
     runner: Optional[Runner] = None
 
+    remake: dict = {"task": None}
+
+    async def remake_helpers() -> None:
+        """A limit helper was deleted in Home Assistant: make it again (after a moment, in case
+        it's coming straight back, e.g. renamed)."""
+        try:
+            await asyncio.sleep(REMAKE_WAIT_S)
+            notes: list = []
+            await ensure_helpers(link, notes)
+            state.setup_note = " ".join(notes) or None
+        except Exception as err:
+            logger.warning("Couldn't make the helpers again: %s", err)
+        finally:
+            remake["task"] = None
+            if runner is not None:
+                runner.wake.set()
+
     async def entity_changed(entity_id: str, st: Optional[dict]) -> None:
+        owned = {link.settings.get(key) for key in OWNED} - {None, ""}
+        if st is None and entity_id in owned and remake["task"] is None:
+            logger.info("Helpers: %s was removed from Home Assistant: making it again in %d s", entity_id,
+                        REMAKE_WAIT_S)
+            remake["task"] = asyncio.ensure_future(remake_helpers())
         if runner is not None:
             runner.wake.set()
 
