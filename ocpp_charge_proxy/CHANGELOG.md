@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.43.0 — Saving sessions
+
+- **Feature:** a Saving sessions card on the Automations tab (off by
+  default). It reads your saving sessions from a Home Assistant calendar,
+  found automatically for Octopus Energy (Power Down / Saving Sessions) and
+  by its name for E.ON Next and EDF, or picked.
+- **Feature:** No charging during a session (its own switch): each session
+  is a no-charging time, and a scheduled slot that runs into it carries on
+  the session's length later. Put back if the session is cancelled.
+- **Feature:** Plug in before a session (its own switch): a charge of the
+  chosen hours, ending as the session starts, added as Charge now adds one,
+  within the daily limit.
+- **Improvement:** sessions are shown hatched on the schedule, and the
+  card lists the ones coming up with what was changed for each.
+
 ## 2.42.0 — Charge now buttons in Home Assistant
 
 - **Feature:** the Charge now buttons are Home Assistant entities:

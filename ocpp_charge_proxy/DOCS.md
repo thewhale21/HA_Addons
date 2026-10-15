@@ -130,6 +130,40 @@ can't be added over existing slots), and auto plug-in, the car plugged in
 sensor and Charge now are planned around them (above). They're shown
 hatched in blue-grey.
 
+### Saving sessions
+
+The **Saving sessions** card on the Automations tab (off by default) keeps
+the car's charging out of your supplier's saving sessions, read from a Home
+Assistant calendar: every upcoming event in it is a session. The calendar
+is read every 5 minutes, up to 8 days ahead.
+
+- **Calendar:** found automatically: Octopus Energy's
+  `calendar.octopus_energy_<account>_octoplus_power_down` (or the older
+  `..._octoplus_saving_sessions`), from the Octopus Energy integration; or
+  another calendar whose ID or name mentions saving or saver sessions, power
+  down or demand flexibility (E.ON Next, EDF). Octopus's Power Up and free
+  electricity calendars are left out. Pick yours if it isn't found.
+- **No charging during a session** (its own switch, on by default): each
+  session is a no-charging time for that day only. Auto plug-in, the car
+  plugged in sensor and Charge now unplug for it and plug back in after, as
+  for a weekly no-charging time. A slot in the schedule that runs into it is
+  moved: from the session's start (or the slot's, if later) it carries on
+  the session's length later, so it keeps its hours. For example, a
+  16:00–19:00 slot with a 17:00–18:00 session becomes 16:00–17:00 and
+  18:00–20:00; a 17:30–18:30 slot becomes 18:30–19:30. The weekly entries
+  are skipped that day and the moved part is added as one-offs (with Force
+  schedule on supplier, it unplugs at a ready time your supplier accepts). A
+  session found while it's already running unplugs straight away and
+  carries on later. Sessions are shown hatched on the schedule.
+- **Plug in before a session** (off by default), with **Charge for** hours:
+  that long before each session a charge is added, as Charge now adds one:
+  a one-off slot until the session starts, with the ready time set to it,
+  kept within the daily limit. A session found later than that charges for
+  the time that's left (not under 15 minutes).
+- A session taken out of the calendar before it starts puts back the slots
+  it moved. Turning **No charging during a session** off puts them all back,
+  and turning the card off forgets the sessions too.
+
 ### Schedule, auto re-plug and start-up
 
 - **Schedule** (**Automations** tab): the last 3 days and the next 7 are

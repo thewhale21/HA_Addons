@@ -5,6 +5,7 @@ import logging
 import os
 import signal
 import sys
+import time
 
 import websockets
 import websockets.exceptions
@@ -17,7 +18,7 @@ from src.app_settings import AppSettings
 from src.config import load_config, starting_current_amps
 from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_files, sample_loop
 from src.ha_history import ChartHistory
-from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, auto_plug_charge, automation_loop
+from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, SAVING_SOURCE, Automation, auto_plug_charge, automation_loop
 from src.ha_link import HaLink
 from src import log_filters
 from src.persistence import Persistence
@@ -25,6 +26,8 @@ from src.shared_state import SharedState
 
 logger = logging.getLogger("ocpp_charge_proxy")
 
+SAVING_READ_S = 300  # the saving sessions calendar is read this often
+SAVING_TICK_S = 30  # and the schedule checked against it this often
 BACKOFF_STEPS = [5, 10, 30, 60]  # then every 60 s: back soon after an outage
 # The simulated car: wait after StartTransaction, then ramp up (Settings tab)
 DEFAULT_START_DELAY_S = 3.0
@@ -279,6 +282,47 @@ async def run() -> None:
         return await charge(hours, CHARGE_NOW_SOURCE, "charge now", confirm)
 
     ha_link.on_auto_plug = on_auto_plug
+
+    async def saving_sessions_loop() -> None:
+        """Saving sessions (Automations tab): read the calendar every few
+        minutes (and straight after a setting changes), keep the schedule
+        clear of them, and add a charge before each if that's on."""
+        last_read, sessions, last_settings = 0.0, None, None
+        while True:
+            try:
+                s = ha_link.settings
+                if not s.get("saving_on"):
+                    if automation.clear_saving_sessions():
+                        automation.publish(shared_state)
+                    sessions, last_settings = None, None
+                else:
+                    wanted = (s.get("saving_entity"), s.get("saving_block"))
+                    if wanted != last_settings or time.monotonic() - last_read >= SAVING_READ_S:
+                        found = await ha_link.read_saving_sessions()
+                        last_read, last_settings = time.monotonic(), wanted
+                        if found is not None:
+                            sessions = found
+                    sc = ha_link.smart_charging()
+                    automation.limit_reset = sc.get("limit_reset")
+                    cap = sc.get("limit_min") if automation.ready_time and not automation.override_guards else None
+                    if automation.sync_saving_sessions(sessions, bool(s.get("saving_block")), ha_link.ready_times,
+                                                       cap, sc.get("provider") or "your supplier"):
+                        automation.publish(shared_state)
+                    due = automation.saving_precharge_due(float(s.get("saving_plug_hours") or 2)) \
+                        if s.get("saving_plug") else None
+                    if due:
+                        record, minutes = due
+                        logger.info("Saving session at %s: charging for %dh %02dm before it", record["start"][11:16],
+                                    minutes // 60, minutes % 60)
+                        try:
+                            out = await charge(minutes / 60, SAVING_SOURCE, "saving session")
+                        except Exception as err:
+                            logger.warning("Charge before the saving session not planned: %s", err)
+                            out = {}
+                        automation.mark_precharged(record, out.get("plan"))
+            except Exception:
+                logger.warning("Saving sessions cycle failed", exc_info=True)
+            await asyncio.sleep(SAVING_TICK_S)
     # A Charge now button pressed in HA: an automation can't answer "are you
     # sure?", so it goes ahead over the daily limit, as auto plug-in does
     ha_link.on_charge_now = lambda hours: charge_now(hours, confirm=True)
@@ -351,6 +395,7 @@ async def run() -> None:
 
     charger_tasks = [
         asyncio.create_task(supplier_marks_loop()),
+        asyncio.create_task(saving_sessions_loop()),
         asyncio.create_task(cp.meter_values_loop()),
         asyncio.create_task(cp.clock_aligned_loop()),
         asyncio.create_task(sample_loop(

@@ -40,6 +40,14 @@
 - Plan check: with the ready time on, while the schedule has the car
   plugged in, the supplier's planned slots up to the ready time are checked
   against the schedule (src/plan_check.py); a mismatch is shown on the page.
+- Saving sessions (src/saving_sessions.py): with "no-charging time" on, each
+  upcoming session from the calendar is a no-charging time (as the weekly
+  ones: auto plug-in, Charge now... unplug for it), and a scheduled slot that
+  runs into it is moved: from the session's start (or its own, if later) it
+  carries on the session's length later, as one-offs (the weekly entries are
+  skipped that day). What a session changed is put back if it's cancelled.
+  With "plug in before" on, a charge of the chosen hours is added before it,
+  as Charge now adds one (sync_saving_sessions, saving_precharge_due).
 - Ready time: optionally, when the schedule plugs in, set your supplier's
   smart charging ready-by time to the schedule's next unplug
   (src/ready_time.py). Only at a scheduled plug-in.
@@ -63,6 +71,7 @@ from typing import Awaitable, Callable, Optional
 
 from src.plan_check import SETTLE_S, check_plan
 from src.ready_time import ALL_DAY_TIMES, check_unplug_times
+from src.saving_sessions import session_id
 
 logger = logging.getLogger(__name__)
 
@@ -80,9 +89,12 @@ ACTIONS = ("plug", "unplug")
 AUTO_SOURCE = "auto_plug"  # entries added by an auto plug-in charge
 CHARGE_NOW_SOURCE = "charge_now"  # ... or by the Charge now button
 CAR_PLUGGED_SOURCE = "car_plugged"  # ... or by the car plugged in sensor
-AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE)
+SAVING_SOURCE = "saving_session"  # ... or before a saving session
+AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
-                CAR_PLUGGED_SOURCE: "Car plugged in charge"}
+                CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
+SAVING_KEEP = datetime.timedelta(days=1)  # a saving session is remembered this long after it ends
+MIN_PRECHARGE_MIN = 15  # less than this left before a session: no charge before it
 ONE_OFF_KEEP = datetime.timedelta(days=14)  # one-off times (and skips) are kept this long after they ran
 
 
@@ -369,6 +381,11 @@ class Automation:
         self.auto_plug_last: Optional[dict] = None  # the last auto plug-in charge planned
         self.unplug_wait_s = GRACEFUL_UNPLUG_S
         self.blocks: list[dict] = []  # no-charging times: nothing is scheduled in them
+        # Saving sessions from the calendar: [{"id", "start", "end" (ISO), "summary",
+        # "changes": {"skips", "added"}, "precharged", "notes"}]; with saving_block
+        # on they're no-charging times too (see sync_saving_sessions)
+        self.saving_sessions: list[dict] = []
+        self.saving_block = False
         self.override_guards = False  # Diagnostics › Debug: no daily limit (Octopus: 6 hours)
         # When the daily limit resets: None = any 24 hours (rolling), "Nh" =
         # any N hours, "HH:MM" = every day then (Octopus: 12:00). From the
@@ -433,6 +450,13 @@ class Automation:
         self.entries = entries
         self.skips = [k for k in schedule.get("skips") or []
                       if isinstance(k, dict) and k.get("entry_id") and k.get("date")]
+        saving = data.get("saving") or {}
+        self.saving_block = bool(saving.get("block", False))
+        self.saving_sessions = [r for r in saving.get("sessions") or []
+                                if isinstance(r, dict) and _parse_iso(r.get("start")) and _parse_iso(r.get("end"))]
+        for r in self.saving_sessions:
+            r.setdefault("changes", {"skips": [], "added": []})
+            r.setdefault("notes", [])
         # Saved re-plug settings (set on the web page) win over the defaults
         replug = data.get("replug")
         if isinstance(replug, dict):
@@ -486,6 +510,7 @@ class Automation:
                                  "unplug_wait_s": self.unplug_wait_s,
                                  "override_guards": self.override_guards, "blocks": self.blocks},
                     "replug": self.replug,
+                    "saving": {"block": self.saving_block, "sessions": self.saving_sessions},
                 }, f, indent=1)
                 f.flush()
                 os.fsync(f.fileno())
@@ -670,9 +695,21 @@ class Automation:
         return plugged_windows([(t, e["action"] == "plug") for t, e, skipped in tl if not skipped],
                                end if open_ended else None)
 
-    def block_windows(self, start: datetime.date, days: int, blocks: Optional[list] = None) -> list:
-        """The no-charging times from `start` for `days` days: [(a, b)]."""
+    def session_windows(self) -> list:
+        """The saving sessions that are no-charging times (with saving_block on): [(a, b)]."""
+        if not self.saving_block:
+            return []
+        return [(_parse_iso(r["start"]), _parse_iso(r["end"])) for r in self.saving_sessions]
+
+    def block_windows(self, start: datetime.date, days: int, blocks: Optional[list] = None,
+                      sessions: bool = True) -> list:
+        """The no-charging times from `start` for `days` days: [(a, b)], with
+        the saving sessions (unless `sessions` is False)."""
         out = []
+        if sessions:
+            lo = self._localize(datetime.datetime.combine(start - datetime.timedelta(days=1), datetime.time()))
+            hi = self._localize(datetime.datetime.combine(start + datetime.timedelta(days=days), datetime.time()))
+            out += [(a, b) for a, b in self.session_windows() if b > lo and a < hi]
         for b in self.blocks if blocks is None else blocks:
             h1, m1 = _parse_hhmm(b["start"])
             h2, m2 = _parse_hhmm(b["end"])
@@ -689,7 +726,8 @@ class Automation:
         """Nothing scheduled may plug in during a no-charging time (over the
         coming week; auto plug-in and Charge now are planned around them)."""
         now = self._now()
-        cuts = self.block_windows(now.date(), self._horizon_days(entries) + 1, blocks)
+        # (not the saving sessions: a slot that runs into one is moved, see sync_saving_sessions)
+        cuts = self.block_windows(now.date(), self._horizon_days(entries) + 1, blocks, sessions=False)
         for a, b in self.windows(entries, now, skips):
             if b <= now:
                 continue
@@ -870,7 +908,9 @@ class Automation:
         # back in at its end, and still ends at the same time
         cuts = self.block_windows(now.date() - datetime.timedelta(days=1), 4)
         segments = minus([(now, end)], cuts)
-        blocked_notes = [f"not plugged in {ca.strftime('%H:%M')}–{cb.strftime('%H:%M')} (no-charging time)"
+        saving = set(self.session_windows())
+        blocked_notes = [f"not plugged in {ca.strftime('%H:%M')}–{cb.strftime('%H:%M')} "
+                         f"({'saving session' if (ca, cb) in saving else 'no-charging time'})"
                          for ca, cb in cuts if ca < end and cb > now]
         shortened = None
         reset = self.limit_reset
@@ -1087,6 +1127,223 @@ class Automation:
                            f"a day (from {fixed})" if fixed else f"{int(span_len.total_seconds() // 3600)} hours",
                            provider, _hours(cap_min))
         return plan
+
+    # --- saving sessions ----------------------------------------------------------
+
+    def sync_saving_sessions(self, sessions: Optional[list], block: bool, ready_times: Optional[list] = None,
+                             cap_min: Optional[int] = None, provider: str = "your supplier") -> bool:
+        """The sessions read from the calendar ([{"start", "end", "summary"}];
+        None: it couldn't be read, so nothing is forgotten). New ones are
+        remembered, a cancelled one (gone from the calendar before it starts)
+        has what it changed put back, and with `block` each is a no-charging
+        time: a scheduled slot that runs into it is moved (see _move_for_session).
+        Returns whether anything changed (it's saved then)."""
+        now = self._now()
+        changed = False
+        new = None if sessions is None else {session_id(x["start"], x["end"]): x for x in sessions}
+        keep = []
+        for r in self.saving_sessions:
+            start, end = _parse_iso(r["start"]), _parse_iso(r["end"])
+            if end < now - SAVING_KEEP:
+                changed = True
+                continue
+            if new is not None and r["id"] not in new and start > now:
+                self._undo_session(r)
+                logger.info("Saving session %s–%s is no longer in the calendar%s", start.strftime("%a %H:%M"),
+                            end.strftime("%H:%M"), ": putting back what it changed" if r.get("notes") else "")
+                changed = True
+                continue
+            keep.append(r)
+        known = {r["id"] for r in keep}
+        for sid, x in (new or {}).items():
+            if sid in known:
+                continue
+            # in local time (the add-on's TZ), as the rest of the schedule
+            keep.append({"id": sid, "start": _iso_local(x["start"].astimezone(now.tzinfo)),
+                         "end": _iso_local(x["end"].astimezone(now.tzinfo)),
+                         "summary": x.get("summary") or "Saving session",
+                         "changes": {"skips": [], "added": []}, "precharged": False, "notes": []})
+            logger.info("Saving session found: %s–%s", x["start"].astimezone().strftime("%a %d %b %H:%M"),
+                        x["end"].astimezone().strftime("%H:%M"))
+            changed = True
+        keep.sort(key=lambda r: _parse_iso(r["start"]))
+        self.saving_sessions = keep
+        if bool(block) != self.saving_block:
+            self.saving_block = bool(block)
+            changed = True
+        moved = False
+        for r in keep:
+            if not block:
+                if r["changes"]["skips"] or r["changes"]["added"]:
+                    self._undo_session(r)
+                    logger.info("Saving sessions aren't no-charging times now: the slots moved for %s are put back",
+                                _parse_iso(r["start"]).strftime("%a %H:%M"))
+                    changed = True
+                continue
+            if _parse_iso(r["end"]) > now and self._move_for_session(r, ready_times):
+                moved = changed = True
+        if moved and cap_min and self.ready_time and not self.override_guards:
+            # a moved slot that's now across the daily limit's reset time is split there, as for Charge now
+            splits = self._reset_splits(self._active_entries(), self.skips, cap_min, one_off=True)
+            if splits:
+                self.entries = self.entries + splits
+                keep[0]["changes"]["added"] += [e["id"] for e in splits]
+            worst = self._longest_day(self._active_entries(), self.skips)
+            if worst and worst[0] > cap_min:
+                logger.warning("Saving session: with the slots moved, the schedule plugs in for %dh %02dm in %s, "
+                               "over %s's %s hours", worst[0] // 60, worst[0] % 60,
+                               limit_day_text(worst[1], self.limit_reset), provider, _hours(cap_min))
+        if changed:
+            self._save()
+        return changed
+
+    def clear_saving_sessions(self) -> bool:
+        """Saving sessions turned off: put back everything they changed and forget them."""
+        if not self.saving_sessions and not self.saving_block:
+            return False
+        for r in self.saving_sessions:
+            self._undo_session(r)
+        self.saving_sessions, self.saving_block = [], False
+        self._save()
+        logger.info("Saving sessions off: anything they changed in the schedule is put back")
+        return True
+
+    def _undo_session(self, r: dict) -> None:
+        added = set(r["changes"].get("added") or [])
+        skips = r["changes"].get("skips") or []
+        if added or skips:
+            self.entries = [e for e in self.entries if e["id"] not in added]
+            self.skips = [k for k in self.skips if k not in skips]
+        r["changes"] = {"skips": [], "added": []}
+        r["notes"] = [n for n in r.get("notes") or [] if n.startswith("charge")]
+
+    @staticmethod
+    def _place(start: datetime.datetime, length: datetime.timedelta, cuts: list) -> list:
+        """`length` of plugged-in time from `start`, around the `cuts`: [(a, b)]."""
+        out, t, left = [], start, length
+        cuts = sorted(cuts)
+        for _ in range(50):
+            if left <= datetime.timedelta(0):
+                break
+            inside = next((cb for ca, cb in cuts if ca <= t < cb), None)
+            if inside is not None:
+                t = inside
+                continue
+            nxt = min((ca for ca, _ in cuts if ca > t), default=None)
+            y = t + left if nxt is None or t + left <= nxt else nxt
+            out.append((t, y))
+            left -= y - t
+            t = y
+        return out
+
+    def _move_for_session(self, r: dict, ready_times: Optional[list]) -> bool:
+        """Move the scheduled slots that run into saving session `r`: from the
+        session's start (or the slot's, if later; or now, if it's begun) the
+        slot carries on the session's length later, around any no-charging
+        time, unplugging at a ready time your supplier accepts (with Force
+        schedule on). Recorded in r["changes"], so it can be put back."""
+        sa, sb = _parse_iso(r["start"]), _parse_iso(r["end"])
+        shift = sb - sa
+        moved = False
+        for _ in range(10):
+            now = self._now().replace(second=0, microsecond=0)
+            cut_from = max(sa, now + datetime.timedelta(minutes=1))
+            if cut_from >= sb:
+                break
+            active = self._active_entries()
+            start_day = now.date() - datetime.timedelta(days=1)
+            stretches = self._stretches(start_day, self._horizon_days() + 2, active, self.skips)
+            hit = next((s for s in stretches if s["end"] > cut_from and s["start"] < sb), None)
+            if hit is None:
+                break
+            c = max(cut_from, hit["start"])
+            src = hit["plug"].get("source")
+
+            def one_off(t, action):
+                return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(),
+                                       "action": action, **({"source": src} if src else {})})
+
+            def key(entry, t):
+                return {"entry_id": entry["id"], "date": t.date().isoformat()}
+
+            added, skips = [], []
+            if hit["start"] < c:
+                added.append(one_off(c, "unplug"))  # plugged in until the session starts
+            else:
+                skips.append(key(hit["plug"], hit["start"]))
+            skips.append(key(hit["unplug"], hit["end"]))
+            new_start = c + shift
+            segs = self._place(new_start, hit["end"] - c,
+                               self.block_windows(new_start.date() - datetime.timedelta(days=1), 4))
+            if not segs:
+                break
+            end = segs[-1][1]
+            if self.ready_time and ready_times:
+                ready = self.first_ready_at(end, ready_times)
+                if ready is not None and ready > end:
+                    segs[-1] = (segs[-1][0], ready)
+                    end = ready
+            # A slot it now meets or runs into joins it: plugged in until whichever ends last
+            later = next((s for s in stretches if s is not hit and s["start"] >= c
+                          and s["start"] <= end and s["end"] > segs[0][0]), None)
+            for i, (x, y) in enumerate(segs):
+                added.append(one_off(x, "plug"))
+                last = i == len(segs) - 1
+                if not last or later is None or later["end"] <= y:
+                    added.append(one_off(y, "unplug"))
+            if later is not None:
+                if later["start"] > segs[0][0]:
+                    skips.append(key(later["plug"], later["start"]))
+                if later["end"] <= end:
+                    skips.append(key(later["unplug"], later["end"]))
+                else:
+                    end = later["end"]
+            skips = [k for k in skips if k not in self.skips]
+            self.entries = self.entries + added
+            self.skips = self.skips + skips
+            r["changes"]["added"] += [e["id"] for e in added]
+            r["changes"]["skips"] += skips
+            note = (f"the {hit['start'].strftime('%H:%M')}–{hit['end'].strftime('%H:%M')} slot "
+                    + (f"unplugs at {c.strftime('%H:%M')} and carries on {segs[0][0].strftime('%H:%M')}–{end.strftime('%H:%M')}"
+                       if hit["start"] < c else f"moved to {segs[0][0].strftime('%H:%M')}–{end.strftime('%H:%M')}")
+                    + (" (joined with the next slot)" if later is not None else ""))
+            r["notes"] = (r.get("notes") or []) + [note]
+            logger.info("Saving session %s–%s: %s", sa.strftime("%a %H:%M"), sb.strftime("%H:%M"), note)
+            moved = True
+        return moved
+
+    def saving_precharge_due(self, hours: float) -> Optional[tuple]:
+        """A session `hours` or less away that hasn't had its charge before it:
+        (its record, minutes from now to its start, at most `hours`). One that's
+        already started, or too close to, is marked done without one."""
+        now = self._now().replace(second=0, microsecond=0)
+        for r in self.saving_sessions:
+            if r.get("precharged"):
+                continue
+            start = _parse_iso(r["start"])
+            left = int((start - now).total_seconds() // 60)
+            if left < MIN_PRECHARGE_MIN:
+                r["precharged"] = True
+                self._save()
+                continue
+            if left <= hours * 60:
+                return r, min(left, int(round(hours * 60)))
+        return None
+
+    def mark_precharged(self, r: dict, plan: Optional[dict]) -> None:
+        r["precharged"] = True
+        if plan and not plan.get("nothing") and plan.get("end"):
+            r["notes"] = (r.get("notes") or []) + [
+                f"charge before it from {_parse_iso(plan['at']).strftime('%H:%M')} to {_parse_iso(plan['end']).strftime('%H:%M')}"]
+        else:
+            r["notes"] = (r.get("notes") or []) + ["charge before it: nothing scheduled"
+                                                   + (f" ({'; '.join(plan.get('notes') or [])})" if plan else "")]
+        self._save()
+
+    def saving_snapshot(self) -> list:
+        return [{"id": r["id"], "start": r["start"], "end": r["end"], "summary": r.get("summary"),
+                 "notes": r.get("notes") or [], "precharged": bool(r.get("precharged"))}
+                for r in self.saving_sessions]
 
     def set_skips(self, times: list, skip: bool = True, daily_cap_min: Optional[int] = None,
                   provider: str = "your supplier") -> None:
@@ -1367,6 +1624,8 @@ class Automation:
                 "unplug_wait_s": self.unplug_wait_s,
                 "override_guards": self.override_guards,
                 "blocks": self.blocks,
+                "saving_sessions": self.saving_snapshot(),
+                "saving_block": self.saving_block,
                 "plan_check": self.plan_check,
                 "skips": self.skips,
                 "upcoming": self.upcoming(),

@@ -19,6 +19,7 @@ entities with subscribe_entities, so changes arrive at once.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import logging
 import os
@@ -29,6 +30,7 @@ from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
 from src import suppliers
 from src.ready_time import ALL_DAY_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity
 from src.smart_charging import find_dispatch_sensors, provider_name, smart_charging
+from src.saving_sessions import find_calendar, is_saving_calendar, parse_events, supplier_of
 from src.ha_entities import (
     ALL_SENSORS, CHARGE_NOW_HOURS, CHARGE_NOW_ICON, HELPER_ICON, HELPER_ID, HELPER_NAME,
     ButtonPresses, PluggedInSync, SensorPublisher, charge_now_entities, charge_now_helper_id,
@@ -44,6 +46,8 @@ DISPATCH_SEARCH_S = 600  # look for a supplier's dispatching sensor again this o
 ENTITY_LIST_TTL_S = 30
 _UNKNOWN_STATES = ("unavailable", "unknown", "none", "")
 DEFAULT_AUTO_PLUG_HOURS = 3.0
+DEFAULT_SAVING_PLUG_HOURS = 2.0
+SAVING_LOOK_AHEAD = datetime.timedelta(days=8)
 
 
 def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
@@ -84,6 +88,23 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if not 0.5 <= hours <= 12 or hours * 2 != int(hours * 2):
             raise ValueError("plug_hours must be 0.5 to 12, in half hours")
         out["plug_hours"] = hours
+    # Saving sessions (Automations tab)
+    for key in ("saving_on", "saving_block", "saving_plug"):
+        if key in raw:
+            out[key] = bool(raw[key])
+    if "saving_entity" in raw:
+        value = str(raw["saving_entity"] or "").strip()
+        if value and not value.startswith("calendar."):
+            raise ValueError("saving_entity must be a calendar entity")
+        out["saving_entity"] = value
+    if "saving_plug_hours" in raw:
+        try:
+            hours = float(raw["saving_plug_hours"])
+        except (TypeError, ValueError):
+            raise ValueError("saving_plug_hours must be a number") from None
+        if not 0.5 <= hours <= 12 or hours * 2 != int(hours * 2):
+            raise ValueError("saving_plug_hours must be 0.5 to 12, in half hours")
+        out["saving_plug_hours"] = hours
     if "auto_plug_hours" in raw:
         try:
             hours = float(raw["auto_plug_hours"])
@@ -171,6 +192,9 @@ def default_settings() -> dict:
         "auto_plug_ready": False, "auto_plug_hours": DEFAULT_AUTO_PLUG_HOURS,
         "plug_auto": True,  # the car plugged in sensor plugs in (on, as before there was a switch)
         "plug_ready": False, "plug_hours": DEFAULT_AUTO_PLUG_HOURS,
+        # Saving sessions: off; the calendar is found automatically unless picked
+        "saving_on": False, "saving_entity": "", "saving_block": True,
+        "saving_plug": False, "saving_plug_hours": DEFAULT_SAVING_PLUG_HOURS,
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then
@@ -253,6 +277,9 @@ class HaLink:
         self._dispatch_searched = 0.0
         self.dispatch_searched_at: Optional[float] = None  # wall clock, for Diagnostics › Health
         self._call = None  # websocket request function while connected
+        # Saving sessions: the calendar read and how it went, for the page
+        self.saving_info: dict = {"entity": None, "auto": False, "supplier": None, "error": None,
+                                  "read_at": None, "count": 0}
         self._reset_logic()
         self._load()
 
@@ -859,14 +886,49 @@ class HaLink:
             return None
         return bool(info.get("current"))
 
+    async def read_saving_sessions(self) -> Optional[list]:
+        """The saving sessions in the calendar (picked, or found by its name),
+        not yet over, the next 8 days: [{"start", "end", "summary"}]; None if it
+        couldn't be read (nothing found, HA not connected...: see saving_info)."""
+        info = self.saving_info
+        entity = self.settings.get("saving_entity") or ""
+        info["auto"] = not entity
+        try:
+            states = await self.all_states()
+            if not entity:
+                entity = find_calendar(states) or ""
+            info["entity"] = entity or None
+            if not entity:
+                info["error"] = "No saving sessions calendar found: pick yours"
+                return None
+            name = next(((st.get("attributes") or {}).get("friendly_name") or "" for st in states
+                         if st.get("entity_id") == entity), "")
+            info["supplier"] = supplier_of(entity, name)
+            now = datetime.datetime.now().astimezone()
+            result = await self.query({
+                "type": "call_service", "domain": "calendar", "service": "get_events",
+                "target": {"entity_id": entity},
+                "service_data": {"start_date_time": (now - datetime.timedelta(hours=12)).isoformat(timespec="seconds"),
+                                 "end_date_time": (now + SAVING_LOOK_AHEAD).isoformat(timespec="seconds")},
+                "return_response": True,
+            })
+            sessions = parse_events((result or {}).get("response"), entity, now)
+        except Exception as err:
+            if info.get("error") != str(err):
+                logger.warning("Couldn't read the saving sessions calendar %s: %s", entity or "-", err)
+            info["error"] = str(err) or type(err).__name__
+            return None
+        info.update(error=None, read_at=time.time(), count=len(sessions))
+        return sessions
+
     async def list_entities(self) -> list[dict]:
-        """Sensors and binary sensors for the pickers."""
+        """Sensors, binary sensors and calendars for the pickers."""
         states = await self.all_states()
         out = []
         for st in states:
             entity_id = st.get("entity_id", "")
             domain = entity_id.split(".", 1)[0]
-            if domain not in ("sensor", "binary_sensor", "time", "select"):
+            if domain not in ("sensor", "binary_sensor", "time", "select", "calendar"):
                 continue
             attrs = st.get("attributes") or {}
             out.append({
@@ -878,6 +940,7 @@ class HaLink:
                 # for the Your supplier pickers (Settings tab)
                 "dispatch": bool(find_dispatch_sensors([st])),
                 "ready": domain in ("time", "select") and "target_time" in entity_id,
+                "saving": is_saving_calendar(entity_id, attrs.get("friendly_name") or ""),
             })
         out.sort(key=lambda e: (e["name"] or "").lower())
         return out
@@ -903,6 +966,7 @@ class HaLink:
         return {
             "settings": s,
             "configured": self.configured,
+            "saving": self.saving_info,
             "ha_entities": {
                 "plugged_in": self.plug_sync.entity_id,
                 "charge_now": [{"entity_id": e, "hours": h} for e, h in self.charge_buttons.items()],

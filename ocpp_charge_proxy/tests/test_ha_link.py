@@ -243,3 +243,39 @@ def test_supply_voltage_from_a_sensor_or_set():
     assert sim.rated_power_kw == 8.0 and 248 <= sim.sample_full().voltage <= 252
     sim.voltage_source = lambda: 5.0  # nonsense: ignored
     assert sim.rated_power_kw == 7.4
+
+
+def test_saving_session_settings_are_checked():
+    s = validate_settings({"saving_on": True, "saving_entity": "calendar.x", "saving_plug_hours": 1.5})
+    assert s["saving_on"] and s["saving_entity"] == "calendar.x" and s["saving_plug_hours"] == 1.5
+    assert s["saving_block"] is True and s["saving_plug"] is False  # the defaults
+    for bad in ({"saving_entity": "sensor.x"}, {"saving_plug_hours": 0.2}, {"saving_plug_hours": 1.25}):
+        with pytest.raises(ValueError):
+            validate_settings(bad)
+
+
+def test_saving_sessions_read_from_the_found_calendar():
+    link, _ = _link()
+    cal = "calendar.octopus_energy_a_1_octoplus_power_down"
+    asked = []
+
+    async def states():
+        return [{"entity_id": cal, "state": "off", "attributes": {"friendly_name": "Power Down"}},
+                {"entity_id": "calendar.home", "state": "off", "attributes": {}}]
+
+    async def query(payload, timeout=30):
+        asked.append(payload)
+        return {"response": {cal: {"events": [
+            {"start": "2099-01-05T17:00:00+00:00", "end": "2099-01-05T18:00:00+00:00", "summary": "Power Down"}]}}}
+
+    link.all_states, link.query = states, query
+    sessions = _run(link.read_saving_sessions())
+    assert len(sessions) == 1 and sessions[0]["start"].hour == 17
+    assert asked[0]["service"] == "get_events" and asked[0]["target"] == {"entity_id": cal} and asked[0]["return_response"]
+    assert link.saving_info["entity"] == cal and link.saving_info["auto"] and link.saving_info["supplier"] == "Octopus Energy"
+
+    async def no_calendar():
+        return [{"entity_id": "calendar.home", "state": "off", "attributes": {}}]
+
+    link.all_states = no_calendar
+    assert _run(link.read_saving_sessions()) is None and "No saving sessions calendar" in link.saving_info["error"]

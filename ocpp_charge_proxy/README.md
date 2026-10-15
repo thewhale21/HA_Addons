@@ -117,6 +117,7 @@ Work through the tabs once, top to bottom.
 | **Car plugged in** | You have a "cable connected" sensor and want it to plug in when you connect the car. Its switch turns it off without forgetting the sensor |
 | **Auto re-plug** | Your supplier sometimes doesn't start a session (Octopus does this): it unplugs and plugs back in for you |
 | **No-charging times** | Times nothing should be scheduled, e.g. off-peak hours when the car charges anyway |
+| **Saving sessions** | You take part in saving sessions (Octopus, E.ON Next, EDF): it reads them from a calendar, keeps charging out of them (moving slots later) and can charge for a few hours before each |
 
 ## Make it switch your charger
 
