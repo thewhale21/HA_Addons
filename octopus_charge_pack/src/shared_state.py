@@ -15,6 +15,7 @@ class SharedState:
     last_update: Optional[str] = None  # when the dispatches were last read, ISO 8601 (UTC)
     poll_seconds: int = 60
     summary: dict = field(default_factory=dict)  # src/dispatches.py summarise(): what the sensors show
+    completed: list = field(default_factory=list)  # completed sessions, newest first (src/dispatches.py)
 
     def to_dict(self) -> dict:
         return asdict(self)

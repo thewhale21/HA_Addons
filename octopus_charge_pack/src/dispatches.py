@@ -87,3 +87,50 @@ def summarise(dispatches: list, now: datetime.datetime, tz: Optional[datetime.tz
         times = dispatch_times(d, tz, {"start_time": previous.get(f"{kind}_start_time")})
         out.update({f"{kind}_{k}": v for k, v in times.items()})
     return out
+
+
+# --- completed sessions -----------------------------------------------------------
+# Octopus changes its planned dispatches a lot, but one that actually happens stays
+# in the list until its end time. So a dispatch that's started is followed (by its
+# start time: an end that's moved later is the same session), and when its end has
+# passed it counts as completed if it was still listed close to that end (it was
+# last seen at most `grace_s` before it). One taken off the plan earlier didn't happen.
+
+KEEP_DAYS = 30  # completed sessions are kept this long
+KEEP_MAX = 200
+
+
+def track_completed(kept: dict, dispatches: list, now: datetime.datetime, grace_s: float) -> list:
+    """Update kept["tracking"] (dispatches that have started) and kept["completed"]
+    (newest first: {"start", "end", "energyAddedKwh", "type", "kind"}). Returns the
+    sessions completed this time."""
+    tracking = kept.setdefault("tracking", {})
+    completed = kept.setdefault("completed", [])
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    for d in dispatches or []:
+        if not isinstance(d, dict):
+            continue
+        start, end = parse_time(d.get("start")), parse_time(d.get("end"))
+        if start is None or end is None or start > now:
+            continue
+        kwh = _kwh(d)
+        tracking[d["start"]] = {"start": d["start"], "end": d["end"], "energyAddedKwh": kwh,
+                                "type": d.get("type"), "kind": "charge" if kwh < 0 else "discharge" if kwh > 0 else None,
+                                "last_seen": stamp}
+    done = []
+    for key, t in list(tracking.items()):
+        end, seen = parse_time(t.get("end")), parse_time(t.get("last_seen"))
+        if end is None or seen is None:
+            tracking.pop(key)
+            continue
+        if end > now:
+            continue
+        tracking.pop(key)
+        if (end - seen).total_seconds() <= grace_s and not any(c["start"] == t["start"] for c in completed):
+            entry = {k: t[k] for k in ("start", "end", "energyAddedKwh", "type", "kind")}
+            done.append(entry)
+    if done:
+        completed[:0] = sorted(done, key=lambda c: c["start"], reverse=True)
+    cutoff = now - datetime.timedelta(days=KEEP_DAYS)
+    kept["completed"] = [c for c in completed if (parse_time(c["end"]) or now) >= cutoff][:KEEP_MAX]
+    return done

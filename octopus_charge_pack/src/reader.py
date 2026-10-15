@@ -11,7 +11,7 @@ import os
 import time
 from typing import Optional
 
-from src.dispatches import summarise
+from src.dispatches import summarise, track_completed
 from src.octopus import AuthError, OctopusClient
 from src.shared_state import SharedState
 
@@ -66,6 +66,10 @@ async def read_once(state: SharedState, client: OctopusClient, kept: dict, wante
     state.summary = summarise(dispatches, now, None, kept)
     for kind in ("charge", "discharge"):
         kept[f"{kind}_start_time"] = state.summary.get(f"{kind}_start_time")
+    # Completed sessions: still listed within two reads (and a minute) of their end
+    for c in track_completed(kept, dispatches, now, grace_s=2 * (state.poll_seconds or 60) + 60):
+        logger.info("Completed %s: %s to %s (%s kWh)", c["kind"] or "dispatch", c["start"], c["end"], c["energyAddedKwh"])
+    state.completed = list(kept.get("completed") or [])
     state.last_update = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -75,6 +79,7 @@ async def worker(state: SharedState, config, data_dir: Optional[str], settings=N
     dispatches and work out the sensors. The account's devices are read again every DEVICES_EVERY_S."""
     path = os.path.join(data_dir, "state.json") if data_dir else None
     kept = _load(path)
+    state.completed = list(kept.get("completed") or [])
     wake = wake or asyncio.Event()
     if not config.api_key:
         state.status, state.error = "Needs an API key", "Set your Octopus API key on the add-on's Configuration tab"

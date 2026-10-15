@@ -215,6 +215,11 @@
       </div>
     </div>
     <div class="note" style="margin:0">From Octopus's planned dispatches for your device: energy above 0 counts as a discharge, below 0 as a charge.</div>
+    <div class="card">
+      <h2>Completed sessions</h2>
+      <table><thead><tr><th>Date</th><th>Time</th><th>Type</th><th class="num">Energy</th></tr></thead><tbody id="o-done"></tbody></table>
+      <div class="note" style="margin:8px 0 0">Octopus changes its plan a lot, but a session that happens stays in it until its end: one still planned when it ended (within two reads) counts as completed. The last 30 days.</div>
+    </div>
   </section>
 
   <!-- ============ Settings ============ -->
@@ -470,6 +475,13 @@ function renderState(s) {
       .map((d) => `<tr><td>${esc(dateTime(d.start))}</td><td>${esc(dateTime(d.end))}</td><td class="num">${num(d.energyAddedKwh, 2)} kWh</td></tr>`);
     $(id).innerHTML = rows.join('') || `<tr><td colspan="3" class="muted">${s.last_update ? 'None planned' : 'Not read yet'}</td></tr>`;
   }
+  const done = s.completed || [];
+  $('o-done').innerHTML = done.map((c) => {
+    const chip = c.kind === 'discharge' ? '<span class="chip dis">Discharge</span>' : c.kind === 'charge' ? '<span class="chip chg">Charge</span>' : '<span class="chip">Dispatch</span>';
+    const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+    const day = new Date(c.start).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
+    return `<tr><td>${esc(day)}</td><td>${esc(t(c.start))}–${esc(t(c.end))}</td><td>${chip}</td><td class="num">${num(c.energyAddedKwh, 2)} kWh</td></tr>`;
+  }).join('') || '<tr><td colspan="4" class="muted">None yet: a session shows here once it has ended</td></tr>';
   drawDevicePicker(s);
 }
 const deviceLabel = (d) => [d.name || d.deviceType || 'Device', d.name && d.deviceType ? d.deviceType : '', d.provider || ''].filter(Boolean).join(' · ');

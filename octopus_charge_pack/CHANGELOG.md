@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 — Completed sessions
+
+- **Feature:** a Completed sessions card on the Overview: the charge and
+  discharge sessions of the last 30 days that actually happened, with
+  their date, times, type and energy. A dispatch counts as completed if it
+  was still in Octopus's plan when it ended (within two reads); one taken
+  off the plan earlier doesn't. Kept across restarts.
+
 ## 0.4.1 — Tidier Settings tab
 
 - **Change:** the Settings tab's Octopus card (device ID, read interval and

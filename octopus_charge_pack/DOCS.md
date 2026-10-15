@@ -12,7 +12,8 @@ and its sensors. In short: enter your Octopus API key on the
 
 1. **Overview** shows its status across the top, then the next discharge
    (with its local date, start and end as the date and time sensors give
-   them) and next charge, each with its own planned dispatches.
+   them) and next charge, each with its own planned dispatches, and the
+   completed sessions of the last 30 days.
 2. **Settings** has the device and read interval (both drop-downs, applied
    at once).
 3. **Diagnostics** has its health, the sensors it posts, the log
@@ -33,6 +34,14 @@ and its sensors. In short: enter your Octopus API key on the
   the sensors' values. The last discharge start time is kept in
   `/data/state.json`, as the template sensor kept its state (and the
   last charge start time, the same way).
+- Completed sessions: Octopus changes its planned dispatches a lot, but one
+  that actually happens stays in the list until its end time. So each
+  dispatch that has started is followed (by its start: one whose end moves
+  later is the same session), and once its end has passed it counts as
+  completed if it was still listed within two reads (and a minute) of that
+  end. One taken off the plan earlier didn't happen. Kept in
+  `/data/state.json` for 30 days; one ending while the add-on is stopped
+  isn't counted.
 - `src/dispatches.py`: the logic of the old template sensors, with no I/O:
   the next charge (energyAddedKwh < 0) and discharge (> 0) that hasn't
   ended, and each one's local date and times.

@@ -131,8 +131,10 @@ def test_the_device_is_found_from_the_account():
     _run(read_once(state, c, kept, None))  # nothing picked, one device: that one
     assert state.device_id == "dev-1" and state.summary["count"] == 3 and state.last_update
     assert state.devices[0]["id"] == "dev-1"  # listed for the page's drop-down
-    assert kept == {"charge_start_time": state.summary["charge_start_time"],
-                    "discharge_start_time": state.summary["discharge_start_time"]}
+    assert {k: kept[k] for k in ("charge_start_time", "discharge_start_time")} == {
+        "charge_start_time": state.summary["charge_start_time"],
+        "discharge_start_time": state.summary["discharge_start_time"]}
+    assert "completed" in kept and "tracking" in kept and state.completed == kept["completed"]
 
 
 def test_the_device_picked_on_the_page_is_followed():
@@ -186,3 +188,39 @@ def test_device_and_interval_are_page_settings(tmp_path):
     again = AppSettings(str(tmp_path / "x"))
     again.adopt_options(Config(api_key="k", device_id="other", poll_seconds=30))
     assert (again.device_id, again.poll_seconds) == ("dev-9", 600)  # the page's choice stays
+
+
+# --- completed sessions ---------------------------------------------------------------
+
+
+def _d(start, end, kwh=5.0):
+    return {"start": start, "end": end, "energyAddedKwh": kwh, "type": "SMART"}
+
+
+def test_a_session_still_listed_at_its_end_is_completed():
+    from src.dispatches import track_completed
+    at = lambda hh, mm=0: datetime.datetime(2026, 10, 15, hh, mm, tzinfo=datetime.timezone.utc)
+    kept = {}
+    plan = [_d("2026-10-15T17:00:00Z", "2026-10-15T18:00:00Z"), _d("2026-10-15T20:00:00Z", "2026-10-15T21:00:00Z", -3)]
+    assert track_completed(kept, plan, at(16), 180) == []  # not started: not followed
+    assert track_completed(kept, plan, at(17, 30), 180) == []
+    assert track_completed(kept, plan, at(17, 59), 180) == []  # still listed just before its end
+    done = track_completed(kept, plan[1:], at(18, 1), 180)  # gone from the list once it ended
+    assert [(c["start"], c["kind"]) for c in done] == [("2026-10-15T17:00:00Z", "discharge")]
+    # the charge, taken off the plan half-way: it didn't happen
+    track_completed(kept, plan[1:], at(20, 10), 180)
+    assert track_completed(kept, [], at(21, 1), 180) == []
+    assert [c["start"] for c in kept["completed"]] == ["2026-10-15T17:00:00Z"] and kept["tracking"] == {}
+
+
+def test_a_session_whose_end_moves_later_is_one_session():
+    from src.dispatches import track_completed
+    at = lambda hh, mm=0: datetime.datetime(2026, 10, 15, hh, mm, tzinfo=datetime.timezone.utc)
+    kept = {}
+    track_completed(kept, [_d("2026-10-15T17:00:00Z", "2026-10-15T17:30:00Z")], at(17, 10), 180)
+    track_completed(kept, [_d("2026-10-15T17:00:00Z", "2026-10-15T18:30:00Z", 9)], at(18, 29), 180)
+    done = track_completed(kept, [], at(18, 31), 180)
+    assert len(done) == 1 and done[0]["end"] == "2026-10-15T18:30:00Z" and done[0]["energyAddedKwh"] == 9
+    # old ones are forgotten
+    track_completed(kept, [], at(18, 31) + datetime.timedelta(days=31), 180)
+    assert kept["completed"] == []
