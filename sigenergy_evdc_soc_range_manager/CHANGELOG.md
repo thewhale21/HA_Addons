@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.20.7 — Clearer logging
+
+- **Improvement:** each start and stop in the log ends with what the add-on
+  saw: the car's SoC, which way it's going (rising or falling, %/h over the
+  last 30 minutes), where it is against the high and low limits, the
+  charger's state, the home battery and grid power, export, the charge
+  signal and the EMS mode. The same is saved with each start and stop in
+  the add-on's history.
+- **Improvement:** a start for the house now says what showed the house
+  needing power and where the car is against both limits (e.g. "at or above
+  the high limit (90%)"), not only that it's above the low limit.
+- **Improvement:** each new decision is logged once at Info (e.g. "Held at
+  the high limit"), with the same details, and each change in the car's SoC
+  is logged with its direction.
+- **Docs:** Diagnostics explains the new log lines. Logging only: no change
+  to when the charger is started or stopped.
+
 ## 0.20.6 — A fresh try for each spell of importing
 
 - **Improvement:** after a stop for charging above the high limit, the car

@@ -17,7 +17,7 @@ from collections import deque
 from dataclasses import replace
 from typing import Awaitable, Callable, Optional
 
-from src.controller import RULES, Decision, Inputs, bound_limits, decide, house_needs_power
+from src.controller import RULES, Decision, Inputs, bound_limits, decide, house_needs_power, soc_place
 from src.flow import flows, house_load
 from src.rates import battery_rates
 from src.schedule import describe
@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 LOG_SIZE = 500  # the history on the Schedule tab
 UNANSWERED_LIMIT = 3  # presses of the same button in a row without a response: then only every unanswered_wait_s
 UNKNOWN = ("unknown", "unavailable", "none", "")
+SOC_TREND_S = 1800  # the SoC's direction is worked out over this long (logging only)
+SOC_TREND_MIN_S = 300  # ...and needs readings at least this far apart
+SOC_SAMPLES_KEEP_S = 7200
+QUIET_RULES = ("press_gap",)  # decisions not logged when they change (they're about a press just made)
 
 # Lists the Settings tab can change (Advanced); matched without regard to case
 LIST_DEFAULTS = {
@@ -96,6 +100,10 @@ def _in(value: Optional[str], options) -> bool:
     return value is not None and value.strip().lower() in {o.strip().lower() for o in options}
 
 
+def _pct_text(v: float) -> str:
+    return f"{v:g}%"
+
+
 def _iso(ts: Optional[float]) -> Optional[str]:
     if ts is None:
         return None
@@ -130,6 +138,8 @@ class Manager:
         self.presses_today = 0
         self.day: Optional[str] = None
         self.log: deque = deque(maxlen=LOG_SIZE)
+        self.soc_samples: deque = deque()  # (time, SoC) readings, for the direction it's going in the log
+        self._logged_rule: Optional[str] = None  # the last decision written to the log
         self.inputs: Optional[Inputs] = None
         self.decision: Optional[Decision] = None
         self.readings: dict = {}
@@ -217,10 +227,16 @@ class Manager:
         soc = _float(get("vehicle_soc"))
         if soc is not None and 0 < soc <= 100:
             if soc != self.soc or self.soc_before_plug_in:
+                previous = None if self.soc_before_plug_in else self.soc
                 self.soc, self.soc_at, self.soc_before_plug_in = soc, now, False
                 self._save()
+                self._soc_sample(now, soc)
+                if previous is not None:
+                    logger.info("Car SoC %s → %s (%s; charger %s)", _pct_text(previous), _pct_text(soc),
+                                self.soc_trend_text(now), (running or "unknown").lower())
             else:
                 self.soc_at = now
+                self._soc_sample(now, soc)
 
         base_high, base_low = _float(get("soc_high")), _float(get("soc_low"))
         high, low, scheduled = base_high, base_low, []
@@ -278,6 +294,70 @@ class Manager:
         self._settings = settings
         return self.inputs
 
+    # --- logging what it sees ------------------------------------------------------
+
+    def _soc_sample(self, now: float, soc: float) -> None:
+        """Keep a reading for the SoC's direction: when it changes, and every few minutes anyway."""
+        last = self.soc_samples[-1] if self.soc_samples else None
+        if last is None or last[1] != soc or now - last[0] >= SOC_TREND_MIN_S:
+            self.soc_samples.append((now, soc))
+        while self.soc_samples and self.soc_samples[0][0] < now - SOC_SAMPLES_KEEP_S:
+            self.soc_samples.popleft()
+
+    def soc_trend(self, now: float) -> Optional[float]:
+        """How fast the car's SoC is changing, %/h, over the last SOC_TREND_S (None: too few readings)."""
+        if not self.soc_samples:
+            return None
+        start = None
+        for ts, soc in self.soc_samples:  # the reading in force when the window starts, else the oldest
+            if ts <= now - SOC_TREND_S or start is None:
+                start = (ts, soc)
+            else:
+                break
+        end = self.soc_samples[-1]
+        span = now - start[0]
+        if span < SOC_TREND_MIN_S:
+            return None
+        return (end[1] - start[1]) / (span / 3600)
+
+    def soc_trend_text(self, now: float) -> str:
+        rate = self.soc_trend(now)
+        if rate is None:
+            return "direction not known yet"
+        if rate >= 0.5:
+            return f"rising {rate:+.1f}%/h"
+        if rate <= -0.5:
+            return f"falling {rate:+.1f}%/h"
+        return "steady"
+
+    def context(self, now: float) -> str:
+        """What it's seeing, on one line for the log: the car, the charger, the house and the grid."""
+        i = self.inputs
+        if i is None:
+            return "no readings yet"
+        parts = []
+        if i.soc is not None:
+            car = f"car {_pct_text(i.soc)} ({self.soc_trend_text(now)})"
+            if i.high is not None and i.low is not None:
+                car += f", {soc_place(i.soc, i.high, i.low)}"
+            parts.append(car)
+        parts.append(f"charger {(i.running_state or 'unknown').lower()}")
+        if i.battery_kw is not None:
+            way = "charging" if i.battery_kw > 0 else "discharging" if i.battery_kw < 0 else "idle"
+            soc_home = self.readings.get("home_soc")
+            parts.append(f"home battery {way} {abs(i.battery_kw):.1f} kW"
+                         + (f" at {_pct_text(soc_home)}" if soc_home is not None else ""))
+        if i.grid_kw is not None:
+            way = "importing" if i.grid_kw > 0 else "exporting" if i.grid_kw < 0 else "idle"
+            parts.append(f"grid {way} {abs(i.grid_kw):.1f} kW")
+        if i.export_kw is not None:
+            parts.append(f"export {i.export_kw:.1f} kW")
+        if i.charge_signal is not None:
+            parts.append(f"charge signal {'on' if i.charge_signal else 'off'}")
+        if i.ems_mode:
+            parts.append(f"EMS {i.ems_mode}")
+        return "; ".join(parts)
+
     # --- acting -----------------------------------------------------------------
 
     async def step(self, states: dict, entities: dict, settings: dict, now: Optional[float] = None) -> Decision:
@@ -286,6 +366,11 @@ class Manager:
         self._new_day(now)
         inputs = self.observe(states, entities, settings, now)
         decision = decide(inputs, settings)
+        # Log each new decision (not the presses: act() logs those), with what it was based on
+        if decision.rule != self._logged_rule and not decision.action and decision.rule not in QUIET_RULES:
+            logger.info("Decision: %s - %s [%s]", decision.status, decision.reason, self.context(now))
+        if decision.rule not in QUIET_RULES:
+            self._logged_rule = decision.rule
         if decision.action:
             gap = float(settings.get("press_gap_s", 60))
             last = self.last_press or {}
@@ -320,14 +405,15 @@ class Manager:
         now = time.time() if now is None else now
         button = entities.get("start_button" if action == "start" else "stop_button")
         watching = bool(settings.get("observe_only")) and rule != "manual"
-        entry = {"at": _iso(now), "action": action, "rule": rule, "reason": reason,
+        context = self.context(now)
+        entry = {"at": _iso(now), "action": action, "rule": rule, "reason": reason, "context": context,
                  "soc": self.soc, "pressed": False, "observe_only": watching, "error": None, **self._limits_now(),
                  **({"soc_from_before_plug_in": True} if self.soc_before_plug_in else {})}
         self.last_press_at = now
         if not button:
             entry["error"] = f"No {action} button set on the Settings tab"
         elif watching:
-            logger.info("Would %s the charger (watching only): %s", action, reason)
+            logger.info("Would %s the charger (watching only): %s [%s]", action, reason, context)
         elif self.press is None:
             entry["error"] = "Not connected to Home Assistant"
         else:
@@ -343,7 +429,7 @@ class Manager:
                                       f"trying again every {wait} min until it does")
                 if rule == "charging_above_high":
                     self.charge_stopped_at = now
-                logger.info("%s the charger: %s", "Started" if action == "start" else "Stopped", reason)
+                logger.info("%s the charger: %s [%s]", "Started" if action == "start" else "Stopped", reason, context)
             except Exception as err:
                 entry["error"] = str(err) or type(err).__name__
         if entry["error"]:

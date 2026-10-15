@@ -112,6 +112,30 @@ def _pct(v: float) -> str:
     return f"{v:g}%"
 
 
+def _kw(v: float) -> str:
+    return f"{v:.1f} kW"
+
+
+def soc_place(soc: float, high: float, low: float) -> str:
+    """Where the SoC is against the limits, in a few words."""
+    if soc >= high:
+        return f"at or above the high limit ({_pct(high)})"
+    if soc <= low:
+        return f"at or below the low limit ({_pct(low)})"
+    return f"between the limits ({_pct(low)}–{_pct(high)})"
+
+
+def house_need(i: Inputs, tuning: Optional[dict] = None) -> str:
+    """What shows the house needing power, in a few words ("" if nothing does)."""
+    t = {**TUNING_DEFAULTS, **(tuning or {})}
+    parts = []
+    if i.battery_kw is not None and i.battery_kw < -t["house_battery_kw"]:
+        parts.append(f"the home battery is discharging {_kw(-i.battery_kw)}")
+    if i.grid_kw is not None and i.grid_kw > t["house_grid_kw"]:
+        parts.append(f"importing {_kw(i.grid_kw)} from the grid")
+    return " and ".join(parts)
+
+
 def house_needs_power(i: Inputs, tuning: Optional[dict] = None) -> bool:
     """The home battery is discharging, or the grid importing for the house: not while the
     home battery charges or a charge signal is on (that's a grid charge)."""
@@ -161,8 +185,9 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
     # 1. The house needs power and the car has some to spare: start, so it can discharge
     if house_needs and rested and soc > low + margin and not retry_wait:
         return Decision("start", "house_needs_power", "Starting",
-                        f"The house is using the home battery or the grid and the car is at {_pct(soc)}, "
-                        f"above the low limit ({_pct(low)}).")
+                        f"The house needs power ({house_need(i, t) or 'the home battery or the grid'}) and the car "
+                        f"is at {_pct(soc)}, {soc_place(soc, high, low)}: started so the car can discharge to the "
+                        "house.")
     # 2. Spare power and room in the car: start, so it can charge
     if opportunity and rested and soc < high - margin and not i.discharging:
         return Decision("start", "charge_opportunity", "Starting",

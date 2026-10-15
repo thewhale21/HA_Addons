@@ -359,6 +359,20 @@ needing attention (also the coloured dot by the title). **Diagnostics ›
 Debug** has the log level, recent log lines, a diagnostics bundle to
 download and a restart button.
 
+The log (Info level) explains each decision with what it was based on:
+
+- Every start and stop, and each new decision when nothing's pressed (e.g.
+  "Held at the high limit"), ends with what the add-on saw in brackets: the
+  car's SoC and the direction it's going (e.g. `rising +4.0%/h`, worked out
+  over the last 30 minutes), where it is against the limits, the charger's
+  state, the home battery and grid power, export, the charge signal and the
+  EMS mode.
+- A start for the house says what showed the house needing power (the home
+  battery discharging, or importing from the grid) and where the car is
+  against both limits.
+- Each change in the car's SoC is logged, e.g. `Car SoC 98% → 99% (rising
+  +4.0%/h; charger charging)`.
+
 ## For developers
 
 Started from the repository's add-on template. The decision is in

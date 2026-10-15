@@ -537,3 +537,43 @@ def test_a_stop_at_the_low_limit_isnt_held_up_by_a_start_just_before(tmp_path):
     assert p.pressed == ["button.sigen_inverter_dc_charger_start_charging"]
     d = _run(m.step(_states(running="Discharging", soc="40", battery="-1"), ent, st, now=1230.0))
     assert d.rule == "low_limit" and p.pressed[-1] == "button.sigen_inverter_dc_charger_stop_charging"
+
+
+# --- logging: what each decision was based on (0.21.0) ---------------------------------
+
+
+def test_a_start_for_the_house_says_where_the_car_is_against_both_limits():
+    above = d(soc=99, battery_kw=-1.2)
+    assert above.rule == "house_needs_power"
+    assert "99%, at or above the high limit (80%)" in above.reason
+    assert "the home battery is discharging 1.2 kW" in above.reason
+    between = d(soc=60, grid_kw=0.8)
+    assert "between the limits (40%–80%)" in between.reason and "importing 0.8 kW from the grid" in between.reason
+
+
+def test_the_soc_direction_is_worked_out_from_readings_over_half_an_hour(tmp_path):
+    m = Manager(str(tmp_path))
+    assert m.soc_trend_text(1000.0) == "direction not known yet"
+    ent, st = _entities(), _settings()
+    _run(m.step(_states(running="Charging", soc="90"), ent, st, now=1000.0))
+    _run(m.step(_states(running="Charging", soc="91"), ent, st, now=1000.0 + 900))
+    _run(m.step(_states(running="Charging", soc="92"), ent, st, now=1000.0 + 1800))
+    assert m.soc_trend(1000.0 + 1800) == pytest.approx(4.0)
+    assert m.soc_trend_text(1000.0 + 1800) == "rising +4.0%/h"
+    _run(m.step(_states(running="Discharging", soc="88"), ent, st, now=1000.0 + 3600))
+    assert m.soc_trend_text(1000.0 + 3600).startswith("falling")
+
+
+def test_presses_and_new_decisions_are_logged_with_what_was_seen(tmp_path, caplog):
+    caplog.set_level("INFO", logger="src.manager")
+    p = Presses()
+    m = Manager(str(tmp_path), press=p.press)
+    ent, st = _entities(), _settings()
+    _run(m.step(_states(lc=1000.0), ent, st, now=1100.0))  # in the restart wait
+    _run(m.step(_states(lc=1000.0), ent, st, now=1150.0))  # same decision: not logged again
+    decisions = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Decision:")]
+    assert len(decisions) == 1 and "[car 60%" in decisions[0] and "charger occupied" in decisions[0]
+    _run(m.step(_states(lc=1000.0), ent, st, now=1200.0))
+    started = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Started the charger")]
+    assert len(started) == 1 and "between the limits (40%–80%)" in started[0] and "grid" in started[0]
+    assert m.log[-1]["context"].startswith("car 60%")
