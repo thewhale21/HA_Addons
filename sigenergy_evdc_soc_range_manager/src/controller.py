@@ -7,7 +7,9 @@ high limits:
 
 - Between the limits it's always allowed to run.
 - At or above the high limit it only runs while the house needs power (so
-  the car discharges), and is stopped once it isn't discharging.
+  the car discharges), and is stopped once it isn't discharging. If it's
+  charging there, it's stopped straight away: the grid import that charging
+  causes isn't the house needing power.
 - At or below the low limit it only runs when there's spare power to charge
   from (exporting, or a "charge now" signal such as Predbat charging), and
   is stopped if it starts discharging.
@@ -124,8 +126,13 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
     soc, high, low, margin = i.soc, i.high, i.low, float(t["margin_pct"])
     wait = float(t["restart_wait_s"])
     rested = not i.active and i.inactive_for is not None and i.inactive_for >= wait
-    house_needs = ((i.battery_kw is not None and i.battery_kw < -t["house_battery_kw"])
-                   or (i.grid_kw is not None and i.grid_kw > t["house_grid_kw"]))
+    # Importing while the home battery charges (or a charge signal is on) is a grid
+    # charge, not the house needing the car's power
+    battery_charging = i.battery_kw is not None and i.battery_kw > t["house_battery_kw"]
+    house_needs = i.charge_signal is not True and (
+        (i.battery_kw is not None and i.battery_kw < -t["house_battery_kw"])
+        or (i.grid_kw is not None and i.grid_kw > t["house_grid_kw"] and not battery_charging))
+    charging = i.active and not i.discharging and (i.running_state or "").strip().lower() == "charging"
     house_quiet = (i.battery_kw is not None and i.battery_kw > -t["house_battery_kw"]
                    and i.grid_kw is not None and i.grid_kw < t["house_grid_kw"])
     # Exporting now is enough, as in the automation's condition
@@ -143,7 +150,13 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
         return Decision("start", "charge_opportunity", "Starting",
                         f"There's spare power ({why_spare}) and the car is at {_pct(soc)}, "
                         f"below the high limit ({_pct(high)}).")
-    # 3. At the high limit and not discharging (nor needed to): stop
+    # 3. At the high limit and charging: stop, whatever the house is doing (the
+    #    car's own charging shows as grid import). Not discharging and the house
+    #    quiet (e.g. still preparing): stop too
+    if soc >= high and charging:
+        return Decision("stop", "high_limit", "Stopping",
+                        f"The car is at {_pct(soc)}, at or above the high limit ({_pct(high)}), "
+                        "and charging.")
     if soc >= high and i.active and not i.discharging and house_quiet:
         return Decision("stop", "high_limit", "Stopping",
                         f"The car is at {_pct(soc)}, at or above the high limit ({_pct(high)}), "

@@ -87,13 +87,32 @@ def test_nothing_starts_while_it_is_running_or_resting():
 
 
 def test_stops_at_the_high_limit_once_the_house_is_quiet_and_it_isnt_discharging():
+    preparing = {"active": True, "inactive_for": None, "running_state": "Preparing Comm"}
+    assert d(soc=80, **preparing).rule == "high_limit" and d(soc=80, **preparing).action == "stop"
+    assert d(soc=80, battery_kw=-1.0, **preparing).action is None  # the house needs power: leave it
+    assert d(soc=80, battery_kw=None, **preparing).action is None  # can't tell: leave it
     charging = {"active": True, "inactive_for": None, "running_state": "Charging"}
     assert d(soc=80, **charging).rule == "high_limit" and d(soc=80, **charging).action == "stop"
-    assert d(soc=80, battery_kw=-1.0, **charging).action is None  # the house needs power: leave it
-    assert d(soc=80, battery_kw=None, **charging).action is None  # can't tell: leave it
     discharging = {**charging, "running_state": "Discharging", "discharging": True}
     assert d(soc=85, **discharging).action is None  # discharging above high is what's wanted
     assert d(soc=80).action is None  # already off: no button press
+
+
+def test_charging_above_the_high_limit_is_stopped_even_while_importing():
+    # Seen: 95% with the high limit at 50%, charging at 7 kW overnight, the grid
+    # importing 12 kW (the car and the home battery charging): it was left charging
+    charging = {"active": True, "inactive_for": None, "running_state": "Charging"}
+    night = {"grid_kw": 12.3, "battery_kw": 4.2, "high": 50, "low": 40}
+    stop = d(soc=95, **night, **charging)
+    assert stop.action == "stop" and stop.rule == "high_limit" and "charging" in stop.reason
+    assert d(soc=95, grid_kw=2.0, battery_kw=-1.0, high=50, low=40, **charging).action == "stop"
+    assert d(soc=95, charge_signal=True, high=50, low=40, **charging).action == "stop"
+    assert d(soc=49, **night, **charging).action is None  # below the high limit: charging's fine
+    # ...and isn't started again for the house while the home battery charges from the grid
+    held = d(soc=95, grid_kw=4.5, battery_kw=4.2, high=50, low=40)
+    assert held.action is None and held.rule == "held_high"
+    assert d(soc=95, grid_kw=0.5, charge_signal=True, high=50, low=40).action is None
+    assert d(soc=95, grid_kw=0.5, high=50, low=40).rule == "house_needs_power"  # a real need still starts it
 
 
 def test_stops_at_the_low_limit_when_discharging_unless_told_to_charge():

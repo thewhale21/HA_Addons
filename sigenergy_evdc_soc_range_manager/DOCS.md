@@ -13,14 +13,16 @@ is on) and the car's SoC is known. Then, in this order:
 
 | | When | It |
 | --- | --- | --- |
-| 1 | The house needs power (home battery discharging, or importing from the grid) and the car is above the low limit | starts the charger, so the car can discharge |
+| 1 | The house needs power (home battery discharging, or importing from the grid while the home battery isn't charging and no charge signal is on) and the car is above the low limit | starts the charger, so the car can discharge |
 | 2 | There's spare power (exporting, or a charge signal such as Predbat charging) and the car is below the high limit | starts the charger, so the car can charge |
-| 3 | The car is at or above the high limit, isn't discharging and the house doesn't need power | stops the charger |
+| 3 | The car is at or above the high limit and charging, or isn't discharging and the house doesn't need power | stops the charger |
 | 4 | The car is at or below the low limit and is discharging (and no charge signal is on) | stops the charger |
 | 5 | The car is between the limits | starts the charger |
 
 So between the limits the charger always runs. At the high limit it only
-runs to discharge, and at the low limit only to charge.
+runs to discharge (if it charges there, it's stopped at once: the import
+that charging causes doesn't count as the house needing power), and at the
+low limit only to charge.
 
 After the charger stops, for whatever reason, it isn't started again for
 the **restart wait** (3 minutes). Some cars stop discharging now and then;

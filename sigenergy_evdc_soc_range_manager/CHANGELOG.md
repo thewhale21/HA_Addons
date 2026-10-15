@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.20.4 — Stops charging above the high limit
+
+- **Fix:** a car charging at or above the high limit wasn't stopped while
+  the grid was importing, because the import (much of it the car's own
+  charging, and the home battery charging overnight) counted as the house
+  needing power. Charging at or above the high limit is now stopped
+  straight away.
+- **Fix:** importing while the home battery charges, or while a charge
+  signal is on, no longer counts as the house needing power, so the
+  charger isn't started again above the high limit during a grid charge.
+
 ## 0.20.3 — A how-to README
 
 - **Docs:** a new README (the add-on's Info page in Home Assistant): what
