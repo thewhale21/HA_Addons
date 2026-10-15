@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 — Idle dispatches shown
+
+- **Fix:** the Overview only listed dispatches with energy (charges and
+  discharges); the ones Octopus plans with 0 kWh were left out. They're now
+  listed in their own Idle card, so every planned dispatch shows. They
+  aren't counted as completed sessions.
+
 ## 0.5.0 — Completed sessions
 
 - **Feature:** a Completed sessions card on the Overview: the charge and

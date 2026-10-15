@@ -214,7 +214,11 @@
         <table><thead><tr><th>Start</th><th>End</th><th class="num">Energy</th></tr></thead><tbody id="o-chg-list"></tbody></table>
       </div>
     </div>
-    <div class="note" style="margin:0">From Octopus's planned dispatches for your device: energy above 0 counts as a discharge, below 0 as a charge.</div>
+    <div class="card">
+      <div class="label"><span class="chip">Idle</span> No charge or discharge</div>
+      <table style="margin-top:8px"><thead><tr><th>Start</th><th>End</th><th class="num">Energy</th></tr></thead><tbody id="o-idle-list"></tbody></table>
+    </div>
+    <div class="note" style="margin:0">From Octopus's planned dispatches for your device: energy above 0 counts as a discharge, below 0 as a charge, and 0 as idle (dispatches Octopus plans with no energy, e.g. to hold the battery).</div>
     <div class="card">
       <h2>Completed sessions</h2>
       <table><thead><tr><th>Date</th><th>Time</th><th>Type</th><th class="num">Energy</th></tr></thead><tbody id="o-done"></tbody></table>
@@ -470,8 +474,8 @@ function renderState(s) {
   $('o-dis-sub').textContent = m.discharge_start ? `${m.discharge_start_date} ${m.discharge_start_time} – ${m.discharge_end_date === m.discharge_start_date ? '' : m.discharge_end_date + ' '}${m.discharge_end_time}${m.discharge_kwh != null ? ' · ' + num(m.discharge_kwh, 2) + ' kWh' : ''}` : '';
   $('o-chg').textContent = m.charge_start ? span(m.charge_start, m.charge_end) : 'None planned';
   $('o-chg-sub').textContent = m.charge_start ? `${m.charge_start_date} ${m.charge_start_time} – ${m.charge_end_date === m.charge_start_date ? '' : m.charge_end_date + ' '}${m.charge_end_time}${m.charge_kwh != null ? ' · ' + num(m.charge_kwh, 2) + ' kWh' : ''}` : '';
-  for (const [kind, id] of [['discharge', 'o-dis-list'], ['charge', 'o-chg-list']]) {
-    const rows = (m.dispatches || []).filter((d) => (kind === 'discharge' ? Number(d.energyAddedKwh) > 0 : Number(d.energyAddedKwh) < 0))
+  for (const [kind, id] of [['discharge', 'o-dis-list'], ['charge', 'o-chg-list'], ['idle', 'o-idle-list']]) {
+    const rows = (m.dispatches || []).filter((d) => { const e = Number(d.energyAddedKwh) || 0; return kind === 'discharge' ? e > 0 : kind === 'charge' ? e < 0 : e === 0; })
       .map((d) => `<tr><td>${esc(dateTime(d.start))}</td><td>${esc(dateTime(d.end))}</td><td class="num">${num(d.energyAddedKwh, 2)} kWh</td></tr>`);
     $(id).innerHTML = rows.join('') || `<tr><td colspan="3" class="muted">${s.last_update ? 'None planned' : 'Not read yet'}</td></tr>`;
   }

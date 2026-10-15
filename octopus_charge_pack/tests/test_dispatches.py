@@ -224,3 +224,11 @@ def test_a_session_whose_end_moves_later_is_one_session():
     # old ones are forgotten
     track_completed(kept, [], at(18, 31) + datetime.timedelta(days=31), 180)
     assert kept["completed"] == []
+
+
+def test_idle_dispatches_arent_sessions():
+    from src.dispatches import track_completed
+    at = lambda hh, mm=0: datetime.datetime(2026, 10, 15, hh, mm, tzinfo=datetime.timezone.utc)
+    kept = {}
+    track_completed(kept, [_d("2026-10-15T15:00:00Z", "2026-10-15T16:00:00Z", 0.0)], at(15, 59), 180)
+    assert track_completed(kept, [], at(16, 1), 180) == [] and kept["completed"] == []

@@ -12,7 +12,8 @@ and its sensors. In short: enter your Octopus API key on the
 
 1. **Overview** shows its status across the top, then the next discharge
    (with its local date, start and end as the date and time sensors give
-   them) and next charge, each with its own planned dispatches, and the
+   them) and next charge, each with its own planned dispatches, the idle
+   ones (0 kWh), and the
    completed sessions of the last 30 days.
 2. **Settings** has the device and read interval (both drop-downs, applied
    at once).

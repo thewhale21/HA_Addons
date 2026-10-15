@@ -111,9 +111,9 @@ def track_completed(kept: dict, dispatches: list, now: datetime.datetime, grace_
         if not isinstance(d, dict):
             continue
         start, end = parse_time(d.get("start")), parse_time(d.get("end"))
-        if start is None or end is None or start > now:
-            continue
         kwh = _kwh(d)
+        if start is None or end is None or start > now or kwh == 0:
+            continue  # (idle ones, with no energy, aren't sessions)
         tracking[d["start"]] = {"start": d["start"], "end": d["end"], "energyAddedKwh": kwh,
                                 "type": d.get("type"), "kind": "charge" if kwh < 0 else "discharge" if kwh > 0 else None,
                                 "last_seen": stamp}
