@@ -37,7 +37,7 @@ same entity IDs, so anything using them (e.g. Predbat's
 Restart the add-on after changing it.
 
 The **device** and **how often to read** are picked on the add-on's
-**Overview**, in the Device card: a drop-down of the devices on your
+**Settings** tab, in the Device card: a drop-down of the devices on your
 account (name · type · provider) and a read interval from 30 seconds to an
 hour. Both apply at once, with no restart. With one device on the account
 it's used until you pick one.
@@ -52,9 +52,9 @@ it's used until you pick one.
 2. Enter your API key on the add-on's **Configuration** tab, then start
    the add-on.
 3. Open it and pick your device (for Charge Pack, the battery) in the
-   **Overview**'s Device card.
-4. The **Overview** shows the next discharge and charge and the planned
-   dispatches; **Diagnostics › Health** lists its sensors.
+   **Settings** tab's Device card.
+4. The **Overview** shows the status, then the next discharge and charge,
+   each with its planned dispatches; **Diagnostics › Health** lists its sensors.
 
 ## Its Home Assistant entities
 
@@ -78,7 +78,7 @@ as a charge, as the template sensors did.
 - **Status says "API key refused":** check the key on the Configuration
   tab (Octopus account › Personal details › API access) and restart.
 - **Status says to pick your device:** your account has more than one
-  device; pick the right one in the **Overview**'s Device card.
+  device; pick the right one in the **Settings** tab's Device card.
 - **The dot by the title is amber or red:** **Diagnostics › Health** says
   why.
 - **Asking for help:** **Diagnostics › Debug** has the log and a

@@ -5,4 +5,4 @@ configuration:
     description: >-
       Your Octopus Energy API key (sk_live_...), from your Octopus account:
       Personal details › API access. The device and how often to read it are
-      picked on the add-on's web page (Overview).
+      picked on the add-on's web page (Settings tab).

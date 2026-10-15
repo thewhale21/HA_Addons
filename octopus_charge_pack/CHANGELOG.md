@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 — Overview layout
+
+- **Change:** the Overview has the status full width across the top, then
+  the next discharge and next charge side by side, each listing its own
+  planned dispatches. The separate Planned dispatches card is gone.
+- **Change:** the Device card (device and read interval) moves to the
+  Settings tab.
+
 ## 0.3.1 — Charge and discharge chips
 
 - **Improvement:** the Overview marks dispatches with a coloured chip,

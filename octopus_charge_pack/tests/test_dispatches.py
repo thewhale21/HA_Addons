@@ -153,7 +153,7 @@ def test_the_device_picked_on_the_page_is_followed():
         _run(read_once(state, c, {}, None))  # two devices and none picked: the page asks
         raise AssertionError("should have asked for a device")
     except ValueError as err:
-        assert "Pick your device on the Overview" in str(err) and len(state.devices) == 2
+        assert "Pick your device on the Settings tab" in str(err) and len(state.devices) == 2
     _run(read_once(state, c, {}, "dev-1"))
     assert state.device_id == "dev-1" and ("dispatches", "dev-1") in c.calls
     found = sum(1 for name, _ in c.calls if name == "devices")

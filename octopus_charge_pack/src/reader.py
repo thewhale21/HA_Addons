@@ -56,7 +56,7 @@ async def read_once(state: SharedState, client: OctopusClient, kept: dict, wante
         state.devices = await client.find_devices()
     device = wanted or pick_device(state.devices)
     if not device:
-        raise ValueError("Pick your device on the Overview (your account has "
+        raise ValueError("Pick your device on the Settings tab (your account has "
                          f"{len(state.devices) or 'no'} device{'' if len(state.devices) == 1 else 's'})")
     if device != state.device_id:
         logger.info("Following device %s", device)

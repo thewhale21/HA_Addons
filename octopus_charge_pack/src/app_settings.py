@@ -1,5 +1,5 @@
 """Settings made on the web page rather than in the add-on's options: the
-device to follow and how often to read it (Overview), and the log level
+device to follow and how often to read it (Settings), and the log level
 (Diagnostics › Debug). Saved
 in /data/settings.json. Add your own: a default in DEFAULTS, a check in
 _valid, a property."""

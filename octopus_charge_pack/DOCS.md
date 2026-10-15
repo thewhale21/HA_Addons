@@ -10,11 +10,11 @@ See the README (the add-on's **Info** tab) for setting it up, its options
 and its sensors. In short: enter your Octopus API key on the
 **Configuration** tab and start it.
 
-1. **Overview** shows its status, the device and read interval (both
-   drop-downs, applied at once), the next discharge (with its local date,
-   start and end as the date and time sensors give them) and next charge,
-   and the planned dispatches.
-2. **Settings** shows the log level and the Octopus connection.
+1. **Overview** shows its status across the top, then the next discharge
+   (with its local date, start and end as the date and time sensors give
+   them) and next charge, each with its own planned dispatches.
+2. **Settings** has the device and read interval (both drop-downs, applied
+   at once) and the Octopus connection.
 3. **Diagnostics** has its health, the sensors it posts, the log
    and a diagnostics bundle (the API key is always hidden).
 
@@ -24,7 +24,7 @@ and its sensors. In short: enter your Octopus API key on the
   (renewed every 45 minutes, and at once if Octopus says it's expired), then
   `flexPlannedDispatches(deviceId)`. The account's devices
   (`viewer.accounts`, then `devices(accountNumber)`) are read at start and
-  every 6 hours, for the Overview's drop-down.
+  every 6 hours, for the Settings tab's drop-down.
 - `src/app_settings.py`: the settings made on the page (device, read
   interval, log level), kept in `/data/settings.json`. A change wakes the
   reader at once. Pre-0.3.0 `device_id` / `poll_seconds` options are copied
