@@ -13,7 +13,7 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
-NO_DATE = "1999-01-01"  # the discharge date when there's no discharge dispatch (as the template did)
+NO_DATE = "1999-01-01"  # the date when there's no dispatch of that kind (as the discharge template did)
 
 
 def parse_time(value) -> Optional[datetime.datetime]:
@@ -47,42 +47,43 @@ def next_dispatch(dispatches: list, kind: str, now: datetime.datetime) -> Option
     return None
 
 
-def discharge_times(dispatch: Optional[dict], tz: Optional[datetime.tzinfo],
-                    previous: dict) -> dict:
-    """The next discharge's local date, start time and end time, as the template sensors gave them:
+def dispatch_times(dispatch: Optional[dict], tz: Optional[datetime.tzinfo],
+                   previous: dict) -> dict:
+    """A dispatch's local start and end, as dates and times:
 
-    - date: YYYY-MM-DD, or 1999-01-01 when there's none;
-    - start time: HH:MM:SS, or the last one when there's none;
-    - end time: HH:MM:SS, 23:59:59 if it ends on a later day, or the start time when there's none.
+    - start_date / end_date: YYYY-MM-DD, or 1999-01-01 when there's none. A dispatch that runs
+      past midnight ends on the next day's date, at its real end time;
+    - start_time: HH:MM:SS, or the last one when there's none;
+    - end_time: HH:MM:SS, or the start time when there's none;
+    - date: the start date (the old single date sensor, kept for existing configs).
 
     `previous` is the last result (kept between restarts), `tz` the local timezone (None: the system's)."""
     start = parse_time((dispatch or {}).get("start"))
     end = parse_time((dispatch or {}).get("end"))
-    out = {"date": NO_DATE, "start_time": previous.get("start_time"), "end_time": None}
+    out = {"start_date": NO_DATE, "end_date": NO_DATE, "start_time": previous.get("start_time"), "end_time": None}
     if start is not None:
         start_local = start.astimezone(tz)
-        out["date"] = start_local.strftime("%Y-%m-%d")
+        out["start_date"] = out["end_date"] = start_local.strftime("%Y-%m-%d")
         out["start_time"] = start_local.strftime("%H:%M:%S")
         if end is not None:
             end_local = end.astimezone(tz)
-            out["end_time"] = "23:59:59" if end_local.date() > start_local.date() else end_local.strftime("%H:%M:%S")
+            out["end_date"] = end_local.strftime("%Y-%m-%d")
+            out["end_time"] = end_local.strftime("%H:%M:%S")
     if out["end_time"] is None:
         out["end_time"] = out["start_time"]
+    out["date"] = out["start_date"]
     return out
 
 
 def summarise(dispatches: list, now: datetime.datetime, tz: Optional[datetime.tzinfo], previous: dict) -> dict:
-    """Everything the sensors show, from the planned dispatches."""
-    charge = next_dispatch(dispatches, "charge", now)
-    discharge = next_dispatch(dispatches, "discharge", now)
-    return {
-        "count": len(dispatches or []),
-        "dispatches": list(dispatches or []),
-        "charge_start": (charge or {}).get("start"),
-        "charge_end": (charge or {}).get("end"),
-        "discharge_start": (discharge or {}).get("start"),
-        "discharge_end": (discharge or {}).get("end"),
-        "discharge_kwh": _kwh(discharge) if discharge else None,
-        **{f"discharge_{k}": v for k, v in discharge_times(discharge, tz, {
-            "start_time": previous.get("discharge_start_time")}).items()},
-    }
+    """Everything the sensors show, from the planned dispatches. `previous` holds the last
+    charge_start_time and discharge_start_time (kept when none is planned)."""
+    out = {"count": len(dispatches or []), "dispatches": list(dispatches or [])}
+    for kind in ("charge", "discharge"):
+        d = next_dispatch(dispatches, kind, now)
+        out[f"{kind}_start"] = (d or {}).get("start")
+        out[f"{kind}_end"] = (d or {}).get("end")
+        out[f"{kind}_kwh"] = _kwh(d) if d else None
+        times = dispatch_times(d, tz, {"start_time": previous.get(f"{kind}_start_time")})
+        out.update({f"{kind}_{k}": v for k, v in times.items()})
+    return out

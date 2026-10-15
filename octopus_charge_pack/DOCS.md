@@ -26,10 +26,11 @@ and its sensors. In short: enter your Octopus API key on the
   account's devices (`viewer.accounts`, then `devices(accountNumber)`).
 - `src/reader.py`: every `poll_seconds`, reads the dispatches and works out
   the sensors' values. The last discharge start time is kept in
-  `/data/state.json`, as the template sensor kept its state.
+  `/data/state.json`, as the template sensor kept its state (and the
+  last charge start time, the same way).
 - `src/dispatches.py`: the logic of the old template sensors, with no I/O:
   the next charge (energyAddedKwh < 0) and discharge (> 0) that hasn't
-  ended, and the discharge's local date and times.
+  ended, and each one's local date and times.
 - `src/ha_entities.py`: the sensors, posted through the Supervisor. If a
   read fails they keep their last values (so a short Octopus outage doesn't
   change Predbat's plan), and the status sensor says what went wrong.

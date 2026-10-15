@@ -31,8 +31,22 @@ SENSORS = {
         "friendly_name": "Next Discharge Dispatch Start", **TIMESTAMP}),
     "discharge_end": ("sensor.next_discharge_dispatch_end", {
         "friendly_name": "Next Discharge Dispatch End", **TIMESTAMP}),
+    "charge_date": ("sensor.next_charge_dispatch_date", {
+        "friendly_name": "Next Charge Dispatch Date", "icon": "mdi:calendar"}),
+    "charge_start_date": ("sensor.next_charge_dispatch_start_date", {
+        "friendly_name": "Next Charge Dispatch Start Date", "icon": "mdi:calendar-start"}),
+    "charge_end_date": ("sensor.next_charge_dispatch_end_date", {
+        "friendly_name": "Next Charge Dispatch End Date", "icon": "mdi:calendar-end"}),
+    "charge_start_time": ("sensor.next_charge_dispatch_start_time", {
+        "friendly_name": "Next Charge Dispatch Start Time", "icon": "mdi:clock-start"}),
+    "charge_end_time": ("sensor.next_charge_dispatch_end_time", {
+        "friendly_name": "Next Charge Dispatch End Time", "icon": "mdi:clock-end"}),
     "discharge_date": ("sensor.next_discharge_dispatch_date", {
         "friendly_name": "Next Discharge Dispatch Date", "icon": "mdi:calendar"}),
+    "discharge_start_date": ("sensor.next_discharge_dispatch_start_date", {
+        "friendly_name": "Next Discharge Dispatch Start Date", "icon": "mdi:calendar-start"}),
+    "discharge_end_date": ("sensor.next_discharge_dispatch_end_date", {
+        "friendly_name": "Next Discharge Dispatch End Date", "icon": "mdi:calendar-end"}),
     "discharge_start_time": ("sensor.next_discharge_dispatch_start_time", {
         "friendly_name": "Next Discharge Dispatch Start Time", "icon": "mdi:clock-start"}),
     "discharge_end_time": ("sensor.next_discharge_dispatch_end_time", {
@@ -52,8 +66,7 @@ def values(state) -> dict:
     if not s:
         return {**out, **{key: None for key in SENSORS if key != "status"}}
     out["planned"] = (s.get("count"), {"flexPlannedDispatches": s.get("dispatches") or []})
-    for key in ("charge_start", "charge_end", "discharge_start", "discharge_end", "discharge_date",
-                "discharge_start_time", "discharge_end_time"):
+    for key in [k for k in SENSORS if k not in ("status", "planned")]:
         out[key] = s.get(key)
     return out
 

@@ -20,7 +20,7 @@ NO_KEY_WAIT_S = 300  # with no API key, how often to look again (it needs a rest
 
 
 def _load(path: Optional[str]) -> dict:
-    """What's kept between restarts: the last discharge start time (the template kept its state)."""
+    """What's kept between restarts: the last charge and discharge start times (the templates kept their state)."""
     try:
         with open(path, encoding="utf-8") as f:
             return json.load(f) or {}
@@ -58,7 +58,8 @@ async def read_once(state: SharedState, client: OctopusClient, kept: dict) -> No
     dispatches = await client.planned_dispatches(state.device_id)
     now = datetime.datetime.now(datetime.timezone.utc)
     state.summary = summarise(dispatches, now, None, kept)
-    kept["discharge_start_time"] = state.summary.get("discharge_start_time")
+    for kind in ("charge", "discharge"):
+        kept[f"{kind}_start_time"] = state.summary.get(f"{kind}_start_time")
     state.last_update = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 

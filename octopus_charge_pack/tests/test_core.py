@@ -67,12 +67,14 @@ def test_own_sensors_are_posted_when_they_change():
     assert {e for e, _, _ in first} == {e for e, _ in SENSORS.values()}
     assert all(v == "unknown" for e, v, _ in first if e != SENSORS["status"][0])  # not read yet
     assert pub.due(state, 10) == []  # nothing changed
-    state.summary = {"count": 1, "dispatches": [{"start": "a"}], "discharge_date": "2026-10-16"}
+    state.summary = {"count": 1, "dispatches": [{"start": "a"}], "discharge_date": "2026-10-16",
+                     "discharge_start_date": "2026-10-16", "discharge_end_date": "2026-10-17"}
     changed = {e: (v, a) for e, v, a in pub.due(state, 20)}
     assert changed["sensor.octopus_planned_dispatches"] == ("1", {
         "friendly_name": "Octopus Planned Dispatches", "icon": "mdi:calendar-clock",
         "flexPlannedDispatches": [{"start": "a"}]})
     assert changed["sensor.next_discharge_dispatch_date"][0] == "2026-10-16"
+    assert changed["sensor.next_discharge_dispatch_end_date"][0] == "2026-10-17"
     assert len(pub.due(state, 10_000)) == len(SENSORS)  # posted again now and then
     assert all(v == "unavailable" for _, v, _ in SensorPublisher.unavailable())
     assert entity_info({}, "") is None

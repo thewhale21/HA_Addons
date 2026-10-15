@@ -5,8 +5,7 @@
 
 Reads your Octopus Intelligent **planned flex dispatches** (Charge Pack
 sessions) for a device, and makes them Home Assistant sensors: the planned
-dispatches, the next charge and discharge, and the next discharge's date and
-times. It replaces the REST and template sensors that did this, with the
+dispatches, and the next charge and discharge with their date and times. It replaces the REST and template sensors that did this, with the
 same entity IDs, so anything using them (e.g. Predbat's
 `rates_export_override`) carries on unchanged. You only enter your API key.
 
@@ -59,9 +58,11 @@ Restart the add-on after changing them.
 | `sensor.octopus_planned_dispatches` | How many dispatches are planned; attribute `flexPlannedDispatches` (start, end, type, energyAddedKwh) |
 | `sensor.next_charge_dispatch_start` / `_end` | The next charge dispatch (timestamps) |
 | `sensor.next_discharge_dispatch_start` / `_end` | The next discharge dispatch (timestamps) |
-| `sensor.next_discharge_dispatch_date` | Its local date, `YYYY-MM-DD`, or `1999-01-01` when none is planned |
-| `sensor.next_discharge_dispatch_start_time` | Its local start, `HH:MM:SS`; keeps the last one when none is planned |
-| `sensor.next_discharge_dispatch_end_time` | Its local end, `HH:MM:SS`; `23:59:59` if it ends the next day; the start time when none is planned |
+| `sensor.next_*_dispatch_start_date` / `_end_date` | Its local start and end dates, `YYYY-MM-DD`, or `1999-01-01` when none is planned. One that runs past midnight ends on the next day's date |
+| `sensor.next_*_dispatch_start_time` / `_end_time` | Its local start and end times, `HH:MM:SS` (the real end time, also past midnight). When none is planned the start time keeps the last one and the end time is the start time |
+| `sensor.next_*_dispatch_date` | The start date again, under the old single date sensor's ID, for existing configs |
+
+`*` is `charge` or `discharge`: each has the same set.
 
 A dispatch with `energyAddedKwh` above 0 counts as a discharge and below 0
 as a charge, as the template sensors did.

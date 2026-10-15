@@ -4,7 +4,7 @@
 import asyncio
 import datetime
 
-from src.dispatches import NO_DATE, discharge_times, next_dispatch, parse_time, summarise
+from src.dispatches import NO_DATE, dispatch_times, next_dispatch, parse_time, summarise
 from src.octopus import AuthError, OctopusClient
 
 UTC = datetime.timezone.utc
@@ -41,16 +41,19 @@ def test_next_charge_and_discharge_like_the_templates():
     assert next_dispatch([], "charge", NOW) is None and next_dispatch(None, "charge", NOW) is None
 
 
-def test_discharge_date_and_times_in_local_time():
+def test_dispatch_dates_and_times_in_local_time():
     d = {"start": "2026-10-15T14:00:00Z", "end": "2026-10-15T14:30:00Z"}
-    assert discharge_times(d, BST, {}) == {"date": "2026-10-15", "start_time": "15:00:00", "end_time": "15:30:00"}
-    # Ends the next day: 23:59:59
-    late = {"start": "2026-10-15T22:30:00Z", "end": "2026-10-15T23:30:00Z"}
-    assert discharge_times(late, BST, {})["end_time"] == "23:59:59"  # 00:30 local, the next day
+    assert dispatch_times(d, BST, {}) == {"start_date": "2026-10-15", "end_date": "2026-10-15", "date": "2026-10-15",
+                                          "start_time": "15:00:00", "end_time": "15:30:00"}
+    # Runs past midnight: the end date is the next day, at the real end time
+    late = dispatch_times({"start": "2026-10-15T22:30:00Z", "end": "2026-10-15T23:30:00Z"}, BST, {})
+    assert (late["start_date"], late["start_time"]) == ("2026-10-15", "23:30:00")
+    assert (late["end_date"], late["end_time"]) == ("2026-10-16", "00:30:00")
     # None planned: 1999-01-01, the last start time kept, the end time = the start time
-    none = discharge_times(None, BST, {"start_time": "15:00:00"})
-    assert none == {"date": NO_DATE, "start_time": "15:00:00", "end_time": "15:00:00"}
-    assert discharge_times(None, BST, {}) == {"date": NO_DATE, "start_time": None, "end_time": None}
+    none = dispatch_times(None, BST, {"start_time": "15:00:00"})
+    assert none == {"start_date": NO_DATE, "end_date": NO_DATE, "date": NO_DATE,
+                    "start_time": "15:00:00", "end_time": "15:00:00"}
+    assert dispatch_times(None, BST, {})["start_time"] is None
 
 
 def test_summary_for_the_sensors():
@@ -59,9 +62,13 @@ def test_summary_for_the_sensors():
     assert (s["charge_start"], s["charge_end"]) == ("2026-10-15T13:00:00+00:00", "2026-10-15T13:30:00+00:00")
     assert (s["discharge_start"], s["discharge_kwh"]) == ("2026-10-15T14:00:00Z", 1.5)
     assert (s["discharge_date"], s["discharge_start_time"], s["discharge_end_time"]) == ("2026-10-15", "15:00:00", "15:30:00")
-    empty = summarise([], NOW, BST, {"discharge_start_time": "09:00:00"})
+    # The charge gets the same date and times
+    assert (s["charge_start_date"], s["charge_end_date"], s["charge_start_time"], s["charge_end_time"],
+            s["charge_kwh"]) == ("2026-10-15", "2026-10-15", "14:00:00", "14:30:00", -3.5)
+    empty = summarise([], NOW, BST, {"discharge_start_time": "09:00:00", "charge_start_time": "01:00:00"})
     assert empty["count"] == 0 and empty["charge_start"] is None
     assert (empty["discharge_date"], empty["discharge_start_time"], empty["discharge_end_time"]) == (NO_DATE, "09:00:00", "09:00:00")
+    assert (empty["charge_date"], empty["charge_start_time"], empty["charge_end_time"]) == (NO_DATE, "01:00:00", "01:00:00")
 
 
 class FakeOctopus(OctopusClient):
@@ -123,4 +130,5 @@ def test_the_device_is_found_from_the_account():
     state, kept = SharedState(), {}
     _run(read_once(state, c, kept))
     assert state.device_id == "dev-1" and state.summary["count"] == 3 and state.last_update
-    assert kept == {"discharge_start_time": state.summary["discharge_start_time"]}
+    assert kept == {"charge_start_time": state.summary["charge_start_time"],
+                    "discharge_start_time": state.summary["discharge_start_time"]}

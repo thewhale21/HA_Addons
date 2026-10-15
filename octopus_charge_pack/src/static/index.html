@@ -459,9 +459,9 @@ function renderState(s) {
   $('o-status').textContent = s.status || '—';
   $('o-status-sub').textContent = s.error ? s.error : (s.last_update ? `Read ${ago(s.last_update)} · every ${s.poll_seconds} s` : '');
   $('o-dis').textContent = m.discharge_start ? span(m.discharge_start, m.discharge_end) : 'None planned';
-  $('o-dis-sub').textContent = m.discharge_start ? `${m.discharge_date} ${m.discharge_start_time}–${m.discharge_end_time}${m.discharge_kwh != null ? ' · ' + num(m.discharge_kwh, 2) + ' kWh' : ''}` : '';
+  $('o-dis-sub').textContent = m.discharge_start ? `${m.discharge_start_date} ${m.discharge_start_time} – ${m.discharge_end_date === m.discharge_start_date ? '' : m.discharge_end_date + ' '}${m.discharge_end_time}${m.discharge_kwh != null ? ' · ' + num(m.discharge_kwh, 2) + ' kWh' : ''}` : '';
   $('o-chg').textContent = m.charge_start ? span(m.charge_start, m.charge_end) : 'None planned';
-  $('o-chg-sub').textContent = '';
+  $('o-chg-sub').textContent = m.charge_start ? `${m.charge_start_date} ${m.charge_start_time} – ${m.charge_end_date === m.charge_start_date ? '' : m.charge_end_date + ' '}${m.charge_end_time}${m.charge_kwh != null ? ' · ' + num(m.charge_kwh, 2) + ' kWh' : ''}` : '';
   const rows = (m.dispatches || []).map((d) => `<tr><td>${esc(dateTime(d.start))}</td><td>${esc(dateTime(d.end))}</td><td>${esc(d.type || '')}</td><td class="num">${d.energyAddedKwh == null ? '—' : num(d.energyAddedKwh, 2) + ' kWh'}</td></tr>`);
   $('o-list').innerHTML = rows.join('') || `<tr><td colspan="4" class="muted">${s.last_update ? 'None planned' : 'Not read yet'}</td></tr>`;
   $('s-octopus').innerHTML = kv([
