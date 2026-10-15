@@ -15,14 +15,23 @@ is on) and the car's SoC is known. Then, in this order:
 | --- | --- | --- |
 | 1 | The house needs power (home battery discharging, or importing from the grid while the home battery isn't charging and no charge signal is on) and the car is above the low limit | starts the charger, so the car can discharge |
 | 2 | There's spare power (exporting, or a charge signal such as Predbat charging) and the car is below the high limit | starts the charger, so the car can charge |
-| 3 | The car is at or above the high limit and charging, or isn't discharging and the house doesn't need power | stops the charger |
+| 3 | The car is at or above the high limit and has been charging for a minute, or isn't discharging and the house doesn't need power | stops the charger |
 | 4 | The car is at or below the low limit and is discharging (and no charge signal is on) | stops the charger |
 | 5 | The car is between the limits | starts the charger |
 
 So between the limits the charger always runs. At the high limit it only
-runs to discharge (if it charges there, it's stopped at once: the import
-that charging causes doesn't count as the house needing power), and at the
-low limit only to charge.
+runs to discharge, and at the low limit only to charge.
+
+If the car charges at or above the high limit for a minute, it's stopped
+whatever the grid is doing: the import that charging causes doesn't count
+as the house needing power. (A minute, so a moment's "Charging" as the
+charger starts isn't stopped.) It then isn't started for the house above
+the high limit for the **house retry wait** (30 minutes), so it doesn't
+start, charge and stop every few minutes.
+
+If the charger doesn't respond to 3 presses of the same button in a row
+(e.g. the car won't start), it's only pressed every 15 minutes until it
+does, and it's noted under **Problems** in the history.
 
 After the charger stops, for whatever reason, it isn't started again for
 the **restart wait** (3 minutes). Some cars stop discharging now and then;
@@ -123,6 +132,8 @@ maximum rate, today's kWh in and out, and the car's capacity and health. **Start
 | House needs power: grid | 0.1 kW | Importing more than this |
 | Spare power: export | 0.5 kW | Exporting more than this… |
 | Margin | 0% | Starts need the SoC this far inside the limits (stops are at the limits). 1 or 2 stops it bouncing at a limit |
+| Charging above the high limit | 60 s | Charging at or above the high limit this long: stopped |
+| House retry wait | 1800 s | After that, how long before it's started for the house above the high limit again |
 | Between button presses | 60 s | At least this long before pressing the same button again |
 | Watch only | off | Decide and log, but don't press anything |
 | Notify service | none | e.g. `notify.mobile_app_your_phone`: told on every start and stop |

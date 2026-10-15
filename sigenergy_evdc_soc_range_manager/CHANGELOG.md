@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.20.5 — No start-stop cycles
+
+- **Improvement:** charging at or above the high limit is stopped after a
+  minute of charging, not at once, so a moment's "Charging" as the charger
+  starts (before it discharges) isn't stopped.
+- **Fix:** after a stop for charging above the high limit, it isn't started
+  for the house above the high limit again for 30 minutes (the **House
+  retry wait**), so it doesn't start, charge and stop every few minutes.
+- **Fix:** if the charger doesn't respond to 3 presses of the same button
+  in a row (e.g. the car won't start), it's only pressed every 15 minutes
+  until it does, instead of every minute, and it's shown under Problems.
+- **Change:** the two new timings are on the Settings tab.
+
 ## 0.20.4 — Stops charging above the high limit
 
 - **Fix:** a car charging at or above the high limit wasn't stopped while

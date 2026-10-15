@@ -84,7 +84,7 @@ every few seconds and whenever a reading changes:
 | The car is… | It… |
 | --- | --- |
 | Between the limits | runs the charger: Sigenergy charges or discharges the car as the house needs |
-| At the high limit | stops it if it's charging; otherwise stops it unless the house needs power (then the car may discharge) |
+| At the high limit | stops it if it's been charging for a minute; otherwise stops it unless the house needs power (then the car may discharge) |
 | At the low limit | stops it, unless there's spare power to charge from, or the charge signal is on |
 
 After any stop it waits 3 minutes before starting again (the **restart

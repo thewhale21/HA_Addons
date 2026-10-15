@@ -25,6 +25,8 @@ NUMBERS = {
     "export_kw": (0, 50),
     "margin_pct": (0, 20),
     "press_gap_s": (10, 600),
+    "charge_stop_s": (0, 900),
+    "house_retry_s": (0, 14400),
     "rate_kw": (0, 100),
     "rate_full_kw": (0, 100),
     "rate_full_soc_pct": (0, 100),

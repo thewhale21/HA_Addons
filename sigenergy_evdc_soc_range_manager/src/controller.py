@@ -8,8 +8,11 @@ high limits:
 - Between the limits it's always allowed to run.
 - At or above the high limit it only runs while the house needs power (so
   the car discharges), and is stopped once it isn't discharging. If it's
-  charging there, it's stopped straight away: the grid import that charging
-  causes isn't the house needing power.
+  charging there (for a minute: not a moment's "Charging" as it starts), it's
+  stopped whatever the grid's doing: the import that charging causes isn't the
+  house needing power. It isn't then started for the house above the high limit
+  for a while (the house retry wait), so it doesn't start, charge and stop
+  every few minutes.
 - At or below the low limit it only runs when there's spare power to charge
   from (exporting, or a "charge now" signal such as Predbat charging), and
   is stopped if it starts discharging.
@@ -58,6 +61,8 @@ TUNING_DEFAULTS = {
     "export_kw": 0.5,  # exporting more than this = spare power to charge the car from
     "margin_pct": 0.0,  # starts need the SoC this far inside the limits (stops are at the limits)
     "press_gap_s": 60,  # at least this long before pressing the same button again
+    "charge_stop_s": 60,  # charging at or above the high limit this long: stopped
+    "house_retry_s": 1800,  # ...and then not started for the house above the high limit for this long
 }
 
 
@@ -80,6 +85,8 @@ class Inputs:
     charge_signal: Optional[bool]  # e.g. Predbat charging (None: not set up)
     ems_blocked: bool = False  # the EMS mode is one that rules out charging from export
     alarm: bool = False  # the charger reports an alarm (an error): it's left alone
+    charging_for: Optional[float] = None  # seconds it's been charging (None: not charging)
+    charge_stopped_ago: Optional[float] = None  # seconds since it was stopped for charging above the high limit
 
 
 @dataclass
@@ -95,6 +102,7 @@ RULES = {
     "charge_opportunity": "Start: spare power to charge from",
     "in_range": "Start: SoC within the limits",
     "high_limit": "Stop: reached the high limit",
+    "charging_above_high": "Stop: charging at or above the high limit",
     "low_limit": "Stop: reached the low limit",
 }
 
@@ -133,6 +141,9 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
         (i.battery_kw is not None and i.battery_kw < -t["house_battery_kw"])
         or (i.grid_kw is not None and i.grid_kw > t["house_grid_kw"] and not battery_charging))
     charging = i.active and not i.discharging and (i.running_state or "").strip().lower() == "charging"
+    # Stopped for charging above the high limit not long ago: the house's need doesn't start it there
+    retry_wait = (i.charge_stopped_ago is not None and i.charge_stopped_ago < float(t["house_retry_s"])
+                  and soc >= high - margin)
     house_quiet = (i.battery_kw is not None and i.battery_kw > -t["house_battery_kw"]
                    and i.grid_kw is not None and i.grid_kw < t["house_grid_kw"])
     # Exporting now is enough, as in the automation's condition
@@ -141,7 +152,7 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
     why_spare = "a charge signal is on" if i.charge_signal is True else "you're exporting"
 
     # 1. The house needs power and the car has some to spare: start, so it can discharge
-    if house_needs and rested and soc > low + margin:
+    if house_needs and rested and soc > low + margin and not retry_wait:
         return Decision("start", "house_needs_power", "Starting",
                         f"The house is using the home battery or the grid and the car is at {_pct(soc)}, "
                         f"above the low limit ({_pct(low)}).")
@@ -153,8 +164,8 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
     # 3. At the high limit and charging: stop, whatever the house is doing (the
     #    car's own charging shows as grid import). Not discharging and the house
     #    quiet (e.g. still preparing): stop too
-    if soc >= high and charging:
-        return Decision("stop", "high_limit", "Stopping",
+    if soc >= high and charging and (i.charging_for is None or i.charging_for >= float(t["charge_stop_s"])):
+        return Decision("stop", "charging_above_high", "Stopping",
                         f"The car is at {_pct(soc)}, at or above the high limit ({_pct(high)}), "
                         "and charging.")
     if soc >= high and i.active and not i.discharging and house_quiet:
@@ -185,6 +196,11 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
                             f"The charger stopped {round(i.inactive_for)} s ago; it starts again in {left} s: "
                             f"{after.reason[0].lower()}{after.reason[1:]}")
     if soc >= high - margin:
+        if retry_wait and house_needs:
+            left = round((float(t["house_retry_s"]) - i.charge_stopped_ago) / 60)
+            return Decision(None, "held_high", "Held at the high limit",
+                            f"The car is at {_pct(soc)}. It charged instead of discharging when last started for "
+                            f"the house, so it's started for the house again in {left} min.")
         return Decision(None, "held_high", "Held at the high limit",
                         f"The car is at {_pct(soc)}: it starts again when the house needs power.")
     if soc <= low + margin:

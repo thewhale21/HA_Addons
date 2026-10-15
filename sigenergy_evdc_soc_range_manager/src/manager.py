@@ -25,6 +25,7 @@ from src.stats import Sample
 logger = logging.getLogger(__name__)
 
 LOG_SIZE = 500  # the history on the Schedule tab
+UNANSWERED_LIMIT = 3  # presses of the same button in a row without a response: then only every unanswered_wait_s
 UNKNOWN = ("unknown", "unavailable", "none", "")
 
 # Lists the Settings tab can change (Advanced); matched without regard to case
@@ -120,6 +121,9 @@ class Manager:
         self.active_since: Optional[float] = None
         self.plugged: Optional[bool] = None
         self.export_since: Optional[float] = None
+        self.charging_since: Optional[float] = None  # the charger has been charging since then
+        self.charge_stopped_at: Optional[float] = None  # stopped for charging above the high limit then
+        self.unanswered = 0  # presses of the same button in a row that the charger didn't respond to
         self.last_press_at: Optional[float] = None
         self.last_press: Optional[dict] = None  # its log entry: what was pressed, and whether it worked
         self.presses_today = 0
@@ -182,6 +186,7 @@ class Manager:
             changed = (running_st or {}).get("last_changed")
             self.active_since = changed if isinstance(changed, (int, float)) else now
         elif active != self.active:
+            self.unanswered = 0  # it responded (or something else changed it)
             # When it changed, by Home Assistant's clock (we may only look a few seconds later)
             changed = (running_st or {}).get("last_changed")
             self.active_since = changed if isinstance(changed, (int, float)) and now - 120 <= changed <= now else now
@@ -196,6 +201,10 @@ class Manager:
         self.active = active
         if active:
             self.was_discharging = discharging
+        if active and not discharging and (running or "").strip().lower() == "charging":
+            self.charging_since = self.charging_since or now
+        else:
+            self.charging_since = None
 
         if plugged and self.plugged is False:
             self.soc_before_plug_in = self.soc is not None  # until a new reading arrives
@@ -244,6 +253,8 @@ class Manager:
             battery_kw=power_kw(get("battery_power")), grid_kw=power_kw(get("grid_power")),
             export_kw=export, export_held_s=0.0 if self.export_since is None else now - self.export_since,
             ems_mode=ems, charge_signal=signal, ems_blocked=_in(ems, lists["blocked_ems_modes"]),
+            charging_for=None if self.charging_since is None else now - self.charging_since,
+            charge_stopped_ago=None if self.charge_stopped_at is None else now - self.charge_stopped_at,
         )
         self.readings = {
             "base_high": base_high, "base_low": base_low,
@@ -272,6 +283,8 @@ class Manager:
         if decision.action:
             gap = float(settings.get("press_gap_s", 60))
             last = self.last_press or {}
+            if self.unanswered >= UNANSWERED_LIMIT and last.get("action") == decision.action:
+                gap = max(gap, float(settings.get("unanswered_wait_s", 900)))
             # The gap only stops the same button being pressed again too soon. The other one goes
             # straight away, as the automation would (e.g. a stop at the low limit just after a start);
             # a start straight after a stop can't happen anyway (the restart wait).
@@ -316,6 +329,14 @@ class Manager:
                 await self.press(button)
                 entry["pressed"] = True
                 self.presses_today += 1
+                same = (self.last_press or {}).get("action") == action and (self.last_press or {}).get("pressed")
+                self.unanswered = self.unanswered + 1 if same else 1
+                if self.unanswered >= UNANSWERED_LIMIT:
+                    wait = round(float(settings.get("unanswered_wait_s", 900)) / 60)
+                    entry["error"] = (f"The charger hasn't responded to {self.unanswered} {action} presses in a row: "
+                                      f"trying again every {wait} min until it does")
+                if rule == "charging_above_high":
+                    self.charge_stopped_at = now
                 logger.info("%s the charger: %s", "Started" if action == "start" else "Stopped", reason)
             except Exception as err:
                 entry["error"] = str(err) or type(err).__name__
@@ -342,7 +363,9 @@ class Manager:
                 return False
             if now - at > 180:
                 return False
-            if entry.get("action") == action and (entry.get("pressed") or entry.get("observe_only")) and not entry.get("error"):
+            # (a press that went through counts even if it's noted as unanswered)
+            if entry.get("action") == action and (entry.get("pressed")
+                                                  or (entry.get("observe_only") and not entry.get("error"))):
                 return True
         return False
 

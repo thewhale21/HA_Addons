@@ -92,7 +92,7 @@ def test_stops_at_the_high_limit_once_the_house_is_quiet_and_it_isnt_discharging
     assert d(soc=80, battery_kw=-1.0, **preparing).action is None  # the house needs power: leave it
     assert d(soc=80, battery_kw=None, **preparing).action is None  # can't tell: leave it
     charging = {"active": True, "inactive_for": None, "running_state": "Charging"}
-    assert d(soc=80, **charging).rule == "high_limit" and d(soc=80, **charging).action == "stop"
+    assert d(soc=80, **charging).rule == "charging_above_high" and d(soc=80, **charging).action == "stop"
     discharging = {**charging, "running_state": "Discharging", "discharging": True}
     assert d(soc=85, **discharging).action is None  # discharging above high is what's wanted
     assert d(soc=80).action is None  # already off: no button press
@@ -104,7 +104,7 @@ def test_charging_above_the_high_limit_is_stopped_even_while_importing():
     charging = {"active": True, "inactive_for": None, "running_state": "Charging"}
     night = {"grid_kw": 12.3, "battery_kw": 4.2, "high": 50, "low": 40}
     stop = d(soc=95, **night, **charging)
-    assert stop.action == "stop" and stop.rule == "high_limit" and "charging" in stop.reason
+    assert stop.action == "stop" and stop.rule == "charging_above_high" and "charging" in stop.reason
     assert d(soc=95, grid_kw=2.0, battery_kw=-1.0, high=50, low=40, **charging).action == "stop"
     assert d(soc=95, charge_signal=True, high=50, low=40, **charging).action == "stop"
     assert d(soc=49, **night, **charging).action is None  # below the high limit: charging's fine
@@ -113,6 +113,23 @@ def test_charging_above_the_high_limit_is_stopped_even_while_importing():
     assert held.action is None and held.rule == "held_high"
     assert d(soc=95, grid_kw=0.5, charge_signal=True, high=50, low=40).action is None
     assert d(soc=95, grid_kw=0.5, high=50, low=40).rule == "house_needs_power"  # a real need still starts it
+
+
+def test_a_moments_charging_above_the_high_limit_isnt_stopped():
+    # e.g. "Charging" for a few seconds as it starts, before it discharges
+    charging = {"active": True, "inactive_for": None, "running_state": "Charging", "high": 50, "low": 40,
+                "grid_kw": 9.0, "battery_kw": 2.0}  # importing (the car charging): only the new rule stops it
+    assert d(soc=95, charging_for=10, **charging).action is None
+    assert d(soc=95, charging_for=60, **charging).rule == "charging_above_high"
+    assert decide(replace(BASE, soc=95, charging_for=10, **charging), {"charge_stop_s": 0}).action == "stop"
+
+
+def test_after_stopping_for_charging_the_house_waits_before_starting_it_above_high():
+    house = {"grid_kw": 0.5, "high": 50, "low": 40}
+    held = d(soc=95, charge_stopped_ago=300, **house)
+    assert held.action is None and held.rule == "held_high" and "25 min" in held.reason
+    assert d(soc=95, charge_stopped_ago=1800, **house).rule == "house_needs_power"  # the wait's over
+    assert d(soc=45, charge_stopped_ago=300, **house).rule == "house_needs_power"  # below high: as before
 
 
 def test_stops_at_the_low_limit_when_discharging_unless_told_to_charge():
@@ -130,7 +147,7 @@ def test_a_margin_keeps_starts_away_from_the_limits():
     assert decide(replace(BASE, soc=41), t).rule == "held_low"
     assert decide(replace(BASE, soc=60), t).rule == "in_range"
     on = {"active": True, "inactive_for": None, "running_state": "Charging"}
-    assert decide(replace(BASE, soc=80, **on), t).rule == "high_limit"  # stops are still at the limit
+    assert decide(replace(BASE, soc=80, **on), t).action == "stop"  # stops are still at the limit
 
 
 # --- the manager: reading Home Assistant and pressing buttons -----------------------------
@@ -194,6 +211,41 @@ def test_manager_starts_in_range_after_the_restart_wait_and_presses_start(tmp_pa
     assert third.rule == "press_gap" and len(p.pressed) == 1
     assert third.status == "Starting" and "waiting for the charger" in third.reason  # not "Waiting to retry"
     assert p.notes == []  # no notify service set
+
+
+def test_manager_stops_charging_above_high_after_a_minute_then_waits_for_the_house(tmp_path):
+    p = Presses()
+    m = Manager(str(tmp_path), press=p.press)
+    ent, st = _entities(), _settings()
+    over = dict(soc="95", grid="12", battery="4")
+    _run(m.step(_states(running="Charging", **over), ent, st, now=1000.0))
+    early = _run(m.step(_states(running="Charging", **over), ent, st, now=1030.0))
+    assert early.action is None and p.pressed == []
+    stop = _run(m.step(_states(running="Charging", **over), ent, st, now=1061.0))
+    assert stop.rule == "charging_above_high" and p.pressed == ["button.sigen_inverter_dc_charger_stop_charging"]
+    # Stopped; the house imports for real (battery idle), but it charged last time: held for a while
+    held = _run(m.step(_states(running="Occupied", soc="95", grid="0.5", battery="0"), ent, st, now=1061.0 + 600))
+    assert held.rule == "held_high" and len(p.pressed) == 1
+    later = _run(m.step(_states(running="Occupied", soc="95", grid="0.5", battery="0"), ent, st, now=1061.0 + 1800))
+    assert later.rule == "house_needs_power" and len(p.pressed) == 2
+
+
+def test_manager_backs_off_when_the_charger_doesnt_respond(tmp_path):
+    p = Presses()
+    m = Manager(str(tmp_path), press=p.press)
+    ent, st = _entities(), _settings()
+    t = 10000.0
+    for _ in range(3):  # in range, charger off: Start, no response, again after the press gap
+        _run(m.step(_states(lc=0.0), ent, st, now=t))
+        t += 61
+    assert len(p.pressed) == 3 and "hasn't responded to 3" in (m.log[-1]["error"] or "")
+    _run(m.step(_states(lc=0.0), ent, st, now=t + 300))
+    assert len(p.pressed) == 3  # backing off
+    _run(m.step(_states(lc=0.0), ent, st, now=t + 900))
+    assert len(p.pressed) == 4
+    # It responds: back to normal, and noted as this add-on's start
+    _run(m.step(_states(running="Charging"), ent, st, now=t + 905))
+    assert m.unanswered == 0 and m.log[-1]["action"] == "start"
 
 
 def test_manager_follows_the_charger_stopping_on_its_own(tmp_path):

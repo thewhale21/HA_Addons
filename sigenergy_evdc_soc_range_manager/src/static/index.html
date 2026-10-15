@@ -734,6 +734,7 @@ setInterval(() => {
 const RULES = {
   house_needs_power: 'House needs power', charge_opportunity: 'Spare power to charge', in_range: 'Within the limits',
   high_limit: 'Reached the high limit', low_limit: 'Reached the low limit', manual: 'Pressed on this page',
+  charging_above_high: 'Charging above the high limit',
   dropout: 'Stopped discharging by itself', schedule: 'Schedule', alarm: 'Charger',
   elsewhere_start: 'Started by something else', elsewhere_stop: 'Stopped by something else',
 };
@@ -1531,6 +1532,8 @@ const TUNING = [
   ['house_grid_kw', 'House needs power: grid', 'kW', 'Importing more than this from the grid means the same.'],
   ['export_kw', 'Spare power: export', 'kW', 'Exporting more than this means there\'s spare power to charge the car from…'],
   ['margin_pct', 'Margin', '%', 'Starts need the SoC this far inside the limits; stops are at the limits. Stops it bouncing on and off at a limit. 0 = off.'],
+  ['charge_stop_s', 'Charging above the high limit', 's', 'Charging at or above the high limit this long: it\'s stopped, whatever the grid is doing.'],
+  ['house_retry_s', 'House retry wait', 's', 'After that, how long before it\'s started for the house above the high limit again (so it doesn\'t start, charge and stop every few minutes).'],
   ['press_gap_s', 'Between button presses', 's', 'At least this long before pressing the same button again, so the charger has time to respond. The other button isn\'t held up.'],
 ];
 const RATES = [
