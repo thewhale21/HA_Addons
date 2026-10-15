@@ -88,11 +88,13 @@ works the same way. In each case:
   accepts at least that long away (rounded up to the half hour; with EDF,
   the next time between 04:00 and 11:00). It unplugs then, after the
   supplier stops the session or the unplug wait (60 s by default).
-- **No-charging times** (below) are left out: it unplugs at the start of
-  one and plugs back in at its end, and the charge still ends when it would
-  have. If it happens during one, it isn't plugged in then, only at its end
-  if the charge would still be running. For example, 12 hours from 21:30
-  with 23:30–05:30 blocked: 21:30–23:30, then 05:30–09:30.
+- **No-charging times** and saving sessions (below) are left out: it
+  unplugs at the start of one and plugs back in at its end, and carries on
+  that much later, so the charge keeps its hours (ending at a ready time
+  your supplier accepts). If it happens during one, it plugs in at its end.
+  For example, 12 hours from 21:30 with 23:30–05:30 blocked: 21:30–23:30,
+  then 05:30–15:30; 3 hours from 17:55 with an 18:00–19:00 saving session:
+  17:55–18:00, then 19:00–22:00.
 - Octopus Energy, with Force schedule on supplier on: only the daily limit
   (6 hours, in each day from 12:00 unless changed on the Settings tab) is scheduled, the earliest first, so up to 12 hours can be
   chosen but a longer charge stops after 6 plugged-in hours (e.g. 12 hours

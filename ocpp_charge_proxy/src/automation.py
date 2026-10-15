@@ -910,15 +910,20 @@ class Automation:
         end = self.first_ready_at(now + datetime.timedelta(minutes=minutes), ready_times)
         if end is None:
             raise ValueError("No ready time your supplier accepts in the next 2 days")
-        # Plugged in from now to then, but not in a no-charging time (off peak:
-        # the car may well charge then anyway): it unplugs at its start and plugs
-        # back in at its end, and still ends at the same time
+        # Plugged in from now for that long, but not in a no-charging time or a
+        # saving session: it unplugs at its start and plugs back in at its end,
+        # carrying on that much later (to a ready time your supplier accepts)
         cuts = self.block_windows(now.date() - datetime.timedelta(days=1), 4)
-        segments = minus([(now, end)], cuts)
+        segments = self._place(now, end - now, cuts)
+        if segments and segments[-1][1] > end:
+            later = self.first_ready_at(segments[-1][1], ready_times) or segments[-1][1]
+            segments[-1] = (segments[-1][0], later)
+            end = later
         saving = set(self.session_windows())
         blocked_notes = [f"not plugged in {ca.strftime('%H:%M')}–{cb.strftime('%H:%M')} "
-                         f"({'saving session' if (ca, cb) in saving else 'no-charging time'})"
-                         for ca, cb in cuts if ca < end and cb > now]
+                         f"({'saving session' if (ca, cb) in saving else 'no-charging time'}), "
+                         f"so it carries on until {end.strftime('%H:%M')}"
+                         for ca, cb in cuts if ca < end and cb > now and ca > now]
         shortened = None
         reset = self.limit_reset
         fixed, span_len = _fixed(reset), limit_length(reset)

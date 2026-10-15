@@ -110,7 +110,7 @@ def test_block_off_puts_slots_back_and_charges_avoid_sessions():
     b, clock = _automation(start=_at(5, 16, 30))
     b.sync_saving_sessions([_session(5, 17, 18)], block=True)
     plan = b.plan_auto_plug(180)
-    assert [(s["start"][11:16], s["end"][11:16]) for s in plan["segments"]] == [("16:30", "17:00"), ("18:00", "19:30")]
+    assert [(s["start"][11:16], s["end"][11:16]) for s in plan["segments"]] == [("16:30", "17:00"), ("18:00", "20:30")]  # the hour lost carries on after
     assert any("saving session" in n for n in plan["notes"])
 
 
@@ -252,3 +252,11 @@ def test_unplug_at_the_start_of_a_no_charging_time():
     clock.dt = _at(5, 23, 45)
     assert a.block_starts_due() == []  # not again, and not for the saving session at 23:40
 
+
+
+def test_auto_plug_in_just_before_a_session_carries_on_after_it():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True)
+    clock.dt = _at(5, 17, 55)
+    plan = a.plan_auto_plug(180)
+    assert [(s["start"][11:16], s["end"][11:16]) for s in plan["segments"]] == [("17:55", "18:00"), ("19:00", "22:00")]

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.43.8 — Charges keep their hours around no-charging times
+
+- **Change:** auto plug-in, the car plugged in sensor and Charge now carry
+  on after a no-charging time or saving session for the time it took out,
+  instead of ending when they would have (3 hours from 17:55 with an
+  18:00–19:00 session: 17:55–18:00, then 19:00–22:00, not 21:00). One that
+  starts during one plugs in at its end for its full hours. The end is a
+  ready time your supplier accepts, and the daily limit still applies.
+
 ## 2.43.7 — Unplug at the start of a no-charging time
 
 - **Feature:** at the start of each no-charging time it unplugs if the car
