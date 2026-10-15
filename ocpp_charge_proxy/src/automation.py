@@ -50,6 +50,8 @@
   With "plug in before" on, a charge of the chosen hours before it is added
   to the schedule as soon as the session is known, for the time the schedule
   doesn't already cover (sync_saving_sessions, _plan_precharge).
+- No-charging times: at the start of each, it unplugs if plugged in (by hand,
+  Home Assistant...), as nothing should charge then (block_starts_due).
 - Ready time: optionally, when the schedule plugs in, set your supplier's
   smart charging ready-by time to the schedule's next unplug
   (src/ready_time.py). Only at a scheduled plug-in.
@@ -96,7 +98,8 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
                 CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
 SAVING_KEEP = datetime.timedelta(days=1)  # a saving session is remembered this long after it ends
-SAVING_MOVE_VERSION = 2  # how slots are moved (2.43.1: earlier, keeping their end); older moves are redone
+SAVING_MOVE_VERSION = 3  # how slots are moved (2.43.1: earlier, keeping their end; 2.43.7: no unplug at
+# the session's start); older moves are redone
 MIN_PRECHARGE_MIN = 15  # less than this left before a session: no charge before it
 ONE_OFF_KEEP = datetime.timedelta(days=14)  # one-off times (and skips) are kept this long after they ran
 
@@ -408,6 +411,7 @@ class Automation:
         self.last_run: Optional[dict] = None  # last schedule entry run
         self.unplug_at: Optional[float] = None  # a scheduled unplug waiting for the supplier, until
         self._last_check: Optional[datetime.datetime] = None
+        self._block_check: Optional[datetime.datetime] = None  # no-charging time starts looked at up to
         self._first_check = True
         self._load()
         self._load_runtime()
@@ -1196,8 +1200,6 @@ class Automation:
                 continue
             if _parse_iso(r["end"]) > now and self._move_for_session(r, ready_times):
                 moved = changed = True
-            if _parse_iso(r["start"]) > now and self._session_unplug(r):
-                changed = True
         if moved and cap_min and self.ready_time and not self.override_guards:
             # a moved slot that's now across the daily limit's reset time is split there, as for Charge now
             splits = self._reset_splits(self._active_entries(), self.skips, cap_min, one_off=True)
@@ -1388,20 +1390,6 @@ class Automation:
         """Whether the schedule (as it runs) unplugs at `t`."""
         return any(occ == t and e["action"] == "unplug" and not skipped
                    for occ, e, skipped in self.timeline(t.date(), 1))
-
-    def _session_unplug(self, r: dict) -> bool:
-        """An unplug at the session's start, so whatever has the car plugged in
-        then (by hand, Home Assistant, a charge...) stops for it. Not added if
-        the schedule already unplugs then. Part of r["changes"]."""
-        sa = _parse_iso(r["start"])
-        if self._unplug_at(sa):
-            return False
-        entry = validate_entry({"time": sa.strftime("%H:%M"), "date": sa.date().isoformat(), "action": "unplug",
-                                "source": SAVING_SOURCE})
-        self.entries = self.entries + [entry]
-        r["changes"]["added"].append(entry["id"])
-        logger.info("Saving session %s: unplugs at its start", sa.strftime("%a %H:%M"))
-        return True
 
     def _undo_pre(self, r: dict) -> None:
         pre = r.pop("pre", None)
@@ -1596,6 +1584,16 @@ class Automation:
         if prev.date() != now.date() and self._prune():  # tidy up once a day
             self._save()
         return due
+
+    def block_starts_due(self) -> list:
+        """The weekly no-charging times that have started since the last look
+        (within CATCH_UP_S): [start]. The first look after a restart finds none."""
+        now = self._now()
+        prev, self._block_check = self._block_check, now
+        if prev is None or now <= prev:
+            return []
+        prev = max(prev, now - datetime.timedelta(seconds=CATCH_UP_S))
+        return [a for a, _ in self.block_windows(prev.date(), 2, sessions=False) if prev < a <= now]
 
     def last_event(self, at: datetime.datetime) -> Optional[tuple[datetime.datetime, dict]]:
         """The schedule's most recent enabled time at or before `at` (within a week)."""
@@ -1904,6 +1902,13 @@ async def automation_loop(
                 else:
                     logger.info("Schedule: unplugging at %s", entry["time"])
                     await unplug(source="schedule")
+            for start in automation.block_starts_due():
+                # In case it's plugged in by hand (or from Home Assistant): nothing
+                # charges in a no-charging time
+                if shared_state.plugged_in:
+                    automation.unplug_at = None
+                    logger.info("No-charging time from %s: unplugging", start.strftime("%H:%M"))
+                    await unplug(source="no-charging time")
             if automation.unplug_at is not None:
                 if not shared_state.plugged_in:
                     automation.unplug_at = None  # unplugged meanwhile

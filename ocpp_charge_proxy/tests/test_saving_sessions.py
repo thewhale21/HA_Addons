@@ -232,19 +232,23 @@ def test_charge_before_takes_the_daily_limit_off_the_next_slot():
     assert "starts at 20:00" in a.saving_sessions[0]["notes"][-1]
 
 
-
-def test_unplug_at_the_session_start():
+def test_no_unplug_added_at_a_session_start():
     a, clock = _automation(start=_at(5, 12, 0))
     a.sync_saving_sessions([_session(5, 18, 19)], block=True)
-    unplugs = [e for e in a.entries if e["action"] == "unplug" and e.get("date") == "2026-10-05" and e["time"] == "18:00"]
-    assert len(unplugs) == 1 and unplugs[0]["source"] == SAVING_SOURCE  # in case it's plugged in by hand
-    # the charge before it ends with that same unplug, not a second one
+    assert a.entries == []
     a.sync_saving_sessions([_session(5, 18, 19)], block=True, plug_hours=1)
     assert len([e for e in a.entries if e["action"] == "unplug" and e["time"] == "18:00"]) == 1
-    assert _today(a) == [("05 17:00", "05 18:00")]
-    # no-charging off: its unplug goes, the charge before it gets its own
-    a.sync_saving_sessions([_session(5, 18, 19)], block=False, plug_hours=1)
-    assert len([e for e in a.entries if e["action"] == "unplug" and e["time"] == "18:00"]) == 1
-    assert _today(a) == [("05 17:00", "05 18:00")]
-    a.sync_saving_sessions([_session(5, 18, 19)], block=False, plug_hours=None)
-    assert a.entries == []
+
+
+def test_unplug_at_the_start_of_a_no_charging_time():
+    a, clock = _automation(start=_at(5, 23, 20))
+    a.set_schedule(blocks=[{"start": "23:30", "end": "05:30"}])
+    a.sync_saving_sessions([_session(5, 23, 23, 40, 50)], block=True)
+    assert a.block_starts_due() == []  # the first look
+    clock.dt = _at(5, 23, 29)
+    assert a.block_starts_due() == []
+    clock.dt = _at(5, 23, 30)
+    assert [t.strftime("%H:%M") for t in a.block_starts_due()] == ["23:30"]
+    clock.dt = _at(5, 23, 45)
+    assert a.block_starts_due() == []  # not again, and not for the saving session at 23:40
+

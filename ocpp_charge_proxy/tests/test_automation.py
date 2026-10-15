@@ -198,6 +198,32 @@ def test_replug_settings_validated():
 # --- the loop ----------------------------------------------------------------
 
 
+def test_loop_unplugs_at_the_start_of_a_no_charging_time():
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 23, 20, tzinfo=TZ))
+    a.set_schedule(blocks=[{"start": "23:30", "end": "05:30"}])
+    state = SharedState(connected_to_server=True, plugged_in=True)  # plugged in by hand
+    sources = []
+
+    async def plug(source=None):
+        state.plugged_in = True
+
+    async def unplug(source=None):
+        sources.append(source)
+        state.plugged_in = False
+
+    async def scenario():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01))
+        await asyncio.sleep(0.03)
+        assert sources == []
+        clock.advance(minutes=11)
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(scenario())
+    assert sources == ["no-charging time"]
+
+
 def test_loop_runs_schedule_and_publishes():
     a, clock = _automation()
     # (an unplug too, so 23:00 isn't inside a plugged-in stretch at start-up)

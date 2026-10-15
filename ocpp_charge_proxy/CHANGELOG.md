@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.43.7 — Unplug at the start of a no-charging time
+
+- **Feature:** at the start of each no-charging time it unplugs if the car
+  is plugged in, e.g. by hand or from Home Assistant, as nothing should
+  charge then.
+- **Change:** saving sessions no longer add an unplug at their start
+  (2.43.6); that was meant for no-charging times. One already added is
+  taken out.
+
 ## 2.43.6 — Saving sessions: unplug at the start
 
 - **Feature:** with No charging during a session on, each session gets an
