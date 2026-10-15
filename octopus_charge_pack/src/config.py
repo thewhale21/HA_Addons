@@ -14,7 +14,8 @@ OPTIONS_PATH = os.environ.get("ADDON_OPTIONS", "/data/options.json")
 @dataclass(frozen=True)
 class Config:
     api_key: str = ""  # Octopus API key (sk_live_...)
-    device_id: str = ""  # the device whose dispatches to follow; empty: found from the account
+    # Options before 0.3.0, read once to copy them to the page's settings (src/app_settings.py):
+    device_id: str = ""  # the device whose dispatches to follow
     poll_seconds: int = 60  # how often the planned dispatches are read
 
 

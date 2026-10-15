@@ -58,7 +58,10 @@ async def run() -> None:
         except NotImplementedError:  # Windows, when run by hand
             pass
 
-    tasks = [asyncio.create_task(link.run()), asyncio.create_task(worker(state, config, data_dir))]
+    wake = asyncio.Event()  # the device picked on the page changed: read it now
+    settings.adopt_options(config)  # device_id / poll_seconds from the options, before they moved to the page
+    settings.on_change = lambda changes: wake.set() if {"device_id", "poll_seconds"} & set(changes) else None
+    tasks = [asyncio.create_task(link.run()), asyncio.create_task(worker(state, config, data_dir, settings, wake))]
     try:
         await stop.wait()
         logger.info("Stopping")

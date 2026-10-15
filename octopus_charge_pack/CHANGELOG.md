@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — Device and interval on the Overview
+
+- **Feature:** the device is a drop-down on the Overview, listing the
+  devices on your account (re-read every 6 hours). The pick applies at
+  once.
+- **Feature:** the read interval is picked on the Overview too (30 seconds
+  to an hour), and applies at once, with no restart.
+- **Change:** `device_id` and `poll_seconds` are no longer add-on options.
+  Values you had set are copied over once, so nothing changes until you
+  pick something else.
+- **Change:** the Settings tab no longer lists the devices.
+
 ## 0.2.0 — Start and end dates, and the charge's too
 
 - **Feature:** start and end date sensors for the next dispatch:

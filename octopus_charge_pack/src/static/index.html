@@ -210,6 +210,17 @@
       </div>
     </div>
     <div class="card">
+      <h2>Device</h2>
+      <div class="row"><div class="grow">Device<div class="note" style="margin:0" id="o-device-note">Whose planned dispatches to read</div></div>
+        <select id="o-device" aria-label="Device"><option value="">Finding your devices…</option></select></div>
+      <div class="row"><div class="grow">Read every<div class="note" style="margin:0">How often to ask Octopus for the planned dispatches</div></div>
+        <select id="o-poll" aria-label="Read every">
+          <option value="30">30 seconds</option><option value="60">1 minute</option><option value="120">2 minutes</option>
+          <option value="300">5 minutes</option><option value="600">10 minutes</option><option value="900">15 minutes</option>
+          <option value="1800">30 minutes</option><option value="3600">1 hour</option>
+        </select></div>
+    </div>
+    <div class="card">
       <h2>Planned dispatches</h2>
       <table><thead><tr><th>Start</th><th>End</th><th>Type</th><th class="num">Energy</th></tr></thead><tbody id="o-list"></tbody></table>
       <div class="note" style="margin:8px 0 0">From Octopus's flexPlannedDispatches for your device. Energy above 0 counts as a discharge, below 0 as a charge.</div>
@@ -220,13 +231,8 @@
   <section id="tab-settings" class="stack" hidden>
     <div class="card">
       <h2>Octopus</h2>
-      <div class="note" style="margin:0 0 10px">The API key, device and how often to read are set on the add-on's <b>Configuration</b> tab in Home Assistant (restart the add-on after changing them).</div>
+      <div class="note" style="margin:0 0 10px">Your API key is set on the add-on's <b>Configuration</b> tab in Home Assistant (restart the add-on after changing it). The device and how often to read it are picked on the <b>Overview</b>.</div>
       <dl class="kv" id="s-octopus"></dl>
-    </div>
-    <div class="card" id="s-devices-card" hidden>
-      <h2>Devices on your account</h2>
-      <div class="note" style="margin:0 0 10px">Put the right one's ID in <b>device_id</b> on the Configuration tab.</div>
-      <dl class="kv" id="s-devices"></dl>
     </div>
     <input type="checkbox" id="sim-all" checked hidden><!-- the template's entity pickers: none here -->
   </section>
@@ -465,13 +471,38 @@ function renderState(s) {
   const rows = (m.dispatches || []).map((d) => `<tr><td>${esc(dateTime(d.start))}</td><td>${esc(dateTime(d.end))}</td><td>${esc(d.type || '')}</td><td class="num">${d.energyAddedKwh == null ? '—' : num(d.energyAddedKwh, 2) + ' kWh'}</td></tr>`);
   $('o-list').innerHTML = rows.join('') || `<tr><td colspan="4" class="muted">${s.last_update ? 'None planned' : 'Not read yet'}</td></tr>`;
   $('s-octopus').innerHTML = kv([
-    ['Device', s.device_id ? `<code>${esc(s.device_id)}</code>` : '<span class="muted">not set: found from the account</span>'],
+    ['Device', s.device_id ? `<code>${esc(s.device_id)}</code>` : '<span class="muted">not picked yet</span>'],
     ['Read every', `${s.poll_seconds} s`],
     ['Last read', s.last_update ? ago(s.last_update) : '—'],
   ]);
-  $('s-devices-card').hidden = !(s.devices || []).length;
-  $('s-devices').innerHTML = kv((s.devices || []).map((d) => [d.name || d.deviceType || 'Device', `<code>${esc(d.id)}</code> <span class="muted">· ${esc([d.deviceType, d.provider].filter(Boolean).join(', '))}</span>`]));
+  drawDevicePicker(s);
 }
+const deviceLabel = (d) => [d.name || d.deviceType || 'Device', d.name && d.deviceType ? d.deviceType : '', d.provider || ''].filter(Boolean).join(' · ');
+function drawDevicePicker(s) {
+  const sel = $('o-device'), devices = s.devices || [];
+  if (document.activeElement !== sel) {
+    const opts = devices.map((d) => `<option value="${esc(d.id)}">${esc(deviceLabel(d))}</option>`);
+    if (s.device_id && !devices.some((d) => d.id === s.device_id)) opts.push(`<option value="${esc(s.device_id)}">${esc(s.device_id)}</option>`);
+    if (!s.device_id) opts.unshift(`<option value="">${devices.length ? 'Pick your device…' : (s.error ? 'No devices found' : 'Finding your devices…')}</option>`);
+    const html = opts.join('');
+    if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
+    sel.value = s.device_id || '';
+  }
+  $('o-device-note').textContent = s.device_id ? `Whose planned dispatches to read · ${s.device_id}` : 'Whose planned dispatches to read';
+  const poll = $('o-poll');
+  if (document.activeElement !== poll) {
+    if (![...poll.options].some((o) => Number(o.value) === s.poll_seconds)) poll.insertAdjacentHTML('beforeend', `<option value="${s.poll_seconds}">${s.poll_seconds} seconds</option>`);
+    poll.value = String(s.poll_seconds);
+  }
+}
+async function saveSetting(body, text) {
+  if (await post('settings', body)) toast(text);
+  setTimeout(() => api('state').then(renderState).catch(() => {}), 1500);
+}
+$('o-device').addEventListener('change', (ev) => {
+  if (ev.target.value) saveSetting({device_id: ev.target.value}, `Device: ${ev.target.selectedOptions[0].textContent}`);
+});
+$('o-poll').addEventListener('change', (ev) => saveSetting({poll_seconds: Number(ev.target.value)}, `Read every ${ev.target.selectedOptions[0].textContent}`));
 
 // ---------- Settings: your Home Assistant entities ----------
 const sim = {data: null, entities: [], edit: {}, entitiesAt: 0};

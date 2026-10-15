@@ -4,14 +4,5 @@ configuration:
     name: Octopus API key
     description: >-
       Your Octopus Energy API key (sk_live_...), from your Octopus account:
-      Personal details › API access. Used to get a Kraken token for the API.
-  device_id:
-    name: Device ID
-    description: >-
-      The device whose planned dispatches to read (e.g. your battery or
-      charger in Octopus Intelligent). Leave empty to find it from your
-      account: if there's more than one device, the web page lists them.
-  poll_seconds:
-    name: Read every (seconds)
-    description: >-
-      How often the planned dispatches are read, 30 to 3600 seconds.
+      Personal details › API access. The device and how often to read it are
+      picked on the add-on's web page (Overview).

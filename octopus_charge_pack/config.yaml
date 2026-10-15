@@ -1,6 +1,6 @@
 name: "Octopus Charge Pack"
 description: "Octopus Intelligent flex dispatches (Charge Pack sessions) as Home Assistant sensors"
-version: "0.2.0"
+version: "0.3.0"
 slug: "octopus_charge_pack"
 url: "https://github.com/thewhale21/HA_Addons/tree/main/octopus_charge_pack"
 arch:
@@ -20,9 +20,5 @@ ports_description:
 image: "ghcr.io/thewhale21/{arch}-addon-octopus-charge-pack"
 options:
   api_key: ""
-  device_id: ""
-  poll_seconds: 60
 schema:
   api_key: password
-  device_id: "str?"
-  poll_seconds: "int(30,3600)"

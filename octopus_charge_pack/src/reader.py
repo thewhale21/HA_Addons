@@ -8,6 +8,7 @@ import datetime
 import json
 import logging
 import os
+import time
 from typing import Optional
 
 from src.dispatches import summarise
@@ -17,6 +18,7 @@ from src.shared_state import SharedState
 logger = logging.getLogger(__name__)
 
 NO_KEY_WAIT_S = 300  # with no API key, how often to look again (it needs a restart anyway)
+DEVICES_EVERY_S = 6 * 3600  # the account's devices (for the page's list) are read again this often
 
 
 def _load(path: Optional[str]) -> dict:
@@ -41,21 +43,25 @@ def _save(path: Optional[str], data: dict) -> None:
 
 
 def pick_device(devices: list) -> Optional[str]:
-    """The device to follow when none is set: the only one there is, else None (the user picks)."""
+    """The device to follow when none is picked: the only one there is, else None (the user picks)."""
     return devices[0].get("id") if len(devices) == 1 and devices[0].get("id") else None
 
 
-async def read_once(state: SharedState, client: OctopusClient, kept: dict) -> None:
-    """Read the planned dispatches once and update the state (raises on failure)."""
-    if not state.device_id:
+async def read_once(state: SharedState, client: OctopusClient, kept: dict, wanted: Optional[str],
+                    find_devices: bool = False) -> None:
+    """Read the planned dispatches once and update the state (raises on failure). `wanted` is the
+    device picked on the page (or the device_id option); with `find_devices` (or no device yet) the
+    account's devices are read too, for the page's list."""
+    if find_devices or not state.devices:
         state.devices = await client.find_devices()
-        state.device_id = pick_device(state.devices)
-        if not state.device_id:
-            listed = ", ".join(f"{d.get('id')} ({d.get('name') or d.get('deviceType') or 'device'})"
-                               for d in state.devices) or "none found"
-            raise ValueError(f"Set device_id on the Configuration tab to one of: {listed}")
-        logger.info("Following device %s", state.device_id)
-    dispatches = await client.planned_dispatches(state.device_id)
+    device = wanted or pick_device(state.devices)
+    if not device:
+        raise ValueError("Pick your device on the Overview (your account has "
+                         f"{len(state.devices) or 'no'} device{'' if len(state.devices) == 1 else 's'})")
+    if device != state.device_id:
+        logger.info("Following device %s", device)
+        state.device_id, state.summary = device, {}
+    dispatches = await client.planned_dispatches(device)
     now = datetime.datetime.now(datetime.timezone.utc)
     state.summary = summarise(dispatches, now, None, kept)
     for kind in ("charge", "discharge"):
@@ -63,22 +69,29 @@ async def read_once(state: SharedState, client: OctopusClient, kept: dict) -> No
     state.last_update = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-async def worker(state: SharedState, config, data_dir: Optional[str]) -> None:
-    """Every poll_seconds: read the planned dispatches and work out the sensors."""
+async def worker(state: SharedState, config, data_dir: Optional[str], settings=None,
+                 wake: Optional[asyncio.Event] = None) -> None:
+    """Every poll_seconds (or when the device or interval picked on the page changes): read the planned
+    dispatches and work out the sensors. The account's devices are read again every DEVICES_EVERY_S."""
     path = os.path.join(data_dir, "state.json") if data_dir else None
     kept = _load(path)
-    state.device_id = config.device_id or None
-    state.poll_seconds = config.poll_seconds
+    wake = wake or asyncio.Event()
     if not config.api_key:
         state.status, state.error = "Needs an API key", "Set your Octopus API key on the add-on's Configuration tab"
         logger.warning(state.error)
         while True:
             await asyncio.sleep(NO_KEY_WAIT_S)
     client = OctopusClient(config.api_key)
+    devices_at = 0.0
     try:
         while True:
+            wake.clear()
+            wanted = (settings.device_id if settings is not None else "") or config.device_id or None
+            state.poll_seconds = settings.poll_seconds if settings is not None else config.poll_seconds
+            now = time.time()
             try:
-                await read_once(state, client, kept)
+                await read_once(state, client, kept, wanted, find_devices=now - devices_at >= DEVICES_EVERY_S)
+                devices_at = devices_at if now - devices_at < DEVICES_EVERY_S else now
                 if state.error:
                     logger.info("Reading the dispatches again")
                 state.status, state.error = "OK", None
@@ -92,6 +105,9 @@ async def worker(state: SharedState, config, data_dir: Optional[str]) -> None:
                 if state.error != message:
                     logger.warning("Couldn't read the dispatches: %s", message)
                 state.status, state.error = "Error", message
-            await asyncio.sleep(config.poll_seconds)
+            try:
+                await asyncio.wait_for(wake.wait(), state.poll_seconds)
+            except asyncio.TimeoutError:
+                pass
     finally:
         await client.close()

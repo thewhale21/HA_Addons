@@ -128,7 +128,61 @@ def test_the_device_is_found_from_the_account():
     assert _run(c.find_devices()) == [{"id": "dev-1", "name": "Battery", "deviceType": "BATTERIES", "account": "A-1"}]
     assert pick_device([{"id": "a"}]) == "a" and pick_device([{"id": "a"}, {"id": "b"}]) is None
     state, kept = SharedState(), {}
-    _run(read_once(state, c, kept))
+    _run(read_once(state, c, kept, None))  # nothing picked, one device: that one
     assert state.device_id == "dev-1" and state.summary["count"] == 3 and state.last_update
+    assert state.devices[0]["id"] == "dev-1"  # listed for the page's drop-down
     assert kept == {"charge_start_time": state.summary["charge_start_time"],
                     "discharge_start_time": state.summary["discharge_start_time"]}
+
+
+def test_the_device_picked_on_the_page_is_followed():
+    from src.reader import read_once
+    from src.shared_state import SharedState
+
+    class TwoDevices(FakeOctopus):
+        async def _post(self, query, variables=None, token=None):
+            if "devices(" in query:
+                self.calls.append(("devices", token))
+                return {"data": {"devices": [{"id": "meter"}, {"id": "dev-1", "name": "Battery"}]}}
+            if "flexPlannedDispatches" in query:
+                self.calls.append(("dispatches", variables["deviceId"]))
+            return await super()._post(query, variables, token)
+
+    c, state = TwoDevices("sk_live_good"), SharedState()
+    try:
+        _run(read_once(state, c, {}, None))  # two devices and none picked: the page asks
+        raise AssertionError("should have asked for a device")
+    except ValueError as err:
+        assert "Pick your device on the Overview" in str(err) and len(state.devices) == 2
+    _run(read_once(state, c, {}, "dev-1"))
+    assert state.device_id == "dev-1" and ("dispatches", "dev-1") in c.calls
+    found = sum(1 for name, _ in c.calls if name == "devices")
+    assert found == 1
+    _run(read_once(state, c, {}, "dev-1"))  # the device list isn't read again each time
+    assert sum(1 for name, _ in c.calls if name == "devices") == found
+
+
+def test_device_and_interval_are_page_settings(tmp_path):
+    from src.app_settings import AppSettings
+    from src.config import Config
+
+    s = AppSettings(str(tmp_path))
+    assert (s.device_id, s.poll_seconds) == ("", 60)
+    s.update({"device_id": " dev-1 ", "poll_seconds": "300"})
+    assert (s.device_id, s.poll_seconds) == ("dev-1", 300)
+    assert AppSettings(str(tmp_path)).poll_seconds == 300  # saved
+    for bad in ({"poll_seconds": 5}, {"poll_seconds": "x"}, {"device_id": "a b"}, {"device_id": 3}):
+        try:
+            s.update(bad)
+            raise AssertionError(f"should have refused {bad}")
+        except ValueError:
+            pass
+
+    # The options from before 0.3.0 are copied over once, and never again
+    fresh = AppSettings(str(tmp_path / "x")) if (tmp_path / "x").mkdir() is None else None
+    fresh.adopt_options(Config(api_key="k", device_id="dev-9", poll_seconds=120))
+    assert (fresh.device_id, fresh.poll_seconds) == ("dev-9", 120)
+    fresh.update({"poll_seconds": 600})
+    again = AppSettings(str(tmp_path / "x"))
+    again.adopt_options(Config(api_key="k", device_id="other", poll_seconds=30))
+    assert (again.device_id, again.poll_seconds) == ("dev-9", 600)  # the page's choice stays

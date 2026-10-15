@@ -10,11 +10,11 @@ See the README (the add-on's **Info** tab) for setting it up, its options
 and its sensors. In short: enter your Octopus API key on the
 **Configuration** tab and start it.
 
-1. **Overview** shows its status, the next discharge (with its local date,
+1. **Overview** shows its status, the device and read interval (both
+   drop-downs, applied at once), the next discharge (with its local date,
    start and end as the date and time sensors give them) and next charge,
    and the planned dispatches.
-2. **Settings** shows the device it follows and, if it had to look, the
-   devices on your account.
+2. **Settings** shows the log level and the Octopus connection.
 3. **Diagnostics** has its health, the sensors it posts, the log
    and a diagnostics bundle (the API key is always hidden).
 
@@ -22,9 +22,14 @@ and its sensors. In short: enter your Octopus API key on the
 
 - `src/octopus.py`: the Octopus GraphQL API. A Kraken token from the API key
   (renewed every 45 minutes, and at once if Octopus says it's expired), then
-  `flexPlannedDispatches(deviceId)`. With no device ID it reads the
-  account's devices (`viewer.accounts`, then `devices(accountNumber)`).
-- `src/reader.py`: every `poll_seconds`, reads the dispatches and works out
+  `flexPlannedDispatches(deviceId)`. The account's devices
+  (`viewer.accounts`, then `devices(accountNumber)`) are read at start and
+  every 6 hours, for the Overview's drop-down.
+- `src/app_settings.py`: the settings made on the page (device, read
+  interval, log level), kept in `/data/settings.json`. A change wakes the
+  reader at once. Pre-0.3.0 `device_id` / `poll_seconds` options are copied
+  over once.
+- `src/reader.py`: at the read interval, reads the dispatches and works out
   the sensors' values. The last discharge start time is kept in
   `/data/state.json`, as the template sensor kept its state (and the
   last charge start time, the same way).

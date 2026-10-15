@@ -33,10 +33,14 @@ same entity IDs, so anything using them (e.g. Predbat's
 | Option | What to put |
 | --- | --- |
 | `api_key` | Your Octopus API key (`sk_live_...`). Hidden, and never shown on the page or in diagnostics |
-| `device_id` | The device whose dispatches to read. Leave empty to find it: with one device on the account it's used; with more, the Settings tab lists them |
-| `poll_seconds` | How often to read them: 60 by default (30 to 3600) |
 
-Restart the add-on after changing them.
+Restart the add-on after changing it.
+
+The **device** and **how often to read** are picked on the add-on's
+**Overview**, in the Device card: a drop-down of the devices on your
+account (name · type · provider) and a read interval from 30 seconds to an
+hour. Both apply at once, with no restart. With one device on the account
+it's used until you pick one.
 
 ## Set it up
 
@@ -45,9 +49,11 @@ Restart the add-on after changing them.
    and End, and Next Discharge Dispatch Date / Start Time / End Time), and
    restart Home Assistant. The add-on uses the same entity IDs, so both
    can't run at once.
-2. Enter your API key on the add-on's **Configuration** tab (and the device
-   ID if you know it), then start the add-on.
-3. The **Overview** shows the next discharge and charge and the planned
+2. Enter your API key on the add-on's **Configuration** tab, then start
+   the add-on.
+3. Open it and pick your device (for Charge Pack, the battery) in the
+   **Overview**'s Device card.
+4. The **Overview** shows the next discharge and charge and the planned
    dispatches; **Diagnostics › Health** lists its sensors.
 
 ## Its Home Assistant entities
@@ -71,8 +77,8 @@ as a charge, as the template sensors did.
 
 - **Status says "API key refused":** check the key on the Configuration
   tab (Octopus account › Personal details › API access) and restart.
-- **Status says to set device_id:** your account has more than one device;
-  copy the right ID from the Settings tab into `device_id` and restart.
+- **Status says to pick your device:** your account has more than one
+  device; pick the right one in the **Overview**'s Device card.
 - **The dot by the title is amber or red:** **Diagnostics › Health** says
   why.
 - **Asking for help:** **Diagnostics › Debug** has the log and a
