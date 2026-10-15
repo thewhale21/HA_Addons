@@ -386,13 +386,18 @@ def test_one_off_time_runs_once_and_is_removed(tmp_path):
         pass
 
 
+def _skip(a, entry_id, date, skip=True):
+    """Skip (or un-skip) one upcoming time."""
+    a.set_skips([{"entry_id": entry_id, "date": date}], skip)
+
+
 def test_skip_one_time(tmp_path):
     every = list(range(7))
     a, clock = _automation(tmp_path)  # Monday 23:00
     a.set_schedule(enabled=True, entries=[
         {"time": "23:30", "action": "plug", "days": every}, {"time": "07:00", "action": "unplug", "days": every}])
     plug_id = a.entries[0]["id"]
-    a.set_skip(plug_id, "2026-10-05")  # tonight
+    _skip(a, plug_id, "2026-10-05")  # tonight
     assert Automation(str(tmp_path)).skips == [{"entry_id": plug_id, "date": "2026-10-05"}]
     nxt = a.next_action()
     assert nxt["action"] == "unplug" and nxt["time"].startswith("2026-10-06T07:00")
@@ -406,11 +411,11 @@ def test_skip_one_time(tmp_path):
     clock.advance(days=15)
     a.due()
     assert a.skips == []  # Monday's skip forgotten (after 14 days)
-    a.set_skip(plug_id, "2026-10-09")
-    a.set_skip(plug_id, "2026-10-09", skip=False)  # undo
+    _skip(a, plug_id, "2026-10-09")
+    _skip(a, plug_id, "2026-10-09", skip=False)  # undo
     assert a.skips == []
     try:
-        a.set_skip("nope", "2026-10-07")
+        _skip(a, "nope", "2026-10-07")
         raise AssertionError("should have refused")
     except ValueError:
         pass
@@ -422,9 +427,9 @@ def test_skipped_unplug_moves_the_ready_time_and_start_up():
     a.set_schedule(enabled=True, entries=[
         {"time": "23:30", "action": "plug", "days": every}, {"time": "07:00", "action": "unplug", "days": every}])
     plug_id, unplug_id = a.entries[0]["id"], a.entries[1]["id"]
-    a.set_skip(unplug_id, "2026-10-06")
+    _skip(a, unplug_id, "2026-10-06")
     assert a.next_unplug(clock.now()).strftime("%a %H:%M") == "Wed 07:00"
-    a.set_skip(plug_id, "2026-10-05")  # last night's plug-in skipped: not inside a stretch
+    _skip(a, plug_id, "2026-10-05")  # last night's plug-in skipped: not inside a stretch
     assert a.in_plug_window() is None
 
 
@@ -948,7 +953,8 @@ def test_a_charge_during_a_no_charging_time_waits_for_its_end():
     b, _ = _blocked(datetime.datetime(2026, 10, 3, 1, 0, tzinfo=TZ))
     out = b.plan_auto_plug(3 * 60)  # would end at 04:00, inside it: nothing
     assert out["nothing"] and not out["plug_now"] and b.entries == []
-    assert b.blocked() is not None
+    now = b._now()
+    assert any(start <= now < end for start, end in b.block_windows(now.date(), 1))  # inside it
 
 
 def test_deleting_a_charge_puts_back_the_slot_it_trimmed():

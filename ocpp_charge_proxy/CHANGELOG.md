@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.41.2 — Unused code removed
+
+- **Change:** removed code nothing used any more: the old idle and
+  charging meter-value builders (meter values come from one builder), an
+  unused ID-masking helper, the charging profiles' text summary, and two
+  one-line automation helpers only the tests called. No change to how the
+  add-on behaves.
+
 ## 2.41.1 — A how-to README
 
 - **Docs:** a new README (the add-on's Info page in Home Assistant): what

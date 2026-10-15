@@ -167,16 +167,3 @@ class TestStackLevelPriority:
         limit = sched.get_current_limit_kw()
         # Stack level 1 (16A) should win over stack level 0 (32A)
         assert abs(limit - 3.68) < 0.01
-
-
-class TestProfileSummary:
-    def test_no_profiles(self):
-        sched = ChargingProfileScheduler()
-        assert sched.profile_summary == "No active profiles"
-
-    def test_with_profile(self):
-        sched = ChargingProfileScheduler()
-        sched.set_profile(_make_profile())
-        summary = sched.profile_summary
-        assert "1 periods" in summary
-        assert "Relative" in summary

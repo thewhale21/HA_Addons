@@ -226,21 +226,3 @@ class ChargingProfileScheduler:
     @property
     def has_profile(self) -> bool:
         return len(self._profiles) > 0
-
-    @property
-    def profile_summary(self) -> str:
-        """Human-readable summary of active profiles."""
-        if not self._profiles:
-            return "No active profiles"
-        lines = []
-        for level, profile in sorted(self._profiles.items()):
-            schedule = _get(profile, "charging_schedule", "chargingSchedule") or {}
-            periods = _get(schedule, "charging_schedule_period", "chargingSchedulePeriod") or []
-            kind = _get(profile, "charging_profile_kind", "chargingProfileKind")
-            profile_id = _get(profile, "charging_profile_id", "chargingProfileId")
-            lines.append(
-                f"  Profile {profile_id}: "
-                f"{len(periods)} periods, "
-                f"kind={kind}"
-            )
-        return "\n".join(lines)

@@ -699,11 +699,6 @@ class Automation:
                     f"The {a.strftime('%a %H:%M')}–{b.strftime('%H:%M')} slot overlaps the no-charging time "
                     f"{hit[0].strftime('%H:%M')}–{hit[1].strftime('%H:%M')}: change one of them")
 
-    def blocked(self, when: Optional[datetime.datetime] = None):
-        """The no-charging time `when` (now) is in: (start, end), or None."""
-        when = when or self._now()
-        return next(((a, b) for a, b in self.block_windows(when.date(), 1) if a <= when < b), None)
-
     def _longest_day(self, entries: list, skips: Optional[list] = None):
         now = self._now()
         return longest_day(self.windows(entries, now, skips, open_ended=True), now - datetime.timedelta(days=1),
@@ -1092,10 +1087,6 @@ class Automation:
                            f"a day (from {fixed})" if fixed else f"{int(span_len.total_seconds() // 3600)} hours",
                            provider, _hours(cap_min))
         return plan
-
-    def set_skip(self, entry_id: str, date: str, skip: bool = True) -> None:
-        """Skip (or un-skip) one upcoming time: entry `entry_id` on `date`."""
-        self.set_skips([{"entry_id": entry_id, "date": date}], skip)
 
     def set_skips(self, times: list, skip: bool = True, daily_cap_min: Optional[int] = None,
                   provider: str = "your supplier") -> None:

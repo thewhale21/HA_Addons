@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 from src.config import Config
-from src.debug_tools import DebugTools, install_log_buffer, mask_id, redacted_config
+from src.debug_tools import DebugTools, install_log_buffer, redacted_config
 from src.gui_data import MessageLog, SessionLog
 
 
@@ -19,7 +19,6 @@ def test_config_is_redacted():
     assert out["password"] == "***" and out["chargepoint_id"] == "…3456"
     assert out["server_hostname"] == "ocpp.example.com"
     assert redacted_config(_config(password=""))["password"] == ""
-    assert mask_id("abc") == "***" and mask_id("") == ""
 
 
 def test_log_buffer_and_level():

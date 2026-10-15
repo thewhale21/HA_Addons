@@ -56,11 +56,6 @@ def redacted_config(config) -> dict:
     return out
 
 
-def mask_id(value) -> str:
-    text = str(value or "")
-    return ("…" + text[-4:] if len(text) > 4 else "***") if text else ""
-
-
 class DebugTools:
     def __init__(self, *, send: Optional[Callable[[str, Optional[str]], Awaitable[dict]]] = None,
                  drop: Optional[Callable[[float], Awaitable[dict]]] = None,
