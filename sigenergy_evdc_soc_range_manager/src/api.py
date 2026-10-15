@@ -15,6 +15,7 @@ from pathlib import Path
 from aiohttp import web
 
 from src.controller import check_limit
+from src.helpers import capacity_target, make_capacity_helper
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     # The charger and its limits (Overview)
     app.router.add_post("/api/charger", handle_charger)
     app.router.add_post("/api/limits", handle_limits)
+    app.router.add_post("/api/capacity", handle_capacity)
     # Scheduled limits (src/schedule.py)
     app.router.add_get("/api/schedule", handle_get_schedule)
     app.router.add_post("/api/schedule", handle_add_schedule)
@@ -229,6 +231,32 @@ async def handle_limits(request: web.Request) -> web.Response:
     except Exception as err:
         return web.json_response({"status": "error", "message": f"Home Assistant refused it: {err}"}, status=502)
     return web.json_response({"status": "ok", **wanted})
+
+
+async def handle_capacity(request: web.Request) -> web.Response:
+    """{"capacity_kwh": 42.5}: set the car's battery capacity helper in Home Assistant. If the
+    capacity comes from a sensor (or nothing), the add-on's own helper is made and used instead."""
+    link = request.app["ha_link"]
+    if link is None:
+        return _unavailable()
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("Send capacity_kwh")
+        entity_id = link.settings.get("capacity")
+        domain, kwh = capacity_target(entity_id, body.get("capacity_kwh"))
+    except (ValueError, TypeError, json.JSONDecodeError) as err:
+        return _bad_request(err)
+    try:
+        if domain is None:
+            if not link.available:
+                return _bad_request("Not connected to Home Assistant")
+            entity_id = await make_capacity_helper(link, kwh)
+            domain = entity_id.split(".", 1)[0]
+        await link.call_service(domain, "set_value", data={"value": kwh}, target={"entity_id": entity_id})
+    except Exception as err:
+        return web.json_response({"status": "error", "message": f"Home Assistant refused it: {err}"}, status=502)
+    return web.json_response({"status": "ok", "capacity_kwh": kwh, "entity_id": entity_id})
 
 
 def _schedule_view(schedule) -> dict:

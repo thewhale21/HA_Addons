@@ -232,7 +232,11 @@ recorder:
 The **Schedule** tab sets the limits. **Default limits** at the top are
 used whenever the schedule doesn't set a limit, and whenever nothing's
 on; they're the limit helpers, so a dashboard or automation can change
-them too. **Now** shows the limits in use and where each comes from.
+them too. **Car battery capacity** below them is the car's usable kWh for
+the virtual battery sensors (the capacity helper picked on the Settings
+tab). If the capacity comes from a sensor, or nothing's picked, entering a
+value makes the **EVDC Vehicle Battery Capacity** helper (or finds it) and
+uses that instead. **Now** shows the limits in use and where each comes from.
 The schedule below changes the high and/or low limit for a while, every
 week or once. Each entry sets the high limit, the low limit or both. Its week view shows today and the next 6 days, with high
 limits in the top half of each day and low limits in the bottom half:

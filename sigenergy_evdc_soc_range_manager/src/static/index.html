@@ -354,7 +354,7 @@
     <div class="grid grid2">
       <div class="card">
         <h2>Default limits</h2>
-        <div class="note" style="margin:0">Used whenever the schedule doesn't set a limit. They're the limit helpers in Home Assistant, so a dashboard or automation can change them too.</div>
+        <div class="note" style="margin:0">Used whenever the schedule doesn't set a limit. They're helpers in Home Assistant, so a dashboard or automation can change them too.</div>
         <div class="row">
           <div class="grow">Default low limit<div class="note" style="margin:0" id="o-low-note">Stops discharging here</div></div>
           <input type="number" id="o-low" min="20" max="98" step="1" aria-label="Low limit (%)"> %
@@ -362,6 +362,10 @@
         <div class="row">
           <div class="grow">Default high limit<div class="note" style="margin:0" id="o-high-note">Stops charging here</div></div>
           <input type="number" id="o-high" min="21" max="99" step="1" aria-label="High limit (%)"> %
+        </div>
+        <div class="row">
+          <div class="grow">Car battery capacity<div class="note" style="margin:0" id="o-cap-note">Usable kWh, for the virtual battery sensors</div></div>
+          <input type="number" id="o-cap" min="1" max="200" step="0.1" aria-label="Car battery capacity (kWh)"> kWh
         </div>
       </div>
       <div class="card">
@@ -764,6 +768,11 @@ function renderState(s) {
     const base = r['base_' + k] !== undefined ? r['base_' + k] : i[k];
     if (document.activeElement !== $('o-' + k)) $('o-' + k).value = base == null ? '' : base;
   }
+  const capEnt = r.capacity_entity || '', capEditable = /^(input_number|number)\./.test(capEnt);
+  if (document.activeElement !== $('o-cap')) $('o-cap').value = r.capacity_kwh == null ? '' : r.capacity_kwh;
+  $('o-cap-note').textContent = capEditable ? `Usable kWh, for the virtual battery sensors (${capEnt})`
+    : capEnt ? `From ${capEnt}: a new value makes the EVDC Vehicle Battery Capacity helper and uses that instead`
+    : 'Not set: a value makes the EVDC Vehicle Battery Capacity helper';
   const sched = r.scheduled || [];
   drawDefaultsNote();
   const from = (k) => { const e = [...sched].reverse().find((x) => x[k] != null); return e ? `scheduled${e.label ? ' (' + esc(e.label) + ')' : ''} until ${whenLocal(e.until)}` : 'default'; };
@@ -1199,6 +1208,13 @@ async function setLimit(key) {
   if (await post('limits', {[key]: value})) toast(`${key === 'high' ? 'High' : 'Low'} limit: ${value}%`);
   setTimeout(pollState, 800);
 }
+async function setCapacity() {
+  const el = $('o-cap'), value = Number(el.value);
+  if (el.value === '' || isNaN(value)) return;
+  if (await post('capacity', {capacity_kwh: value})) toast(`Battery capacity: ${value} kWh`);
+  setTimeout(pollState, 800);
+}
+$('o-cap').addEventListener('change', setCapacity);
 $('o-to-schedule').addEventListener('click', () => showTab('schedule'));
 // ---------- Car SoC chart: the last 24 or 48 hours ----------
 const socc = {hours: 24, data: null, at: 0};

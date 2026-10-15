@@ -69,3 +69,11 @@ async def test_settings_and_log_level(client):
     assert resp.status == 200
     data = await (await client.get("/api/debug/info?lines=5")).json()
     assert data["log_level"] == "info"
+
+
+@pytest.mark.asyncio
+async def test_battery_capacity_is_set_from_the_schedule_page(client):
+    assert (await client.post("/api/capacity", json={"capacity_kwh": 500})).status == 400  # out of range
+    assert (await client.post("/api/capacity", json={"capacity_kwh": "lots"})).status == 400
+    resp = await client.post("/api/capacity", json={"capacity_kwh": 42.5})
+    assert resp.status == 400  # nothing picked and no Home Assistant to make the helper in

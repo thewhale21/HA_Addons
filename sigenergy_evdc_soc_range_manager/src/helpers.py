@@ -36,6 +36,38 @@ KNOWN_VALUES = {
 }
 
 
+CAPACITY_MIN_KWH, CAPACITY_MAX_KWH = 1.0, 200.0
+
+
+def capacity_target(entity_id: str, value) -> tuple:
+    """(domain, kWh) to set the car's battery capacity from the web page (raises ValueError).
+    The domain is None when it can't be set where it comes from (nothing picked, or a sensor):
+    the add-on's own capacity helper is made (or found) and used instead."""
+    try:
+        kwh = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("Give the battery capacity in kWh") from None
+    if not CAPACITY_MIN_KWH <= kwh <= CAPACITY_MAX_KWH:
+        raise ValueError(f"The battery capacity must be between {CAPACITY_MIN_KWH:g} and {CAPACITY_MAX_KWH:g} kWh")
+    domain = (entity_id or "").split(".", 1)[0]
+    return (domain if domain in ("input_number", "number") else None), kwh
+
+
+async def make_capacity_helper(link, kwh: float) -> str:
+    """The add-on's EVDC Vehicle Battery Capacity helper, found or made at `kwh`, and
+    picked on the Settings tab. Returns its entity ID."""
+    kind, spec = HELPERS["capacity"]
+    entity_id = f"{kind}.{slugify(spec['name'])}"
+    states = {st.get("entity_id") for st in await link.all_states(fresh=True)}
+    if entity_id not in states:
+        result = await link.query({"type": f"{kind}/create", **spec, "initial": kwh})
+        entity_id = f"{kind}.{(result or {}).get('id') or slugify(spec['name'])}"
+        logger.info("Helpers: %s: made %s at %g", spec["name"], entity_id, kwh)
+    await link.update_settings({"capacity": entity_id})
+    logger.info("Battery capacity: now from %s", entity_id)
+    return entity_id
+
+
 def slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 

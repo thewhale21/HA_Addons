@@ -282,7 +282,7 @@ class Manager:
             "base_high": base_high, "base_low": base_low,
             "scheduled": [{"id": e["id"], "kind": e["kind"], "high": e["high"], "low": e["low"], "until": e["until"],
                            "label": e.get("label") or ""} for e in scheduled],
-            "capacity_kwh": _float(get("capacity")), "mode": mode,
+            "capacity_kwh": _float(get("capacity")), "capacity_entity": entities.get("capacity") or None, "mode": mode,
             "energy_mode": plugged and _in(mode, lists["energy_mode_states"]),
             "fast_mode": plugged and _in(mode, lists["fast_mode_states"]),
             "available_kw": power_kw(get("available_power")),

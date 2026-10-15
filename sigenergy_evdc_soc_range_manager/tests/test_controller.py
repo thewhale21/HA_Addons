@@ -577,3 +577,9 @@ def test_presses_and_new_decisions_are_logged_with_what_was_seen(tmp_path, caplo
     started = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Started the charger")]
     assert len(started) == 1 and "between the limits (40%–80%)" in started[0] and "grid" in started[0]
     assert m.log[-1]["context"].startswith("car 60%")
+
+
+def test_the_page_is_told_which_entity_the_battery_capacity_comes_from(tmp_path):
+    m = Manager(str(tmp_path))
+    _run(m.step(_states(), _entities(), _settings(), now=1000.0))
+    assert m.readings["capacity_kwh"] == 64 and m.readings["capacity_entity"] == "input_number.cap"

@@ -134,3 +134,44 @@ def test_page_polling_is_kept_out_of_the_log():
     assert not f.filter(rec('1.2.3.4 "GET /api/state HTTP/1.1" 200 12'))
     assert f.filter(rec('1.2.3.4 "POST /api/sensors HTTP/1.1" 200 12'))
     assert f.filter(rec('1.2.3.4 "GET /api/state HTTP/1.1" 500 12'))
+
+
+def test_battery_capacity_is_set_on_its_helper_or_a_new_one():
+    from src.helpers import capacity_target
+    assert capacity_target("input_number.vehicle_max_capacity", "42.5") == ("input_number", 42.5)
+    assert capacity_target("number.car_capacity", 60) == ("number", 60.0)
+    # From a sensor or nothing: the add-on's own helper is made instead
+    assert capacity_target("sensor.evdc_soc_range_capacity_estimate", 42.5) == (None, 42.5)
+    assert capacity_target("", 42.5) == (None, 42.5)
+    for value, says in [(0.5, "between 1 and 200"), (None, "in kWh")]:
+        try:
+            capacity_target("input_number.vehicle_max_capacity", value)
+            raise AssertionError("should have refused")
+        except ValueError as err:
+            assert says in str(err)
+
+
+def test_the_capacity_helper_is_made_or_found_and_picked(tmp_path):
+    from src.helpers import make_capacity_helper
+
+    class Link:
+        def __init__(self, have):
+            self.have, self.queries, self.settings = have, [], {}
+
+        async def all_states(self, fresh=False):
+            return [{"entity_id": e} for e in self.have]
+
+        async def query(self, msg):
+            self.queries.append(msg)
+            return {"id": "evdc_vehicle_battery_capacity"}
+
+        async def update_settings(self, changes):
+            self.settings.update(changes)
+
+    new = Link([])
+    assert asyncio.run(make_capacity_helper(new, 42.5)) == "input_number.evdc_vehicle_battery_capacity"
+    assert new.queries[0]["type"] == "input_number/create" and new.queries[0]["initial"] == 42.5
+    assert new.settings == {"capacity": "input_number.evdc_vehicle_battery_capacity"}
+    found = Link(["input_number.evdc_vehicle_battery_capacity"])
+    assert asyncio.run(make_capacity_helper(found, 42.5)) == "input_number.evdc_vehicle_battery_capacity"
+    assert found.queries == [] and found.settings["capacity"] == "input_number.evdc_vehicle_battery_capacity"

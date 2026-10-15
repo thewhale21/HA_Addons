@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.21.0 — Battery capacity on the Schedule tab
+
+- **Feature:** the car's battery capacity (usable kWh, for the virtual
+  battery sensors) can be set under **Default limits** on the Schedule tab,
+  next to the limits. It shows which entity it comes from.
+- **Feature:** if the capacity comes from a sensor (e.g. the capacity
+  estimate), or nothing's picked, entering a value makes the **EVDC Vehicle
+  Battery Capacity** helper (or finds it), picks it on the Settings tab and
+  sets it, so the virtual battery's size is one fixed number you control.
+- **Docs:** the Schedule tab's battery capacity.
+
 ## 0.20.7 — Clearer logging
 
 - **Improvement:** each start and stop in the log ends with what the add-on
