@@ -43,8 +43,9 @@
 - Saving sessions (src/saving_sessions.py): with "no-charging time" on, each
   upcoming session from the calendar is a no-charging time (as the weekly
   ones: auto plug-in, Charge now... unplug for it), and a scheduled slot that
-  runs into it is moved: from the session's start (or its own, if later) it
-  carries on the session's length later, as one-offs (the weekly entries are
+  runs into it keeps its end and its length but isn't plugged in during the
+  session, so it starts that much earlier (15:30–21:30 with an 18:00–19:00
+  session: 14:30–18:00 and 19:00–21:30), as one-offs (the weekly entries are
   skipped that day). What a session changed is put back if it's cancelled.
   With "plug in before" on, a charge of the chosen hours is added before it,
   as Charge now adds one (sync_saving_sessions, saving_precharge_due).
@@ -94,6 +95,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
                 CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
 SAVING_KEEP = datetime.timedelta(days=1)  # a saving session is remembered this long after it ends
+SAVING_MOVE_VERSION = 2  # how slots are moved (2.43.1: earlier, keeping their end); older moves are redone
 MIN_PRECHARGE_MIN = 15  # less than this left before a session: no charge before it
 ONE_OFF_KEEP = datetime.timedelta(days=14)  # one-off times (and skips) are kept this long after they ran
 
@@ -1162,7 +1164,8 @@ class Automation:
             keep.append({"id": sid, "start": _iso_local(x["start"].astimezone(now.tzinfo)),
                          "end": _iso_local(x["end"].astimezone(now.tzinfo)),
                          "summary": x.get("summary") or "Saving session",
-                         "changes": {"skips": [], "added": []}, "precharged": False, "notes": []})
+                         "changes": {"skips": [], "added": []}, "precharged": False, "notes": [],
+                         "v": SAVING_MOVE_VERSION})
             logger.info("Saving session found: %s–%s", x["start"].astimezone().strftime("%a %d %b %H:%M"),
                         x["end"].astimezone().strftime("%H:%M"))
             changed = True
@@ -1173,6 +1176,10 @@ class Automation:
             changed = True
         moved = False
         for r in keep:
+            if r.get("v") != SAVING_MOVE_VERSION:
+                self._undo_session(r)  # moved the old way: put back, and moved again below
+                r["v"] = SAVING_MOVE_VERSION
+                changed = True
             if not block:
                 if r["changes"]["skips"] or r["changes"]["added"]:
                     self._undo_session(r)
@@ -1236,18 +1243,42 @@ class Automation:
             t = y
         return out
 
+    @staticmethod
+    def _place_back(end: datetime.datetime, length: datetime.timedelta, cuts: list,
+                    not_before: datetime.datetime) -> list:
+        """`length` of plugged-in time ending at `end`, filled backwards around
+        the `cuts` and not before `not_before`: [(a, b)] in time order (shorter
+        if it runs into `not_before`)."""
+        out, t, left = [], end, length
+        cuts = sorted(cuts)
+        for _ in range(50):
+            if left <= datetime.timedelta(0) or t <= not_before:
+                break
+            inside = next((ca for ca, cb in cuts if ca < t <= cb), None)
+            if inside is not None:
+                t = inside
+                continue
+            prev = max((cb for _, cb in cuts if cb < t), default=None)
+            x = max(t - left, not_before, prev if prev is not None else t - left)
+            out.append((x, t))
+            left -= t - x
+            t = x
+        return out[::-1]
+
     def _move_for_session(self, r: dict, ready_times: Optional[list]) -> bool:
-        """Move the scheduled slots that run into saving session `r`: from the
-        session's start (or the slot's, if later; or now, if it's begun) the
-        slot carries on the session's length later, around any no-charging
-        time, unplugging at a ready time your supplier accepts (with Force
-        schedule on). Recorded in r["changes"], so it can be put back."""
+        """Move the scheduled slots that run into saving session `r`: a slot
+        keeps its end (its ready time) and its length, and is not plugged in
+        during the session, so it starts that much earlier (e.g. 15:30–21:30
+        with an 18:00–19:00 session: 14:30–18:00 and 19:00–21:30), around any
+        other no-charging time. A slot already running unplugs at the session
+        (or now, if it's begun) and plugs back in after it, still ending at its
+        own time. Recorded in r["changes"], so it can be put back."""
         sa, sb = _parse_iso(r["start"]), _parse_iso(r["end"])
-        shift = sb - sa
         moved = False
         for _ in range(10):
             now = self._now().replace(second=0, microsecond=0)
-            cut_from = max(sa, now + datetime.timedelta(minutes=1))
+            soon = now + datetime.timedelta(minutes=1)
+            cut_from = max(sa, soon)
             if cut_from >= sb:
                 break
             active = self._active_entries()
@@ -1256,7 +1287,6 @@ class Automation:
             hit = next((s for s in stretches if s["end"] > cut_from and s["start"] < sb), None)
             if hit is None:
                 break
-            c = max(cut_from, hit["start"])
             src = hit["plug"].get("source")
 
             def one_off(t, action):
@@ -1266,47 +1296,43 @@ class Automation:
             def key(entry, t):
                 return {"entry_id": entry["id"], "date": t.date().isoformat()}
 
+            cuts = self.block_windows(hit["start"].date() - datetime.timedelta(days=1), 4)
             added, skips = [], []
-            if hit["start"] < c:
-                added.append(one_off(c, "unplug"))  # plugged in until the session starts
+            running = hit["start"] <= now
+            if running:
+                # plugged in already: until the session (or now), then what's left of it after
+                c = max(cut_from, hit["start"])
+                added.append(one_off(c, "unplug"))
+                segs = self._place_back(hit["end"], hit["end"] - c, cuts, c)
             else:
                 skips.append(key(hit["plug"], hit["start"]))
+                segs = self._place_back(hit["end"], hit["end"] - hit["start"], cuts, soon)
             skips.append(key(hit["unplug"], hit["end"]))
-            new_start = c + shift
-            segs = self._place(new_start, hit["end"] - c,
-                               self.block_windows(new_start.date() - datetime.timedelta(days=1), 4))
-            if not segs:
-                break
-            end = segs[-1][1]
-            if self.ready_time and ready_times:
-                ready = self.first_ready_at(end, ready_times)
-                if ready is not None and ready > end:
-                    segs[-1] = (segs[-1][0], ready)
-                    end = ready
-            # A slot it now meets or runs into joins it: plugged in until whichever ends last
-            later = next((s for s in stretches if s is not hit and s["start"] >= c
-                          and s["start"] <= end and s["end"] > segs[0][0]), None)
-            for i, (x, y) in enumerate(segs):
-                added.append(one_off(x, "plug"))
-                last = i == len(segs) - 1
-                if not last or later is None or later["end"] <= y:
-                    added.append(one_off(y, "unplug"))
-            if later is not None:
-                if later["start"] > segs[0][0]:
-                    skips.append(key(later["plug"], later["start"]))
-                if later["end"] <= end:
-                    skips.append(key(later["unplug"], later["end"]))
-                else:
-                    end = later["end"]
+            # An earlier slot it now meets or runs into joins it (plugged in from its start)
+            earlier = next((s for s in stretches if s is not hit and segs and s["end"] >= segs[0][0]
+                            and s["start"] < segs[0][0] and s["end"] <= hit["start"]), None)
+            for n, (x, y) in enumerate(segs):
+                if not (n == 0 and earlier is not None):
+                    added.append(one_off(x, "plug"))
+                added.append(one_off(y, "unplug"))
+            if earlier is not None:
+                skips.append(key(earlier["unplug"], earlier["end"]))
             skips = [k for k in skips if k not in self.skips]
             self.entries = self.entries + added
             self.skips = self.skips + skips
             r["changes"]["added"] += [e["id"] for e in added]
             r["changes"]["skips"] += skips
-            note = (f"the {hit['start'].strftime('%H:%M')}–{hit['end'].strftime('%H:%M')} slot "
-                    + (f"unplugs at {c.strftime('%H:%M')} and carries on {segs[0][0].strftime('%H:%M')}–{end.strftime('%H:%M')}"
-                       if hit["start"] < c else f"moved to {segs[0][0].strftime('%H:%M')}–{end.strftime('%H:%M')}")
-                    + (" (joined with the next slot)" if later is not None else ""))
+            parts = ([(hit["start"], c)] if running else []) + segs
+            if earlier is not None and parts:
+                parts[0] = (earlier["start"], parts[0][1])
+            span = ", ".join(f"{x.strftime('%H:%M')}–{y.strftime('%H:%M')}" for x, y in parts)
+            lost = (hit["end"] - hit["start"]) - sum((y - x for x, y in parts), datetime.timedelta(0))
+            if earlier is not None:
+                lost += earlier["end"] - earlier["start"]
+            note = (f"the {hit['start'].strftime('%H:%M')}–{hit['end'].strftime('%H:%M')} slot is now {span}"
+                    + (" (joined with the slot before)" if earlier is not None else "")
+                    + (f", {int(lost.total_seconds() // 60)} min shorter (it had begun)"
+                       if lost > datetime.timedelta(0) else ""))
             r["notes"] = (r.get("notes") or []) + [note]
             logger.info("Saving session %s–%s: %s", sa.strftime("%a %H:%M"), sb.strftime("%H:%M"), note)
             moved = True

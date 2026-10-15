@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.43.1 — Saving sessions: slots start earlier
+
+- **Fix:** a slot that runs into a saving session now keeps its end time
+  and its hours and starts earlier by the time the session takes out of it
+  (15:30–21:30 with an 18:00–19:00 session: 14:30–18:00 and 19:00–21:30).
+  It was carried on later instead (19:00–22:30), past its ready time.
+  Slots moved by 2.43.0 are moved again.
+- **Improvement:** a slot moved earlier that meets the slot before joins it.
+
 ## 2.43.0 — Saving sessions
 
 - **Feature:** a Saving sessions card on the Automations tab (off by

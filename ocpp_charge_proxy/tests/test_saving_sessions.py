@@ -1,6 +1,6 @@
 import datetime
 
-from src.automation import SAVING_SOURCE, Automation, ReplugOptions
+from src.automation import SAVING_SOURCE, Automation, ReplugOptions, validate_entry
 from src.saving_sessions import find_calendar, is_saving_calendar, parse_events, supplier_of
 
 TZ = datetime.timezone.utc
@@ -70,30 +70,39 @@ def test_events_parsed():
 # --- the schedule around a session --------------------------------------------------
 
 
-def test_slot_into_a_session_moves_by_its_length():
+def test_slot_keeps_its_end_and_starts_earlier():
     a, _ = _automation()
-    a.set_schedule(enabled=True, entries=[{"time": "16:00", "action": "plug"}, {"time": "19:00", "action": "unplug"}])
-    assert a.sync_saving_sessions([_session(5, 17, 18)], block=True)
-    assert _windows(a)[:2] == [("05 16:00", "05 17:00"), ("05 18:00", "05 20:00")]
-    assert _windows(a)[2] == ("06 16:00", "06 19:00")  # only that day
-    assert "carries on 18:00–20:00" in a.saving_sessions[0]["notes"][0]
-    assert not a.sync_saving_sessions([_session(5, 17, 18)], block=True)  # nothing more to do
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    assert a.sync_saving_sessions([_session(5, 18, 19)], block=True)
+    assert _windows(a)[:2] == [("05 14:30", "05 18:00"), ("05 19:00", "05 21:30")]
+    assert _windows(a)[2] == ("06 15:30", "06 21:30")  # only that day
+    assert a.saving_sessions[0]["notes"][0] == "the 15:30–21:30 slot is now 14:30–18:00, 19:00–21:30"
+    assert not a.sync_saving_sessions([_session(5, 18, 19)], block=True)  # nothing more to do
     # cancelled: put back
     assert a.sync_saving_sessions([], block=True)
-    assert _windows(a)[0] == ("05 16:00", "05 19:00") and a.saving_sessions == []
+    assert _windows(a)[0] == ("05 15:30", "05 21:30") and a.saving_sessions == []
+
+
+def test_slot_moved_earlier_joins_the_slot_before():
+    a, _ = _automation()
+    a.set_schedule(enabled=True, entries=[{"time": "13:00", "action": "plug"}, {"time": "14:00", "action": "unplug"},
+                                          {"time": "14:30", "action": "plug"}, {"time": "18:30", "action": "unplug"}])
+    a.sync_saving_sessions([_session(5, 17, 18)], block=True)
+    assert _windows(a)[:2] == [("05 13:00", "05 17:00"), ("05 18:00", "05 18:30")]
 
 
 def test_slot_starting_in_a_session_moves_whole():
     a, _ = _automation()
     a.set_schedule(enabled=True, entries=[{"time": "17:30", "action": "plug"}, {"time": "18:30", "action": "unplug"}])
     a.sync_saving_sessions([_session(5, 17, 19)], block=True)
-    assert _windows(a)[0] == ("05 19:30", "05 20:30")
+    assert _windows(a)[0] == ("05 16:00", "05 17:00")  # ends before the session instead
 
 
 def test_block_off_puts_slots_back_and_charges_avoid_sessions():
     a, clock = _automation()
     a.set_schedule(enabled=True, entries=[{"time": "16:00", "action": "plug"}, {"time": "19:00", "action": "unplug"}])
     a.sync_saving_sessions([_session(5, 17, 18)], block=True)
+    assert _windows(a)[:2] == [("05 15:00", "05 17:00"), ("05 18:00", "05 19:00")]
     a.sync_saving_sessions([_session(5, 17, 18)], block=False)
     assert _windows(a)[0] == ("05 16:00", "05 19:00")
     assert a.session_windows() == []
@@ -110,7 +119,7 @@ def test_saving_a_schedule_isnt_refused_for_a_session():
     a.sync_saving_sessions([_session(5, 17, 18)], block=True)
     a.set_schedule(enabled=True, entries=[{"time": "16:00", "action": "plug"}, {"time": "19:00", "action": "unplug"}])
     a.sync_saving_sessions([_session(5, 17, 18)], block=True)
-    assert _windows(a)[:2] == [("05 16:00", "05 17:00"), ("05 18:00", "05 20:00")]
+    assert _windows(a)[:2] == [("05 15:00", "05 17:00"), ("05 18:00", "05 19:00")]
 
 
 def test_charge_before_a_session(tmp_path):
@@ -147,7 +156,8 @@ def test_session_already_running_unplugs_now():
     clock.dt = _at(5, 16, 30)
     a.sync_saving_sessions([_session(5, 16, 17)], block=True)
     w = [(x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in a.windows() if y > _at(5, 15)]
-    assert w[:2] == [("15:00", "16:31"), ("17:31", "19:00")]
+    assert w[:2] == [("15:00", "16:31"), ("17:00", "18:00")]  # it had begun: what's left after the session
+    assert "min shorter" in a.saving_sessions[0]["notes"][0]
 
 
 def test_turning_it_off_clears_everything():
@@ -157,3 +167,20 @@ def test_turning_it_off_clears_everything():
     assert a.clear_saving_sessions()
     assert _windows(a)[0] == ("05 16:00", "05 19:00") and a.saving_sessions == [] and not a.saving_block
     assert not a.clear_saving_sessions()
+
+
+def test_slots_moved_by_2_43_0_are_moved_again():
+    a, _ = _automation()
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True)
+    r = a.saving_sessions[0]
+    # as 2.43.0 left it: no version, its own one-offs (19:00-22:30)
+    a._undo_session(r)
+    extra = [validate_entry({"time": t, "date": "2026-10-05", "action": act}) for t, act in
+             (("18:00", "unplug"), ("19:00", "plug"), ("22:30", "unplug"))]
+    a.entries += extra
+    a.skips.append({"entry_id": a.entries[1]["id"], "date": "2026-10-05"})
+    r["changes"] = {"skips": [{"entry_id": a.entries[1]["id"], "date": "2026-10-05"}], "added": [e["id"] for e in extra]}
+    del r["v"]
+    assert a.sync_saving_sessions([_session(5, 18, 19)], block=True)
+    assert _windows(a)[:2] == [("05 14:30", "05 18:00"), ("05 19:00", "05 21:30")]

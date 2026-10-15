@@ -146,15 +146,16 @@ is read every 5 minutes, up to 8 days ahead.
 - **No charging during a session** (its own switch, on by default): each
   session is a no-charging time for that day only. Auto plug-in, the car
   plugged in sensor and Charge now unplug for it and plug back in after, as
-  for a weekly no-charging time. A slot in the schedule that runs into it is
-  moved: from the session's start (or the slot's, if later) it carries on
-  the session's length later, so it keeps its hours. For example, a
-  16:00–19:00 slot with a 17:00–18:00 session becomes 16:00–17:00 and
-  18:00–20:00; a 17:30–18:30 slot becomes 18:30–19:30. The weekly entries
-  are skipped that day and the moved part is added as one-offs (with Force
-  schedule on supplier, it unplugs at a ready time your supplier accepts). A
-  session found while it's already running unplugs straight away and
-  carries on later. Sessions are shown hatched on the schedule.
+  for a weekly no-charging time. A slot in the schedule that runs into it
+  keeps its end time (its ready time) and its hours, so it starts earlier by
+  the time the session takes out of it. For example, a 15:30–21:30 slot with
+  an 18:00–19:00 session becomes 14:30–18:00 and 19:00–21:30; a 17:30–18:30
+  slot with a 17:00–19:00 session becomes 16:00–17:00. If that meets an
+  earlier slot they join. The weekly entries are skipped that day and the
+  new times are added as one-offs. A slot already running when the session
+  is found unplugs for it (straight away, if it's begun) and plugs back in
+  after, still ending at its own time, so it's that much shorter. Sessions
+  are shown hatched on the schedule.
 - **Plug in before a session** (off by default), with **Charge for** hours:
   that long before each session a charge is added, as Charge now adds one:
   a one-off slot until the session starts, with the ready time set to it,
