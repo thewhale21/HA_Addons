@@ -72,6 +72,24 @@ it's used until you pick one.
 
 `*` is `charge` or `discharge`: each has the same set.
 
+The 2nd and 3rd discharges have the same set too, with `_2` or `_3` after
+`dispatch`: `sensor.next_discharge_dispatch_2_date`, `..._2_start_time`,
+`..._2_end_time` and so on (`1999-01-01` and `00:00:00` when there isn't
+one). So Predbat can see up to three planned discharges:
+
+```yaml
+rates_export_override:
+  - date: sensor.next_discharge_dispatch_date
+    start: sensor.next_discharge_dispatch_start_time
+    end: sensor.next_discharge_dispatch_end_time
+  - date: sensor.next_discharge_dispatch_2_date
+    start: sensor.next_discharge_dispatch_2_start_time
+    end: sensor.next_discharge_dispatch_2_end_time
+  - date: sensor.next_discharge_dispatch_3_date
+    start: sensor.next_discharge_dispatch_3_start_time
+    end: sensor.next_discharge_dispatch_3_end_time
+```
+
 A dispatch with `energyAddedKwh` above 0 counts as a discharge and below 0
 as a charge, as the template sensors did.
 

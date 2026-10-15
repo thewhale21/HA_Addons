@@ -279,3 +279,18 @@ def test_the_calendar_follows_the_plan():
               ev("2026-10-15T21:00:00+01:00", "2026-10-15T22:00:00+01:00", "Dinner", "4", "mine")]  # not ours
     delete, add = plan(events, [a, b, idle], _at(15, 30))
     assert [e["uid"] for e in delete] == ["2"] and add == [b]
+
+
+def test_the_2nd_and_3rd_discharges():
+    from src.dispatches import summarise
+    from src.ha_entities import SENSORS
+    plan = [_d("2026-10-15T18:00:00+00:00", "2026-10-15T19:00:00+00:00", 4.4),
+            _d("2026-10-15T22:30:00+00:00", "2026-10-15T23:00:00+00:00", -0.6),
+            _d("2026-10-15T23:30:00+00:00", "2026-10-16T00:30:00+00:00", 2.0)]
+    s = summarise(plan, _at(12), datetime.timezone.utc, {})
+    assert s["discharge_start_time"] == "18:00:00"
+    assert (s["discharge_2_date"], s["discharge_2_start_time"], s["discharge_2_end_time"], s["discharge_2_end_date"]) == (
+        "2026-10-15", "23:30:00", "00:30:00", "2026-10-16")
+    assert (s["discharge_3_date"], s["discharge_3_start_time"], s["discharge_3_end_time"]) == ("1999-01-01", "00:00:00", "00:00:00")
+    assert SENSORS["discharge_2_date"][0] == "sensor.next_discharge_dispatch_2_date"
+    assert SENSORS["discharge_3_end_time"][0] == "sensor.next_discharge_dispatch_3_end_time"

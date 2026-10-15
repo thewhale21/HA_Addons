@@ -34,8 +34,9 @@ def _kwh(d: dict) -> float:
         return 0.0
 
 
-def next_dispatch(dispatches: list, kind: str, now: datetime.datetime) -> Optional[dict]:
-    """The first dispatch (in the API's order) of `kind` ("charge" or "discharge") that hasn't ended."""
+def next_dispatches(dispatches: list, kind: str, now: datetime.datetime) -> list:
+    """The dispatches (in the API's order) of `kind` ("charge" or "discharge") that haven't ended."""
+    out = []
     for d in dispatches or []:
         if not isinstance(d, dict):
             continue
@@ -43,8 +44,17 @@ def next_dispatch(dispatches: list, kind: str, now: datetime.datetime) -> Option
         if (kind == "charge" and kwh < 0) or (kind == "discharge" and kwh > 0):
             end = parse_time(d.get("end"))
             if end is not None and end > now:
-                return d
-    return None
+                out.append(d)
+    return out
+
+
+def next_dispatch(dispatches: list, kind: str, now: datetime.datetime) -> Optional[dict]:
+    """The first dispatch (in the API's order) of `kind` ("charge" or "discharge") that hasn't ended."""
+    found = next_dispatches(dispatches, kind, now)
+    return found[0] if found else None
+
+
+LATER_DISCHARGES = (2, 3)  # sensors for the 2nd and 3rd discharge too (e.g. for Predbat)
 
 
 def dispatch_times(dispatch: Optional[dict], tz: Optional[datetime.tzinfo],
@@ -86,6 +96,15 @@ def summarise(dispatches: list, now: datetime.datetime, tz: Optional[datetime.tz
         out[f"{kind}_kwh"] = _kwh(d) if d else None
         times = dispatch_times(d, tz, {"start_time": previous.get(f"{kind}_start_time")})
         out.update({f"{kind}_{k}": v for k, v in times.items()})
+    # The 2nd and 3rd discharges: the same set (1999-01-01 and 00:00:00 when there's none)
+    later = next_dispatches(dispatches, "discharge", now)
+    for n in LATER_DISCHARGES:
+        d = later[n - 1] if len(later) >= n else None
+        out[f"discharge_{n}_start"] = (d or {}).get("start")
+        out[f"discharge_{n}_end"] = (d or {}).get("end")
+        out[f"discharge_{n}_kwh"] = _kwh(d) if d else None
+        times = dispatch_times(d, tz, {"start_time": "00:00:00"})
+        out.update({f"discharge_{n}_{k}": v for k, v in times.items()})
     out.update(now_values(dispatches, now))
     return out
 

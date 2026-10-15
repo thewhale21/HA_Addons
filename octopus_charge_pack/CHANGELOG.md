@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1 — The 2nd and 3rd discharges
+
+- **Feature:** sensors for the 2nd and 3rd planned discharges, the same set
+  as the next one: `sensor.next_discharge_dispatch_2_date`, `_2_start_date`,
+  `_2_end_date`, `_2_start_time`, `_2_end_time`, `_2_start`, `_2_end`, and
+  the same with `_3` (`1999-01-01` and `00:00:00` when there isn't one).
+  Add them to Predbat's `rates_export_override` like the first (README).
+
 ## 0.6.0 — Now, a calendar, plan changes and a timeline
 
 - **Feature:** `sensor.octopus_charge_pack_now`: what Octopus has the
