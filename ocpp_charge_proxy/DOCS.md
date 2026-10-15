@@ -397,12 +397,14 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   SoC over the last 30 minutes to 24 hours, or 14 days. Drag across the
   chart or scroll over it to zoom (double-click or **Reset zoom** to go
   back). The charts and the
-  energy per day are read from Home Assistant's history of the add-on's
+  energy for the last 7 days are read from Home Assistant's history of the add-on's
   sensors (keep them recorded): 10-second detail for 24 hours, then
   5-minute points while HA keeps them (10 days by default, `purge_keep_days`)
   and hourly beyond that.
-- **Sessions:** energy and time spent charging per day for the last 14
-  days (click a day to show only its sessions), and the last 20 charging
+- **Sessions:** a timeline of the last 7 days (when the car was plugged in,
+  coloured by what plugged it in, when it charged, and each day's energy and
+  time charging; click a day to show only its sessions, or a charge to open
+  it), and the last 20 charging
   sessions (energy, duration, peak power, what ended them; transaction ID
   and ID tag in the details; tagged with your supplier's name, e.g.
   **Octopus Energy slot**, when the whole session was in its dispatch

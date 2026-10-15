@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.46.0 — Recent sessions with a 7-day timeline
+
+- **Improvement:** the Sessions tab's **Recent sessions** card opens with a
+  timeline of the last 7 days: when the car was plugged in (coloured by what
+  plugged it in: the schedule, auto plug-in, Charge now, ...), when it
+  actually charged (with the kWh), and each day's energy and time charging.
+  Click a day to show only its sessions in the list below (again to show
+  all), or click a charge to open that session's details.
+- **Change:** the **Per day** chart is gone (the timeline replaces it).
+
 ## 2.45.1 — The schedule without the past days
 
 - **Change:** the Automations tab's schedule shows today and the next 6
