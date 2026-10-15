@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.25.0 — The page redesigned
+
+- **Improvement:** each tab opens with a banner that answers its main
+  question first, the detail below:
+  - **Overview:** **Right now**: what it's doing and why, the car's SoC
+    against the limits, and Start/Stop. Blue normally, green while
+    charging, grey when unplugged, red on a charger alarm.
+  - **Schedule:** **Limits now** (the limits in force and where they come
+    from) with **Quick hold** beside them; the default limits as three
+    fields side by side.
+  - **Statistics:** the four headline numbers (usable capacity, round-trip
+    losses, is it paying, dropouts), with the cards below for the detail.
+  - **Diagnostics:** the health: green **All good**, orange or red when
+    something needs attention.
+- **Improvement:** shorter pages: **Recent starts and stops** shows the
+  latest 6 (**Show all** for the rest) and **History** 15 at a time; cards
+  side by side no longer leave gaps under the shorter one.
+- **Improvement:** Settings puts **How it runs** first and the entities
+  after it, with both "show" switches together; each entity's reading
+  stays on its label's line. Schedule entries' Skip, Pause and Delete are
+  quieter, Delete in red. Long log lines wrap on the Debug tab.
+- **Change:** Spare power on the Overview reads **None (not exporting)**
+  instead of 0.00 kW.
+- **New:** Settings › **Appearance**: **Colourful** (the banners, the
+  default) or **Basic** (plain cards). Saved in each browser.
+
 ## 0.24.0 — The schedule redesigned
 
 - **Improvement:** the Schedule tab's week view is easier to read: taller

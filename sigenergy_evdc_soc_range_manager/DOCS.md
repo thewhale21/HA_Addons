@@ -104,9 +104,12 @@ The differences:
    anything, so you can compare. Then turn your automation off and Watch
    only off.
 
-The **Overview** shows what it's doing and why, the car's SoC against the
-limits (set on the Schedule tab), the power readings it decides from, the
-virtual battery and the recent starts and stops.
+The **Overview** opens with **Right now**: what it's doing and why, the
+car's SoC against the limits (set on the Schedule tab) and Start/Stop.
+Below are the power readings it decides from, the virtual battery, the
+car's SoC over time and the recent starts and stops (the latest 6;
+**Show all** for the rest). Each tab has a banner like this at the top;
+Settings › **Appearance** switches them to plain cards (**Basic**).
 
 The **Power** card's diagram shows where the power is going: solar,
 the grid, the home battery, the house and the car, with dots moving along
@@ -118,7 +121,7 @@ first, then the home battery, then the grid; the car hangs off the house.
 The house's use comes from `sensor.sigen_plant_consumed_power` (or is
 worked out from the others if that isn't set).
 
-**Quick hold** (on the Schedule tab) holds the car for a while, from now:
+**Quick hold** (in the Schedule tab's **Limits now** banner) holds the car for a while, from now:
 **No discharging** puts the low limit at its SoC now, **Hold here** keeps
 it where it is, and **Keep at least** sets a low limit you choose, for 1
 to 8 hours or until a time. Each is a one-off schedule entry, so it ends
@@ -245,10 +248,11 @@ recorder:
 
 ## Limit schedule
 
-The **Schedule** tab sets the limits. **Default limits** at the top are
+The **Schedule** tab sets the limits. **Limits now** at the top shows the
+limits in force and where they come from. **Default limits** below it are
 used whenever the schedule doesn't set a limit, and whenever nothing's
 on; they're the limit helpers, so a dashboard or automation can change
-them too. **Car battery capacity** below them is the car's usable kWh for
+them too. **Car battery capacity** beside them is the car's usable kWh for
 the virtual battery sensors (the capacity helper picked on the Settings
 tab). If the capacity comes from a sensor, or nothing's picked, entering a
 value makes the **EVDC SoC Range Vehicle Battery Capacity** helper (or finds it) and

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>try { if (localStorage.getItem('evdc-theme') === 'basic') document.documentElement.classList.add('basic'); } catch (e) {}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SigEnergy EVDC SoC Range Manager</title>
@@ -301,6 +302,116 @@
   #s-lists input { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
     border-radius: 8px; padding: 6px 10px; }
 
+
+  /* ===== The overhaul: banners at the top of each tab, calmer cards, less to scan ===== */
+  :root { --hero2: #00897b; }
+  .card h2 { font-size: 15px; letter-spacing: .1px; }
+  .card > .note:first-of-type { line-height: 1.5; }
+  .stack { gap: 18px; }
+  .section-title { margin: 14px 2px -6px; }
+  /* Cards that sit side by side without stretching to each other's height */
+  .masonry { columns: 2 440px; column-gap: 16px; }
+  .masonry.three { columns: 3 320px; }
+  .masonry > .card { break-inside: avoid; margin: 0 0 16px; display: block; width: 100%; }
+  .masonry > .card:last-child { margin-bottom: 0; }
+  /* The banner */
+  .bnr { position: relative; isolation: isolate; color: #fff; border-radius: var(--radius); padding: 16px 20px 18px;
+    background: linear-gradient(120deg, var(--primary) 0%, color-mix(in srgb, var(--hero2) 82%, #000) 100%);
+    box-shadow: 0 4px 18px -6px color-mix(in srgb, var(--primary) 55%, transparent); }
+  .bnr::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit;
+    background: radial-gradient(circle at 92% -30%, rgba(255,255,255,.28), transparent 45%), radial-gradient(circle at 0% 130%, rgba(255,255,255,.14), transparent 40%); }
+  .bnr.warn { background: linear-gradient(120deg, #fb8c00, #c62828); }
+  .bnr.err { background: linear-gradient(120deg, #e53935, #6a1b1b); }
+  .bnr.good { background: linear-gradient(120deg, #43a047, color-mix(in srgb, var(--hero2) 75%, #000)); }
+  .bnr.charging { background: linear-gradient(120deg, #43a047, color-mix(in srgb, var(--hero2) 80%, #000)); }
+  .bnr.idle { background: linear-gradient(120deg, #607d8b, #37474f); }
+  .bnr svg { width: 18px; height: 18px; flex: none; }
+  .bnr .top { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .bnr .top .spacer { flex: 1; }
+  .bnr .ttl { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 500; }
+  .bnr .main { display: flex; gap: 18px 28px; flex-wrap: wrap; align-items: stretch; }
+  .bnr .lead { flex: 1 1 300px; display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
+  .bnr .ring { width: 54px; height: 54px; flex: none; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(255,255,255,.18); box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); }
+  .bnr .ring svg { width: 26px; height: 26px; }
+  .bnr .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+  .bnr .hb { font-size: 28px; font-weight: 500; line-height: 1.15; margin: 2px 0 4px; }
+  .bnr .sm { font-size: 12.5px; opacity: .9; line-height: 1.45; }
+  .bnr .side { flex: 1 1 300px; padding-left: 26px; border-left: 1px solid rgba(255,255,255,.25); min-width: 0; }
+  @media (max-width: 720px) { .bnr .side { padding-left: 0; border-left: 0; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.25); flex-basis: 100%; } }
+  .bnr .label, .bnr .sub, .bnr .note, .bnr .muted, .bnr .range-labels { color: rgba(255,255,255,.85); }
+  :root:not(.basic) .bnr .big, :root:not(.basic) .bnr #o-status { color: #fff; }
+  :root:not(.basic) .bnr .chip { background: rgba(255,255,255,.94); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .bnr .chip:not(.ok):not(.warn):not(.err):not(.info) { color: #455a64; }
+  .bnr .btn { background: rgba(255,255,255,.14); color: #fff; border-color: rgba(255,255,255,.4); border-radius: 999px; }
+  .bnr .btn:hover:not(:disabled) { background: #fff; color: color-mix(in srgb, var(--primary) 70%, #000); }
+  .bnr .btn.primary { background: #fff; color: color-mix(in srgb, var(--primary) 75%, #000); border-color: #fff; }
+  .bnr .seg { border: 0; gap: 6px; overflow: visible; }
+  .bnr .seg button { border: 1px solid rgba(255,255,255,.38) !important; border-radius: 999px; color: #fff; background: rgba(255,255,255,.12); padding: 5px 12px; }
+  .bnr .seg button[aria-pressed="true"] { background: #fff; color: color-mix(in srgb, var(--primary) 75%, #000); }
+  .bnr select, .bnr input[type="number"] { background: rgba(255,255,255,.95); color: #263238; border-color: transparent; }
+  .bnr details.more > summary { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
+  .bnr .kv dt { color: rgba(255,255,255,.8); } .bnr .kv dd { color: #fff; }
+  .bnr .kv { gap: 7px 18px; font-size: 14px; }
+  .bnr .range { background: rgba(255,255,255,.22); box-shadow: none; height: 12px; }
+  .bnr .range .win { background: rgba(255,255,255,.6); }
+  .bnr .range .mark { background: #fff; box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 60%, #000); }
+  .bnr .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .bnr .stat { background: rgba(255,255,255,.14); border-radius: 12px; padding: 10px 14px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); min-width: 0; }
+  .bnr .stat .big { font-size: 24px; }
+  .bnr .stat .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bnr .hold { gap: 8px; }
+  .bnr .ctl .btn { min-width: 116px; }
+  .bnr-result:empty, .bnr-result[hidden] { display: none; }
+  /* Recent starts and stops: the latest few, the rest on request */
+  .capped tbody tr:nth-child(n+7) { display: none; }
+  .showall { display: flex; justify-content: center; padding-top: 10px; }
+  /* All entries: quieter actions */
+  .entry .acts .btn { border-color: transparent; background: none; }
+  .entry .acts .btn:hover { background: var(--hover); border-color: var(--divider); }
+  .entry .acts .btn[data-del] { color: var(--err); }
+  /* Settings pickers: the reading stays on the label's line */
+  .pk > .row:first-child { flex-wrap: nowrap; align-items: flex-start; }
+  .pk > .row:first-child > .muted { max-width: 46%; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; color: var(--text); font-weight: 500; font-size: 13px; }
+  .pk + .pk { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--divider); }
+  .setbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 10px 14px; border-radius: 10px; background: var(--hover); font-size: 13px; }
+  .setbar .grow { flex: 1; min-width: 200px; }
+  .setbar label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  /* Statistics: the banner has each card's headline, so the cards lead with their title */
+  #tab-stats .masonry > .card > .label { font-size: 15px; font-weight: 500; color: var(--text); text-transform: none; letter-spacing: .1px; }
+  #tab-stats .masonry > .card > .big { display: none; }
+  #tab-stats .masonry > .card > .sub { margin-top: 4px; }
+  /* Debug: long log lines wrap */
+  .logs { white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* Default limits: three fields side by side */
+  .deflims { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
+  .deflims .fld { padding: 12px 14px; border-radius: 10px; background: var(--hover); display: flex; flex-direction: column; gap: 8px; }
+  .deflims .fld .head { font-weight: 500; }
+  .deflims .fld .in { display: flex; align-items: center; gap: 6px; }
+  .deflims .fld .note { margin: 0; }
+
+  /* The basic theme (Settings › Appearance): the banners as plain cards */
+  .basic .bnr, .basic .bnr.warn, .basic .bnr.err, .basic .bnr.good, .basic .bnr.charging, .basic .bnr.idle { background: var(--card); color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--divider); }
+  .basic .bnr::before { display: none; }
+  .basic .bnr .label, .basic .bnr .sub, .basic .bnr .note, .basic .bnr .muted, .basic .bnr .range-labels, .basic .bnr .kv dt { color: var(--text2); }
+  .basic .bnr .kv dd { color: var(--text); }
+  .basic .bnr .sm, .basic .bnr .k { opacity: 1; color: var(--text2); }
+  .basic .bnr .ring { background: var(--hover); box-shadow: none; color: var(--primary); }
+  .basic .bnr.warn .ring { color: var(--warn); } .basic .bnr.err .ring { color: var(--err); } .basic .bnr.good .ring, .basic .bnr.charging .ring { color: var(--ok); }
+  .basic .bnr .side { border-color: var(--divider); }
+  .basic .bnr .stat { background: var(--hover); box-shadow: none; }
+  .basic .bnr .btn { background: var(--card); color: var(--primary); border-color: var(--divider); border-radius: 8px; }
+  .basic .bnr .btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  .basic .bnr .seg { border: 1px solid var(--divider); gap: 0; overflow: hidden; }
+  .basic .bnr .seg button { border: 0 !important; border-radius: 0; color: var(--text); background: none; }
+  .basic .bnr .seg button + button { border-left: 1px solid var(--divider) !important; }
+  .basic .bnr .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  .basic .bnr select, .basic .bnr input[type="number"] { background: var(--bg); color: var(--text); border-color: var(--divider); }
+  .basic .bnr details.more > summary { color: var(--primary); text-decoration: none; }
+  .basic .bnr .range { background: var(--hover); box-shadow: inset 0 0 0 1px var(--divider); }
+  .basic .bnr .range .win { background: color-mix(in srgb, var(--ok) 35%, transparent); }
+  .basic .bnr .range .mark { background: var(--text); box-shadow: none; }
 </style>
 </head>
 <body>
@@ -328,30 +439,30 @@
   <!-- ============ Overview: what the add-on is doing (renderState) ============ -->
   <section id="tab-overview" class="stack">
     <div class="card" id="o-note" hidden><h2><span class="chip warn">Check</span> Setting up</h2><div class="note" style="margin:0" id="o-note-text"></div></div>
-    <div class="grid grid2">
-      <div class="card">
-        <div class="row" style="margin-top:0;align-items:flex-start">
-          <div class="grow">
-            <div class="label">Status</div>
-            <div class="big" id="o-status">—</div>
-            <div class="sub" id="o-reason"></div>
+    <div class="bnr" id="o-bnr">
+      <div class="top"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21Z"/></svg>Right now</span><span class="spacer"></span>
+        <span class="ctl"><button class="btn small" id="o-start">Start charger</button><button class="btn small" id="o-stop">Stop charger</button></span></div>
+      <div class="main">
+        <div class="lead">
+          <div class="ring" id="o-ring"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21Z"/></svg></div>
+          <div style="min-width:0">
+            <div class="k">Status</div>
+            <div class="hb" id="o-status">—</div>
+            <div class="sm" id="o-reason"></div>
             <div class="row" style="margin-top:10px;gap:6px" id="o-chips"></div>
           </div>
-          <div class="ctl" style="flex-direction:column;align-items:stretch">
-            <button class="btn small" id="o-start">Start charger</button>
-            <button class="btn small" id="o-stop">Stop charger</button>
-          </div>
+        </div>
+        <div class="side">
+          <div class="k">Car</div>
+          <div class="row" style="margin-top:0;align-items:baseline;gap:10px"><div class="hb" id="o-soc">—</div><div class="sm" id="o-soc-sub"></div></div>
+          <div class="range" id="o-range" aria-hidden="true"><div class="win" id="o-win"></div><div class="mark" id="o-mark"></div></div>
+          <div class="range-labels"><span>0%</span><span id="o-range-text"></span><span>100%</span></div>
+          <div class="row" id="o-sched-now" hidden style="margin-top:10px"></div>
+          <div class="row" style="margin-top:12px"><div class="grow sm" id="o-limits-note"></div><button class="btn small" id="o-to-schedule">Limits and schedule ›</button></div>
         </div>
       </div>
-      <div class="card">
-        <div class="label">Car</div>
-        <div class="big" id="o-soc">—</div>
-        <div class="sub" id="o-soc-sub"></div>
-        <div class="range" id="o-range" aria-hidden="true"><div class="win" id="o-win"></div><div class="mark" id="o-mark"></div></div>
-        <div class="range-labels"><span>0%</span><span id="o-range-text"></span><span>100%</span></div>
-        <div class="row" id="o-sched-now" hidden style="margin-top:10px"></div>
-        <div class="row" style="margin-top:12px"><div class="grow note" style="margin:0" id="o-limits-note"></div><button class="btn small" id="o-to-schedule">Limits and schedule</button></div>
-      </div>
+    </div>
+    <div class="grid grid2">
       <div class="card" style="grid-column:1/-1">
         <h2>Power</h2>
         <div class="flowwrap">
@@ -379,50 +490,49 @@
     </div>
     <div class="card">
       <h2>Recent starts and stops<span class="spacer"></span><span class="chip" id="o-presses"></span></h2>
-      <div class="table-wrap"><table>
+      <div class="table-wrap capped" id="o-log-wrap"><table>
         <thead><tr><th>When</th><th>What and why</th><th class="num">SoC</th></tr></thead>
         <tbody id="o-log"></tbody>
       </table></div>
+      <div class="showall" id="o-log-more" hidden><button class="btn small" id="o-log-toggle"></button></div>
     </div>
   </section>
 
   <!-- ============ Schedule: the limits and when they change (src/schedule.py) ============ -->
   <section id="tab-schedule" class="stack" hidden>
-    <div class="grid grid2">
-      <div class="card">
-        <h2>Default limits</h2>
-        <div class="note" style="margin:0">Used whenever the schedule doesn't set a limit. They're helpers in Home Assistant, so a dashboard or automation can change them too.</div>
-        <div class="row">
-          <div class="grow">Default low limit<div class="note" style="margin:0" id="o-low-note">Stops discharging here</div></div>
-          <input type="number" id="o-low" min="20" max="98" step="1" aria-label="Low limit (%)"> %
+    <div class="bnr" id="sc-bnr">
+      <div class="top"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-2 .9-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11zM7 11h5v5H7z"/></svg>Limits now</span></div>
+      <div class="main">
+        <div class="lead" style="align-items:center">
+          <div class="ring"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-2 .9-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11zM7 11h5v5H7z"/></svg></div>
+          <dl class="kv" id="sc-now" style="margin:0"></dl>
         </div>
-        <div class="row">
-          <div class="grow">Default high limit<div class="note" style="margin:0" id="o-high-note">Stops charging here</div></div>
-          <input type="number" id="o-high" min="21" max="99" step="1" aria-label="High limit (%)"> %
+        <div class="side">
+          <div class="k" style="margin-bottom:8px">Quick hold <span style="text-transform:none;letter-spacing:0;opacity:.85">· from now, for a while</span></div>
+          <div class="hold">
+            <div class="seg" role="group" aria-label="Hold" id="hold-kind"><button data-k="no_discharge" aria-pressed="true" title="The low limit at the car's SoC now: it isn't discharged any further">No discharging</button><button data-k="hold" aria-pressed="false" title="Kept where it is: neither charged nor discharged by more than 1%">Hold here</button><button data-k="at_least" aria-pressed="false" title="The low limit at a level you choose">Keep at least</button></div>
+          </div>
+          <div class="hold" style="margin-top:8px">
+            <span class="field" id="hold-low-wrap" hidden><input type="number" id="hold-low" min="20" max="98" step="1" value="90" aria-label="Keep at least (%)"><span class="unit">%</span></span>
+            <select id="hold-until" aria-label="How long">
+              <option value="h1">for 1 hour</option><option value="h2">for 2 hours</option><option value="h4">for 4 hours</option><option value="h8">for 8 hours</option>
+              <option value="t06:00">until 06:00</option><option value="t07:00">until 07:00</option><option value="t08:00" selected>until 08:00</option><option value="t12:00">until 12:00</option><option value="t18:00">until 18:00</option>
+            </select>
+            <button class="btn small primary" id="hold-go">Hold</button>
+          </div>
+          <details class="more sm" style="display:block;margin-top:8px"><summary>How it works</summary><div><b>No discharging</b> puts the low limit at the car's SoC now, <b>Hold here</b> keeps it where it is, <b>Keep at least</b> sets a low limit you choose. Each is a one-off entry in the schedule below, so it ends by itself.</div></details>
+          <div class="row" id="hold-now" style="margin-top:10px;gap:6px" hidden></div>
         </div>
-        <div class="row">
-          <div class="grow">Car battery capacity<div class="note" style="margin:0" id="o-cap-note">Usable kWh, for the virtual battery sensors</div></div>
-          <input type="number" id="o-cap" min="1" max="200" step="0.1" aria-label="Car battery capacity (kWh)"> kWh
-        </div>
-      </div>
-      <div class="card">
-        <h2>Now</h2>
-        <dl class="kv" id="sc-now"></dl>
       </div>
     </div>
     <div class="card">
-      <h2>Quick hold</h2>
-      <div class="note" style="margin:0 0 10px">Holds the car from now for a while: <b>No discharging</b> puts the low limit at its SoC now, <b>Hold here</b> keeps it where it is, <b>Keep at least</b> sets a low limit you choose. Each is a one-off entry in the schedule below, so it ends by itself.</div>
-      <div class="hold">
-        <div class="seg" role="group" aria-label="Hold" id="hold-kind"><button data-k="no_discharge" aria-pressed="true" title="The low limit at the car's SoC now: it isn't discharged any further">No discharging</button><button data-k="hold" aria-pressed="false" title="Kept where it is: neither charged nor discharged by more than 1%">Hold here</button><button data-k="at_least" aria-pressed="false" title="The low limit at a level you choose">Keep at least</button></div>
-        <span class="field" id="hold-low-wrap" hidden><input type="number" id="hold-low" min="20" max="98" step="1" value="90" aria-label="Keep at least (%)"><span class="unit">%</span></span>
-        <select id="hold-until" aria-label="How long">
-          <option value="h1">for 1 hour</option><option value="h2">for 2 hours</option><option value="h4">for 4 hours</option><option value="h8">for 8 hours</option>
-          <option value="t06:00">until 06:00</option><option value="t07:00">until 07:00</option><option value="t08:00" selected>until 08:00</option><option value="t12:00">until 12:00</option><option value="t18:00">until 18:00</option>
-        </select>
-        <button class="btn small primary" id="hold-go">Hold</button>
+      <h2>Default limits</h2>
+      <div class="note" style="margin:0">Used whenever the schedule doesn't set a limit. They're helpers in Home Assistant, so a dashboard or automation can change them too.</div>
+      <div class="deflims">
+        <div class="fld"><div class="head">Low limit</div><div class="in"><input type="number" id="o-low" min="20" max="98" step="1" aria-label="Low limit (%)"> %</div><div class="note" id="o-low-note">Stops discharging here</div></div>
+        <div class="fld"><div class="head">High limit</div><div class="in"><input type="number" id="o-high" min="21" max="99" step="1" aria-label="High limit (%)"> %</div><div class="note" id="o-high-note">Stops charging here</div></div>
+        <div class="fld"><div class="head">Car battery capacity</div><div class="in"><input type="number" id="o-cap" min="1" max="200" step="0.1" aria-label="Car battery capacity (kWh)"> kWh</div><div class="note" id="o-cap-note">Usable kWh, for the virtual battery sensors</div></div>
       </div>
-      <div class="row" id="hold-now" style="margin-top:10px;gap:6px" hidden></div>
     </div>
     <div class="card">
       <h2>Schedule<span class="spacer"></span><button class="btn small primary" id="w-add">+ Add</button></h2>
@@ -447,7 +557,11 @@
 
   <!-- ============ Statistics: the car's battery (src/stats.py) ============ -->
   <section id="tab-stats" class="stack" hidden>
-    <div class="grid grid2">
+    <div class="bnr">
+      <div class="top"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>The car's battery</span><span class="spacer"></span><span class="sm" id="t-bnr-since"></span></div>
+      <div class="stats" id="t-tiles"></div>
+    </div>
+    <div class="masonry">
       <div class="card">
         <div class="label">Car battery: usable capacity</div>
         <div class="big" id="t-cap">—</div>
@@ -463,8 +577,6 @@
         <dl class="kv" id="t-eff" style="margin-top:12px"></dl>
         <div class="note" id="t-loss-note">From the SoC: the kWh it takes to put 1% into the car against the kWh you get back for 1% out, added up over the latest charges and discharges (short ones too, up to 60% of SoC each way, last 30 days). That's the charger and the car; the inverter's own AC ↔ DC loss is on top (see Is it paying?).</div>
       </div>
-    </div>
-    <div class="grid grid2">
       <div class="card">
         <div class="label">Is it paying? Last 30 days</div>
         <div class="big" id="t-money">—</div>
@@ -492,17 +604,17 @@
 
   <!-- ============ Settings ============ -->
   <section id="tab-settings" class="stack" hidden>
-    <div class="section-title">Your Home Assistant entities</div>
-    <div class="note" style="margin:8px 0 0">They start as the Sigenergy integration's own. The limits, battery capacity and charging mode select are made as helpers if left empty; point them at helpers you already have instead if you like.</div>
-    <div class="row" style="margin-top:4px">
-      <div class="grow note" style="margin:0" id="s-auto-note"></div>
-      <span class="muted" style="font-size:13px">Show the ones set up automatically</span>
-      <label class="switch"><input type="checkbox" id="s-show-auto" aria-label="Show the entities set up automatically"><span></span></label>
+    <div class="bnr">
+      <div class="top" style="margin-bottom:8px"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>Settings</span></div>
+      <div class="sm" style="margin-left:26px">How it runs first, then the Home Assistant entities it reads and presses. Changes are saved as you make them.</div>
     </div>
-    <div class="grid" id="s-pickers"></div>
-    <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all" checked> Show all entities in the lists</label>
     <div class="section-title">How it runs</div>
-    <div class="grid">
+    <div class="masonry">
+      <div class="card">
+        <h2>Appearance</h2>
+        <div class="row" style="margin-top:0"><div class="grow">Theme<div class="note" style="margin:0">Colourful puts a coloured banner at the top of each tab; Basic keeps them as plain cards. Saved in this browser.</div></div></div>
+        <div class="row" style="margin-top:8px"><div class="seg" id="c-theme" role="group" aria-label="Theme"><button data-theme="colour">Colourful</button><button data-theme="basic">Basic</button></div></div>
+      </div>
       <div class="card">
         <h2>Timing and levels</h2>
         <div id="s-tuning"></div>
@@ -535,11 +647,18 @@
           <label class="switch"><input type="checkbox" id="s-flip" aria-label="Flip the inverter's power"><span></span></label>
         </div>
       </div>
-      <div class="card" style="grid-column:1/-1">
-        <h2>Advanced: the charger's states</h2>
-        <div class="note" style="margin:0 0 6px">Only change these if your charger or set-up reports different words. Comma separated, any case.</div>
-        <div id="s-lists"></div>
-      </div>
+    </div>
+    <div class="section-title">Your Home Assistant entities</div>
+    <div class="setbar">
+      <div class="grow">They start as the Sigenergy integration's own. The limits, battery capacity and charging mode select are made as helpers if left empty; point them at helpers you already have instead if you like. <span id="s-auto-note"></span></div>
+      <label><label class="switch"><input type="checkbox" id="s-show-auto" aria-label="Show the entities set up automatically"><span></span></label>Show the ones set up automatically</label>
+      <label><input type="checkbox" id="sim-all" checked> Show all entities in the lists</label>
+    </div>
+    <div class="masonry three" id="s-pickers"></div>
+    <div class="card">
+      <h2>Advanced: the charger's states</h2>
+      <div class="note" style="margin:0 0 6px">Only change these if your charger or set-up reports different words. Comma separated, any case.</div>
+      <div id="s-lists"></div>
     </div>
   </section>
 
@@ -577,6 +696,10 @@
 
   <!-- ============ Diagnostics › Health ============ -->
   <section id="tab-health" class="stack" hidden>
+    <div class="bnr good" id="h-bnr">
+      <div class="top"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>Diagnostics</span></div>
+      <div class="lead" id="h-bnr-lead"></div>
+    </div>
     <div class="card" id="h-issues-card" hidden><h2>Needs attention</h2><ul class="issues" id="h-issues"></ul></div>
     <div class="grid">
       <div class="card"><h2>Add-on</h2><dl class="kv" id="h-addon"></dl></div>
@@ -593,6 +716,34 @@
 
 <script>
 'use strict';
+// ---------- Theme (Settings › Appearance): colourful banners or basic cards, per browser ----------
+function drawTheme() {
+  const basic = document.documentElement.classList.contains('basic');
+  document.querySelectorAll('#c-theme button').forEach((b) => b.setAttribute('aria-pressed', (b.dataset.theme === 'basic') === basic));
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#c-theme button'); if (!b) return;
+  const basic = b.dataset.theme === 'basic';
+  document.documentElement.classList.toggle('basic', basic);
+  try { localStorage.setItem('evdc-theme', basic ? 'basic' : 'colour'); } catch (e2) {}
+  drawTheme();
+});
+document.addEventListener('DOMContentLoaded', drawTheme);
+// The Overview banner's colour follows what the car is doing
+const RING = {
+  dis: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z"/></svg>',
+  chg: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21Z"/></svg>',
+  idle: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1 14H9V8h2v8Zm4 0h-2V8h2v8Z"/></svg>',
+  alarm: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>',
+};
+function drawBannerTint(s) {
+  const i = (s && s.inputs) || {}, st = String((s && s.status) || '').toLowerCase();
+  const kind = i.alarm ? 'alarm' : i.discharging || /discharg/.test(st) ? 'dis' : i.charging || /(^|[^s])charg/.test(st) ? 'chg' : 'idle';
+  // Unplugged (or no reading yet): grey; otherwise blue, green while charging, red on an alarm
+  const off = /unplug|starting|no reading/.test(st) || i.plugged_in === false;
+  $('o-bnr').className = 'bnr ' + (kind === 'alarm' ? 'err' : kind === 'chg' ? 'charging' : kind === 'idle' && off ? 'idle' : '');
+  $('o-ring').innerHTML = RING[kind];
+}
 const $ = (id) => document.getElementById(id);
 let state = null;          // latest /api/state
 let activeTab = 'overview';
@@ -719,6 +870,13 @@ function updateStatus() {
     : `Unhealthy: ${issues.map((i) => i[1]).join('; ')}. Open Diagnostics`;
   $('status-btn').setAttribute('aria-label', level === 'ok' ? 'Healthy. Open Diagnostics' : `Unhealthy, ${issues.length} issue${issues.length === 1 ? '' : 's'}. Open Diagnostics`);
   $('h-issues-card').hidden = !issues.length;
+  $('h-bnr').className = 'bnr ' + (level === 'ok' ? 'good' : level);
+  const nErr = issues.filter((i) => i[0] === 'err').length;
+  $('h-bnr-lead').innerHTML = `<div class="ring">${level === 'ok'
+    ? '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>'}</div><div style="min-width:0">`
+    + `<div class="k">Health</div><div class="hb">${level === 'ok' ? 'All good' : `${issues.length} thing${issues.length === 1 ? ' needs' : 's need'} attention`}</div>`
+    + `<div class="sm">${level === 'ok' ? 'The charger, its sensors and Home Assistant are all working.' : nErr ? `${nErr} problem${nErr === 1 ? '' : 's'}: see below` : 'See below'}</div></div>`;
   $('h-issues').innerHTML = issues.map(([lvl, t]) => `<li><span class="chip ${lvl}">${lvl === 'err' ? 'Problem' : 'Check'}</span> ${esc(t)}</li>`).join('');
 }
 setInterval(() => { if (!document.hidden) pollStatus(); }, 30000);
@@ -845,7 +1003,7 @@ function renderState(s) {
     ['Max rate', rt.car_kw != null && inUse ? `${num(rt.car_kw, 2)} kW <span class="muted">· home battery ${num(rt.house_kw, 2)} · plant ${num(rt.rate_kw, 2)}</span>` : '—'],
     ['Today', st.today_in_kwh != null ? `${num(st.today_in_kwh, 1)} kWh in · ${num(st.today_out_kwh, 1)} kWh out` : '—'],
     ['Car battery', cap ? `${num(cap, 1)} kWh` + (st.health_pct ? ` <span class="muted">· ${num(st.health_pct, 0)}% health</span>` : '') : '<span class="muted">Not set</span>'],
-    ['Spare power', i.export_kw == null ? '<span class="muted">Export not set</span>' : `Exporting ${kw(i.export_kw)}` + (t.export_held_s ? ` <span class="muted">· for ${dur(t.export_held_s)}</span>` : '')
+    ['Spare power', i.export_kw == null ? '<span class="muted">Export not set</span>' : !(i.export_kw > 0.005) && !t.export_held_s && !i.charge_signal ? '<span class="muted">None (not exporting)</span>' : `Exporting ${kw(i.export_kw)}` + (t.export_held_s ? ` <span class="muted">· for ${dur(t.export_held_s)}</span>` : '')
       + (i.charge_signal ? ' · <span class="chip ok">charge signal</span>' : '')],
     ['EMS mode', i.ems_mode ? esc(i.ems_mode) + (i.ems_blocked ? ' <span class="chip warn">no charging from export</span>' : '') : '<span class="muted">—</span>'],
   ]);
@@ -854,6 +1012,9 @@ function renderState(s) {
   // Log
   $('o-presses').textContent = `${s.presses_today || 0} button press${s.presses_today === 1 ? '' : 'es'} today`;
   const log = s.log || [];
+  $('o-log-more').hidden = log.length <= 6;
+  $('o-log-toggle').textContent = $('o-log-wrap').classList.contains('capped') ? `Show all ${log.length}` : 'Show fewer';
+  drawBannerTint(s);
   updateStatus();
   $('o-log').innerHTML = log.length ? log.map((x) => {
     const what = x.action === 'alarm' ? '<span class="chip err">Charger alarm</span>'
@@ -1009,7 +1170,7 @@ async function refreshSchedule() {
 }
 
 // ---------- History: every action and change of limits (newest first) ----------
-const hist = {entries: [], filter: 'all', shown: 50};
+const hist = {entries: [], filter: 'all', shown: 15};
 const HIST_FILTERS = {
   all: () => true,
   actions: (x) => ((x.action === 'start' || x.action === 'stop') && !x.observe_only) || (x.action || '').startsWith('elsewhere_'),
@@ -1052,11 +1213,15 @@ function drawHistory() {
 }
 $('h-filter').addEventListener('click', (ev) => {
   const f = ev.target.dataset.f; if (!f) return;
-  hist.filter = f; hist.shown = 50;
+  hist.filter = f; hist.shown = 15;
   $('h-filter').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.f === f));
   drawHistory();
 });
-$('h-more').addEventListener('click', () => { hist.shown += 100; drawHistory(); });
+$('o-log-toggle').addEventListener('click', () => {
+  const w = $('o-log-wrap'); w.classList.toggle('capped');
+  $('o-log-toggle').textContent = w.classList.contains('capped') ? `Show all ${(state && state.log || []).length}` : 'Show fewer';
+});
+$('h-more').addEventListener('click', () => { hist.shown += 50; drawHistory(); });
 
 // The week view: today and the next 6 days, an entry's high limit in the top half of
 // each day and its low limit in the bottom half
@@ -1787,6 +1952,13 @@ async function refreshStats() {
     : '<tr><td colspan="7" class="empty">No sessions yet</td></tr>';
   const now = t.in_session ? ` A ${t.in_session.direction} is in progress (from ${t.in_session.soc_start ?? '?'}%).` : '';
   $('t-since').textContent = (t.recording_since ? `Recording since ${dateTime(t.recording_since)}.` : '') + (t.since ? ` Data from ${t.since}.` : '') + now;
+  // The banner: the headline of each card
+  const tile = (label, big, sub) => `<div class="stat"><div class="label">${label}</div><div class="big">${esc(big)}</div><div class="sub" title="${esc(sub)}">${esc(sub)}</div></div>`;
+  $('t-tiles').innerHTML = tile('Usable capacity', $('t-cap').textContent, $('t-size').textContent)
+    + tile('Round-trip losses · 30 days', $('t-loss').textContent, t.soc_loss_30_kwh != null ? $('t-loss-sub').textContent.split(':')[0] : '')
+    + tile('Is it paying? · 30 days', $('t-money').textContent, $('t-money').textContent === '—' ? 'Pick rate sensors in Settings' : $('t-money-sub').textContent)
+    + tile('Discharge dropouts', $('t-drop').textContent, $('t-drop-sub').textContent);
+  $('t-bnr-since').textContent = `${t.session_count} sessions recorded`;
 }
 
 window.addEventListener('resize', () => { clearTimeout(refreshStats._t); refreshStats._t = setTimeout(() => { if (activeTab === 'stats') refreshStats(); }, 250); });
