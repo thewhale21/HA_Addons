@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.43.2 — Saving sessions: charge before only when needed
+
+- **Fix:** Plug in before a session adds nothing if the schedule already
+  has the car plugged in for those hours (e.g. a slot moved to end as the
+  session starts), and only the missing time if it covers part of them. As
+  before, the next slot starts later if it'd take a day over the daily limit.
+
 ## 2.43.1 — Saving sessions: slots start earlier
 
 - **Fix:** a slot that runs into a saving session now keeps its end time

@@ -1353,7 +1353,22 @@ class Automation:
                 self._save()
                 continue
             if left <= hours * 60:
-                return r, min(left, int(round(hours * 60)))
+                minutes = min(left, int(round(hours * 60)))
+                # Already plugged in by the schedule (e.g. a slot up to the session):
+                # nothing to add. Partly: the charge joins the scheduled slot, so
+                # only the missing time is added (planned as Charge now is, the
+                # next slot trimmed if that takes a day over the daily limit)
+                covered = window_minutes(self.windows(), now, start)
+                if covered >= minutes:
+                    r["precharged"] = True
+                    r["notes"] = (r.get("notes") or []) + [
+                        "charge before it: the schedule already has it plugged in then"]
+                    logger.info("Saving session at %s: the schedule already has the car plugged in for the "
+                                "%dh %02dm before it, nothing added", start.strftime("%H:%M"),
+                                minutes // 60, minutes % 60)
+                    self._save()
+                    continue
+                return r, minutes
         return None
 
     def mark_precharged(self, r: dict, plan: Optional[dict]) -> None:

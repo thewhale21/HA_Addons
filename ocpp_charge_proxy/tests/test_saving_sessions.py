@@ -184,3 +184,21 @@ def test_slots_moved_by_2_43_0_are_moved_again():
     del r["v"]
     assert a.sync_saving_sessions([_session(5, 18, 19)], block=True)
     assert _windows(a)[:2] == [("05 14:30", "05 18:00"), ("05 19:00", "05 21:30")]
+
+
+def test_charge_before_a_session_only_adds_what_the_schedule_doesnt_cover():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True)  # 14:30-18:00, 19:00-21:30
+    clock.dt = _at(5, 16, 0)
+    assert a.saving_precharge_due(2) is None  # plugged in already
+    assert a.saving_sessions[0]["precharged"] and "already" in a.saving_sessions[0]["notes"][-1]
+    # partly covered: the charge joins the slot, adding only the missing hour
+    b, clock = _automation(start=_at(5, 12, 0))
+    b.set_schedule(enabled=True, entries=[{"time": "17:00", "action": "plug"}, {"time": "18:00", "action": "unplug"}])
+    b.sync_saving_sessions([_session(5, 18, 19)], block=True)
+    clock.dt = _at(5, 16, 0)
+    record, minutes = b.saving_precharge_due(2)
+    plan = b.plan_auto_plug(minutes, source=SAVING_SOURCE)
+    assert plan["end"][11:16] == "18:00"
+    assert [w for w in _windows(b) if w[0].startswith("05")] == [("05 16:00", "05 18:00")]

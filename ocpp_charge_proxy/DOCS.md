@@ -159,7 +159,11 @@ is read every 5 minutes, up to 8 days ahead.
 - **Plug in before a session** (off by default), with **Charge for** hours:
   that long before each session a charge is added, as Charge now adds one:
   a one-off slot until the session starts, with the ready time set to it,
-  kept within the daily limit. A session found later than that charges for
+  kept within the daily limit (the next slot starts later if it would go
+  over, as for auto plug-in). If the schedule already has the car plugged in
+  for those hours (e.g. a slot that runs up to the session), nothing is
+  added; if it covers part of them, the charge joins that slot, so only the
+  missing time is added. A session found later than that charges for
   the time that's left (not under 15 minutes).
 - A session taken out of the calendar before it starts puts back the slots
   it moved. Turning **No charging during a session** off puts them all back,

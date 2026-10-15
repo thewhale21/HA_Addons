@@ -490,7 +490,7 @@
           <label class="switch"><input type="checkbox" id="save-block" aria-label="No charging during a saving session"><span></span></label>
         </div>
         <div class="row">
-          <div class="grow">Plug in before a session<div class="note" style="margin:0">Adds a charge that ends as the session starts. <details class="more"><summary>More</summary><div>The hours below before each session, a charge is added to the schedule as Charge now adds one: a one-off slot until the session starts, with the ready time set to its end, kept within the daily limit as Charge now is. If the session is found later than that, it charges for the time that's left (not if that's under 15 minutes).</div></details></div></div>
+          <div class="grow">Plug in before a session<div class="note" style="margin:0">Adds a charge that ends as the session starts. <details class="more"><summary>More</summary><div>The hours below before each session, if the schedule doesn't already have the car plugged in for them, a charge is added as Charge now adds one (joining any slot that covers part of that time, so only the missing hours are added): a one-off slot until the session starts, with the ready time set to its end, kept within the daily limit as Charge now is. If the session is found later than that, it charges for the time that's left (not if that's under 15 minutes).</div></details></div></div>
           <label class="switch"><input type="checkbox" id="save-plug" aria-label="Plug in before a saving session"><span></span></label>
         </div>
         <div class="row" id="save-hours-row">
