@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.43.6 — Saving sessions: unplug at the start
+
+- **Feature:** with No charging during a session on, each session gets an
+  unplug at its start (a one-off on the schedule), so the car stops even if
+  it was plugged in by hand or from Home Assistant. Not added if the
+  schedule already unplugs then (e.g. a charge before the session ends
+  there); taken out with the rest if the session is cancelled or the switch
+  is turned off.
+
 ## 2.43.5 — Schedule view: slots whose unplug is skipped
 
 - **Fix:** the schedule view drew a slot to its own unplug even when that

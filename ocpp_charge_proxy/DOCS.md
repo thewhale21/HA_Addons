@@ -144,7 +144,9 @@ is read every 5 minutes, up to 8 days ahead.
   down or demand flexibility (E.ON Next, EDF). Octopus's Power Up and free
   electricity calendars are left out. Pick yours if it isn't found.
 - **No charging during a session** (its own switch, on by default): each
-  session is a no-charging time for that day only. Auto plug-in, the car
+  session is a no-charging time for that day only, with an unplug at its
+  start (a one-off, in case the car is plugged in by hand or by Home
+  Assistant; not added if the schedule already unplugs then). Auto plug-in, the car
   plugged in sensor and Charge now unplug for it and plug back in after, as
   for a weekly no-charging time. A slot in the schedule that runs into it
   keeps its end time (its ready time) and its hours, so it starts earlier by

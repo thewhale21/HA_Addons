@@ -1183,17 +1183,21 @@ class Automation:
         for r in keep:
             if r.get("v") != SAVING_MOVE_VERSION:
                 self._undo_session(r)  # moved the old way: put back, and moved again below
+                self._undo_pre(r)
                 r["v"] = SAVING_MOVE_VERSION
                 changed = True
             if not block:
                 if r["changes"]["skips"] or r["changes"]["added"]:
                     self._undo_session(r)
+                    self._undo_pre(r)  # (it may have used the session's unplug: redone below)
                     logger.info("Saving sessions aren't no-charging times now: the slots moved for %s are put back",
                                 _parse_iso(r["start"]).strftime("%a %H:%M"))
                     changed = True
                 continue
             if _parse_iso(r["end"]) > now and self._move_for_session(r, ready_times):
                 moved = changed = True
+            if _parse_iso(r["start"]) > now and self._session_unplug(r):
+                changed = True
         if moved and cap_min and self.ready_time and not self.override_guards:
             # a moved slot that's now across the daily limit's reset time is split there, as for Charge now
             splits = self._reset_splits(self._active_entries(), self.skips, cap_min, one_off=True)
@@ -1380,6 +1384,25 @@ class Automation:
             moved = True
         return moved
 
+    def _unplug_at(self, t: datetime.datetime) -> bool:
+        """Whether the schedule (as it runs) unplugs at `t`."""
+        return any(occ == t and e["action"] == "unplug" and not skipped
+                   for occ, e, skipped in self.timeline(t.date(), 1))
+
+    def _session_unplug(self, r: dict) -> bool:
+        """An unplug at the session's start, so whatever has the car plugged in
+        then (by hand, Home Assistant, a charge...) stops for it. Not added if
+        the schedule already unplugs then. Part of r["changes"]."""
+        sa = _parse_iso(r["start"])
+        if self._unplug_at(sa):
+            return False
+        entry = validate_entry({"time": sa.strftime("%H:%M"), "date": sa.date().isoformat(), "action": "unplug",
+                                "source": SAVING_SOURCE})
+        self.entries = self.entries + [entry]
+        r["changes"]["added"].append(entry["id"])
+        logger.info("Saving session %s: unplugs at its start", sa.strftime("%a %H:%M"))
+        return True
+
     def _undo_pre(self, r: dict) -> None:
         pre = r.pop("pre", None)
         if pre:
@@ -1438,7 +1461,7 @@ class Automation:
             if after is not None:
                 skips.append(key(after["plug"], y))
                 joined.append(after)
-            else:
+            elif not self._unplug_at(y):
                 added.append(one_off(y, "unplug"))
         self.entries = self.entries + added
         self.skips = self.skips + [k for k in skips if k not in self.skips]
