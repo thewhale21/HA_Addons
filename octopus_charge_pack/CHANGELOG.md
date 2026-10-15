@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 — Its own icon
+
+- **Change:** a Charge Pack icon and logo in the add-on store (a battery
+  with a lightning bolt) instead of the template's puzzle piece, and a home
+  battery icon in the sidebar.
+
 ## 0.5.1 — Idle dispatches shown
 
 - **Fix:** the Overview only listed dispatches with energy (charges and
