@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 — Unused code removed
+
+- **Change:** removed an unused method for changing the watched sensors
+  (the Settings tab saves them another way). No change to how the add-on
+  behaves.
+
 ## 0.3.0 — Card sizes, sections and a house for the energy flow
 
 - **Feature:** make any card bigger or smaller (− and + in Edit

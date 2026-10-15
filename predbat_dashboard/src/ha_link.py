@@ -118,19 +118,6 @@ class HaLink:
         except Exception:
             logger.warning("Could not save sensor settings", exc_info=True)
 
-    async def update_settings(self, raw: dict) -> dict:
-        new = validate_settings(raw, self.settings)
-        changed = new != self.settings
-        self.settings = new
-        self.configured = True
-        self._save()
-        if changed:
-            logger.info("Sensors: %s", ", ".join(f"{k} {v or '-'}" for k, v in new.items()))
-            self._changed.set()  # follow the new ones
-            for entity_id in self.watched:
-                await self._notify(entity_id)
-        return new
-
     @property
     def watched(self) -> list[str]:
         return sorted({v for k, v in self.settings.items() if k in ENTITY_KEYS and v} | self.extra)
