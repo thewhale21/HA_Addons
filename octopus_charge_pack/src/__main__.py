@@ -17,6 +17,7 @@ from src import log_filters
 from src.api import create_api_app
 from src.app_settings import AppSettings
 from src.calendar_sync import CalendarSync
+from src.soc_check import check_sessions
 from src.config import load_config
 from src.debug_tools import DebugTools, install_log_buffer
 from src.ha_link import HaLink
@@ -65,9 +66,14 @@ async def run() -> None:
     settings.on_change = lambda changes: wake.set() if {"device_id", "poll_seconds", "calendar"} & set(changes) else None
     calendar = CalendarSync(link, state)
 
-    async def after_read(dispatches: list) -> None:
-        # The calendar of dispatches (Settings tab: on by default)
-        await calendar.sync(dispatches, datetime.datetime.now(datetime.timezone.utc), settings.calendar)
+    async def after_read(dispatches: list, kept: dict) -> bool:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        # The calendars of dispatches (Settings tab: on by default)
+        await calendar.sync(dispatches, now, settings.calendar)
+        # Did the battery charge / discharge in the completed sessions? (the SoC sensor, if picked)
+        if link.connected:
+            return await check_sessions(kept.get("completed") or [], link.settings.get("soc_entity"), link.query, now)
+        return False
 
     tasks = [asyncio.create_task(link.run()),
              asyncio.create_task(worker(state, config, data_dir, settings, wake, after_read))]

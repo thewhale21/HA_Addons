@@ -17,6 +17,7 @@ class SharedState:
     summary: dict = field(default_factory=dict)  # src/dispatches.py summarise(): what the sensors show
     completed: list = field(default_factory=list)  # completed sessions, newest first (src/dispatches.py)
     changes: list = field(default_factory=list)  # changes to the plan, newest first (src/dispatches.py)
+    soc_entity: Optional[str] = None  # the home battery's SoC sensor (Settings), for the History tab
     calendar: dict = field(default_factory=dict)  # the calendar of dispatches (src/calendar_sync.py)
 
     def to_dict(self) -> dict:

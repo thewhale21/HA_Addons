@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0 — Did the battery really discharge?
+
+- **Feature:** pick your home battery's SoC sensor on the Settings tab
+  (Your home battery). Each completed session then shows its SoC from start
+  to end, and whether it really discharged (or charged): 2% or more the
+  right way counts. Earlier sessions are checked too, as far back as Home
+  Assistant keeps history.
+- **Improvement:** the History tab's completed sessions are redesigned:
+  totals across the top (sessions, kWh discharged and charged, and how many
+  really moved the battery), and each session as a row with its times,
+  planned kWh, a SoC bar and the result.
+
 ## 0.6.3 — A calendar each for charges and discharges
 
 - **Change:** two calendars instead of one: Octopus Charge Pack Charge

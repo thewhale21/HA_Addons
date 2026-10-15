@@ -15,10 +15,12 @@ and its sensors. In short: enter your Octopus API key on the
    ticked), then the next discharge (with its local date, start and end as
    the date and time sensors give them) and next charge, each with its own
    planned dispatches.
-2. **History** has the completed sessions of the last 30 days and the
-   plan's changes of the last 7.
+2. **History** has the completed sessions of the last 30 days (with
+   totals, and with your home battery's SoC sensor picked on the Settings
+   tab, its SoC from the start to the end of each and whether it really
+   charged or discharged) and the plan's changes of the last 7.
 3. **Settings** has the device and read interval (both drop-downs, applied
-   at once) and the calendar switch.
+   at once), your home battery's SoC sensor and the calendar switch.
 4. **Diagnostics** has its health, the sensors it posts, the log
    and a diagnostics bundle (the API key is always hidden).
 
@@ -56,6 +58,13 @@ and its sensors. In short: enter your Octopus API key on the
   have started stay, as a history). Idle dispatches aren't added; events it
   didn't add are never touched. Checked against the calendars when the plan
   changes, and every 10 minutes.
+- `src/soc_check.py`: with a SoC sensor picked, each completed session's
+  SoC at its start and end is read back from Home Assistant's history
+  (`history/history_during_period`). A discharge that took it down by 2% or
+  more counts as discharged, a charge that took it up as charged; no
+  readings then: "No SoC reading". Checked once per session (when it
+  completes, and for earlier ones when the sensor is picked, as far back as
+  HA keeps history: 10 days by default) and kept with it.
 - `src/dispatches.py`: the logic of the old template sensors, with no I/O:
   the next charge (energyAddedKwh < 0) and discharge (> 0) that hasn't
   ended, and each one's local date and times.

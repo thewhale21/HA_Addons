@@ -110,7 +110,10 @@ async def worker(state: SharedState, config, data_dir: Optional[str], settings=N
                 _save(path, kept)
                 if after_read is not None:
                     try:
-                        await after_read((state.summary or {}).get("dispatches") or [])
+                        # (it may add to the completed sessions, e.g. the SoC check: saved then)
+                        if await after_read((state.summary or {}).get("dispatches") or [], kept):
+                            state.completed = list(kept.get("completed") or [])
+                            _save(path, kept)
                     except Exception:
                         logger.warning("After reading the dispatches", exc_info=True)
             except AuthError as err:

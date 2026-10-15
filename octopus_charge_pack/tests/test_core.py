@@ -44,10 +44,12 @@ def test_app_settings_are_checked_and_saved(tmp_path):
             s.update(bad)
 
 
-def test_no_entity_pickers_here(tmp_path):
-    assert validate_settings({}) == {}
-    with pytest.raises(ValueError):
-        validate_settings({"nope": 1})
+def test_the_soc_sensor_picker(tmp_path):
+    assert validate_settings({}) == {"soc_entity": ""}
+    assert validate_settings({"soc_entity": " sensor.battery_soc "}) == {"soc_entity": "sensor.battery_soc"}
+    for bad in ({"nope": 1}, {"soc_entity": "light.x"}):
+        with pytest.raises(ValueError):
+            validate_settings(bad)
     link = HaLink(str(tmp_path), SharedState(), token="")
     assert not link.available and link.watched == []
 

@@ -299,3 +299,29 @@ def test_the_2nd_and_3rd_discharges():
     assert (s["discharge_3_date"], s["discharge_3_start_time"], s["discharge_3_end_time"]) == ("1999-01-01", "00:00:00", "00:00:00")
     assert SENSORS["discharge_2_date"][0] == "sensor.next_discharge_dispatch_2_date"
     assert SENSORS["discharge_3_end_time"][0] == "sensor.next_discharge_dispatch_3_end_time"
+
+
+# --- did the battery discharge? (the SoC sensor) ---------------------------------------
+
+def test_soc_shows_whether_a_session_happened():
+    from src.soc_check import check_sessions, result
+    s, e = _at(18), _at(19)
+    readings = [(_at(17, 50).timestamp(), 80.0), (_at(18, 30).timestamp(), 70.0), (_at(18, 59).timestamp(), 62.0)]
+    assert result("discharge", readings, s, e) == {"soc_start": 80.0, "soc_end": 62.0, "soc_result": "discharged"}
+    assert result("discharge", [(s.timestamp(), 80.0), (e.timestamp(), 79.5)], s, e)["soc_result"] == "not_discharged"
+    assert result("charge", [(s.timestamp(), 20.0), (e.timestamp(), 45.0)], s, e)["soc_result"] == "charged"
+    assert result("discharge", [], s, e)["soc_result"] == "no_data"
+    completed = [{"start": "2026-10-15T18:00:00Z", "end": "2026-10-15T19:00:00Z", "kind": "discharge"},
+                 {"start": "2026-10-01T18:00:00Z", "end": "2026-10-01T19:00:00Z", "kind": "discharge"}]
+    asked = []
+
+    async def query(payload, timeout=30):
+        asked.append(payload)
+        return {"sensor.soc": [{"s": "80", "lu": _at(17, 50).timestamp()}, {"s": "unavailable", "lu": _at(18).timestamp()},
+                               {"s": "61", "lu": _at(18, 58).timestamp()}]}
+
+    assert _run(check_sessions(completed, "sensor.soc", query, _at(19, 5)))
+    assert completed[0]["soc_result"] == "discharged" and completed[0]["soc_end"] == 61.0
+    assert completed[1]["soc_result"] == "no_data" and len(asked) == 1  # too old for HA's history
+    assert not _run(check_sessions(completed, "sensor.soc", query, _at(19, 6)))  # checked once
+    assert not _run(check_sessions(completed, "", query, _at(19, 6)))

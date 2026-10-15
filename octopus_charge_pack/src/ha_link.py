@@ -37,7 +37,7 @@ ENTITY_LIST_TTL_S = 30
 PICKER_DOMAINS = ("sensor", "binary_sensor", "switch", "input_boolean", "input_number", "light", "climate")
 
 # The entity pickers on the Settings tab: key -> domain(s) allowed
-ENTITY_KEYS: dict = {}  # none needed: the add-on reads Octopus, not Home Assistant entities
+ENTITY_KEYS: dict = {"soc_entity": ("sensor", "number", "input_number")}  # your home battery's SoC (History tab)
 
 
 def default_settings() -> dict:
@@ -82,6 +82,7 @@ class HaLink:
         self._changed = asyncio.Event()  # the watched entities changed: subscribe again
         self._states_cache: tuple[float, list] = (0.0, [])
         self._load()
+        shared_state.soc_entity = self.settings.get("soc_entity") or None
 
     # --- settings ------------------------------------------------------------
 
@@ -121,6 +122,7 @@ class HaLink:
         self.settings = new
         self.configured = True
         self._save()
+        self._shared.soc_entity = new.get("soc_entity") or None
         if changed:
             logger.info("Sensors: %s", ", ".join(f"{k} {v or '-'}" for k, v in new.items()))
             self._changed.set()  # follow the new ones

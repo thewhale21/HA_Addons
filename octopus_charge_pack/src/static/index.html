@@ -162,6 +162,29 @@
   .tl .axis { position: relative; height: 14px; color: var(--text2); font-size: 11px; }
   .tl .axis span { position: absolute; transform: translateX(-50%); }
   .tl .axis span:first-child { transform: none; } .tl .axis span:last-child { transform: translateX(-100%); }
+  /* History: summary tiles and sessions */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 4px; }
+  .stat { background: var(--hover); border-radius: 12px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 22px; font-weight: 500; margin-top: 2px; }
+  .stat span { font-size: 12px; color: var(--text2); }
+  .sessions { display: grid; gap: 8px; margin-top: 12px; }
+  .sess { display: grid; grid-template-columns: 112px 104px minmax(120px, 1fr) 140px; gap: 12px; align-items: center;
+          padding: 10px 12px; border: 1px solid var(--divider); border-radius: 12px; }
+  .sess .when { font-size: 13px; font-weight: 500; line-height: 1.25; } .sess .when small { display: block; font-weight: 400; color: var(--text2); }
+  .sess > div:last-child { justify-self: end; }
+  .sess .what { font-size: 12px; color: var(--text2); line-height: 1.6; }
+  .socbar { position: relative; height: 10px; border-radius: 5px; background: var(--hover); }
+  .socbar i { position: absolute; top: 0; bottom: 0; border-radius: 5px; }
+  .socbar i.discharge { background: linear-gradient(90deg, var(--violet), #ce93d8); }
+  .socbar i.charge { background: linear-gradient(90deg, #81d4fa, var(--info)); }
+  .socbar em { position: absolute; top: -3px; width: 3px; height: 16px; border-radius: 2px; background: var(--text); }
+  .soctext { font-size: 12px; color: var(--text2); margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .pill.ok { background: rgba(67,160,71,.14); color: var(--ok); } .pill.warn { background: rgba(245,124,0,.14); color: var(--warn); }
+  .pill.none { background: var(--hover); color: var(--text2); }
+  .prompt { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; background: var(--hover); margin-top: 12px; font-size: 13px; }
+  .prompt .grow { flex: 1; }
+  @media (max-width: 640px) { .sess { grid-template-columns: 1fr auto; } .sess .soc { grid-column: 1 / -1; } }
   .tl-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 12px; color: var(--text2); }
   .tl-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
   .switch { position: relative; width: 44px; height: 24px; flex: none; }
@@ -250,7 +273,9 @@
   <section id="tab-history" class="stack" hidden>
     <div class="card">
       <h2>Completed sessions</h2>
-      <table><thead><tr><th>Date</th><th>Time</th><th>Type</th><th class="num">Energy</th></tr></thead><tbody id="o-done"></tbody></table>
+      <div class="stats" id="o-done-stats"></div>
+      <div id="o-done-prompt"></div>
+      <div class="sessions" id="o-done"></div>
       <div class="note" style="margin:8px 0 0">Octopus changes its plan a lot, but a session that happens stays in it until its end: one still planned when it ended (within two reads) counts as completed. The last 30 days.</div>
     </div>
     <div class="card">
@@ -272,6 +297,11 @@
           <option value="1800">30 minutes</option><option value="3600">1 hour</option>
         </select></div>
       <div class="note" style="margin:14px 0 0">Your Octopus API key is set on the add-on's <b>Configuration</b> tab in Home Assistant (restart the add-on after changing it).</div>
+    </div>
+    <div class="card">
+      <h2>Your home battery</h2>
+      <div class="row" style="margin-top:0"><div class="grow">SoC sensor<div class="note" style="margin:0">Its state of charge (%), so the History tab can show whether each session really charged or discharged it. <details class="more"><summary>More</summary><div>For each completed session, its SoC at the start and the end is read back from Home Assistant's history. Moving 2% or more the right way counts. Earlier sessions are checked when you pick it, as far back as Home Assistant keeps history (10 days by default).</div></details></div></div></div>
+      <div class="row" style="margin-top:6px"><span class="picker" data-key="soc_entity" data-domain="sensor,number,input_number" data-class="battery" data-units="%" data-none="None"></span></div>
     </div>
     <div class="card">
       <h2>Calendars<span class="spacer"></span>
@@ -543,14 +573,43 @@ function renderState(s) {
   const cals = cal.calendars || {};
   $('s-cal-info').innerHTML = cal.enabled === false ? kv([['Status', '<span class="chip">Off</span>']])
     : kv([['Charges', calRow(cals.charge)], ['Discharges', calRow(cals.discharge)]]);
-  const done = s.completed || [];
-  $('o-done').innerHTML = done.map((c) => {
-    const chip = c.kind === 'discharge' ? '<span class="chip dis">Discharge</span>' : c.kind === 'charge' ? '<span class="chip chg">Charge</span>' : '<span class="chip">Dispatch</span>';
-    const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
-    const day = new Date(c.start).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
-    return `<tr><td>${esc(day)}</td><td>${esc(t(c.start))}–${esc(t(c.end))}</td><td>${chip}</td><td class="num">${num(c.energyAddedKwh, 2)} kWh</td></tr>`;
-  }).join('') || '<tr><td colspan="4" class="muted">None yet: a session shows here once it has ended</td></tr>';
+  drawHistory(s);
   drawDevicePicker(s);
+}
+// History: completed sessions, with the battery's SoC if a sensor is picked
+function drawHistory(s) {
+  const done = s.completed || [], hasSoc = !!s.soc_entity;
+  const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+  const dis = done.filter((c) => c.kind === 'discharge'), chg = done.filter((c) => c.kind === 'charge');
+  const sumKwh = (xs) => xs.reduce((a, c) => a + Math.abs(Number(c.energyAddedKwh) || 0), 0);
+  const checked = done.filter((c) => c.soc_result && c.soc_result !== 'no_data');
+  const good = checked.filter((c) => c.soc_result === 'discharged' || c.soc_result === 'charged');
+  const tile = (label, value, sub) => `<div class="stat"><span>${label}</span><b>${value}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
+  $('o-done-stats').innerHTML = !done.length ? '' : tile('Sessions', done.length, 'the last 30 days')
+    + tile('Discharged', `${num(sumKwh(dis), 1)} kWh`, `${dis.length} session${dis.length === 1 ? '' : 's'}`)
+    + tile('Charged', `${num(sumKwh(chg), 1)} kWh`, `${chg.length} session${chg.length === 1 ? '' : 's'}`)
+    + (hasSoc ? tile('Battery moved', checked.length ? `${good.length} of ${checked.length}` : '—', 'checked against its SoC') : '');
+  $('o-done-prompt').innerHTML = hasSoc || !done.length ? '' : `<div class="prompt"><div class="grow">Pick your home battery's SoC sensor to see whether each session really charged or discharged it.</div><button class="btn small" id="o-soc-go">Pick it</button></div>`;
+  if ($('o-soc-go')) $('o-soc-go').onclick = () => showTab('settings');
+  const RESULT = {discharged: ['ok', '✓ Discharged'], charged: ['ok', '✓ Charged'], not_discharged: ['warn', 'Didn\'t discharge'],
+    not_charged: ['warn', 'Didn\'t charge'], no_data: ['none', 'No SoC reading']};
+  $('o-done').innerHTML = done.map((c) => {
+    const kind = c.kind === 'charge' ? 'charge' : 'discharge';
+    const chip = kind === 'discharge' ? '<span class="chip dis">Discharge</span>' : '<span class="chip chg">Charge</span>';
+    const day = new Date(c.start).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
+    let bar = '<div class="soctext">Not checked</div>', pill = '';
+    if (c.soc_result && c.soc_start != null && c.soc_end != null) {
+      const a = Math.max(0, Math.min(100, c.soc_start)), b = Math.max(0, Math.min(100, c.soc_end));
+      const lo = Math.min(a, b), hi = Math.max(a, b), d = b - a;
+      bar = `<div class="socbar" title="SoC ${num(a, 0)}% → ${num(b, 0)}%"><i class="${kind}" style="left:${lo}%;width:${Math.max(hi - lo, 0.8)}%"></i><em style="left:calc(${b}% - 1.5px)"></em></div>`
+        + `<div class="soctext">${num(a, 0)}% → ${num(b, 0)}% <b style="color:var(--text)">${d > 0 ? '+' : ''}${num(d, 0)}%</b></div>`;
+    } else if (c.soc_result === 'no_data') bar = '<div class="soctext">No SoC readings for then</div>';
+    else if (!hasSoc) bar = '';
+    if (c.soc_result) { const [cls, text] = RESULT[c.soc_result] || ['none', c.soc_result]; pill = `<span class="pill ${cls}">${text}</span>`; }
+    return `<div class="sess"><div class="when">${esc(day)}<small>${esc(t(c.start))}–${esc(t(c.end))}</small></div>`
+      + `<div class="what">${chip}<br>${num(Math.abs(c.energyAddedKwh), 2)} kWh planned</div>`
+      + `<div class="soc">${bar}</div><div>${pill}</div></div>`;
+  }).join('') || '<div class="muted" style="padding:8px 0">None yet: a session shows here once it has ended</div>';
 }
 const deviceLabel = (d) => [d.name || d.deviceType || 'Device', d.name && d.deviceType ? d.deviceType : '', d.provider || ''].filter(Boolean).join(' · ');
 function drawDevicePicker(s) {
