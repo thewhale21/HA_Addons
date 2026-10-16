@@ -404,6 +404,49 @@
   .basic .hero-next .k b, .basic .hero-off { background: var(--hover); }
   .basic .hero-next .sm, .basic .hero-cap, .basic .hero-on, .basic .hero-help { opacity: 1; color: var(--text2); }
   .basic .bnr .dot { box-shadow: none; }
+
+  /* ===== 2.49: calmer cards, less to scan ===== */
+  .stack { gap: 18px; }
+  .card h2 { font-size: 15px; letter-spacing: .1px; }
+  .section-title { margin: 14px 2px -6px; }
+  /* Cards side by side without stretching to each other's height (no gaps) */
+  .masonry { columns: 2 440px; column-gap: 16px; }
+  .masonry.three { columns: 3 300px; }
+  .masonry > .card { break-inside: avoid; margin: 0 0 16px; display: block; width: 100%; }
+  .masonry > .card:last-child { margin-bottom: 0; }
+  /* Overview banner: the state on the left, the four readings on the right */
+  .bnr.ov .hero-main { align-items: center; }
+  .bnr.ov .hero-next { flex: 1 1 280px; }
+  .bnr.ov .state { font-size: 30px; font-weight: 500; line-height: 1.15; margin: 2px 0 4px; }
+  .bnr.ov .ov-stats { flex: 1 1 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .bnr.ov .ov-stats .big { white-space: nowrap; }
+  .bnr.ov .conn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; font-size: 13px; }
+  .bnr.ov .conn > span { display: inline-flex; align-items: center; gap: 6px; }
+  .bnr .stat .label { font-size: 11px; }
+  .bnr .stat .sub { font-size: 11.5px; line-height: 1.35; }
+  .bnr .hero-top #o-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  /* OCPP messages: both directions in one card */
+  .cmds { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px 28px; }
+  .cmds > div > .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text2); margin-bottom: 6px; }
+  /* Automations: one daily-limit line (in the banner), a smaller key */
+  #sim-auto-cap, #plug-cap { display: none !important; }
+  .wlegend { font-size: 11.5px; gap: 6px 14px; }
+  /* Settings: max current on one line */
+  #c-amps { flex-wrap: nowrap; }
+  #c-amps button { padding: 6px 7px; white-space: nowrap; font-size: 13px; flex: 1 0 auto; }
+  .setbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 10px 14px; border-radius: 10px; background: var(--hover); font-size: 13px; }
+  .setbar label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  .kv dd code, .kv dd .mono { overflow-wrap: anywhere; font-size: 12px; }
+  /* Debug: replies sit quietly under their call; destructive buttons in red */
+  .msg.result > summary { padding-top: 2px; padding-bottom: 5px; font-size: 12px; opacity: .8; }
+  .msg.result .a { padding-left: 12px; }
+  .btn.danger, #d-drop, #d-restart, #d-clear-sessions, #d-clear-messages { color: var(--err); }
+  .btn.danger:hover, #d-drop:hover, #d-restart:hover, #d-clear-sessions:hover, #d-clear-messages:hover { background: color-mix(in srgb, var(--err) 10%, transparent); border-color: var(--err); }
+  /* Diagnostics: the long configuration table folds away */
+  details.fold > summary { cursor: pointer; color: var(--primary); font-size: 13px; list-style: none; padding: 4px 0; }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  details.fold > summary::before { content: '▸ '; } details.fold[open] > summary::before { content: '▾ '; }
+  .basic .bnr.ov .state { color: inherit; }
 </style>
 </head>
 <body>
@@ -429,30 +472,28 @@
   </div>
   <!-- ============ Overview ============ -->
   <section id="tab-overview" class="stack">
-    <div class="bnr solo ov">
-      <div class="hero">
-        <div>
-          <div class="label">Charger state</div>
-          <div class="state" id="o-state">—</div>
-          <div class="sub" id="o-state-sub"></div>
+    <div class="bnr solo ov" id="o-bnr">
+      <div class="hero-top"><span class="hero-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.31-.78C8.48 10.94 10.42 7.54 13.01 3h1l-1 7h3.51c.4 0 .62.19.4.66C12.97 17.55 11 21 11 21Z"/></svg>Charger</span><span class="spacer"></span><span id="o-chips"></span></div>
+      <div class="hero-main">
+        <div class="hero-next">
+          <div class="ring"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 7V3h-2v4h-4V3H8v4c-1 0-2 1-2 2v5.5L9.5 18v3h5v-3l3.5-3.5V9c0-1-1-2-2-2Z"/></svg></div>
+          <div style="min-width:0">
+            <div class="k">Charger state</div>
+            <div class="state" id="o-state">—</div>
+            <div class="sm" id="o-state-sub"></div>
+            <div class="conn">
+              <span><span class="dot" id="o-conn-dot"></span><span id="o-conn">—</span></span>
+              <span><span class="sm">Transaction</span> <span id="o-tx">—</span></span>
+            </div>
+          </div>
         </div>
-        <div>
-          <div class="label">OCPP server</div>
-          <div class="row" style="margin-top:6px"><span class="dot" id="o-conn-dot"></span><span id="o-conn">—</span></div>
+        <div class="ov-stats">
+          <div class="stat"><div class="label">Power</div><div class="big" id="o-power">—</div><div class="sub" id="o-power-sub"></div></div>
+          <div class="stat"><div class="label">Current</div><div class="big" id="o-amps">—</div><div class="sub" id="o-amps-sub"></div></div>
+          <div class="stat"><div class="label">Car SoC</div><div class="big" id="o-soc">—</div><div class="sub" id="o-soc-sub"></div></div>
+          <div class="stat"><div class="label">Energy meter</div><div class="big" id="o-energy">—</div><div class="sub">Lifetime register</div></div>
         </div>
-        <div>
-          <div class="label">Transaction</div>
-          <div style="margin-top:6px" id="o-tx">—</div>
-        </div>
-        <div style="margin-left:auto" id="o-chips"></div>
       </div>
-    </div>
-
-    <div class="grid tiles">
-      <div class="card"><div class="label">Power</div><div class="big" id="o-power">—</div><div class="sub" id="o-power-sub"></div></div>
-      <div class="card"><div class="label">Current</div><div class="big" id="o-amps">—</div><div class="sub" id="o-amps-sub"></div></div>
-      <div class="card"><div class="label">Car SoC</div><div class="big" id="o-soc">—</div><div class="sub" id="o-soc-sub"></div></div>
-      <div class="card"><div class="label">Energy meter</div><div class="big" id="o-energy">—</div><div class="sub">Lifetime register</div></div>
     </div>
 
     <div class="grid">
@@ -482,14 +523,11 @@
       <div class="legend" id="chart-legend"></div>
     </div>
 
-    <div class="grid">
-      <div class="card">
-        <h2>Last command received</h2>
-        <div id="o-rx" class="muted">None yet</div>
-      </div>
-      <div class="card">
-        <h2>Last command sent</h2>
-        <div id="o-txcmd" class="muted">None yet</div>
+    <div class="card">
+      <h2>OCPP messages<span class="spacer"></span><a href="#" class="muted" style="font-size:12px;font-weight:400" id="o-to-logs">All messages ›</a></h2>
+      <div class="cmds">
+        <div><div class="k">Last received from <span class="supn" data-f="your supplier">your supplier</span></div><div id="o-rx" class="muted">None yet</div></div>
+        <div><div class="k">Last sent to <span class="supn" data-f="your supplier">your supplier</span></div><div id="o-txcmd" class="muted">None yet</div></div>
       </div>
     </div>
   </section>
@@ -564,7 +602,7 @@
           <div id="a-plan" style="margin-top:6px"></div></div>
       </div>
     </div>
-    <div class="grid">
+    <div class="masonry">
       <div class="card">
         <h2>Auto plug-in<span class="spacer"></span>
           <label class="switch"><input type="checkbox" id="sim-auto" aria-label="Auto plug-in"><span></span></label>
@@ -659,7 +697,8 @@
       <div class="hero-top" style="margin-bottom:10px"><span class="hero-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>Settings</span></div>
       <div class="hero-sub">How the simulated charger behaves, and how it works with <span class="supn" data-f="your supplier">your supplier</span> and Home Assistant.</div>
     </div>
-    <div class="grid">
+    <div class="section-title">The charger</div>
+    <div class="masonry three">
       <div class="card">
         <h2>Appearance</h2>
         <div class="row">
@@ -693,7 +732,9 @@
       </div>
     </div>
     <div class="section-title">Your Home Assistant sensors</div>
-    <div class="grid">
+    <div class="setbar"><span style="flex:1;min-width:200px">The sensors it reads. Lists show the likely ones first.</span>
+      <label><input type="checkbox" id="sim-all"> Show all sensors in the lists (here and on the Automations tab)</label></div>
+    <div class="masonry three">
       <div class="card">
         <h2>Power</h2>
         <div class="row"><div class="grow">Power sensor<div class="note" style="margin:0">Real power (W or kW) reported instead of the simulation</div></div></div>
@@ -718,7 +759,7 @@
       </div>
     </div>
     <div class="section-title">Your supplier</div>
-    <div class="grid">
+    <div class="masonry three">
       <div class="card">
         <h2>Smart charging sensor</h2>
         <div class="note" style="margin:0 0 10px">Found automatically: pick one only if it isn't, or the wrong one is. <details class="more"><summary>More</summary><div>Octopus Energy and EDF Energy: the intelligent dispatching binary sensor; E.ON Next: its smart charging schedule sensor. It has your supplier's planned slots.</div></details></div>
@@ -753,12 +794,29 @@
         <div id="sup-clash" class="note" style="margin:12px 0 0" hidden></div>
       </div>
     </div>
-    <label class="live" style="cursor:pointer"><input type="checkbox" id="sim-all"> Show all sensors in the lists (here and on the Automations tab)</label>
   </section>
 
 
   <!-- ============ Diagnostics › Debug ============ -->
   <section id="tab-debug" class="stack" hidden>
+    <div class="card">
+      <h2>Logs</h2>
+      <div class="row" style="margin-top:0">
+        <div class="grow">Log level<div class="note" style="margin:0" id="d-level-note">Saved: kept after a restart. <details class="more"><summary>More</summary><div>OCPP messages are logged at Info, except Heartbeats and periodic meter readings, which only show at Debug. Clock-aligned readings stay at Info during a session.</div></details></div></div>
+        <div class="seg" id="d-level" role="group" aria-label="Log level"><button data-level="debug">Debug</button><button data-level="info">Info</button><button data-level="warning">Warning</button></div>
+      </div>
+      <div class="msg-tools" style="margin-top:12px">
+        <input type="search" id="m-filter" placeholder="Filter by action or text" aria-label="Filter messages" style="flex:1;min-width:160px">
+        <label><input type="checkbox" id="m-hide-hb" checked> Hide Heartbeat</label>
+        <label><input type="checkbox" id="m-hide-mv"> Hide MeterValues</label>
+        <label><input type="checkbox" id="m-pause"> Pause</label>
+        <button class="btn small" id="m-copy">Copy</button>
+      </div>
+      <div class="msgs" id="m-list"></div>
+      <div class="note"><span id="m-count">0</span> shown · newest at the top · the last 300 frames are kept, across restarts. ↑ sent, ↓ received.</div>
+    </div>
+    <div class="section-title">Tools</div>
+    <div class="masonry">
     <div class="card">
       <h2>Test values</h2>
       <div class="note" style="margin:0 0 10px">For testing: values reported in place of the simulation or your sensors.</div>
@@ -805,22 +863,6 @@
       <div class="note" style="margin:0">Off by default. On: the schedule, auto plug-in and Charge now can plug in for longer than <span class="supn" data-f="your supplier">your supplier</span>'s daily limit while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on. <details class="more"><summary>More</summary><div>Your supplier may not charge for the rest. Turning the guards back on needs the schedule to be within the limit again.</div></details></div>
     </div>
     <div class="card">
-      <h2>Logs</h2>
-      <div class="row" style="margin-top:0">
-        <div class="grow">Log level<div class="note" style="margin:0" id="d-level-note">Saved: kept after a restart. <details class="more"><summary>More</summary><div>OCPP messages are logged at Info, except Heartbeats and periodic meter readings, which only show at Debug. Clock-aligned readings stay at Info during a session.</div></details></div></div>
-        <div class="seg" id="d-level" role="group" aria-label="Log level"><button data-level="debug">Debug</button><button data-level="info">Info</button><button data-level="warning">Warning</button></div>
-      </div>
-      <div class="msg-tools" style="margin-top:12px">
-        <input type="search" id="m-filter" placeholder="Filter by action or text" aria-label="Filter messages" style="flex:1;min-width:160px">
-        <label><input type="checkbox" id="m-hide-hb" checked> Hide Heartbeat</label>
-        <label><input type="checkbox" id="m-hide-mv"> Hide MeterValues</label>
-        <label><input type="checkbox" id="m-pause"> Pause</label>
-        <button class="btn small" id="m-copy">Copy</button>
-      </div>
-      <div class="msgs" id="m-list"></div>
-      <div class="note"><span id="m-count">0</span> shown · newest at the top · the last 300 frames are kept, across restarts. ↑ sent, ↓ received.</div>
-    </div>
-    <div class="card">
       <h2>Diagnostics bundle</h2>
       <div class="row" style="margin-top:0">
         <div class="grow"><div class="note" style="margin:0">One file to attach to a bug report. <details class="more"><summary>More</summary><div>The add-on's state, schedule, sessions, your supplier's plan and settings, health, recent OCPP messages and log lines, and the add-on's options with the password and most of the chargepoint ID hidden.</div></details></div></div>
@@ -838,6 +880,7 @@
         <button class="btn small" id="d-clear-messages">Clear</button>
       </div>
     </div>
+    </div>
   </section>
 
   <section id="tab-health" class="stack" hidden>
@@ -851,15 +894,12 @@
       <div class="card"><h2>OCPP connection</h2><dl class="kv" id="h-conn"></dl></div>
       <div class="card"><h2>Heartbeat</h2><dl class="kv" id="h-hb"></dl></div>
       <div class="card"><h2>Home Assistant</h2><dl class="kv" id="h-ha"></dl></div>
+      <div class="card"><h2>Held messages</h2><div id="h-held"></div></div>
       <div class="card span2">
         <h2>Home Assistant entities</h2>
         <div class="note" style="margin:0 0 10px">The add-on creates these itself. The sensors show as unavailable while the add-on is stopped.</div>
         <dl class="kv" id="sim-entities"></dl>
       </div>
-    </div>
-    <div class="card">
-      <h2>Held messages</h2>
-      <div id="h-held"></div>
     </div>
     <div class="section-title">Supplier</div>
     <div class="grid">
@@ -880,15 +920,21 @@
       <h2>Configuration<span class="spacer"></span>
         <label class="live" style="cursor:pointer"><input type="checkbox" id="p-only-server"> Set by supplier only</label>
       </h2>
+      <div class="note" style="margin:0 0 6px">The charger's settings as <span class="supn" data-f="your supplier">your supplier</span> sees them.</div>
+      <details class="fold"><summary>Show the keys</summary>
       <div class="table-wrap">
         <table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id="p-config"></tbody></table>
-      </div>
+      </div></details>
     </div>
   </section>
 </main>
 <div class="toast" id="toast"></div>
 
 <script>
+document.addEventListener('click', (e) => {
+  if (e.target.id !== 'o-to-logs') return;
+  e.preventDefault(); showTab('diagnostics'); const b = document.querySelector('[data-sub="debug"]'); if (b) b.click();
+});
 // ---------- Theme (Settings › Appearance): colourful banners or basic cards, per browser ----------
 function drawTheme() {
   const basic = document.documentElement.classList.contains('basic');
@@ -1923,7 +1969,7 @@ function profileHtml(pr) {
     <div class="timeline">${segs || '<div style="width:100%;color:var(--text2)">No periods</div>'}</div>
     <div class="timeline-axis"><span>${esc(startTxt)}</span><span>${pr.duration_s ? '+' + dur(pr.duration_s) : 'open-ended'}</span></div>
     <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>From</th><th class="num">Limit</th><th class="num">≈ Power</th></tr></thead><tbody>
-    ${periods.map((p) => `<tr><td>+${dur(p.start_period)}${pr.start ? ' <span class="muted">(' + time(new Date(new Date(pr.start).getTime() + p.start_period * 1000).toISOString()) + ')</span>' : ''}</td><td class="num">${esc(p.limit)} ${unit}</td><td class="num">${num(unit === 'A' ? p.limit * VOLTS / 1000 : p.limit / 1000, 1)} kW</td></tr>`).join('')}
+    ${periods.map((p) => `<tr><td>+${dur(p.start_period)}${pr.start ? ' <span class="muted">(' + time(new Date(new Date(pr.start).getTime() + p.start_period * 1000).toISOString()) + ')</span>' : ''}</td><td class="num">${esc(p.limit)} ${unit}</td><td class="num">${num(unit === 'A' ? p.limit * volts() / 1000 : p.limit / 1000, 1)} kW</td></tr>`).join('')}
     </tbody></table></div>` + (pr.min_rate != null ? `<div class="note">Minimum rate ${esc(pr.min_rate)} ${unit}</div>` : '');
 }
 function drawConfig() {

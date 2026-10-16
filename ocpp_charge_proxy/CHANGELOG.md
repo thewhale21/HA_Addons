@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.49.0 — The page tidied up
+
+- **Improvement:** the Overview's banner holds the charger's state, the
+  connection and transaction, and Power, Current, Car SoC and the energy
+  meter as tiles; the last messages received and sent are one **OCPP
+  messages** card, with a link to the full log.
+- **Improvement:** cards side by side no longer leave gaps under the
+  shorter one (the Automations tab's Auto plug-in, Car plugged in, Saving
+  sessions and Auto re-plug; the Settings sections; the Debug tools). The
+  daily limit is said once, in the Charge now banner; the schedule's key is
+  smaller; Max current fits on one line.
+- **Improvement:** Settings' **Show all sensors in the lists** is at the
+  top of the sensors it affects.
+- **Improvement:** Diagnostics › Debug puts the log first and the tools
+  beside each other below it; replies sit quietly under their message, and
+  Drop, Restart and Clear are in red. On Health, held messages sit with the
+  other cards and the configuration keys fold away (**Show the keys**).
+- **Fix:** Diagnostics › Health's Charging profiles card was empty (and the
+  configuration table not drawn) when a profile was in amps.
+
 ## 2.48.0 — Off-peak times
 
 - **Change:** no-charging times are now called **off-peak times**, as
