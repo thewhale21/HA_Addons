@@ -88,13 +88,18 @@ works the same way. In each case:
   accepts at least that long away (rounded up to the half hour; with EDF,
   the next time between 04:00 and 11:00). It unplugs then, after the
   supplier stops the session or the unplug wait (60 s by default).
-- **No-charging times** and saving sessions (below) are left out: it
-  unplugs at the start of one and plugs back in at its end, and carries on
-  that much later, so the charge keeps its hours (ending at a ready time
-  your supplier accepts). If it happens during one, it plugs in at its end.
-  For example, 12 hours from 21:30 with 23:30–05:30 blocked: 21:30–23:30,
-  then 05:30–15:30; 3 hours from 17:55 with an 18:00–19:00 saving session:
-  17:55–18:00, then 19:00–22:00.
+- **Off-peak times** (below) are left out: it unplugs at the start of one
+  and plugs back in at its end, and the charge still ends when it would
+  have (the car may well charge in your off-peak hours anyway). If it
+  happens during one, it isn't plugged in then, only at its end if the
+  charge would still be running. For example, 12 hours from 21:30 with
+  23:30–05:30 off peak: 21:30–23:30, then 05:30–09:30.
+- **Saving sessions** (below, with No charging during a session on) are
+  left out too, but the charge carries on that much later so it keeps its
+  hours (ending at a ready time your supplier accepts); one that starts
+  during a session plugs in at its end for its full hours. For example,
+  3 hours from 17:55 with an 18:00–19:00 session: 17:55–18:00, then
+  19:00–22:00.
 - Octopus Energy, with Force schedule on supplier on: only the daily limit
   (6 hours, in each day from 12:00 unless changed on the Settings tab) is scheduled, the earliest first, so up to 12 hours can be
   chosen but a longer charge stops after 6 plugged-in hours (e.g. 12 hours
@@ -121,13 +126,13 @@ The entries show on the Automations tab as orange **Auto plug-in**, pink
 **Charge now** or brown **Car plugged in** slots, and run even with the
 schedule off. A slot that was trimmed keeps its own colour.
 
-### No-charging times
+### Off-peak times
 
-**No-charging times** are times nothing is scheduled in, on the days you
+**Off-peak times** are times nothing is scheduled in, on the days you
 pick, e.g. your off-peak hours (23:30–05:30) when the car may well charge
 anyway. They're part of the schedule on the Automations tab: add one as you
 would a slot (click or drag across a day, or **+ Add a slot**) and choose
-**No-charging time**; click one to change its times or days, or delete it. Slots can't be added in them (and one
+**Off-peak time**; click one to change its times or days, or delete it. Slots can't be added in them (and one
 can't be added over existing slots), and auto plug-in, the car plugged in
 sensor and Charge now are planned around them (above). At the start of
 each, it unplugs if the car is plugged in (by hand or from Home Assistant,
@@ -147,16 +152,16 @@ is read every 5 minutes, up to 8 days ahead.
   down or demand flexibility (E.ON Next, EDF). Octopus's Power Up and free
   electricity calendars are left out. Pick yours if it isn't found.
 - **No charging during a session** (its own switch, on by default): each
-  session is a no-charging time for that day only. Auto plug-in, the car
+  session is an off-peak time for that day only. Auto plug-in, the car
   plugged in sensor and Charge now unplug for it and plug back in after, as
-  for a weekly no-charging time. A slot in the schedule that runs into it
+  for a weekly off-peak time. A slot in the schedule that runs into it
   keeps its end time (its ready time) and its hours, so it starts earlier by
   the time the session takes out of it. For example, a 15:30–21:30 slot with
   an 18:00–19:00 session becomes 14:30–18:00 and 19:00–21:30; a 17:30–18:30
   slot with a 17:00–19:00 session becomes 16:00–17:00. If that meets an
   earlier slot they join. If starting earlier would be in the past (e.g.
   the session is found at 14:40), the slot keeps its start and ends later
-  instead: 15:30–18:00 and 19:00–22:30, around any no-charging time,
+  instead: 15:30–18:00 and 19:00–22:30, around any off-peak time,
   unplugging at a ready time your supplier accepts (with Force schedule on
   supplier), and joining the next slot if it meets it. A slot already
   running when the session is found unplugs for it (straight away, if it's
@@ -168,7 +173,7 @@ is read every 5 minutes, up to 8 days ahead.
   to the schedule as one-offs (purple), ending as the session starts. Only
   the time the schedule doesn't already have the car plugged in is added:
   nothing if a slot already covers it (e.g. a slot moved to end as the
-  session starts), and a slot it meets is joined. Not in a no-charging time
+  session starts), and a slot it meets is joined. Not in an off-peak time
   or the past (a session found late gets what's left, not under 15
   minutes). With Force schedule on supplier, if that takes a day over the
   daily limit, the next slot after the session starts that much later, as
@@ -449,7 +454,7 @@ follows your Home Assistant theme. Settings save as soon as you change them.
     (automatic for the others): no more than the limit in any period of the
     **Reset frequency** (24 hours unless changed, 1–168 hours). If a change
     means the schedule no longer fits, the card offers to clear the
-    schedule's charging slots (no-charging times stay), put the setting
+    schedule's charging slots (off-peak times stay), put the setting
     back, or keep both and shorten the slots yourself. With a reset time, "any 24 hours" below means each day from
     that time, and a charge across it can be longer: 08:00 for 12 hours is
     08:00–18:00 (4 hours before 12:00, then 6 after).

@@ -221,7 +221,7 @@ def test_loop_unplugs_at_the_start_of_a_no_charging_time():
         await asyncio.gather(task, return_exceptions=True)
 
     _run(scenario())
-    assert sources == ["no-charging time"]
+    assert sources == ["off-peak time"]
 
 
 def test_loop_runs_schedule_and_publishes():
@@ -944,7 +944,7 @@ def test_slots_cant_overlap_a_no_charging_time():
             a.set_schedule(entries=[{"time": slot[0], "action": "plug"}, {"time": slot[1], "action": "unplug"}])
             raise AssertionError("should have refused %s" % (slot,))
         except ValueError as err:
-            assert "no-charging time" in str(err)
+            assert "off-peak time" in str(err)
     a.set_schedule(entries=[{"time": "05:30", "action": "plug"}, {"time": "07:00", "action": "unplug"}])  # just after: fine
     try:
         a.set_schedule(blocks=[{"start": "05:00", "end": "06:00", "days": list(range(7))}])  # over that slot
@@ -956,12 +956,11 @@ def test_slots_cant_overlap_a_no_charging_time():
 
 def test_a_charge_is_cut_around_a_no_charging_time():
     a, clock = _blocked(_at(18))
-    out = a.plan_auto_plug(12 * 60)  # 18:00 for 12 h, no limit: 18:00-23:30, then the rest 05:30-12:00
-    assert _spans(out) == [("18:00", "23:30"), ("05:30", "12:00")] and out["plug_now"]
-    assert any("carries on until 12:00" in n for n in out["notes"])
+    out = a.plan_auto_plug(12 * 60)  # 18:00 for 12 h, no limit: 18:00-23:30, then 05:30-06:00
+    assert _spans(out) == [("18:00", "23:30"), ("05:30", "06:00")] and out["plug_now"]
     day = clock.now().date()
     wins = [(x.strftime("%a %H:%M"), y.strftime("%a %H:%M")) for x, y in a.windows() if x.date() >= day]
-    assert wins[:2] == [("Sat 18:00", "Sat 23:30"), ("Sun 05:30", "Sun 12:00")]
+    assert wins[:2] == [("Sat 18:00", "Sat 23:30"), ("Sun 05:30", "Sun 06:00")]
 
 
 def test_only_the_daily_limit_is_scheduled():
@@ -975,11 +974,11 @@ def test_only_the_daily_limit_is_scheduled():
 
 def test_a_charge_during_a_no_charging_time_waits_for_its_end():
     a, clock = _blocked(datetime.datetime(2026, 10, 3, 1, 0, tzinfo=TZ))
-    out = a.plan_auto_plug(6 * 60)  # 01:00 for 6 h: all 6 after it, 05:30-11:30
-    assert not out["plug_now"] and _spans(out) == [("05:30", "11:30")]
+    out = a.plan_auto_plug(6 * 60)  # 01:00 for 6 h would end 07:00: 05:30-07:00, same end
+    assert not out["plug_now"] and _spans(out) == [("05:30", "07:00")]
     b, _ = _blocked(datetime.datetime(2026, 10, 3, 1, 0, tzinfo=TZ))
-    out = b.plan_auto_plug(3 * 60)  # 05:30-08:30
-    assert not out["plug_now"] and _spans(out) == [("05:30", "08:30")]
+    out = b.plan_auto_plug(3 * 60)  # would end at 04:00, inside it: nothing
+    assert out["nothing"] and not out["plug_now"] and b.entries == []
     now = b._now()
     assert any(start <= now < end for start, end in b.block_windows(now.date(), 1))  # inside it
 
@@ -1167,7 +1166,7 @@ def test_unskipping_into_a_no_charging_time_is_refused():
         a.set_skips(keys, False, daily_cap_min=360)
         raise AssertionError("should have refused")
     except ValueError as err:
-        assert "no-charging time" in str(err)
+        assert "off-peak time" in str(err)
     assert keys[0] in a.skips
 
 

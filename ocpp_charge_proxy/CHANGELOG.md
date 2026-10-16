@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.48.0 — Off-peak times
+
+- **Change:** no-charging times are now called **off-peak times**, as
+  that's what they're for: your off-peak hours, when the car may well
+  charge anyway.
+- **Change (undoes part of 2.43.8):** auto plug-in, the car plugged in
+  sensor and Charge now only carry on later after a **saving session**.
+  Round an off-peak time they unplug at its start and plug back in at its
+  end, but still end when they would have (12 hours from 21:30 with
+  23:30–05:30 off peak: 21:30–23:30, then 05:30–09:30). One that starts
+  during an off-peak time plugs in at its end only if the charge would
+  still be running.
+
 ## 2.47.0 — Charge now in the schedule, and a colourful theme
 
 - **Improvement:** on the Automations tab, **Charge now** and the

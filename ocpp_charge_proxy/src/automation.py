@@ -40,8 +40,8 @@
 - Plan check: with the ready time on, while the schedule has the car
   plugged in, the supplier's planned slots up to the ready time are checked
   against the schedule (src/plan_check.py); a mismatch is shown on the page.
-- Saving sessions (src/saving_sessions.py): with "no-charging time" on, each
-  upcoming session from the calendar is a no-charging time (as the weekly
+- Saving sessions (src/saving_sessions.py): with "off-peak time" on, each
+  upcoming session from the calendar is an off-peak time (as the weekly
   ones: auto plug-in, Charge now... unplug for it), and a scheduled slot that
   runs into it keeps its end and its length but isn't plugged in during the
   session, so it starts that much earlier (15:30–21:30 with an 18:00–19:00
@@ -50,7 +50,7 @@
   With "plug in before" on, a charge of the chosen hours before it is added
   to the schedule as soon as the session is known, for the time the schedule
   doesn't already cover (sync_saving_sessions, _plan_precharge).
-- No-charging times: at the start of each, it unplugs if plugged in (by hand,
+- Off-peak times: at the start of each, it unplugs if plugged in (by hand,
   Home Assistant...), as nothing should charge then (block_starts_due).
 - Ready time: optionally, when the schedule plugs in, set your supplier's
   smart charging ready-by time to the schedule's next unplug
@@ -156,14 +156,14 @@ def _parse_date(value) -> datetime.date:
 
 
 def validate_block(raw: dict) -> dict:
-    """A no-charging time: {id, start "HH:MM", end "HH:MM", days [0=Mon..6=Sun]};
+    """An off-peak time: {id, start "HH:MM", end "HH:MM", days [0=Mon..6=Sun]};
     overnight when end <= start (it starts on the days given)."""
     if not isinstance(raw, dict):
-        raise ValueError("Each no-charging time must be an object")
+        raise ValueError("Each off-peak time must be an object")
     h1, m1 = _parse_hhmm(raw.get("start"))
     h2, m2 = _parse_hhmm(raw.get("end"))
     if (h1, m1) == (h2, m2):
-        raise ValueError("A no-charging time must start and end at different times")
+        raise ValueError("An off-peak time must start and end at different times")
     days = raw.get("days", list(range(7)))
     if not isinstance(days, list) or not days or any(
         not isinstance(d, int) or isinstance(d, bool) or not 0 <= d <= 6 for d in days
@@ -386,10 +386,10 @@ class Automation:
         self.ready_status: Optional[dict] = None  # the last time it was set (or why not)
         self.auto_plug_last: Optional[dict] = None  # the last auto plug-in charge planned
         self.unplug_wait_s = GRACEFUL_UNPLUG_S
-        self.blocks: list[dict] = []  # no-charging times: nothing is scheduled in them
+        self.blocks: list[dict] = []  # off-peak times: nothing is scheduled in them
         # Saving sessions from the calendar: [{"id", "start", "end" (ISO), "summary",
         # "changes": {"skips", "added"}, "precharged", "notes"}]; with saving_block
-        # on they're no-charging times too (see sync_saving_sessions)
+        # on they're off-peak times too (see sync_saving_sessions)
         self.saving_sessions: list[dict] = []
         self.saving_block = False
         self.override_guards = False  # Diagnostics › Debug: no daily limit (Octopus: 6 hours)
@@ -411,7 +411,7 @@ class Automation:
         self.last_run: Optional[dict] = None  # last schedule entry run
         self.unplug_at: Optional[float] = None  # a scheduled unplug waiting for the supplier, until
         self._last_check: Optional[datetime.datetime] = None
-        self._block_check: Optional[datetime.datetime] = None  # no-charging time starts looked at up to
+        self._block_check: Optional[datetime.datetime] = None  # off-peak time starts looked at up to
         self._first_check = True
         self._load()
         self._load_runtime()
@@ -442,7 +442,7 @@ class Automation:
             try:
                 blocks.append(validate_block(raw))
             except ValueError:
-                logger.warning("Ignoring invalid no-charging time %r", raw)
+                logger.warning("Ignoring invalid off-peak time %r", raw)
         self.blocks = blocks
         try:
             self.unplug_wait_s = self._valid_wait(schedule.get("unplug_wait_s", GRACEFUL_UNPLUG_S))
@@ -586,7 +586,7 @@ class Automation:
         new_blocks = self.blocks
         if blocks is not None:
             if not isinstance(blocks, list) or len(blocks) > 20:
-                raise ValueError("No-charging times must be a list (at most 20)")
+                raise ValueError("Off-peak times must be a list (at most 20)")
             new_blocks = [validate_block(b) for b in blocks]
         if entries is not None or blocks is not None:
             self.check_blocks(new_entries, new_blocks, new_skips)
@@ -703,14 +703,14 @@ class Automation:
                                end if open_ended else None)
 
     def session_windows(self) -> list:
-        """The saving sessions that are no-charging times (with saving_block on): [(a, b)]."""
+        """The saving sessions that are off-peak times (with saving_block on): [(a, b)]."""
         if not self.saving_block:
             return []
         return [(_parse_iso(r["start"]), _parse_iso(r["end"])) for r in self.saving_sessions]
 
     def block_windows(self, start: datetime.date, days: int, blocks: Optional[list] = None,
                       sessions: bool = True) -> list:
-        """The no-charging times from `start` for `days` days: [(a, b)], with
+        """The off-peak times from `start` for `days` days: [(a, b)], with
         the saving sessions (unless `sessions` is False)."""
         out = []
         if sessions:
@@ -730,7 +730,7 @@ class Automation:
         return sorted(out)
 
     def check_blocks(self, entries: list, blocks: list, skips: Optional[list] = None) -> None:
-        """Nothing scheduled may plug in during a no-charging time (over the
+        """Nothing scheduled may plug in during an off-peak time (over the
         coming week; auto plug-in and Charge now are planned around them)."""
         now = self._now()
         # (not the saving sessions: a slot that runs into one is moved, see sync_saving_sessions)
@@ -741,7 +741,7 @@ class Automation:
             hit = next(((ca, cb) for ca, cb in cuts if ca < b and cb > a), None)
             if hit:
                 raise ValueError(
-                    f"The {a.strftime('%a %H:%M')}–{b.strftime('%H:%M')} slot overlaps the no-charging time "
+                    f"The {a.strftime('%a %H:%M')}–{b.strftime('%H:%M')} slot overlaps the off-peak time "
                     f"{hit[0].strftime('%H:%M')}–{hit[1].strftime('%H:%M')}: change one of them")
 
     def _longest_day(self, entries: list, skips: Optional[list] = None):
@@ -910,20 +910,24 @@ class Automation:
         end = self.first_ready_at(now + datetime.timedelta(minutes=minutes), ready_times)
         if end is None:
             raise ValueError("No ready time your supplier accepts in the next 2 days")
-        # Plugged in from now for that long, but not in a no-charging time or a
-        # saving session: it unplugs at its start and plugs back in at its end,
-        # carrying on that much later (to a ready time your supplier accepts)
+        # Plugged in from now for that long, but not in a saving session or an
+        # off-peak time: it unplugs at the start of one and plugs back in at its
+        # end. After a saving session it carries on that much later (to a ready
+        # time your supplier accepts), so it keeps its hours; an off-peak time is
+        # just left out (the car may well charge then anyway), so it still ends
+        # when it would have.
         cuts = self.block_windows(now.date() - datetime.timedelta(days=1), 4)
-        segments = self._place(now, end - now, cuts)
+        saving = set(self.session_windows())
+        segments = self._place(now, end - now, [c for c in cuts if c in saving])
         if segments and segments[-1][1] > end:
             later = self.first_ready_at(segments[-1][1], ready_times) or segments[-1][1]
             segments[-1] = (segments[-1][0], later)
             end = later
-        saving = set(self.session_windows())
+        segments = minus(segments, [c for c in cuts if c not in saving])
         blocked_notes = [f"not plugged in {ca.strftime('%H:%M')}–{cb.strftime('%H:%M')} "
-                         f"({'saving session' if (ca, cb) in saving else 'no-charging time'}), "
-                         f"so it carries on until {end.strftime('%H:%M')}"
-                         for ca, cb in cuts if ca < end and cb > now and ca > now]
+                         + (f"(saving session), so it carries on until {end.strftime('%H:%M')}" if (ca, cb) in saving and ca > now
+                            else "(saving session)" if (ca, cb) in saving else "(off-peak time)")
+                         for ca, cb in cuts if ca < end and cb > now]
         shortened = None
         reset = self.limit_reset
         fixed, span_len = _fixed(reset), limit_length(reset)
@@ -1120,7 +1124,7 @@ class Automation:
             # far this charge takes it over the cap (beyond the schedule's own),
             # before and after the next slot is trimmed
             "over": {"before": before, "after": after, "added": added_over, "left": left_over} if cap_min else None,
-            # plugged in straight away (False: it starts after a no-charging time)
+            # plugged in straight away (False: it starts after an off-peak time)
             "plug_now": plug_now,
             "segments": [{"start": _iso_local(x), "end": _iso_local(y)} for x, y in segments],
         }
@@ -1148,7 +1152,7 @@ class Automation:
         """The sessions read from the calendar ([{"start", "end", "summary"}];
         None: it couldn't be read, so nothing is forgotten). New ones are
         remembered, a cancelled one (gone from the calendar before it starts)
-        has what it changed put back, and with `block` each is a no-charging
+        has what it changed put back, and with `block` each is an off-peak
         time: a scheduled slot that runs into it is moved (see _move_for_session).
         With `plug_hours`, a charge for that long before each session is added
         to the schedule as soon as it's known (see _plan_precharge).
@@ -1199,7 +1203,7 @@ class Automation:
                 if r["changes"]["skips"] or r["changes"]["added"]:
                     self._undo_session(r)
                     self._undo_pre(r)  # (it may have used the session's unplug: redone below)
-                    logger.info("Saving sessions aren't no-charging times now: the slots moved for %s are put back",
+                    logger.info("Saving sessions aren't off-peak times now: the slots moved for %s are put back",
                                 _parse_iso(r["start"]).strftime("%a %H:%M"))
                     changed = True
                 continue
@@ -1300,7 +1304,7 @@ class Automation:
         keeps its end (its ready time) and its length, and is not plugged in
         during the session, so it starts that much earlier (e.g. 15:30–21:30
         with an 18:00–19:00 session: 14:30–18:00 and 19:00–21:30), around any
-        other no-charging time. If that start would be in the past, it keeps
+        other off-peak time. If that start would be in the past, it keeps
         its start and ends that much later instead (15:30–18:00, 19:00–22:30),
         unplugging at a ready time your supplier accepts (with Force schedule
         on). A slot already running unplugs at the session (or now) and carries
@@ -1407,7 +1411,7 @@ class Automation:
     def _plan_precharge(self, r: dict, hours: float, cap_min: Optional[int], provider: str) -> None:
         """Plug in for `hours` before session `r`, as one-offs: only for the
         time the schedule doesn't already have the car plugged in (joining a
-        slot it meets), not in a no-charging time, not in the past. If that
+        slot it meets), not in an off-peak time, not in the past. If that
         takes a day over the daily limit (`cap_min`), the next slot after the
         session starts later by that much, as for a car plugged in. Recorded in
         r["pre"], so it can be taken out again."""
@@ -1529,7 +1533,7 @@ class Automation:
             new = list(self.skips)
             for key, _ in keys:
                 new = [k for k in new if k != key]
-            self.check_blocks(self.entries, self.blocks, new)  # e.g. a no-charging time added while it was skipped
+            self.check_blocks(self.entries, self.blocks, new)  # e.g. an off-peak time added while it was skipped
         for key, entry in keys:
             self.skips = [k for k in self.skips if k != key] + ([key] if skip else [])
             logger.info("Schedule: %s the %s at %s on %s", "skipping" if skip else "no longer skipping",
@@ -1591,7 +1595,7 @@ class Automation:
         return due
 
     def block_starts_due(self) -> list:
-        """The weekly no-charging times that have started since the last look
+        """The weekly off-peak times that have started since the last look
         (within CATCH_UP_S): [start]. The first look after a restart finds none."""
         now = self._now()
         prev, self._block_check = self._block_check, now
@@ -1909,11 +1913,11 @@ async def automation_loop(
                     await unplug(source="schedule")
             for start in automation.block_starts_due():
                 # In case it's plugged in by hand (or from Home Assistant): nothing
-                # charges in a no-charging time
+                # charges in an off-peak time
                 if shared_state.plugged_in:
                     automation.unplug_at = None
-                    logger.info("No-charging time from %s: unplugging", start.strftime("%H:%M"))
-                    await unplug(source="no-charging time")
+                    logger.info("Off-peak time from %s: unplugging", start.strftime("%H:%M"))
+                    await unplug(source="off-peak time")
             if automation.unplug_at is not None:
                 if not shared_state.plugged_in:
                     automation.unplug_at = None  # unplugged meanwhile

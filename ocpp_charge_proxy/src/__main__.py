@@ -260,7 +260,7 @@ async def run() -> None:
 
     async def charge(hours: float, source: str, plug_source: str, confirm: bool = True) -> dict:
         """Plug in and add the charge to the schedule (auto plug-in, the car
-        plugged in sensor, Charge now). Not plugged in during a no-charging
+        plugged in sensor, Charge now). Not plugged in during an off-peak
         time: it plugs in when that ends, if the charge still has time left.
         Charge now asks first (confirm) if it would go over the daily limit."""
         preview = await plan_charge(hours, source, dry_run=True)
@@ -270,7 +270,7 @@ async def run() -> None:
         if preview.get("plug_now"):
             await do_plug(source=plug_source)
         elif shared_state.plugged_in:
-            await do_unplug(source="no-charging time")
+            await do_unplug(source="off-peak time")
         return {"plan": await plan_charge(hours, source)}
 
     async def on_auto_plug(hours: float, source: str = AUTO_SOURCE, plug_source: str = "auto plug-in (low SoC)") -> None:
