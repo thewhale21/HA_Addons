@@ -26,7 +26,7 @@ import os
 import time
 from typing import Awaitable, Callable, Optional
 
-from src.ha_entities import ALL_SENSORS, SensorPublisher, entity_info
+from src.ha_entities import ALL_SENSORS, RETIRED, SensorPublisher, entity_info
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +264,7 @@ class HaLink:
                 self._changed.clear()
                 await subscribe()
                 self.publisher.reset()
+                await self._remove_retired()
                 while True:
                     if reader_task.done():
                         reader_task.result()  # raises why it ended
@@ -335,6 +336,23 @@ class HaLink:
         except Exception as err:
             self.publisher.forget(entity_id)
             logger.debug("Couldn't post %s: %s", entity_id, err)
+
+    async def _remove_retired(self) -> None:
+        """Take the sensors the add-on no longer posts out of Home Assistant (once a connection; quiet if gone)."""
+        if self._session is None:
+            return
+        import aiohttp
+
+        for entity_id in RETIRED:
+            try:
+                async with self._session.delete(
+                    f"{SUPERVISOR_API}/states/{entity_id}", headers={"Authorization": f"Bearer {self._token}"},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    if resp.status == 200:
+                        logger.info("Removed %s (no longer posted)", entity_id)
+            except Exception as err:
+                logger.debug("Couldn't remove %s: %s", entity_id, err)
 
     async def shutdown(self) -> None:
         """Mark the add-on's sensors unavailable while it's stopped."""

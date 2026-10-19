@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.2 — Just the one date sensor
+
+- **Change:** the `_start_date` and `_end_date` sensors are gone, for all
+  six charges and discharges (e.g. `sensor.next_charge_dispatch_start_date`,
+  `sensor.next_discharge_dispatch_3_end_date`); `sensor.next_*_dispatch_date`
+  (the start date) stays, with the start and end times. The old ones are
+  taken out of Home Assistant when the add-on starts.
+
 ## 0.9.1 — Plan changes in the log
 
 - **Change:** the History tab's **Plan changes** card is gone. Each change

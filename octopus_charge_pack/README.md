@@ -66,9 +66,8 @@ it's used until you pick one.
 | `sensor.octopus_planned_dispatches` | How many dispatches are planned; attribute `flexPlannedDispatches` (start, end, type, energyAddedKwh) |
 | `sensor.next_charge_dispatch_start` / `_end` | The next charge dispatch (timestamps) |
 | `sensor.next_discharge_dispatch_start` / `_end` | The next discharge dispatch (timestamps) |
-| `sensor.next_*_dispatch_start_date` / `_end_date` | Its local start and end dates, `YYYY-MM-DD`, or `1999-01-01` when none is planned. One that runs past midnight ends on the next day's date |
 | `sensor.next_*_dispatch_start_time` / `_end_time` | Its local start and end times, `HH:MM:SS` (the real end time, also past midnight). When none is planned the start time keeps the last one and the end time is the start time |
-| `sensor.next_*_dispatch_date` | The start date again, under the old single date sensor's ID, for existing configs |
+| `sensor.next_*_dispatch_date` | Its local start date, `YYYY-MM-DD`, or `1999-01-01` when none is planned |
 
 `*` is `charge` or `discharge`: each has the same set.
 

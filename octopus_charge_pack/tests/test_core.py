@@ -76,10 +76,14 @@ def test_own_sensors_are_posted_when_they_change():
         "friendly_name": "Octopus Planned Dispatches", "icon": "mdi:calendar-clock",
         "flexPlannedDispatches": [{"start": "a"}]})
     assert changed["sensor.next_discharge_dispatch_date"][0] == "2026-10-16"
-    assert changed["sensor.next_discharge_dispatch_end_date"][0] == "2026-10-17"
+    assert "sensor.next_discharge_dispatch_end_date" not in changed  # retired in 0.9.2: _date stays
     assert len(pub.due(state, 10_000)) == len(SENSORS)  # posted again now and then
     assert all(v == "unavailable" for _, v, _ in SensorPublisher.unavailable())
     assert entity_info({}, "") is None
+    from src.ha_entities import RETIRED
+    assert "sensor.next_charge_dispatch_2_start_date" in RETIRED and "sensor.next_discharge_dispatch_end_date" in RETIRED
+    assert not set(RETIRED) & {e for e, _ in SENSORS.values()}
+    assert "sensor.next_charge_dispatch_3_date" in {e for e, _ in SENSORS.values()}
 
 
 def test_debug_tools_hide_secrets_and_set_the_log_level(tmp_path):

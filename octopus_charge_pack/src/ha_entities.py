@@ -36,20 +36,12 @@ SENSORS = {
         "friendly_name": "Next Discharge Dispatch End", **TIMESTAMP}),
     "charge_date": ("sensor.next_charge_dispatch_date", {
         "friendly_name": "Next Charge Dispatch Date", "icon": "mdi:calendar"}),
-    "charge_start_date": ("sensor.next_charge_dispatch_start_date", {
-        "friendly_name": "Next Charge Dispatch Start Date", "icon": "mdi:calendar-start"}),
-    "charge_end_date": ("sensor.next_charge_dispatch_end_date", {
-        "friendly_name": "Next Charge Dispatch End Date", "icon": "mdi:calendar-end"}),
     "charge_start_time": ("sensor.next_charge_dispatch_start_time", {
         "friendly_name": "Next Charge Dispatch Start Time", "icon": "mdi:clock-start"}),
     "charge_end_time": ("sensor.next_charge_dispatch_end_time", {
         "friendly_name": "Next Charge Dispatch End Time", "icon": "mdi:clock-end"}),
     "discharge_date": ("sensor.next_discharge_dispatch_date", {
         "friendly_name": "Next Discharge Dispatch Date", "icon": "mdi:calendar"}),
-    "discharge_start_date": ("sensor.next_discharge_dispatch_start_date", {
-        "friendly_name": "Next Discharge Dispatch Start Date", "icon": "mdi:calendar-start"}),
-    "discharge_end_date": ("sensor.next_discharge_dispatch_end_date", {
-        "friendly_name": "Next Discharge Dispatch End Date", "icon": "mdi:calendar-end"}),
     "discharge_start_time": ("sensor.next_discharge_dispatch_start_time", {
         "friendly_name": "Next Discharge Dispatch Start Time", "icon": "mdi:clock-start"}),
     "discharge_end_time": ("sensor.next_discharge_dispatch_end_time", {
@@ -59,14 +51,16 @@ SENSORS = {
 for _kind, _n in [(k, n) for k in ("charge", "discharge") for n in (2, 3)]:
     for _key, _suffix, _label, _attrs in (
             ("start", "start", "Start", TIMESTAMP), ("end", "end", "End", TIMESTAMP),
-            ("start_date", "start_date", "Start Date", {"icon": "mdi:calendar-start"}),
-            ("end_date", "end_date", "End Date", {"icon": "mdi:calendar-end"}),
             ("start_time", "start_time", "Start Time", {"icon": "mdi:clock-start"}),
             ("end_time", "end_time", "End Time", {"icon": "mdi:clock-end"}),
             ("date", "date", "Date", {"icon": "mdi:calendar"})):
         SENSORS[f"{_kind}_{_n}_{_key}"] = (f"sensor.next_{_kind}_dispatch_{_n}_{_suffix}", {
             "friendly_name": f"Next {_kind.title()} Dispatch {_n} {_label}", **_attrs})
 ALL_SENSORS = [entity_id for entity_id, _ in SENSORS.values()]
+# Sensors there were once and aren't now (0.9.2: the start and end dates; _date is the start date):
+# taken out of Home Assistant when the add-on connects
+RETIRED = [f"sensor.next_{kind}_dispatch{n}_{which}_date" for kind in ("charge", "discharge")
+           for n in ("", "_2", "_3") for which in ("start", "end")]
 
 REFRESH_S = 300  # everything posted again at least this often, even unchanged
 
