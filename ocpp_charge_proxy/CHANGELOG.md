@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.49.1 — Sessions in your supplier's colour
+
+- **Change:** on the Sessions tab, a session charged in your supplier's
+  dispatch slots is drawn in its colour (Octopus purple, E.ON red, EDF
+  amber), on the 7-day timeline and in the list's energy bar. Others stay
+  green; the key says which is which.
+
 ## 2.49.0 — The page tidied up
 
 - **Improvement:** the Overview's banner holds the charger's state, the

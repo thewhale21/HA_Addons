@@ -1563,9 +1563,15 @@ async function refreshSmart(force) {
   applyDailyLimit();
 }
 // Each supplier's slots in its own colour on the chart
+const SUPPLIER_COLOURS = {'Octopus Energy': '#8e24aa', 'EDF Energy': '#f9a825', 'E.ON Next': '#e53935'};
 function providerColor(name) {
-  return {'Octopus Energy': '#8e24aa', 'EDF Energy': '#f9a825', 'E.ON Next': '#e53935'}[name] || cssVar('--primary');
+  return SUPPLIER_COLOURS[name] || cssVar('--primary');
 }
+// A session's supplier (charged in its dispatch slots for a minute or more), and its colour:
+// green (the default) when there's none or it isn't one we know
+const sessSupplier = (x) => (x && x.supplier && (x.supplier_s || 0) >= 60 && SUPPLIER_COLOURS[x.supplier]) ? x.supplier : null;
+const sessFill = (x, dir = '90deg') => { const c = SUPPLIER_COLOURS[sessSupplier(x)];
+  return c ? `background:linear-gradient(${dir}, color-mix(in srgb, ${c} 65%, #fff), ${c});` : ''; };
 function drawSmartCheck(pc) {
   const el = $('sc-check'); if (!el) return;
   if (!pc || !(smart.data && smart.data.found)) { el.innerHTML = ''; return; }
@@ -1701,10 +1707,10 @@ async function refreshSessions() {
   const hmT = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '';
   const dayOf = (iso) => new Date(iso).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
   const by = (src) => src ? `<span>plugged in by ${esc(src)}</span>` : '';
-  const row = ({key, cls = '', start, stop, tags, kwh, sub, end, detail}) => {
+  const row = ({key, cls = '', start, stop, tags, kwh, sub, end, detail, sess}) => {
     const open = key && sessionsOpen.has(key);
     const energy = kwh == null ? `<div class="kwh">—<small>${sub || ''}</small></div>`
-      : `<div class="kwh">${num(kwh, 2)} kWh<small>${sub || ''}</small></div><div class="ebar"><i style="width:${Math.max(2, kwh / maxKwh * 100)}%"></i></div>`;
+      : `<div class="kwh">${num(kwh, 2)} kWh<small>${sub || ''}</small></div><div class="ebar"><i style="width:${Math.max(2, kwh / maxKwh * 100)}%;${sessFill(sess)}"></i></div>`;
     rows.push(`<div class="sess ${cls} ${open ? 'open' : ''}" ${key ? `data-key="${esc(key)}"` : ''}><div class="shead">`
       + `<div class="when">${esc(dayOf(start))}<small>${esc(hmT(start))}${stop ? '–' + esc(hmT(stop)) : ' – now'}</small></div>`
       + `<div class="tags">${tags || ''}</div><div class="energy">${energy}</div><div class="end">${end}</div></div>`
@@ -1713,7 +1719,7 @@ async function refreshSessions() {
   const subOf = (s) => [hmDur(s.duration_s || 0), s.peak_power_kw ? `peak ${num(s.peak_power_kw, 1)} kW` : ''].filter(Boolean).join(' · ');
   if (sessionsData.current && onDay(sessionsData.current.start)) {
     const c = sessionsData.current;
-    row({key: c.start, start: c.start, stop: null, tags: tag(c.start) + supTag(c), kwh: c.energy_kwh, sub: subOf(c),
+    row({key: c.start, sess: c, start: c.start, stop: null, tags: tag(c.start) + supTag(c), kwh: c.energy_kwh, sub: subOf(c),
       end: '<span class="pill ok"><span class="pdot"></span>Charging now</span>', detail: () => sessionDetail({...c, current: true})});
   } else if (sessionsData.waiting && onDay(sessionsData.waiting.plugged_at)) {
     const w = sessionsData.waiting;
@@ -1729,7 +1735,7 @@ async function refreshSessions() {
     } else {
       const ended = s.reason === 'Remote' ? ['ok', `✓ Stopped by ${esc(supName() || 'supplier')}`] : s.reason === 'EVDisconnected' ? ['info', 'Unplugged']
         : ['Reboot', 'PowerLoss', 'HardReset', 'SoftReset'].includes(s.reason) ? ['warn', esc(reasonText(s.reason))] : ['none', esc(reasonText(s.reason))];
-      row({key: s.start, start: s.start, stop: s.stop, tags: (tag(s.start) + supTag(s)) || '<span class="muted">Session</span>', kwh: s.energy_kwh || 0, sub: subOf(s),
+      row({key: s.start, sess: s, start: s.start, stop: s.stop, tags: (tag(s.start) + supTag(s)) || '<span class="muted">Session</span>', kwh: s.energy_kwh || 0, sub: subOf(s),
         end: `<span class="pill ${ended[0]}">${ended[1]}</span>`, detail: () => sessionDetail(s)});
     }
   });
@@ -1771,7 +1777,7 @@ function drawSessionTimeline(sd) {
   const plugs = (sd.plugged || []).map((p) => ({a: new Date(p.start).getTime(), b: p.end ? new Date(p.end).getTime() : now, p, by: byOf(p.by)}));
   const sess = [...(sd.current ? [{...sd.current, live: true}] : []), ...(sd.history || []).filter((x) => x.type !== 'no_session')]
     .map((x) => ({a: new Date(x.start).getTime(), b: x.stop ? new Date(x.stop).getTime() : now, x}));
-  const used = new Set();
+  const used = new Set(), usedSup = new Set();
   let html = '';
   for (let n = 0; n > -7; n--) {
     const lo = day0.getTime() + n * DAY, hi = lo + DAY, pct = (ms) => (Math.min(Math.max(ms, lo), hi) - lo) / DAY * 100;
@@ -1785,7 +1791,8 @@ function drawSessionTimeline(sd) {
       kwh += (z.x.energy_kwh || 0) * share; secs += (Math.min(z.b, hi) - Math.max(z.a, lo)) / 1000;
       const w = pct(z.b) - pct(z.a);
       const title = `Charged ${t(z.a)}–${z.x.stop ? t(z.b) : 'now'} · ${num(z.x.energy_kwh, 2)} kWh · ${hmDur(z.x.duration_s || 0)}${z.x.reason ? ' · ended by ' + reasonText(z.x.reason) : ''}`;
-      inner += `<div class="chg ${z.x.live ? 'live' : ''}" data-key="${esc(z.x.start)}" style="left:${pct(z.a)}%;width:${Math.max(w, 0.4)}%" title="${esc(title)}">${w > 7 ? num(z.x.energy_kwh, 1) + ' kWh' : ''}</div>`;
+      const sup = sessSupplier(z.x); usedSup.add(sup || '');
+      inner += `<div class="chg ${z.x.live ? 'live' : ''}" data-key="${esc(z.x.start)}" style="left:${pct(z.a)}%;width:${Math.max(w, 0.4)}%;${sessFill(z.x, '135deg')}" title="${esc(title)}">${w > 7 ? num(z.x.energy_kwh, 1) + ' kWh' : ''}</div>`;
     }
     if (n === 0) inner += `<div class="gone" style="left:${pct(now)}%"></div><div class="now" style="left:${pct(now)}%"></div>`;
     const d = new Date(lo), name = n === 0 ? 'Today' : n === -1 ? 'Yesterday' : d.toLocaleDateString([], {weekday: 'short'});
@@ -1795,7 +1802,8 @@ function drawSessionTimeline(sd) {
   }
   html += '<div></div><div class="axis">' + [0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => `<span style="left:${h / 24 * 100}%">${String(h % 24).padStart(2, '0')}:00</span>`).join('') + '</div><div></div>';
   el.innerHTML = html;
-  $('s-tl-legend').innerHTML = '<span><b class="band" style="background:var(--ok)"></b>Charged</span>'
+  $('s-tl-legend').innerHTML = (usedSup.has('') || !usedSup.size ? '<span><b class="band" style="background:var(--ok)"></b>Charged</span>' : '')
+    + [...usedSup].filter(Boolean).map((n) => `<span><b class="band" style="background:${SUPPLIER_COLOURS[n]}"></b>Charged in ${esc(n)}'s slots</span>`).join('')
     + PLUG_BY.filter(([, , label]) => used.has(label)).map(([, c, label]) => `<span><b class="band" style="background:${c};opacity:.35"></b>Plugged in: ${label}</span>`).join('')
     + (used.has('Another way') ? '<span><b class="band" style="background:#9e9e9e;opacity:.35"></b>Plugged in another way</span>' : '')
     + '<span><b class="band" style="background:var(--err);width:2px"></b>Now</span>';
