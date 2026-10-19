@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.0 — Three charges, and the banner theme
+
+- **New:** sensors for the 2nd and 3rd planned charge, like the
+  discharges: `sensor.next_charge_dispatch_2_date`, `..._2_start_time`,
+  `..._2_end_time`, `..._3_start` and so on (`1999-01-01` and `00:00:00`
+  when there isn't one), e.g. for more `rates_import_override` entries in
+  Predbat.
+- **New:** the page has the same look as the other add-ons: a coloured
+  banner at the top of each tab, from blue to Octopus purple (Overview:
+  what's happening now; History: the completed sessions' totals;
+  Settings; Diagnostics › Health: **All good**, or orange or red when
+  something needs attention).
+- **New:** Settings › **Appearance**: **Colourful** (the banners) or
+  **Basic** (plain cards), saved in each browser.
+
 ## 0.7.1 — Plan changes without idle slots
 
 - **Change:** Plan changes leaves out idle dispatches (0 kWh): only charges

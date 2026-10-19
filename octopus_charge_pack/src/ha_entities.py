@@ -55,8 +55,8 @@ SENSORS = {
     "discharge_end_time": ("sensor.next_discharge_dispatch_end_time", {
         "friendly_name": "Next Discharge Dispatch End Time", "icon": "mdi:clock-end"}),
 }
-# The 2nd and 3rd discharge (e.g. for more rates_export_override entries in Predbat)
-for _n, _word in ((2, "2nd"), (3, "3rd")):
+# The 2nd and 3rd charge and discharge (e.g. for more rates_import/export_override entries in Predbat)
+for _kind, _n in [(k, n) for k in ("charge", "discharge") for n in (2, 3)]:
     for _key, _suffix, _label, _attrs in (
             ("start", "start", "Start", TIMESTAMP), ("end", "end", "End", TIMESTAMP),
             ("start_date", "start_date", "Start Date", {"icon": "mdi:calendar-start"}),
@@ -64,8 +64,8 @@ for _n, _word in ((2, "2nd"), (3, "3rd")):
             ("start_time", "start_time", "Start Time", {"icon": "mdi:clock-start"}),
             ("end_time", "end_time", "End Time", {"icon": "mdi:clock-end"}),
             ("date", "date", "Date", {"icon": "mdi:calendar"})):
-        SENSORS[f"discharge_{_n}_{_key}"] = (f"sensor.next_discharge_dispatch_{_n}_{_suffix}", {
-            "friendly_name": f"Next Discharge Dispatch {_n} {_label}", **_attrs})
+        SENSORS[f"{_kind}_{_n}_{_key}"] = (f"sensor.next_{_kind}_dispatch_{_n}_{_suffix}", {
+            "friendly_name": f"Next {_kind.title()} Dispatch {_n} {_label}", **_attrs})
 ALL_SENSORS = [entity_id for entity_id, _ in SENSORS.values()]
 
 REFRESH_S = 300  # everything posted again at least this often, even unchanged

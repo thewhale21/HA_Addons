@@ -72,10 +72,12 @@ it's used until you pick one.
 
 `*` is `charge` or `discharge`: each has the same set.
 
-The 2nd and 3rd discharges have the same set too, with `_2` or `_3` after
-`dispatch`: `sensor.next_discharge_dispatch_2_date`, `..._2_start_time`,
-`..._2_end_time` and so on (`1999-01-01` and `00:00:00` when there isn't
-one). So Predbat can see up to three planned discharges:
+The 2nd and 3rd charges and discharges have the same set too, with `_2` or
+`_3` after `dispatch`: `sensor.next_discharge_dispatch_2_date`,
+`sensor.next_charge_dispatch_2_start_time`, `..._3_end_time` and so on
+(`1999-01-01` and `00:00:00` when there isn't one). So Predbat can see up to
+three planned discharges (and the same for charges, with
+`rates_import_override` and `next_charge_dispatch`):
 
 ```yaml
 rates_export_override:

@@ -54,7 +54,8 @@ def next_dispatch(dispatches: list, kind: str, now: datetime.datetime) -> Option
     return found[0] if found else None
 
 
-LATER_DISCHARGES = (2, 3)  # sensors for the 2nd and 3rd discharge too (e.g. for Predbat)
+LATER = (2, 3)  # sensors for the 2nd and 3rd charge and discharge too (e.g. for Predbat)
+LATER_DISCHARGES = LATER  # (the old name)
 
 
 def dispatch_times(dispatch: Optional[dict], tz: Optional[datetime.tzinfo],
@@ -96,15 +97,16 @@ def summarise(dispatches: list, now: datetime.datetime, tz: Optional[datetime.tz
         out[f"{kind}_kwh"] = _kwh(d) if d else None
         times = dispatch_times(d, tz, {"start_time": previous.get(f"{kind}_start_time")})
         out.update({f"{kind}_{k}": v for k, v in times.items()})
-    # The 2nd and 3rd discharges: the same set (1999-01-01 and 00:00:00 when there's none)
-    later = next_dispatches(dispatches, "discharge", now)
-    for n in LATER_DISCHARGES:
-        d = later[n - 1] if len(later) >= n else None
-        out[f"discharge_{n}_start"] = (d or {}).get("start")
-        out[f"discharge_{n}_end"] = (d or {}).get("end")
-        out[f"discharge_{n}_kwh"] = _kwh(d) if d else None
-        times = dispatch_times(d, tz, {"start_time": "00:00:00"})
-        out.update({f"discharge_{n}_{k}": v for k, v in times.items()})
+    # The 2nd and 3rd charges and discharges: the same set (1999-01-01 and 00:00:00 when there's none)
+    for kind in ("charge", "discharge"):
+        later = next_dispatches(dispatches, kind, now)
+        for n in LATER:
+            d = later[n - 1] if len(later) >= n else None
+            out[f"{kind}_{n}_start"] = (d or {}).get("start")
+            out[f"{kind}_{n}_end"] = (d or {}).get("end")
+            out[f"{kind}_{n}_kwh"] = _kwh(d) if d else None
+            times = dispatch_times(d, tz, {"start_time": "00:00:00"})
+            out.update({f"{kind}_{n}_{k}": v for k, v in times.items()})
     out.update(now_values(dispatches, now))
     return out
 

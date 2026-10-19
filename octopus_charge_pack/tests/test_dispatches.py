@@ -301,6 +301,23 @@ def test_the_2nd_and_3rd_discharges():
     assert SENSORS["discharge_3_end_time"][0] == "sensor.next_discharge_dispatch_3_end_time"
 
 
+def test_the_2nd_and_3rd_charges():
+    from src.dispatches import summarise
+    from src.ha_entities import SENSORS
+    plan = [_d("2026-10-15T01:00:00+00:00", "2026-10-15T02:00:00+00:00", -3.0),
+            _d("2026-10-15T13:00:00+00:00", "2026-10-15T13:30:00+00:00", -1.5),
+            _d("2026-10-15T18:00:00+00:00", "2026-10-15T19:00:00+00:00", 4.4),
+            _d("2026-10-15T23:30:00+00:00", "2026-10-16T01:30:00+00:00", -6.0)]
+    s = summarise(plan, _at(12), datetime.timezone.utc, {})
+    assert s["charge_start_time"] == "13:00:00"
+    assert (s["charge_2_date"], s["charge_2_start_time"], s["charge_2_end_time"], s["charge_2_end_date"], s["charge_2_kwh"]) == (
+        "2026-10-15", "23:30:00", "01:30:00", "2026-10-16", -6.0)
+    assert (s["charge_3_date"], s["charge_3_start_time"], s["charge_3_end_time"]) == ("1999-01-01", "00:00:00", "00:00:00")
+    assert SENSORS["charge_2_start_time"] == ("sensor.next_charge_dispatch_2_start_time",
+                                             {"friendly_name": "Next Charge Dispatch 2 Start Time", "icon": "mdi:clock-start"})
+    assert SENSORS["charge_3_end"][0] == "sensor.next_charge_dispatch_3_end"
+
+
 # --- did the battery discharge? (the SoC sensor) ---------------------------------------
 
 def test_soc_shows_whether_a_session_happened():
