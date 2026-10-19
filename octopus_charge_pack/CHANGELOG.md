@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1 — Completed sessions at a glance
+
+- **Change:** on the Overview's **Today and tomorrow**, a completed charge
+  or discharge shows a green tick, or a red cross when your home battery's
+  SoC shows it didn't charge or discharge (Settings › Your home battery),
+  centred in its block. Completed blocks are paler, so the mark stands out.
+
 ## 0.8.0 — Three charges, and the banner theme
 
 - **New:** sensors for the 2nd and 3rd planned charge, like the
