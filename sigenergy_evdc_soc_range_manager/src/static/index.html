@@ -479,13 +479,13 @@
       </div>
     </div>
     <div class="card">
-      <h2>Car SoC<span class="spacer"></span><span class="seg" role="group" aria-label="Period" id="sc-hours"><button data-h="1" aria-pressed="false">1h</button><button data-h="3" aria-pressed="false">3h</button><button data-h="6" aria-pressed="false">6h</button><button data-h="12" aria-pressed="false">12h</button><button data-h="24" aria-pressed="true">24h</button><button data-h="48" aria-pressed="false">48h</button></span></h2>
+      <h2>Car SoC<span class="spacer"></span><button class="btn small" id="sc-reset" hidden title="Back to the whole period">Reset zoom</button><span class="seg" role="group" aria-label="Period" id="sc-hours"><button data-h="1" aria-pressed="false">1h</button><button data-h="3" aria-pressed="false">3h</button><button data-h="6" aria-pressed="false">6h</button><button data-h="12" aria-pressed="false">12h</button><button data-h="24" aria-pressed="true">24h</button><button data-h="48" aria-pressed="false">48h</button></span></h2>
       <div class="chart socchart" id="o-socchart" role="img" aria-label="The car's SoC over time, with the limits and the starts and stops"></div>
       <div class="legend">
         <span><i class="ln-soc"></i>SoC</span><span><i class="ln-lim"></i>Limits</span>
         <span><b class="band" style="background:var(--s-charge);opacity:.3"></b>Charging</span><span><b class="band" style="background:var(--s-dis);opacity:.3"></b>Discharging</span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 2px, transparent 2px 4px);opacity:.5"></b>Unplugged</span><span><b class="band" style="background:var(--err);opacity:.3"></b>Charger alarm</span>
         <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:var(--ok)"/></svg> Started</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1H9L5 9Z" style="fill:var(--text2)"/></svg> Stopped</span>
-        <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:none;stroke:var(--text2);stroke-width:1.5"/></svg> Would (watch only)</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 0L10 5L5 10L0 5Z" style="fill:var(--warn)"/></svg> Dropped out</span><span><svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" style="fill:none;stroke:var(--text2);stroke-dasharray:2 1.5"/></svg> Started or stopped elsewhere</span>
+        <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:none;stroke:var(--text2);stroke-width:1.5"/></svg> Would (watch only)</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 0L10 5L5 10L0 5Z" style="fill:var(--warn)"/></svg> Dropped out</span><span><svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" style="fill:none;stroke:var(--text2);stroke-dasharray:2 1.5"/></svg> Started or stopped elsewhere</span><span style="margin-left:auto">Drag or scroll to zoom · double-click to reset</span>
       </div>
     </div>
     <div class="card">
@@ -1435,7 +1435,7 @@ async function setCapacity() {
 $('o-cap').addEventListener('change', setCapacity);
 $('o-to-schedule').addEventListener('click', () => showTab('schedule'));
 // ---------- Car SoC chart: the last 24 or 48 hours ----------
-const socc = {hours: 24, data: null, at: 0};
+const socc = {hours: 24, data: null, at: 0, zoom: null};  // zoom: [t0, t1] (s) inside the period, or null
 async function refreshSocChart(force) {
   if (!force && Date.now() - socc.at < 60000 && socc.data) return;
   try { socc.data = await api('soc_history?hours=' + socc.hours); socc.at = Date.now(); } catch (e) { return; }
@@ -1443,7 +1443,7 @@ async function refreshSocChart(force) {
 }
 $('sc-hours').addEventListener('click', (ev) => {
   const h = Number(ev.target.dataset.h); if (!h) return;
-  socc.hours = h;
+  socc.hours = h; socc.zoom = null;
   $('sc-hours').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', Number(b.dataset.h) === h));
   refreshSocChart(true);
 });
@@ -1454,14 +1454,19 @@ function drawSocChart() {
   if (!pts.length) { box.innerHTML = '<div class="empty">Nothing recorded yet: the chart fills in as the add-on runs.</div>'; return; }
   const W = Math.max(300, box.clientWidth || 600), H = 220, P = {l: 34, r: 10, t: 10, b: 26};
   const pw = W - P.l - P.r, ph = H - P.t - P.b;
-  const t1 = d.now, t0 = t1 - d.hours * 3600;
-  const X = (t) => P.l + (Math.max(t0, Math.min(t1, t)) - t0) / (t1 - t0) * pw;
+  // The period, or the part of it zoomed into (drag across the chart, or scroll over it)
+  const tNow = d.now, tStart = tNow - d.hours * 3600;
+  if (socc.zoom && (socc.zoom[0] < tStart || socc.zoom[1] > tNow + 60)) socc.zoom = null;
+  const [t0, t1] = socc.zoom || [tStart, tNow];
+  $('sc-reset').hidden = !socc.zoom;
+  const X = (t) => P.l + (t - t0) / (t1 - t0) * pw;  // (drawn clipped to the chart)
   const Y = (v) => P.t + (1 - v / 100) * ph;
   let svg = '';
   // Grid
   for (const v of [20, 40, 60, 80, 100]) svg += `<line class="axis" x1="${P.l}" x2="${W - P.r}" y1="${Y(v)}" y2="${Y(v)}" opacity="${v === 20 ? 1 : .5}"/><text x="${P.l - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
+  svg += `<clipPath id="sc-clip"><rect x="${P.l}" y="0" width="${pw}" height="${H}"/></clipPath><g clip-path="url(#sc-clip)">`;
   // Spans: each point holds until the next one (the last until now)
-  const spans = pts.map((p, n) => [p[0], n + 1 < pts.length ? pts[n + 1][0] : t1, p]);
+  const spans = pts.map((p, n) => [p[0], n + 1 < pts.length ? pts[n + 1][0] : tNow, p]);
   // What the charger was doing, shading the whole height behind the line
   const SC = {charge: 'var(--s-charge)', discharge: 'var(--s-dis)', unplugged: 'var(--text2)', alarm: 'var(--err)'};
   const runs = [];  // spans in a row with the same state, as one
@@ -1484,7 +1489,7 @@ function drawSocChart() {
     if (p[1] == null || p[4] === 'unplugged') { pen = false; continue; }  // a break while unplugged
     line += `${pen ? 'L' : 'M'}${X(a)},${Y(p[1])} `;
     pen = true;
-    if (b === t1) line += `L${X(b)},${Y(p[1])}`;
+    if (b === tNow) line += `L${X(b)},${Y(p[1])}`;
   }
   svg += `<path class="soc" d="${line}"/>`;
   // Starts, stops (hollow while watching only) and dropouts, at the SoC then
@@ -1514,8 +1519,10 @@ function drawSocChart() {
       svg += `<path class="ev" d="${tri}" style="${e.observe_only ? `fill:var(--card);stroke:${c}` : `fill:${c};stroke:var(--card)`}"/>`;
     }
   }
-  // Time axis: about 4-8 labels whatever the period, the day's name at midnight
-  const stepMin = {1: 10, 3: 30, 6: 60, 12: 120, 24: 360, 48: 720}[d.hours] || Math.max(10, d.hours * 15);
+  svg += '</g>';
+  // Time axis: about 4-8 labels whatever's shown, the day's name at midnight
+  const spanMin = (t1 - t0) / 60;
+  const stepMin = [5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].find((m) => spanMin / m <= 8) || 1440;
   const step = stepMin * 60, firstT = Math.ceil(t0 / step) * step;  // whole steps of the clock
   const tzShift = new Date(firstT * 1000).getTimezoneOffset() * 60;  // ...in local time
   const first = new Date((Math.ceil((t0 - tzShift) / step) * step + tzShift) * 1000);
@@ -1524,6 +1531,7 @@ function drawSocChart() {
     svg += `<line class="axis" x1="${X(t)}" x2="${X(t)}" y1="${P.t}" y2="${H - P.b}" opacity=".35"/><text x="${X(t)}" y="${H - 6}" text-anchor="middle">${lab}</text>`;
   }
   svg += `<line class="cross" id="sc-cross" x1="0" x2="0" y1="${P.t}" y2="${H - P.b}" visibility="hidden"/>`;
+  svg += `<rect id="sc-sel" x="0" y="${P.t}" width="0" height="${ph}" style="fill:var(--primary);opacity:.15" visibility="hidden"/>`;
   svg += `<rect id="sc-hit" x="${P.l}" y="${P.t}" width="${pw}" height="${ph + 12}" style="fill:transparent"/>`;
   box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${svg}</svg>`;
   // Hover: the time, SoC, limits, what it was doing and anything that happened near then
@@ -1545,7 +1553,39 @@ function drawSocChart() {
     tip.style.top = '4px';
   });
   hit.addEventListener('mouseleave', () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); });
+  // Zoom: drag across a stretch, or scroll (in around the pointer); double-click or Reset zoom to go back
+  const svgX = (ev) => { const r = box.querySelector('svg').getBoundingClientRect(); return (ev.clientX - r.left) * (W / r.width); };
+  const tAt = (x) => t0 + (Math.max(P.l, Math.min(P.l + pw, x)) - P.l) / pw * (t1 - t0);
+  const MIN_SPAN = 10 * 60;
+  const setZoom = (a, b) => {
+    if (b - a < MIN_SPAN) { const m = (a + b) / 2; a = m - MIN_SPAN / 2; b = m + MIN_SPAN / 2; }
+    a = Math.max(tStart, a); b = Math.min(tNow, b);
+    socc.zoom = b - a >= (tNow - tStart) - 1 ? null : [a, b];
+    tip.hidden = true; drawSocChart();
+  };
+  const sel = box.querySelector('#sc-sel');
+  hit.addEventListener('mousedown', (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    const x0 = svgX(ev);
+    const move = (e) => { const x = Math.max(P.l, Math.min(P.l + pw, svgX(e)));
+      sel.setAttribute('x', Math.min(x0, x)); sel.setAttribute('width', Math.abs(x - x0)); sel.setAttribute('visibility', 'visible'); };
+    const up = (e) => {
+      window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up);
+      sel.setAttribute('visibility', 'hidden');
+      const x1 = svgX(e);
+      if (Math.abs(x1 - x0) > 6) setZoom(tAt(Math.min(x0, x1)), tAt(Math.max(x0, x1)));
+    };
+    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+  });
+  hit.addEventListener('wheel', (ev) => {
+    ev.preventDefault();
+    const tc = tAt(svgX(ev)), f = ev.deltaY < 0 ? 0.75 : 1 / 0.75;
+    setZoom(tc - (tc - t0) * f, tc + (t1 - tc) * f);
+  }, {passive: false});
+  hit.addEventListener('dblclick', () => { socc.zoom = null; drawSocChart(); });
 }
+$('sc-reset').addEventListener('click', () => { socc.zoom = null; drawSocChart(); });
 window.addEventListener('resize', () => { clearTimeout(drawSocChart._t); drawSocChart._t = setTimeout(drawSocChart, 250); });
 
 // ---------- Quick holds (src/holds.py): a one-off schedule entry from now ----------

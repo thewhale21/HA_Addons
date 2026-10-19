@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.26.0 — Zoom into the car's SoC
+
+- **New:** the Overview's **Car SoC** chart zooms: drag across a stretch
+  of it, or scroll over it (in and out around the pointer, down to 10
+  minutes). **Reset zoom** or a double-click goes back to the whole period;
+  picking another period does too. The time labels follow what's shown.
+
 ## 0.25.0 — The page redesigned
 
 - **Improvement:** each tab opens with a banner that answers its main
