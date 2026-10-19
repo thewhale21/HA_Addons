@@ -412,11 +412,6 @@
       <div class="sessions" id="o-done"></div>
       <div class="note" style="margin:8px 0 0">Octopus changes its plan a lot, but a session that happens stays in it until its end: one still planned when it ended (within two reads) counts as completed. The last 30 days.</div>
     </div>
-    <div class="card">
-      <h2>Plan changes</h2>
-      <table><thead><tr><th>When</th><th>Type</th><th>Change</th></tr></thead><tbody id="o-changes"></tbody></table>
-      <div class="note" style="margin:8px 0 0">What Octopus added, moved or took off the plan between reads (dispatches that have ended dropping off aren't changes). The last 7 days.</div>
-    </div>
   </section>
 
   <section id="tab-settings" class="stack" hidden>
@@ -722,15 +717,6 @@ function renderState(s) {
     ? `Now: ${NOWCHIP[m.now]} until ${esc(hm(m.now_end))} · ${m.now_minutes_left} min left${m.now_kwh ? ' · ' + num(m.now_kwh, 2) + ' kWh' : ''}`
     : 'Now: <span class="chip">Nothing planned</span>';
   drawTimeline(m.dispatches || [], s.completed || []);
-  // Plan changes
-  const KCHIP = {discharge: '<span class="chip dis">Discharge</span>', charge: '<span class="chip chg">Charge</span>', idle: '<span class="chip">Idle</span>'};
-  const span2 = (d) => `${hm(d.start)}–${hm(d.end)}${d.kind !== 'idle' ? ' (' + num(d.energyAddedKwh, 2) + ' kWh)' : ''}`;
-  $('o-changes').innerHTML = (s.changes || []).filter((c) => (c.dispatch || {}).kind !== 'idle').slice(0, 60).map((c) => {
-    const d = c.dispatch, day = new Date(d.start).toLocaleDateString([], {weekday: 'short'});
-    const what = c.change === 'added' ? `Added ${day} ${span2(d)}` : c.change === 'removed' ? `Taken off ${day} ${span2(d)}`
-      : `Changed ${day} ${span2(c.was)} → ${span2(d)}`;
-    return `<tr><td>${esc(dateTime(c.at))}</td><td>${KCHIP[d.kind] || ''}</td><td>${esc(what)}</td></tr>`;
-  }).join('') || '<tr><td colspan="3" class="muted">No changes yet: they show here as Octopus changes its plan</td></tr>';
   // Calendar (Settings)
   const cal = s.calendar || {};
   if (document.activeElement !== $('s-cal')) $('s-cal').checked = cal.enabled !== false;

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.1 — Plan changes in the log
+
+- **Change:** the History tab's **Plan changes** card is gone. Each change
+  is still logged, now at Debug (with what it was before a change), and
+  kept in the diagnostics bundle for 7 days.
+
 ## 0.9.0 — The last 7 days
 
 - **New:** the History tab has a chart of the last 7 days: each day's kWh

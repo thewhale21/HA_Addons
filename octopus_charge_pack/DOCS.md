@@ -52,7 +52,8 @@ and its sensors. In short: enter your Octopus API key on the
 - Plan changes: each read is compared with the last (dispatches matched by
   their start): one that's new, gone or has another end or energy is a
   change. One that has ended dropping off isn't, nor are idle ones (0 kWh).
-  Kept for 7 days.
+  Logged at Debug (Diagnostics › Debug › Log level), and kept for 7 days in
+  the diagnostics bundle.
 - `src/calendar_sync.py`: the calendars. The first time, it makes two Local
   Calendars, Octopus Charge Pack Charge (`calendar.octopus_charge_pack_charge`)
   and Octopus Charge Pack Discharge (`calendar.octopus_charge_pack_discharge`),

@@ -74,7 +74,9 @@ async def read_once(state: SharedState, client: OctopusClient, kept: dict, wante
     state.completed = list(kept.get("completed") or [])
     for c in track_changes(kept, dispatches, now):
         d = c["dispatch"]
-        logger.info("Plan change: %s %s %s to %s (%s kWh)", c["change"], d["kind"], d["start"], d["end"], d["energyAddedKwh"])
+        was = c.get("was") or {}
+        logger.debug("Plan change: %s %s %s to %s (%s kWh)%s", c["change"], d["kind"], d["start"], d["end"], d["energyAddedKwh"],
+                     f", was {was.get('start')} to {was.get('end')} ({was.get('energyAddedKwh')} kWh)" if was else "")
     state.changes = list(kept.get("changes") or [])
     state.last_update = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
