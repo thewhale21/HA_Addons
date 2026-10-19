@@ -193,6 +193,28 @@
   .pill.none { background: var(--hover); color: var(--text2); }
   .prompt { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; background: var(--hover); margin-top: 12px; font-size: 13px; }
   .prompt .grow { flex: 1; }
+  /* History: the last 7 days, discharged to the left of the centre line and charged to the right */
+  .dv { display: grid; grid-template-columns: 84px minmax(0, 1fr) minmax(0, 1fr) 132px; gap: 7px 0; align-items: center; }
+  .dv > .dl, .dv > .lft, .dv > .rgt, .dv > .det { cursor: pointer; transition: opacity .15s; }
+  .dv .dl { font-size: 13px; font-weight: 500; line-height: 1.2; padding-right: 12px; }
+  .dv .dl small { display: block; font-size: 11px; font-weight: 400; color: var(--text2); }
+  .dv .dl.today { color: var(--primary); }
+  .dv .lft, .dv .rgt { position: relative; height: 34px; background: var(--hover); }
+  .dv .lft { border-radius: 10px 0 0 10px; border-right: 2px solid var(--text2); }
+  .dv .rgt { border-radius: 0 10px 10px 0; }
+  .dv .bar { position: absolute; top: 6px; bottom: 6px; border-radius: 6px; color: #fff; font-size: 11.5px; font-weight: 600;
+    display: flex; align-items: center; padding: 0 8px; white-space: nowrap; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+  .dv .lft .bar { right: 4px; justify-content: flex-start; background: linear-gradient(270deg, #ab47bc, var(--violet)); }
+  .dv .rgt .bar { left: 4px; justify-content: flex-end; background: linear-gradient(90deg, #29b6f6, var(--info)); }
+  .dv .det { font-size: 12px; color: var(--text2); text-align: right; line-height: 1.35; font-variant-numeric: tabular-nums; }
+  .dv .det b { color: var(--text); font-weight: 500; }
+  .dv .det .ok { color: var(--ok); } .dv .det .bad { color: var(--err); }
+  .dv .dim { opacity: .35; }
+  .dv .lft.sel, .dv .rgt.sel { box-shadow: inset 0 0 0 2px var(--primary); }
+  .dv .dl.sel { color: var(--primary); }
+  .dv .ax { font-size: 11px; color: var(--text2); padding-top: 2px; }
+  .dv .ax.l { text-align: left; } .dv .ax.r { text-align: right; }
+  @media (max-width: 640px) { .dv { grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr) 84px; } }
   @media (max-width: 640px) { .sess { grid-template-columns: 1fr auto; } .sess .soc { grid-column: 1 / -1; } }
   .tl-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 12px; color: var(--text2); }
   .tl-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
@@ -380,7 +402,12 @@
       <div class="stats" id="o-done-stats"></div>
     </div>
     <div class="card">
-      <h2>Sessions</h2>
+      <h2>The last 7 days<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400">Click a day to show its sessions</span></h2>
+      <div class="dv" id="o-dv"></div>
+      <div class="tl-legend" id="o-dv-legend"></div>
+    </div>
+    <div class="card">
+      <h2>Sessions<span class="spacer"></span><span id="o-done-filter"></span></h2>
       <div id="o-done-prompt"></div>
       <div class="sessions" id="o-done"></div>
       <div class="note" style="margin:8px 0 0">Octopus changes its plan a lot, but a session that happens stays in it until its end: one still planned when it ended (within two reads) counts as completed. The last 30 days.</div>
@@ -717,8 +744,51 @@ function renderState(s) {
   drawDevicePicker(s);
 }
 // History: completed sessions, with the battery's SoC if a sensor is picked
+let doneDay = null;  // YYYY-MM-DD: the Sessions list shows only this day (picked on the 7-day chart)
+const dayKey = (iso) => new Date(iso).toLocaleDateString('en-CA');
+// The last 7 days: each day's discharged kWh to the left of the centre line, charged to the right.
+// With a SoC sensor, only the sessions that really moved the battery count; without one, all completed.
+function drawDays(done, hasSoc) {
+  const ok = (c) => !hasSoc || c.soc_result === 'charged' || c.soc_result === 'discharged';
+  const failed = (c) => /^not_/.test(c.soc_result || '');
+  const kwh = (c) => Math.abs(Number(c.energyAddedKwh) || 0);
+  const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+  const days = [];
+  for (let n = 0; n > -7; n--) {
+    const d = new Date(day0); d.setDate(d.getDate() + n);
+    const key = d.toLocaleDateString('en-CA'), all = done.filter((c) => dayKey(c.start) === key), good = all.filter(ok);
+    days.push({n, d, key, all, good, bad: all.filter(failed).length,
+      dis: good.filter((c) => c.kind === 'discharge').reduce((a, c) => a + kwh(c), 0),
+      chg: good.filter((c) => c.kind === 'charge').reduce((a, c) => a + kwh(c), 0)});
+  }
+  const max = Math.max(0.5, ...days.map((x) => Math.max(x.dis, x.chg)));
+  const W = (v) => Math.max(v ? 2 : 0, v / max * 92);
+  $('o-dv').innerHTML = days.map((x) => {
+    const st = doneDay === x.key ? 'sel' : doneDay ? 'dim' : '';
+    const name = x.n === 0 ? 'Today' : x.n === -1 ? 'Yesterday' : x.d.toLocaleDateString([], {weekday: 'short'});
+    const bar = (v, side) => v ? `<div class="bar" style="width:${W(v)}%" title="${side === 'l' ? 'Discharged' : 'Charged'} ${num(v, 2)} kWh">${W(v) > 22 ? (side === 'l' ? '−' : '+') + num(v, 1) + ' kWh' : ''}</div>` : '';
+    const det = !x.all.length ? '—'
+      : `<b>${x.good.length} of ${x.all.length}</b> ${hasSoc ? '<span class="ok">✓</span>' : 'completed'}${x.bad ? ` · <span class="bad">${x.bad} ✕</span>` : ''}`
+        + `<br>${x.dis ? '−' + num(x.dis, 1) : '0'} / ${x.chg ? '+' + num(x.chg, 1) : '0'} kWh`;
+    return `<div class="dl ${x.n === 0 ? 'today' : ''} ${st}" data-day="${x.key}">${name}<small>${x.d.toLocaleDateString([], {day: 'numeric', month: 'short'})}</small></div>`
+      + `<div class="lft ${st}" data-day="${x.key}">${bar(x.dis, 'l')}</div><div class="rgt ${st}" data-day="${x.key}">${bar(x.chg, 'r')}</div>`
+      + `<div class="det ${st}" data-day="${x.key}">${det}</div>`;
+  }).join('') + '<div></div><div class="ax l">← Discharged</div><div class="ax r">Charged →</div><div></div>';
+  $('o-dv-legend').innerHTML = '<span><i style="background:var(--violet)"></i>Discharged</span><span><i style="background:var(--info)"></i>Charged</span>'
+    + `<span>${hasSoc ? 'Only sessions that really moved your home battery (✓); ✕ didn\'t' : 'All completed sessions (pick your home battery\'s SoC sensor in Settings to count only the ones that moved it)'}</span>`;
+}
+$('o-dv').addEventListener('click', (ev) => {
+  const el = ev.target.closest('[data-day]'); if (!el) return;
+  doneDay = doneDay === el.dataset.day ? null : el.dataset.day;
+  if (state) drawHistory(state);
+});
+document.addEventListener('click', (ev) => {
+  if (ev.target.id !== 'o-done-all') return;
+  ev.preventDefault(); doneDay = null; if (state) drawHistory(state);
+});
 function drawHistory(s) {
   const done = s.completed || [], hasSoc = !!s.soc_entity;
+  drawDays(done, hasSoc);
   const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   const dis = done.filter((c) => c.kind === 'discharge'), chg = done.filter((c) => c.kind === 'charge');
   const sumKwh = (xs) => xs.reduce((a, c) => a + Math.abs(Number(c.energyAddedKwh) || 0), 0);
@@ -733,7 +803,9 @@ function drawHistory(s) {
   if ($('o-soc-go')) $('o-soc-go').onclick = () => showTab('settings');
   const RESULT = {discharged: ['ok', '✓ Discharged'], charged: ['ok', '✓ Charged'], not_discharged: ['warn', 'Didn\'t discharge'],
     not_charged: ['warn', 'Didn\'t charge'], no_data: ['none', 'No SoC reading']};
-  $('o-done').innerHTML = done.map((c) => {
+  $('o-done-filter').innerHTML = doneDay ? `<span class="chip" style="margin-right:4px">${new Date(doneDay + 'T12:00:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} <a href="#" id="o-done-all" style="margin-left:4px">Show all</a></span>` : '';
+  const shown = doneDay ? done.filter((c) => dayKey(c.start) === doneDay) : done;
+  $('o-done').innerHTML = shown.map((c) => {
     const kind = c.kind === 'charge' ? 'charge' : 'discharge';
     const chip = kind === 'discharge' ? '<span class="chip dis">Discharge</span>' : '<span class="chip chg">Charge</span>';
     const day = new Date(c.start).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
@@ -749,7 +821,7 @@ function drawHistory(s) {
     return `<div class="sess"><div class="when">${esc(day)}<small>${esc(t(c.start))}–${esc(t(c.end))}</small></div>`
       + `<div class="what">${chip}<br>${num(Math.abs(c.energyAddedKwh), 2)} kWh planned</div>`
       + `<div class="soc">${bar}</div><div>${pill}</div></div>`;
-  }).join('') || '<div class="muted" style="padding:8px 0">None yet: a session shows here once it has ended</div>';
+  }).join('') || `<div class="muted" style="padding:8px 0">${doneDay ? 'No completed sessions that day' : 'None yet: a session shows here once it has ended'}</div>`;
 }
 const deviceLabel = (d) => [d.name || d.deviceType || 'Device', d.name && d.deviceType ? d.deviceType : '', d.provider || ''].filter(Boolean).join(' · ');
 function drawDevicePicker(s) {

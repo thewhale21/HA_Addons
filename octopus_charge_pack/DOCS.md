@@ -15,7 +15,9 @@ and its sensors. In short: enter your Octopus API key on the
    ticked), then the next discharge (with its local date, start and end as
    the date and time sensors give them) and next charge, each with its own
    planned dispatches.
-2. **History** has the completed sessions of the last 30 days (with
+2. **History** has a chart of the last 7 days (kWh discharged to the left,
+   charged to the right; click a day to show its sessions) and the
+   completed sessions of the last 30 days (with
    totals, and with your home battery's SoC sensor picked on the Settings
    tab, its SoC from the start to the end of each and whether it really
    charged or discharged) and the plan's changes of the last 7.

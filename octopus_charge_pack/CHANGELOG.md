@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0 — The last 7 days
+
+- **New:** the History tab has a chart of the last 7 days: each day's kWh
+  discharged to the left of a centre line and charged to the right,
+  counting only the sessions that really moved your home battery (with its
+  SoC sensor picked; otherwise every completed session), and how many of
+  the day's sessions did (✓) or didn't (✕). Click a day to show only its
+  sessions in the list below; again, or **Show all**, to show them all.
+
 ## 0.8.1 — Completed sessions at a glance
 
 - **Change:** on the Overview's **Today and tomorrow**, a completed charge
