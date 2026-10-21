@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.3 — Each tab from the top
+
+- **Change:** switching tab goes back to the top of the page, instead of
+  staying as far down as you'd scrolled on the last one.
+
 ## 0.9.2 — Just the one date sensor
 
 - **Change:** the `_start_date` and `_end_date` sensors are gone, for all
