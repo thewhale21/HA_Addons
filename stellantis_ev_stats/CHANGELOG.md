@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 — Each tab from the top
+
+- **Change:** switching tab goes back to the top of the page, instead of
+  staying as far down as you'd scrolled on the last one.
+
 ## 0.3.1 — Range left for each kind of driving
 
 - **Feature:** the Efficiency now card shows the range left at the SoC now,
