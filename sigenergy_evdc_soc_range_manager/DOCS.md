@@ -225,8 +225,9 @@ title: Power  # optional
 
 **Settings › Power flow card** adds things with their own power sensor,
 e.g. a car charger (a Hypervolt, say) or a heat pump: each is drawn as a
-smaller circle coming off the house, in its own colour, and the house then
-shows what's left ("4.2 kW of 12.6 kW"). It starts with a **Car charger**
+circle coming off the house, in its own colour, and the house then shows
+what's left ("4.2 kW of 12.6 kW"); turn **Take them off the house** off to
+show its whole use instead. It starts with a **Car charger**
 and a **Heat pump**; **+ Add a device** adds more (up to 6), and × removes
 one. For each:
 

@@ -734,3 +734,18 @@ def test_power_flow_takes_devices_off_the_house_and_the_cards_own_sensors(tmp_pa
     st["sensor.house2"] = {"state": "12000", "attributes": {"unit_of_measurement": "W"}}
     m.observe(st, {**ent, "flow_home_power": "sensor.house2"}, _settings(), 1030.0)
     assert m.power_flow()["house_kw"] == 12 and m.power_flow()["home_kw"] == 5.0
+
+
+def test_the_house_can_show_its_whole_use_with_devices(tmp_path):
+    from src.ha_link import default_settings, validate_settings
+    assert default_settings()["flow_subtract"] is True
+    assert validate_settings({"flow_subtract": False}, default_settings())["flow_subtract"] is False
+    m = Manager(str(tmp_path), press=Presses().press)
+    st = _states(running="Available", grid="9")
+    st.update({"sensor.hv": {"state": "7", "attributes": {"unit_of_measurement": "kW"}},
+               "sensor.house": {"state": "10", "attributes": {"unit_of_measurement": "kW"}}})
+    ent = _entities(home_power="sensor.house", flow_subtract=False,
+                    flow_devices=[{"name": "Hypervolt", "icon": "car", "power": "sensor.hv", "plugged": ""}])
+    m.observe(st, ent, _settings(), 1000.0)
+    f = m.power_flow()
+    assert f["house_kw"] == 10 and f["home_kw"] is None and f["devices"][0]["kw"] == 7

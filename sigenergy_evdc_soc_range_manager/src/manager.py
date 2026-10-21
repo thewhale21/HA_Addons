@@ -321,6 +321,7 @@ class Manager:
             "home_measured_kw": power_kw(get("home_power")),
             "home_soc": _float(get("home_battery_soc")), "home_kwh": _float(get("home_battery_capacity")),
             "flow_devices": flow_devices(entities.get("flow_devices"), states),
+            "flow_subtract": entities.get("flow_subtract", True) is not False,
         }
         # The power flow card's own sensors for solar, the grid and the home battery, when picked
         for key, entity_key in (("flow_pv_kw", "flow_pv_power"), ("flow_grid_kw", "flow_grid_power"),
@@ -612,8 +613,10 @@ class Manager:
         devices = r.get("flow_devices") or []
         used = sum(d["kw"] or 0.0 for d in devices)
         rest = None if house is None else round(max(0.0, house - used), 3)
+        # (or, with "Take them off the house" off, its whole use: home_kw None)
         return {"pv_kw": pv, "grid_kw": grid, "battery_kw": batt, "car_kw": car,
-                "house_kw": None if house is None else round(house, 3), "home_kw": rest if devices else None,
+                "house_kw": None if house is None else round(house, 3),
+                "home_kw": rest if devices and r.get("flow_subtract", True) else None,
                 "home_soc": r.get("home_soc"), "devices": devices,
                 "lines": flows(pv, grid, batt, car, house)}
 

@@ -138,7 +138,8 @@ DEFAULT_ENTITIES = {
 
 def default_settings() -> dict:
     return {**{key: DEFAULT_ENTITIES.get(key, "") for key in ENTITY_KEYS},
-            "flow_devices": [dict(d) for d in DEFAULT_FLOW_DEVICES]}
+            "flow_devices": [dict(d) for d in DEFAULT_FLOW_DEVICES],
+            "flow_subtract": True}  # the house shows what's left after its devices (False: its whole use)
 
 
 def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
@@ -157,6 +158,10 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             out[key] = value
     if "flow_devices" in raw:
         out["flow_devices"] = validate_flow_devices(raw["flow_devices"])
+    if "flow_subtract" in raw:
+        if not isinstance(raw["flow_subtract"], bool):
+            raise ValueError("flow_subtract must be true or false")
+        out["flow_subtract"] = raw["flow_subtract"]
     unknown = [k for k in raw if k not in out]
     if unknown:
         raise ValueError("Unknown setting: " + ", ".join(unknown))
@@ -193,7 +198,7 @@ class HaLink:
             try:
                 with open(path, encoding="utf-8") as f:
                     self.settings = validate_settings(
-                        {k: v for k, v in json.load(f).items() if k in ENTITY_KEYS or k == "flow_devices"},
+                        {k: v for k, v in json.load(f).items() if k in ENTITY_KEYS or k in ("flow_devices", "flow_subtract")},
                         default_settings())
                 self.configured = True
                 return

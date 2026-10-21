@@ -680,6 +680,10 @@
     <div class="card" id="s-flow">
       <h2>Devices off the house<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400">For the Overview's diagram and the dashboard card</span></h2>
       <div class="note" style="margin:0">Things in your home with their own power sensor, e.g. a car charger or a heat pump: each is drawn coming off the house, which then shows what's left. <details class="more"><summary>More</summary><div>Pick its power sensor (W or kW) to show it; with no sensor it isn't drawn. Pick a <b>plugged in</b> entity too and it's only drawn while that's on (on, home, connected, plugged in, charging, or a number above 0), e.g. your charger's "plugged in" sensor. Up to 6. Only the drawing uses these: the add-on doesn't decide anything from them.</div></details></div>
+      <div class="row" style="margin-top:12px">
+        <div class="grow">Take them off the house<div class="note" style="margin:0">On: the house shows what's left after its devices (e.g. "4.2 kW of 12.6 kW"). Off: its whole use, the devices included.</div></div>
+        <label class="switch"><input type="checkbox" id="s-flow-sub" aria-label="Take the devices off the house"><span></span></label>
+      </div>
       <div class="fdevs" id="s-flow-devs"></div>
       <div class="fadd"><button class="btn small" id="s-flow-add">+ Add a device</button><span class="note" style="margin:0" id="s-flow-max"></span></div>
       <h2 style="margin-top:22px">Solar, the grid, the home battery, the house and the car</h2>
@@ -1786,9 +1790,12 @@ function drawFlowDevices() {
         <span class="picker" data-key="fdev.${n}.plugged" data-domain="binary_sensor,input_boolean,switch,sensor,device_tracker" data-none="Always shown (with a reading)"></span></div>
       <div class="fstat">${status}</div></div>`;
   }).join('');
+  $('s-flow-sub').checked = !sim.data || sim.data.settings.flow_subtract !== false;
   $('s-flow-add').disabled = list.length >= 6;
   $('s-flow-max').textContent = list.length >= 6 ? 'Up to 6 devices' : '';
 }
+$('s-flow-sub').addEventListener('change', (ev) => saveSensors({flow_subtract: ev.target.checked},
+  ev.target.checked ? 'The house shows what\'s left after its devices' : 'The house shows its whole use'));
 $('s-flow-add').addEventListener('click', () => {
   const list = flowDevs();
   if (list.length >= 6) return;

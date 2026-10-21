@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.29.0 — The house's whole use, if you like
+
+- **New:** Settings › Power flow card › **Take them off the house**: on
+  (the default), the house on the power flow shows what's left after its
+  devices ("4.2 kW of 12.6 kW"); off, its whole use, the devices included.
+
 ## 0.28.3 — Each tab from the top
 
 - **Change:** switching tab goes back to the top of the page, instead of
