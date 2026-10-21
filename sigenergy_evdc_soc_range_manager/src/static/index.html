@@ -1123,11 +1123,12 @@ function flowParts(f) {
   delete lines.car_home; delete lineColour.car_home;  // the car joins the column
   const car = f.car_kw || 0;
   const devs = [{car: true, name: 'Car', icon: 'car', kw: Math.abs(car)}, ...(f.devices || []).slice(0, 6)], n = devs.length;
-  // Up to 4 in a column; 5 or 6 zigzag between two, so no line passes behind another device
-  const zig = n > 4, r = zig ? 24 : n > 3 ? 27 : 30;
-  const gapY = n > 1 ? Math.min(100, (zig ? 290 : 250) / (n - 1)) : 0;
+  // The same size as the others. Up to 3 in a column; more zigzag between two, so no line
+  // passes behind another circle
+  const zig = n > 3, r = 38;
+  const gapY = n > 1 ? Math.min(zig ? 110 : 100, (zig ? 370 : 200) / (n - 1)) : 0;
   devs.forEach((d, k) => {
-    const x = zig ? (k % 2 ? 580 : 492) : 500, y = Math.round(172 + (k - (n - 1) / 2) * gapY);
+    const x = zig ? (k % 2 ? 610 : 500) : 500, y = Math.round(172 + (k - (n - 1) / 2) * gapY);
     const key = 'dev' + k;
     nodesAt[key] = [x, y];
     // Out of the house, turning at x 430 (left of every device), then straight in: no line crosses a device
@@ -1191,21 +1192,20 @@ function flowParts(f) {
   nodes += node('battery', '--f-bout', 'Battery', false, [
     [`↓ ${kwShort(batt != null && batt > 0 ? batt : 0)}`, '--f-bin'], [`↑ ${kwShort(batt != null && batt < 0 ? batt : 0)}`, '--f-bout']],
     f.home_soc == null ? null : `${num(f.home_soc, 0)}%`);
-  // Each one: a smaller circle in its colour, its icon and power, its name below (the car: its
-  // SoC too, and whether it's charging or discharging into the house)
+  // Each one like the others: its icon and power in a circle in its colour, its name below. The
+  // car shows its SoC above the icon, and ← into the house while discharging, → while charging.
   devs.forEach((d, k) => {
     const [x, y] = nodesAt['dev' + k], c = colourOf(lineColour['home_dev' + k]);
-    const max = zig ? 10 : 16, name = String(d.name || '').length > max ? String(d.name).slice(0, max - 1) + '…' : String(d.name || '');
+    const max = zig ? 12 : 16, name = String(d.name || '').length > max ? String(d.name).slice(0, max - 1) + '…' : String(d.name || '');
     const esc2 = (s) => s.replace(/[&<>"]/g, (ch) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[ch]);
-    const sc = r > 26 ? 0.75 : 0.64, iw = 24 * sc;
+    const soc = d.car && f.car_soc != null, iconTop = soc ? y - 12 : y - 17;
     nodes += `<circle class="node" cx="${x}" cy="${y}" r="${r}" style="stroke:${c}"/>`
-      + `<g transform="translate(${x - iw / 2},${y - (r > 26 ? 19 : 16)}) scale(${sc})"><path d="${DEV_ICONS[d.icon] || DEV_ICONS.plug}" style="fill:${c}"/></g>`
-      + `<text x="${x}" y="${y + (r > 26 ? 15 : 13)}" class="big" style="font-size:${r > 26 ? 12 : 11}px${d.car ? `;fill:${c}` : ''}">${kwShort(d.kw)}</text>`
-      + `<text class="lbl" x="${x}" y="${y + r + 14}" style="font-size:${r > 26 ? 11.5 : 10.5}px">${esc2(name)}${d.car && f.car_soc != null ? ` · ${num(f.car_soc, 0)}%` : ''}</text>`
-      + (d.car && d.kw > 0.01 && !zig ? `<text class="sm" x="${x}" y="${y + r + 26}">${car < 0 ? 'discharging' : 'charging'}</text>` : '');
+      + (soc ? `<text x="${x}" y="${y - 15}" class="big">${num(f.car_soc, 0)}%</text>` : '')
+      + `<g transform="translate(${x - 10},${iconTop}) scale(0.84)"><path d="${DEV_ICONS[d.icon] || DEV_ICONS.plug}" style="fill:${c}"/></g>`
+      + `<text x="${x}" y="${iconTop + 33}" class="${d.car ? '' : 'big'}" ${d.car ? `style="fill:${c}"` : ''}>${d.car ? `${car < 0 ? '←' : '→'} ` : ''}${kwShort(d.kw)}</text>`
+      + `<text class="lbl" x="${x}" y="${y + r + 17}">${esc2(name)}</text>`;
   });
-  const w = zig ? 632 : 556;
-  return {vb: `0 -16 ${w} ${zig ? 384 : 362}`, lines: svg, nodes, sig};
+  return zig ? {vb: '0 -50 680 470', lines: svg, nodes, sig} : {vb: '0 -16 568 362', lines: svg, nodes, sig};
 }
 function drawFlow(f, i, e) {
   const box = $('o-flow'); if (!box) return;

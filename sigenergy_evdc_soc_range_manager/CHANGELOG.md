@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.28.1 — Every circle the same size
+
+- **Change:** on the power flow, the car and your devices off the house
+  are the same size as solar, the grid, the house and the battery. Up to 3
+  sit in a column; with more they zigzag between two. The car's SoC is in
+  its circle, above its icon, with ← while it discharges into the house and
+  → while it charges.
+
 ## 0.28.0 — The car off the house like the rest
 
 - **Change:** on the power flow (the Overview and the dashboard card) the
