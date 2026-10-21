@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.28.3 — Each tab from the top
+
+- **Change:** switching tab goes back to the top of the page, instead of
+  staying as far down as you'd scrolled on the last one.
+
 ## 0.28.2 — Bigger on a phone
 
 - **Change:** with the car and one device (e.g. a Hypervolt), the power
