@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.28.0 — The car off the house like the rest
+
+- **Change:** on the power flow (the Overview and the dashboard card) the
+  car on the DC charger is drawn like your devices off the house: first in
+  the column to the right of the house, in blue, with its power, its SoC
+  and whether it's charging or discharging (the dots run into the house
+  while it discharges).
+- **New:** Settings › Power flow card can give the drawing its own
+  **house** and **car** sensors too, alongside solar, the grid and the home
+  battery; only the drawing changes.
+- **Change:** the first device's colour is pink, so it isn't mistaken for
+  the car.
+
 ## 0.27.0 — Devices off the house on the power flow
 
 - **New:** Settings › **Power flow card**: devices off the house, e.g. a

@@ -68,11 +68,13 @@ ENTITY_KEYS = {
     # For the costs (e.g. the Octopus Energy integration's current rate sensors)
     "import_rate": ("sensor", "input_number", "number"),
     "export_rate": ("sensor", "input_number", "number"),
-    # The power flow card only: other sensors for solar, the grid and the home battery
-    # (empty: the ones above, which it decides from)
+    # The power flow card only: other sensors for solar, the grid, the home battery, the
+    # house and the car (empty: the ones above, which it decides from)
     "flow_pv_power": ("sensor",),
     "flow_grid_power": ("sensor",),
     "flow_battery_power": ("sensor",),
+    "flow_home_power": ("sensor",),
+    "flow_car_power": ("sensor",),
 }
 # The power flow card's own devices off the house (a car charger, a heat pump...): each a
 # name, an icon, a power sensor and (optional) when it's plugged in. Not shown without a

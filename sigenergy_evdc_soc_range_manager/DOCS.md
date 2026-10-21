@@ -237,9 +237,13 @@ one. For each:
   charger's plugged-in sensor. Without one it's drawn whenever it has a
   reading.
 
-The card picks its **solar**, **grid** and **home battery** from the same
-card if you'd like it to show other sensors than the ones the add-on
-decides from (Home power, Statistics); only the drawing changes.
+The car on the DC charger is always first in that column, in blue, with
+its SoC and whether it's charging or discharging into the house.
+
+The same card can point the drawing at other sensors for **solar**, the
+**grid**, the **home battery**, the **house** (its whole use, your devices
+included) and the **car** than the ones the add-on decides from (Home
+power, Statistics); only the drawing changes.
 
 The add-on installs it itself each time it starts: it copies the card into
 Home Assistant's `www` folder (so it has access to the config folder) and

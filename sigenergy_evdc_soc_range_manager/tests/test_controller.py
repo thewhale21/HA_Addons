@@ -730,3 +730,7 @@ def test_power_flow_takes_devices_off_the_house_and_the_cards_own_sensors(tmp_pa
     assert m.inputs.grid_kw == 9
     m.observe(st, {**ent, "flow_devices": []}, _settings(), 1020.0)
     assert m.power_flow()["home_kw"] is None and m.power_flow()["devices"] == []
+    # The card's own house sensor
+    st["sensor.house2"] = {"state": "12000", "attributes": {"unit_of_measurement": "W"}}
+    m.observe(st, {**ent, "flow_home_power": "sensor.house2"}, _settings(), 1030.0)
+    assert m.power_flow()["house_kw"] == 12 and m.power_flow()["home_kw"] == 5.0

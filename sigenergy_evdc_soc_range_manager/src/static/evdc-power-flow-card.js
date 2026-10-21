@@ -60,7 +60,8 @@ function reversePath(d) {
   return d.includes('C') ? `M${pts[3]} C${pts[2]} ${pts[1]} ${pts[0]}` : `M${pts[1]} L${pts[0]}`;
 }
 // ---- The power flow drawing: the same in the add-on's page and the dashboard card ----
-// Devices off the house (a car charger, a heat pump...): a column to the right of it
+// Off the house, in a column to its right: the car on the DC charger first, then your devices
+// (a car charger, a heat pump...)
 const DEV_ICONS = {
   car: 'M5,11L6.5,6.5H17.5L19,11M17.5,16A1.5,1.5 0 0,1 16,14.5A1.5,1.5 0 0,1 17.5,13A1.5,1.5 0 0,1 19,14.5A1.5,1.5 0 0,1 17.5,16M6.5,16A1.5,1.5 0 0,1 5,14.5A1.5,1.5 0 0,1 6.5,13A1.5,1.5 0 0,1 8,14.5A1.5,1.5 0 0,1 6.5,16M18.92,6C18.72,5.42 18.16,5 17.5,5H6.5C5.84,5 5.28,5.42 5.08,6L3,12V20A1,1 0 0,0 4,21H5A1,1 0 0,0 6,20V19H18V20A1,1 0 0,0 19,21H20A1,1 0 0,0 21,20V12L18.92,6Z',
   heatpump: 'M12,11A1,1 0 0,0 11,12A1,1 0 0,0 12,13A1,1 0 0,0 13,12A1,1 0 0,0 12,11M12.5,2C17,2 17.11,5.57 14.75,6.75C13.76,7.24 13.32,8.29 13.13,9.22C13.61,9.42 14.03,9.73 14.35,10.13C18.05,8.13 22.03,8.92 22.03,12.5C22.03,17 18.46,17.1 17.28,14.73C16.78,13.74 15.72,13.3 14.79,13.11C14.59,13.59 14.28,14 13.88,14.34C15.87,18.03 15.08,22 11.5,22C7,22 6.91,18.42 9.27,17.24C10.25,16.75 10.69,15.71 10.89,14.79C10.4,14.59 9.97,14.27 9.65,13.87C5.96,15.85 2,15.07 2,11.5C2,7 5.56,6.89 6.74,9.26C7.24,10.25 8.29,10.68 9.22,10.87C9.41,10.39 9.73,9.97 10.14,9.65C8.15,5.96 8.94,2 12.5,2Z',
@@ -68,13 +69,15 @@ const DEV_ICONS = {
   flash: 'M7,2V13H10V22L17,10H13L17,2H7Z',
   water: 'M12,20A6,6 0 0,1 6,14C6,10 12,3.25 12,3.25C12,3.25 18,10 18,14A6,6 0 0,1 12,20Z',
 };
-const DEV_COLOURS = ['#26c6da', '#ff7043', '#9ccc65', '#ab47bc', '#ffca28', '#78909c'];
+const DEV_COLOURS = ['#ec407a', '#ff7043', '#9ccc65', '#ab47bc', '#ffca28', '#78909c'];
 const colourOf = (c) => c.startsWith('--') ? `var(${c})` : c;
 // Everything to draw: {vb (the viewBox), lines (the lines and moving dots), nodes, sig (changes
 // when the lines or the dots' speeds do, so the dots don't jump on every update)}
 function flowParts(f) {
   const nodesAt = {...NODES}, lines = {...LINES}, lineColour = {...LINE_COLOUR}, flowsOf = {...FLOWS};
-  const devs = (f.devices || []).slice(0, 6), n = devs.length;
+  delete lines.car_home; delete lineColour.car_home;  // the car joins the column
+  const car = f.car_kw || 0;
+  const devs = [{car: true, name: 'Car', icon: 'car', kw: Math.abs(car)}, ...(f.devices || []).slice(0, 6)], n = devs.length;
   // Up to 4 in a column; 5 or 6 zigzag between two, so no line passes behind another device
   const zig = n > 4, r = zig ? 24 : n > 3 ? 27 : 30;
   const gapY = n > 1 ? Math.min(100, (zig ? 290 : 250) / (n - 1)) : 0;
@@ -84,19 +87,21 @@ function flowParts(f) {
     nodesAt[key] = [x, y];
     // Out of the house, turning at x 430 (left of every device), then straight in: no line crosses a device
     lines[`home_${key}`] = `M396,172 C430,172 430,${y} ${x - r},${y}`;
-    lineColour[`home_${key}`] = DEV_COLOURS[d.n % DEV_COLOURS.length];
+    lineColour[`home_${key}`] = d.car ? '--f-car' : DEV_COLOURS[d.n % DEV_COLOURS.length];
   });
   const on = {}, dots = [];
-  const car = f.car_kw || 0;
   for (const [key, kwv] of Object.entries(f.lines || {})) {
     const [line, dir, colour] = flowsOf[key] || [];
     if (!line) continue;
     on[line] = colour;
     dots.push([line, dir, colour, kwv]);
   }
-  if (Math.abs(car) > 0.01) { on.car_home = '--f-car'; dots.push(['car_home', car < 0 ? 1 : -1, '--f-car', Math.abs(car)]); }
+  // Out of the house to each one; the car discharging comes back into it
   devs.forEach((d, k) => {
-    if ((d.kw || 0) > 0.01) { on[`home_dev${k}`] = lineColour[`home_dev${k}`]; dots.push([`home_dev${k}`, 1, lineColour[`home_dev${k}`], d.kw]); }
+    if ((d.kw || 0) > 0.01) {
+      on[`home_dev${k}`] = lineColour[`home_dev${k}`];
+      dots.push([`home_dev${k}`, d.car && car < 0 ? -1 : 1, lineColour[`home_dev${k}`], d.kw]);
+    }
   });
   const sig = JSON.stringify([n, dots.map(([l, d, c, k]) => [l, d, c, Math.round(Math.log2(0.6 + k) * 4)])]);
   let svg = '';
@@ -134,28 +139,27 @@ function flowParts(f) {
   nodes += node('grid', '--f-export', 'Grid', false, [
     [`← ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export'], [`→ ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import']]);
   // With devices off it, the house shows what's left, and the whole below
-  nodes += n && f.home_kw != null
+  nodes += f.home_kw != null
     ? node('home', '--f-home', 'Home', false, [[kwShort(f.home_kw), null, true], [`of ${kwShort(f.house_kw)}`, null, 'sm']])
     : node('home', '--f-home', 'Home', false, [[kwShort(f.house_kw), null, true]]);
   // ↓ into the battery, ↑ out of it
   nodes += node('battery', '--f-bout', 'Battery', false, [
     [`↓ ${kwShort(batt != null && batt > 0 ? batt : 0)}`, '--f-bin'], [`↑ ${kwShort(batt != null && batt < 0 ? batt : 0)}`, '--f-bout']],
     f.home_soc == null ? null : `${num(f.home_soc, 0)}%`);
-  // The car sits above the house: ↓ discharging (down into the house), ↑ charging (up from it)
-  nodes += node('car', '--f-car', 'Car', true, [[`${car < 0 ? '↓' : '↑'} ${kwShort(car)}`, '--f-car']],
-    f.car_soc == null ? null : `${num(f.car_soc, 0)}%`);
-  // The devices: a smaller circle in its colour, its icon and power, its name below
+  // Each one: a smaller circle in its colour, its icon and power, its name below (the car: its
+  // SoC too, and whether it's charging or discharging into the house)
   devs.forEach((d, k) => {
-    const [x, y] = nodesAt['dev' + k], c = lineColour['home_dev' + k];
+    const [x, y] = nodesAt['dev' + k], c = colourOf(lineColour['home_dev' + k]);
     const max = zig ? 10 : 16, name = String(d.name || '').length > max ? String(d.name).slice(0, max - 1) + '…' : String(d.name || '');
     const esc2 = (s) => s.replace(/[&<>"]/g, (ch) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[ch]);
     const sc = r > 26 ? 0.75 : 0.64, iw = 24 * sc;
     nodes += `<circle class="node" cx="${x}" cy="${y}" r="${r}" style="stroke:${c}"/>`
       + `<g transform="translate(${x - iw / 2},${y - (r > 26 ? 19 : 16)}) scale(${sc})"><path d="${DEV_ICONS[d.icon] || DEV_ICONS.plug}" style="fill:${c}"/></g>`
-      + `<text x="${x}" y="${y + (r > 26 ? 15 : 13)}" class="big" style="font-size:${r > 26 ? 12 : 11}px">${kwShort(d.kw)}</text>`
-      + `<text class="lbl" x="${x}" y="${y + r + 14}" style="font-size:${r > 26 ? 11.5 : 10.5}px">${esc2(name)}</text>`;
+      + `<text x="${x}" y="${y + (r > 26 ? 15 : 13)}" class="big" style="font-size:${r > 26 ? 12 : 11}px${d.car ? `;fill:${c}` : ''}">${kwShort(d.kw)}</text>`
+      + `<text class="lbl" x="${x}" y="${y + r + 14}" style="font-size:${r > 26 ? 11.5 : 10.5}px">${esc2(name)}${d.car && f.car_soc != null ? ` · ${num(f.car_soc, 0)}%` : ''}</text>`
+      + (d.car && d.kw > 0.01 && !zig ? `<text class="sm" x="${x}" y="${y + r + 26}">${car < 0 ? 'discharging' : 'charging'}</text>` : '');
   });
-  const w = !n ? 420 : zig ? 632 : 556;
+  const w = zig ? 632 : 556;
   return {vb: `0 -16 ${w} ${zig ? 384 : 362}`, lines: svg, nodes, sig};
 }
 const num = (v, d) => Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});

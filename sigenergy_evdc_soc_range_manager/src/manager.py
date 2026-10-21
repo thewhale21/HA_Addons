@@ -324,7 +324,8 @@ class Manager:
         }
         # The power flow card's own sensors for solar, the grid and the home battery, when picked
         for key, entity_key in (("flow_pv_kw", "flow_pv_power"), ("flow_grid_kw", "flow_grid_power"),
-                                ("flow_battery_kw", "flow_battery_power")):
+                                ("flow_battery_kw", "flow_battery_power"), ("flow_home_kw", "flow_home_power"),
+                                ("flow_car_kw", "flow_car_power")):
             if entities.get(entity_key):
                 self.readings[key] = power_kw(get(entity_key))
         self._settings = settings
@@ -598,13 +599,14 @@ class Manager:
         i, r = self.inputs, self.readings
         if i is None:
             return {}
-        car = abs(r.get("car_kw") or 0.0) if i.active else 0.0
+        car_kw = r["flow_car_kw"] if "flow_car_kw" in r else r.get("car_kw")  # the card's own car sensor, if picked
+        car = abs(car_kw or 0.0) if i.active else 0.0
         car = -car if i.discharging else car
         # The card's own solar, grid and battery sensors when picked, else the ones it decides from
         pv = r["flow_pv_kw"] if "flow_pv_kw" in r else r.get("pv_kw")
         grid = r["flow_grid_kw"] if "flow_grid_kw" in r else i.grid_kw
         batt = r["flow_battery_kw"] if "flow_battery_kw" in r else i.battery_kw
-        house = house_load(pv, grid, batt, car, r.get("home_measured_kw"))
+        house = house_load(pv, grid, batt, car, r["flow_home_kw"] if "flow_home_kw" in r else r.get("home_measured_kw"))
         # Devices off the house (a car charger, a heat pump...): drawn coming off it, the house
         # showing what's left
         devices = r.get("flow_devices") or []
