@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.28.2 — Bigger on a phone
+
+- **Change:** with the car and one device (e.g. a Hypervolt), the power
+  flow stays in the usual square, the car above the house and the device
+  below it, so it isn't squeezed narrow and small on a phone. With more
+  devices they go in a column to the right as before.
+
 ## 0.28.1 — Every circle the same size
 
 - **Change:** on the power flow, the car and your devices off the house

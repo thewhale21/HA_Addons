@@ -1123,16 +1123,25 @@ function flowParts(f) {
   delete lines.car_home; delete lineColour.car_home;  // the car joins the column
   const car = f.car_kw || 0;
   const devs = [{car: true, name: 'Car', icon: 'car', kw: Math.abs(car)}, ...(f.devices || []).slice(0, 6)], n = devs.length;
-  // The same size as the others. Up to 3 in a column; more zigzag between two, so no line
-  // passes behind another circle
-  const zig = n > 3, r = 38;
+  // The same size as the others, and the drawing as narrow as it can be (so it's as big as it
+  // can be on a phone): the car above the house and one device below it fit the usual square.
+  // With more, a column to the right of the house; more than 3 zigzag between two columns, so
+  // no line passes behind another circle.
+  const tight = n <= 2, zig = n > 3, r = 38;
   const gapY = n > 1 ? Math.min(zig ? 110 : 100, (zig ? 370 : 200) / (n - 1)) : 0;
+  const above = {};
   devs.forEach((d, k) => {
-    const x = zig ? (k % 2 ? 610 : 500) : 500, y = Math.round(172 + (k - (n - 1) / 2) * gapY);
     const key = 'dev' + k;
-    nodesAt[key] = [x, y];
-    // Out of the house, turning at x 430 (left of every device), then straight in: no line crosses a device
-    lines[`home_${key}`] = `M396,172 C430,172 430,${y} ${x - r},${y}`;
+    if (tight) {
+      nodesAt[key] = k ? [358, 282] : [358, 50];
+      above[key] = !k;
+      lines[`home_${key}`] = k ? 'M358,210 L358,244' : 'M358,134 L358,88';
+    } else {
+      const x = zig ? (k % 2 ? 610 : 500) : 500, y = Math.round(172 + (k - (n - 1) / 2) * gapY);
+      nodesAt[key] = [x, y];
+      // Out of the house, turning at x 430 (left of every device), then straight in: no line crosses a device
+      lines[`home_${key}`] = `M396,172 C430,172 430,${y} ${x - r},${y}`;
+    }
     lineColour[`home_${key}`] = d.car ? '--f-car' : DEV_COLOURS[d.n % DEV_COLOURS.length];
   });
   const on = {}, dots = [];
@@ -1185,9 +1194,12 @@ function flowParts(f) {
   nodes += node('grid', '--f-export', 'Grid', false, [
     [`← ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export'], [`→ ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import']]);
   // With devices off it, the house shows what's left, and the whole below
+  const homeLabel = tight && n === 2 ? '' : 'Home';
   nodes += f.home_kw != null
-    ? node('home', '--f-home', 'Home', false, [[kwShort(f.home_kw), null, true], [`of ${kwShort(f.house_kw)}`, null, 'sm']])
-    : node('home', '--f-home', 'Home', false, [[kwShort(f.house_kw), null, true]]);
+    ? node('home', '--f-home', homeLabel, false, [[kwShort(f.home_kw), null, true], [`of ${kwShort(f.house_kw)}`, null, 'sm']])
+    : node('home', '--f-home', homeLabel, false, [[kwShort(f.house_kw), null, true]]);
+  // A device below the house: its name goes below to the left, clear of the line down
+  if (!homeLabel) nodes += '<text class="lbl" x="326" y="226" style="text-anchor:end">Home</text>';
   // ↓ into the battery, ↑ out of it
   nodes += node('battery', '--f-bout', 'Battery', false, [
     [`↓ ${kwShort(batt != null && batt > 0 ? batt : 0)}`, '--f-bin'], [`↑ ${kwShort(batt != null && batt < 0 ? batt : 0)}`, '--f-bout']],
@@ -1203,9 +1215,10 @@ function flowParts(f) {
       + (soc ? `<text x="${x}" y="${y - 15}" class="big">${num(f.car_soc, 0)}%</text>` : '')
       + `<g transform="translate(${x - 10},${iconTop}) scale(0.84)"><path d="${DEV_ICONS[d.icon] || DEV_ICONS.plug}" style="fill:${c}"/></g>`
       + `<text x="${x}" y="${iconTop + 33}" class="${d.car ? '' : 'big'}" ${d.car ? `style="fill:${c}"` : ''}>${d.car ? `${car < 0 ? '←' : '→'} ` : ''}${kwShort(d.kw)}</text>`
-      + `<text class="lbl" x="${x}" y="${y + r + 17}">${esc2(name)}</text>`;
+      + `<text class="lbl" x="${x}" y="${above['dev' + k] ? y - r - 8 : y + r + 17}">${esc2(name)}</text>`;
   });
-  return zig ? {vb: '0 -50 680 470', lines: svg, nodes, sig} : {vb: '0 -16 568 362', lines: svg, nodes, sig};
+  const vb = tight ? '0 -16 420 362' : zig ? '0 -50 680 470' : '0 -16 568 362';
+  return {vb, lines: svg, nodes, sig};
 }
 function drawFlow(f, i, e) {
   const box = $('o-flow'); if (!box) return;
