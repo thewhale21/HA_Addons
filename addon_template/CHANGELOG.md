@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6 — Each tab from the top
+
+- **Change:** switching tab goes back to the top of the page, instead of
+  staying as far down as you'd scrolled on the last one.
+
 ## 0.1.5 — The banner theme
 
 - **New:** the page has the same look as the other add-ons: a coloured
