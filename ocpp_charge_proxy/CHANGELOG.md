@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.49.2 — Each tab from the top
+
+- **Change:** switching tab goes back to the top of the page, instead of
+  staying as far down as you'd scrolled on the last one.
+
 ## 2.49.1 — Sessions in your supplier's colour
 
 - **Change:** on the Sessions tab, a session charged in your supplier's

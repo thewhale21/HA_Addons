@@ -1066,6 +1066,7 @@ function showTab(name) {
   if (name === 'diagnostics' || name === 'provider') name = 'health';
   if (name === 'messages') name = 'debug';  // the messages are under Debug › Logs
   if (!document.getElementById('tab-' + name)) name = 'overview';
+  const moved = activeTab !== name;
   activeTab = name;
   const diag = DIAG.includes(name);
   document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-selected',
@@ -1073,6 +1074,7 @@ function showTab(name) {
   $('diag-nav').hidden = !diag;
   $('diag-nav').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.sub === name));
   document.querySelectorAll('main > section').forEach((s) => s.hidden = s.id !== 'tab-' + name);
+  if (moved) window.scrollTo(0, 0);  // another tab starts at its top
   try { history.replaceState(null, '', '#' + (name === 'automation' ? 'automations' : name)); } catch (e) {}
   refreshTab(true);
 }
