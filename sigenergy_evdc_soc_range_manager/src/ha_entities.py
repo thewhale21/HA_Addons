@@ -141,7 +141,10 @@ def _power_flow(state):
         "pv_kw": _r2(f.get("pv_kw")), "grid_kw": _r2(f.get("grid_kw")), "battery_kw": _r2(f.get("battery_kw")),
         "car_kw": _r2(f.get("car_kw")), "house_kw": _r2(f.get("house_kw")),
         "home_soc": _r2(f.get("home_soc")), "car_soc": _r2((state.inputs or {}).get("soc")),
-        "lines": {k: _r2(v) for k, v in (f.get("lines") or {}).items()}})
+        "lines": {k: _r2(v) for k, v in (f.get("lines") or {}).items()},
+        # Devices off the house: drawn coming off it, the house showing what's left (home_kw)
+        "home_kw": _r2(f.get("home_kw")),
+        "devices": [{**d, "kw": _r2(d.get("kw"))} for d in f.get("devices") or []]})
 
 
 class SensorPublisher:

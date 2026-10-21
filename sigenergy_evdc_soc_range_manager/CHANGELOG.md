@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.27.0 — Devices off the house on the power flow
+
+- **New:** Settings › **Power flow card**: devices off the house, e.g. a
+  car charger and a heat pump (there from the start; **+ Add a device** for
+  more, up to 6). Pick a device's power sensor and it's drawn coming off
+  the house, in its own colour with its name and icon, and the house shows
+  what's left of its use. Pick a **plugged in** entity and it's only drawn
+  while that's on. Nothing picked: nothing drawn.
+- **New:** the same card can give the power flow its own **solar**,
+  **grid** and **home battery** sensors; what the add-on decides from
+  doesn't change.
+- Both the Overview's diagram and the dashboard card (EVDC Power Flow)
+  draw them, the same way.
+
 ## 0.26.0 — Zoom into the car's SoC
 
 - **New:** the Overview's **Car SoC** chart zooms: drag across a stretch

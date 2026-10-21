@@ -275,6 +275,34 @@
   .flow text { fill: var(--text); font-size: 12px; text-anchor: middle; }
   .flow text.lbl { fill: var(--text2); font-size: 12.5px; }
   .flow text.big { font-size: 13px; font-weight: 500; }
+  .flow text.sm { fill: var(--text2); font-size: 10.5px; }
+  /* Settings › Power flow card */
+  .fdevs { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; margin-top: 10px; }
+  .fdev { border: 1px solid var(--divider); border-radius: 12px; padding: 12px 14px 14px; position: relative; overflow: hidden; }
+  .fdev::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--dc); }
+  .fdev .fhead { display: flex; align-items: center; gap: 8px; }
+  .fdev .fico { width: 34px; height: 34px; flex: none; border-radius: 50%; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--dc) 16%, transparent); box-shadow: inset 0 0 0 2px var(--dc); }
+  .fdev .fico svg { width: 18px; height: 18px; fill: var(--dc); }
+  .fdev input.fname { flex: 1; min-width: 0; font: inherit; font-weight: 500; color: var(--text); background: transparent;
+    border: 1px solid transparent; border-radius: 8px; padding: 4px 8px; }
+  .fdev input.fname:hover, .fdev input.fname:focus { border-color: var(--divider); background: var(--bg); outline: none; }
+  .fdev .fdel { border: 0; background: none; color: var(--text2); font-size: 18px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+  .fdev .fdel:hover { color: var(--err); background: var(--hover); }
+  .fdev .ficons { display: flex; gap: 4px; margin: 10px 0 2px; }
+  .fdev .ficons button { width: 32px; height: 28px; border-radius: 8px; border: 1px solid var(--divider); background: none; cursor: pointer; display: grid; place-items: center; }
+  .fdev .ficons button svg { width: 16px; height: 16px; fill: var(--text2); }
+  .fdev .ficons button[aria-pressed="true"] { border-color: var(--dc); background: color-mix(in srgb, var(--dc) 14%, transparent); }
+  .fdev .ficons button[aria-pressed="true"] svg { fill: var(--dc); }
+  .fdev .fpick { margin-top: 10px; }
+  .fdev .fpick .lab { font-size: 13px; display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .fdev .fpick .lab span { color: var(--text2); font-size: 12px; text-align: right; }
+  .fdev .fstat { margin-top: 10px; font-size: 12px; }
+  .fadd { margin-top: 12px; display: flex; gap: 10px; align-items: center; }
+  .fsrc { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 10px; }
+  .fsrc .pkx { padding: 12px 14px; border-radius: 10px; background: var(--hover); }
+  .fsrc .pkx .lab { font-size: 13px; font-weight: 500; display: flex; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+  .fsrc .pkx .lab span { color: var(--text2); font-weight: 400; font-size: 12px; }
   .flow .ico { fill: var(--text); }
   :root { --f-solar: #ff9800; --f-import: #488fc2; --f-export: #8353d1; --f-bin: #f06292; --f-bout: #4db6ac; --f-home: #5ec9b6; --f-car: var(--primary); }
   @media (prefers-reduced-motion: reduce) { .flow animateMotion { display: none; } }
@@ -647,6 +675,21 @@
           <label class="switch"><input type="checkbox" id="s-flip" aria-label="Flip the inverter's power"><span></span></label>
         </div>
       </div>
+    </div>
+    <div class="section-title">Power flow card</div>
+    <div class="card" id="s-flow">
+      <h2>Devices off the house<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400">For the Overview's diagram and the dashboard card</span></h2>
+      <div class="note" style="margin:0">Things in your home with their own power sensor, e.g. a car charger or a heat pump: each is drawn coming off the house, which then shows what's left. <details class="more"><summary>More</summary><div>Pick its power sensor (W or kW) to show it; with no sensor it isn't drawn. Pick a <b>plugged in</b> entity too and it's only drawn while that's on (on, home, connected, plugged in, charging, or a number above 0), e.g. your charger's "plugged in" sensor. Up to 6. Only the drawing uses these: the add-on doesn't decide anything from them.</div></details></div>
+      <div class="fdevs" id="s-flow-devs"></div>
+      <div class="fadd"><button class="btn small" id="s-flow-add">+ Add a device</button><span class="note" style="margin:0" id="s-flow-max"></span></div>
+      <h2 style="margin-top:22px">Solar, the grid and the home battery</h2>
+      <div class="note" style="margin:0">The card uses the sensors under Home power and Statistics below. Pick others here to change what the card shows only.</div>
+      <div class="fsrc">
+        <div class="pkx"><div class="lab">Solar<span id="s-read-flow_pv_power"></span></div><span class="picker" data-key="flow_pv_power" data-domain="sensor" data-class="power" data-units="W,kW" data-none="Same as Statistics › Solar power"></span></div>
+        <div class="pkx"><div class="lab">Grid<span id="s-read-flow_grid_power"></span></div><span class="picker" data-key="flow_grid_power" data-domain="sensor" data-class="power" data-units="W,kW" data-none="Same as Home power › Grid power"></span></div>
+        <div class="pkx"><div class="lab">Home battery<span id="s-read-flow_battery_power"></span></div><span class="picker" data-key="flow_battery_power" data-domain="sensor" data-class="power" data-units="W,kW" data-none="Same as Home power › Home battery power"></span></div>
+      </div>
+      <div class="note">Grid: positive while importing. Home battery: negative while discharging.</div>
     </div>
     <div class="section-title">Your Home Assistant entities</div>
     <div class="setbar">
@@ -1059,66 +1102,111 @@ function reversePath(d) {
   return d.includes('C') ? `M${pts[3]} C${pts[2]} ${pts[1]} ${pts[0]}` : `M${pts[1]} L${pts[0]}`;
 }
 const kwShort = (v) => v == null ? '—' : Math.abs(v) < 1 ? `${Math.round(Math.abs(v) * 1000)} W` : `${num(Math.abs(v), 1)} kW`;
-function drawFlow(f, i, e) {
-  const box = $('o-flow'); if (!box) return;
+// ---- The power flow drawing: the same in the add-on's page and the dashboard card ----
+// Devices off the house (a car charger, a heat pump...): a column to the right of it
+const DEV_ICONS = {
+  car: 'M5,11L6.5,6.5H17.5L19,11M17.5,16A1.5,1.5 0 0,1 16,14.5A1.5,1.5 0 0,1 17.5,13A1.5,1.5 0 0,1 19,14.5A1.5,1.5 0 0,1 17.5,16M6.5,16A1.5,1.5 0 0,1 5,14.5A1.5,1.5 0 0,1 6.5,13A1.5,1.5 0 0,1 8,14.5A1.5,1.5 0 0,1 6.5,16M18.92,6C18.72,5.42 18.16,5 17.5,5H6.5C5.84,5 5.28,5.42 5.08,6L3,12V20A1,1 0 0,0 4,21H5A1,1 0 0,0 6,20V19H18V20A1,1 0 0,0 19,21H20A1,1 0 0,0 21,20V12L18.92,6Z',
+  heatpump: 'M12,11A1,1 0 0,0 11,12A1,1 0 0,0 12,13A1,1 0 0,0 13,12A1,1 0 0,0 12,11M12.5,2C17,2 17.11,5.57 14.75,6.75C13.76,7.24 13.32,8.29 13.13,9.22C13.61,9.42 14.03,9.73 14.35,10.13C18.05,8.13 22.03,8.92 22.03,12.5C22.03,17 18.46,17.1 17.28,14.73C16.78,13.74 15.72,13.3 14.79,13.11C14.59,13.59 14.28,14 13.88,14.34C15.87,18.03 15.08,22 11.5,22C7,22 6.91,18.42 9.27,17.24C10.25,16.75 10.69,15.71 10.89,14.79C10.4,14.59 9.97,14.27 9.65,13.87C5.96,15.85 2,15.07 2,11.5C2,7 5.56,6.89 6.74,9.26C7.24,10.25 8.29,10.68 9.22,10.87C9.41,10.39 9.73,9.97 10.14,9.65C8.15,5.96 8.94,2 12.5,2Z',
+  plug: 'M16,7V3H14V7H10V3H8V7H8C7,7 6,8 6,9V14.5L9.5,18V21H14.5V18L18,14.5V9C18,8 17,7 16,7Z',
+  flash: 'M7,2V13H10V22L17,10H13L17,2H7Z',
+  water: 'M12,20A6,6 0 0,1 6,14C6,10 12,3.25 12,3.25C12,3.25 18,10 18,14A6,6 0 0,1 12,20Z',
+};
+const DEV_COLOURS = ['#26c6da', '#ff7043', '#9ccc65', '#ab47bc', '#ffca28', '#78909c'];
+const colourOf = (c) => c.startsWith('--') ? `var(${c})` : c;
+// Everything to draw: {vb (the viewBox), lines (the lines and moving dots), nodes, sig (changes
+// when the lines or the dots' speeds do, so the dots don't jump on every update)}
+function flowParts(f) {
+  const nodesAt = {...NODES}, lines = {...LINES}, lineColour = {...LINE_COLOUR}, flowsOf = {...FLOWS};
+  const devs = (f.devices || []).slice(0, 6), n = devs.length;
+  // Up to 4 in a column; 5 or 6 zigzag between two, so no line passes behind another device
+  const zig = n > 4, r = zig ? 24 : n > 3 ? 27 : 30;
+  const gapY = n > 1 ? Math.min(100, (zig ? 290 : 250) / (n - 1)) : 0;
+  devs.forEach((d, k) => {
+    const x = zig ? (k % 2 ? 580 : 492) : 500, y = Math.round(172 + (k - (n - 1) / 2) * gapY);
+    const key = 'dev' + k;
+    nodesAt[key] = [x, y];
+    // Out of the house, turning at x 430 (left of every device), then straight in: no line crosses a device
+    lines[`home_${key}`] = `M396,172 C430,172 430,${y} ${x - r},${y}`;
+    lineColour[`home_${key}`] = DEV_COLOURS[d.n % DEV_COLOURS.length];
+  });
   const on = {}, dots = [];
   const car = f.car_kw || 0;
   for (const [key, kwv] of Object.entries(f.lines || {})) {
-    const [line, dir, colour] = FLOWS[key] || [];
+    const [line, dir, colour] = flowsOf[key] || [];
     if (!line) continue;
     on[line] = colour;
     dots.push([line, dir, colour, kwv]);
   }
   if (Math.abs(car) > 0.01) { on.car_home = '--f-car'; dots.push(['car_home', car < 0 ? 1 : -1, '--f-car', Math.abs(car)]); }
-  // Only rebuild the lines and moving dots when the flows change, so the dots don't jump
-  const sig = JSON.stringify(dots.map(([l, d, c, k]) => [l, d, c, Math.round(Math.log2(0.6 + k) * 4)]));
+  devs.forEach((d, k) => {
+    if ((d.kw || 0) > 0.01) { on[`home_dev${k}`] = lineColour[`home_dev${k}`]; dots.push([`home_dev${k}`, 1, lineColour[`home_dev${k}`], d.kw]); }
+  });
+  const sig = JSON.stringify([n, dots.map(([l, d, c, k]) => [l, d, c, Math.round(Math.log2(0.6 + k) * 4)])]);
   let svg = '';
-  for (const [name, d] of Object.entries(LINES)) {
-    svg += `<path id="fl-${name}" class="ln ${on[name] ? 'on' : ''}" d="${d}" style="stroke:var(${on[name] || LINE_COLOUR[name]})"/>`;
+  for (const [name, d] of Object.entries(lines)) {
+    svg += `<path class="ln ${on[name] ? 'on' : ''}" d="${d}" style="stroke:${colourOf(on[name] || lineColour[name])}"/>`;
   }
   for (const [line, dir, colour, kwv] of dots) {
     const durS = Math.max(0.8, Math.min(4, 4 / (0.6 + kwv))).toFixed(2);
     // Against the line's drawn direction: travel a reversed copy of it (works in every browser)
-    const path = dir < 0 ? reversePath(LINES[line]) : LINES[line];
+    const path = dir < 0 ? reversePath(lines[line]) : lines[line];
     for (const offset of [0, 0.5]) {
-      svg += `<circle r="3.5" style="fill:var(${colour})"><animateMotion dur="${durS}s" repeatCount="indefinite" begin="-${(offset * durS).toFixed(2)}s"
-        path="${path}"/></circle>`;
+      svg += `<circle r="3.5" style="fill:${colourOf(colour)}"><animateMotion dur="${durS}s" repeatCount="indefinite" begin="-${(offset * durS).toFixed(2)}s" path="${path}"/></circle>`;
     }
   }
-  let nodes = '';
-  // Like the Power Flow Card Plus: an optional reading above the icon, the flows below it
-  const node = (key, colour, label, labelAbove, lines, top) => {
-    const [x, y] = NODES[key], r = 38;
-    let out = `<circle class="node" cx="${x}" cy="${y}" r="${r}" style="stroke:var(${colour})"/>`;
-    out += `<text class="lbl" x="${x}" y="${labelAbove ? y - r - 8 : y + r + 17}">${label}</text>`;
-    let iconTop = y - (lines.length > 1 ? 27 : 17);
+  // An optional reading above the icon, the flows below it
+  const node = (key, colour, label, labelAbove, rows2, top) => {
+    const [x, y] = nodesAt[key], rr = 38;
+    let out = `<circle class="node" cx="${x}" cy="${y}" r="${rr}" style="stroke:var(${colour})"/>`;
+    out += `<text class="lbl" x="${x}" y="${labelAbove ? y - rr - 8 : y + rr + 17}">${label}</text>`;
+    let iconTop = y - (rows2.length > 1 ? 27 : 17);
     if (top) {
-      const base = y - (lines.length > 1 ? 24 : 15);
+      const base = y - (rows2.length > 1 ? 24 : 15);
       out += `<text x="${x}" y="${base}" class="big">${top}</text>`;
       iconTop = base + 3;
     }
     out += `<g transform="translate(${x - 10},${iconTop}) scale(0.84)"><path class="ico" d="${ICONS[key]}"/></g>`;
-    lines.forEach(([text, c, big], n) => {
-      out += `<text x="${x}" y="${iconTop + 33 + n * 13}" class="${big ? 'big' : ''}" ${c ? `style="fill:var(${c})"` : ''}>${text}</text>`;
+    rows2.forEach(([text, c, cls], k) => {
+      out += `<text x="${x}" y="${iconTop + 33 + k * 13}" class="${cls === true ? 'big' : cls || ''}" ${c ? `style="fill:var(${c})"` : ''}>${text}</text>`;
     });
     return out;
   };
   const grid = f.grid_kw, batt = f.battery_kw;
-  nodes += node('solar', '--f-solar', 'Solar', true, [[kwShort(f.pv_kw), null, true]]);
-  // As the power flow cards show it: ← sent to the grid, → taken from it
+  let nodes = node('solar', '--f-solar', 'Solar', true, [[kwShort(f.pv_kw), null, true]]);
+  // ← sent to the grid, → taken from it
   nodes += node('grid', '--f-export', 'Grid', false, [
     [`← ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export'], [`→ ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import']]);
-  nodes += node('home', '--f-home', 'Home', false, [[kwShort(f.house_kw), null, true]]);
+  // With devices off it, the house shows what's left, and the whole below
+  nodes += n && f.home_kw != null
+    ? node('home', '--f-home', 'Home', false, [[kwShort(f.home_kw), null, true], [`of ${kwShort(f.house_kw)}`, null, 'sm']])
+    : node('home', '--f-home', 'Home', false, [[kwShort(f.house_kw), null, true]]);
   // ↓ into the battery, ↑ out of it
   nodes += node('battery', '--f-bout', 'Battery', false, [
     [`↓ ${kwShort(batt != null && batt > 0 ? batt : 0)}`, '--f-bin'], [`↑ ${kwShort(batt != null && batt < 0 ? batt : 0)}`, '--f-bout']],
     f.home_soc == null ? null : `${num(f.home_soc, 0)}%`);
   // The car sits above the house: ↓ discharging (down into the house), ↑ charging (up from it)
   nodes += node('car', '--f-car', 'Car', true, [[`${car < 0 ? '↓' : '↑'} ${kwShort(car)}`, '--f-car']],
-    i.soc == null ? null : `${num(i.soc, 0)}%`);
+    f.car_soc == null ? null : `${num(f.car_soc, 0)}%`);
+  // The devices: a smaller circle in its colour, its icon and power, its name below
+  devs.forEach((d, k) => {
+    const [x, y] = nodesAt['dev' + k], c = lineColour['home_dev' + k];
+    const max = zig ? 10 : 16, name = String(d.name || '').length > max ? String(d.name).slice(0, max - 1) + '…' : String(d.name || '');
+    const esc2 = (s) => s.replace(/[&<>"]/g, (ch) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[ch]);
+    const sc = r > 26 ? 0.75 : 0.64, iw = 24 * sc;
+    nodes += `<circle class="node" cx="${x}" cy="${y}" r="${r}" style="stroke:${c}"/>`
+      + `<g transform="translate(${x - iw / 2},${y - (r > 26 ? 19 : 16)}) scale(${sc})"><path d="${DEV_ICONS[d.icon] || DEV_ICONS.plug}" style="fill:${c}"/></g>`
+      + `<text x="${x}" y="${y + (r > 26 ? 15 : 13)}" class="big" style="font-size:${r > 26 ? 12 : 11}px">${kwShort(d.kw)}</text>`
+      + `<text class="lbl" x="${x}" y="${y + r + 14}" style="font-size:${r > 26 ? 11.5 : 10.5}px">${esc2(name)}</text>`;
+  });
+  const w = !n ? 420 : zig ? 632 : 556;
+  return {vb: `0 -16 ${w} ${zig ? 384 : 362}`, lines: svg, nodes, sig};
+}
+function drawFlow(f, i, e) {
+  const box = $('o-flow'); if (!box) return;
+  const {vb, lines: svg, nodes, sig} = flowParts({...f, car_soc: i.soc});
   if (box.dataset.sig !== sig || !box.querySelector('#fl-nodes')) {
     box.dataset.sig = sig;
-    box.innerHTML = `<svg viewBox="0 -16 420 362">${svg}<g id="fl-nodes">${nodes}</g></svg>`;
+    box.innerHTML = `<svg viewBox="${vb}" style="max-width:${Math.round(460 * Number(vb.split(' ')[2]) / 420)}px">${svg}<g id="fl-nodes">${nodes}</g></svg>`;
   } else {
     box.querySelector('#fl-nodes').innerHTML = nodes;
   }
@@ -1637,10 +1725,75 @@ async function refreshSensors(force) {
     try { sim.entities = (await api('sensors/entities')).entities; sim.entitiesAt = Date.now(); } catch (e) { sim.entities = []; }
   }
   sim.edit = {...sim.data.settings};
+  (sim.data.settings.flow_devices || []).forEach((d, n) => { sim.edit[`fdev.${n}.power`] = d.power || ''; sim.edit[`fdev.${n}.plugged`] = d.plugged || ''; });
+  if (force || !$('s-flow').contains(document.activeElement)) drawFlowDevices();
   const typing = document.activeElement && document.activeElement.closest('.picker');
   if (force || !typing) drawPickers();
   drawSensors();
 }
+// ---------- Settings › Power flow card: devices off the house ----------
+const FLOW_ICON_NAMES = {car: 'Car', heatpump: 'Heat pump', plug: 'Plug', flash: 'Electric', water: 'Hot water'};
+const flowDevs = () => JSON.parse(JSON.stringify((sim.data && sim.data.settings.flow_devices) || []));
+// A picker's change as a settings patch: a device's ("fdev.<n>.power") goes in the whole list
+function sensorPatch(key, value) {
+  const m = /^fdev\.(\d+)\.(power|plugged)$/.exec(key);
+  if (!m) return {[key]: value};
+  const list = flowDevs();
+  if (list[+m[1]]) list[+m[1]][m[2]] = value;
+  return {flow_devices: list};
+}
+const saveFlowDevs = (list, msg) => saveSensors({flow_devices: list}, msg);
+function drawFlowDevices() {
+  const list = flowDevs(), info = (sim.data && sim.data.devices) || [];
+  const shown = new Set(((state && state.flow && state.flow.devices) || []).map((d) => d.n));
+  const read = (e) => !e ? '' : e.state == null ? '<span class="chip warn">not found</span>'
+    : ['unavailable', 'unknown'].includes(e.state) ? `<span class="chip warn">${esc(e.state)}</span>` : esc(e.state) + (e.unit ? ' ' + esc(e.unit) : '');
+  $('s-flow-devs').innerHTML = list.map((d, n) => {
+    const colour = DEV_COLOURS[n % DEV_COLOURS.length], inf = info[n] || {};
+    const status = !d.power ? '<span class="pill none">Hidden: pick its power sensor</span>'
+      : shown.has(n) ? '<span class="pill ok"><span class="pdot"></span>On the card</span>'
+      : d.plugged ? '<span class="pill none">Hidden: not plugged in</span>' : '<span class="pill none">Waiting for a reading</span>';
+    return `<div class="fdev" style="--dc:${colour}" data-n="${n}">
+      <div class="fhead"><div class="fico"><svg viewBox="0 0 24 24"><path d="${DEV_ICONS[d.icon] || DEV_ICONS.plug}"/></svg></div>
+        <input class="fname" value="${esc(d.name)}" maxlength="30" aria-label="Name" data-n="${n}">
+        <button class="fdel" data-del="${n}" title="Remove ${esc(d.name)}" aria-label="Remove">×</button></div>
+      <div class="ficons" role="group" aria-label="Icon">${Object.entries(FLOW_ICON_NAMES).map(([k, label]) =>
+        `<button data-icon="${k}" data-n="${n}" aria-pressed="${d.icon === k}" title="${label}"><svg viewBox="0 0 24 24"><path d="${DEV_ICONS[k]}"/></svg></button>`).join('')}</div>
+      <div class="fpick"><div class="lab">Power<span>${read(inf.power)}</span></div>
+        <span class="picker" data-key="fdev.${n}.power" data-domain="sensor" data-class="power" data-units="W,kW" data-none="None: not shown"></span></div>
+      <div class="fpick"><div class="lab">Plugged in <span>${d.plugged ? read(inf.plugged) : 'optional'}</span></div>
+        <span class="picker" data-key="fdev.${n}.plugged" data-domain="binary_sensor,input_boolean,switch,sensor,device_tracker" data-none="Always shown (with a reading)"></span></div>
+      <div class="fstat">${status}</div></div>`;
+  }).join('');
+  $('s-flow-add').disabled = list.length >= 6;
+  $('s-flow-max').textContent = list.length >= 6 ? 'Up to 6 devices' : '';
+}
+$('s-flow-add').addEventListener('click', () => {
+  const list = flowDevs();
+  if (list.length >= 6) return;
+  list.push({name: `Device ${list.length + 1}`, icon: 'plug', power: '', plugged: ''});
+  saveFlowDevs(list, 'Device added: pick its power sensor');
+});
+$('s-flow-devs').addEventListener('click', (ev) => {
+  const del = ev.target.closest('[data-del]'), ico = ev.target.closest('[data-icon]');
+  if (del) {
+    const list = flowDevs(), n = +del.dataset.del, name = list[n] && list[n].name;
+    list.splice(n, 1);
+    saveFlowDevs(list, `${name || 'Device'} removed`);
+  } else if (ico) {
+    const list = flowDevs(), n = +ico.dataset.n;
+    if (!list[n] || list[n].icon === ico.dataset.icon) return;
+    list[n].icon = ico.dataset.icon;
+    saveFlowDevs(list, `Icon: ${FLOW_ICON_NAMES[ico.dataset.icon]}`);
+  }
+});
+$('s-flow-devs').addEventListener('change', (ev) => {
+  if (!ev.target.classList.contains('fname')) return;
+  const list = flowDevs(), n = +ev.target.dataset.n, name = ev.target.value.trim();
+  if (!list[n] || !name || list[n].name === name) return;
+  list[n].name = name;
+  saveFlowDevs(list, `Renamed to ${name}`);
+});
 // Settings save as soon as they change
 async function saveSensors(patch, msg) {
   try {
@@ -1709,7 +1862,7 @@ function setupCombo(box, key, opts) {
   const choose = (o) => {
     if ((sim.edit[key] || '') !== o.value) {
       sim.edit[key] = o.value;
-      saveSensors({[key]: o.value}, o.value ? 'Entity saved' : 'Entity removed');
+      saveSensors(sensorPatch(key, o.value), o.value ? 'Entity saved' : 'Entity removed');
     }
     close(); showValue(); input.blur();
   };
@@ -1738,7 +1891,7 @@ function setupCombo(box, key, opts) {
 // Without Home Assistant's entity list (e.g. not connected) the pickers are plain text boxes
 document.addEventListener('change', (ev) => {
   const key = ev.target.dataset && ev.target.dataset.key;
-  if (key && ev.target.closest('.picker')) saveSensors({[key]: ev.target.value.trim()}, 'Entity saved');
+  if (key && ev.target.closest('.picker')) saveSensors(sensorPatch(key, ev.target.value.trim()), 'Entity saved');
 });
 $('sim-all').addEventListener('change', drawPickers);
 // The pickers, drawn into cards: [card, key, label, note, domains]
@@ -1786,6 +1939,10 @@ $('s-show-auto').addEventListener('change', (ev) => {
 });
 function drawSensors() {
   const ents = (sim.data || {}).entities || {}, auto = (sim.data || {}).automatic || {};
+  for (const key of ['flow_pv_power', 'flow_grid_power', 'flow_battery_power']) {
+    const ent = ents[key], el = $('s-read-' + key);
+    if (el) el.innerHTML = !ent ? '' : ent.state == null ? '<span class="chip warn">no reading</span>' : esc(ent.state) + (ent.unit ? ' ' + esc(ent.unit) : '');
+  }
   let hidden = 0;
   for (const [, key] of PICKERS) {
     const ent = ents[key], el = $('s-read-' + key);

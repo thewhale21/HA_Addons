@@ -221,6 +221,26 @@ type: custom:evdc-power-flow-card
 title: Power  # optional
 ```
 
+### Devices off the house
+
+**Settings › Power flow card** adds things with their own power sensor,
+e.g. a car charger (a Hypervolt, say) or a heat pump: each is drawn as a
+smaller circle coming off the house, in its own colour, and the house then
+shows what's left ("4.2 kW of 12.6 kW"). It starts with a **Car charger**
+and a **Heat pump**; **+ Add a device** adds more (up to 6), and × removes
+one. For each:
+
+- **Name** and **icon** (car, heat pump, plug, electric, hot water).
+- **Power**: its sensor, W or kW. Without one it isn't drawn.
+- **Plugged in** (optional): only drawn while this is on (on, home,
+  connected, plugged in, charging, or a number above 0), e.g. your
+  charger's plugged-in sensor. Without one it's drawn whenever it has a
+  reading.
+
+The card picks its **solar**, **grid** and **home battery** from the same
+card if you'd like it to show other sensors than the ones the add-on
+decides from (Home power, Statistics); only the drawing changes.
+
 The add-on installs it itself each time it starts: it copies the card into
 Home Assistant's `www` folder (so it has access to the config folder) and
 adds `/local/evdc-power-flow-card.js` to the dashboards' resources.

@@ -100,6 +100,36 @@ def _in(value: Optional[str], options) -> bool:
     return value is not None and value.strip().lower() in {o.strip().lower() for o in options}
 
 
+# A device's "plugged in" entity counts as plugged in with one of these states (or a number above 0)
+PLUGGED_WORDS = ("on", "true", "yes", "home", "plugged", "plugged in", "plugged_in", "connected", "charging",
+                 "occupied", "running", "heating")
+
+
+def plugged_now(st: Optional[dict]) -> bool:
+    text = _text(st)
+    if text is None:
+        return False
+    if _in(text, PLUGGED_WORDS):
+        return True
+    try:
+        return float(text) > 0
+    except ValueError:
+        return False
+
+
+def flow_devices(devices, states: dict) -> list:
+    """The power flow card's devices to show now: with a power sensor, and plugged in (when
+    there's an entity for it). Each {n, name, icon, kw}: n is its place in the settings, for its colour."""
+    out = []
+    for n, d in enumerate(devices or []):
+        if not d.get("power") or (d.get("plugged") and not plugged_now(states.get(d["plugged"]))):
+            continue
+        kw = power_kw(states.get(d["power"]))
+        out.append({"n": n, "name": d.get("name") or f"Device {n + 1}", "icon": d.get("icon") or "plug",
+                    "kw": None if kw is None else round(max(0.0, kw), 3)})
+    return out
+
+
 def _pct_text(v: float) -> str:
     return f"{v:g}%"
 
@@ -290,7 +320,13 @@ class Manager:
             "pv_kw": power_kw(get("pv_power")),
             "home_measured_kw": power_kw(get("home_power")),
             "home_soc": _float(get("home_battery_soc")), "home_kwh": _float(get("home_battery_capacity")),
+            "flow_devices": flow_devices(entities.get("flow_devices"), states),
         }
+        # The power flow card's own sensors for solar, the grid and the home battery, when picked
+        for key, entity_key in (("flow_pv_kw", "flow_pv_power"), ("flow_grid_kw", "flow_grid_power"),
+                                ("flow_battery_kw", "flow_battery_power")):
+            if entities.get(entity_key):
+                self.readings[key] = power_kw(get(entity_key))
         self._settings = settings
         return self.inputs
 
@@ -564,10 +600,20 @@ class Manager:
             return {}
         car = abs(r.get("car_kw") or 0.0) if i.active else 0.0
         car = -car if i.discharging else car
-        house = house_load(r.get("pv_kw"), i.grid_kw, i.battery_kw, car, r.get("home_measured_kw"))
-        return {"pv_kw": r.get("pv_kw"), "grid_kw": i.grid_kw, "battery_kw": i.battery_kw, "car_kw": car,
-                "house_kw": None if house is None else round(house, 3), "home_soc": r.get("home_soc"),
-                "lines": flows(r.get("pv_kw"), i.grid_kw, i.battery_kw, car, house)}
+        # The card's own solar, grid and battery sensors when picked, else the ones it decides from
+        pv = r["flow_pv_kw"] if "flow_pv_kw" in r else r.get("pv_kw")
+        grid = r["flow_grid_kw"] if "flow_grid_kw" in r else i.grid_kw
+        batt = r["flow_battery_kw"] if "flow_battery_kw" in r else i.battery_kw
+        house = house_load(pv, grid, batt, car, r.get("home_measured_kw"))
+        # Devices off the house (a car charger, a heat pump...): drawn coming off it, the house
+        # showing what's left
+        devices = r.get("flow_devices") or []
+        used = sum(d["kw"] or 0.0 for d in devices)
+        rest = None if house is None else round(max(0.0, house - used), 3)
+        return {"pv_kw": pv, "grid_kw": grid, "battery_kw": batt, "car_kw": car,
+                "house_kw": None if house is None else round(house, 3), "home_kw": rest if devices else None,
+                "home_soc": r.get("home_soc"), "devices": devices,
+                "lines": flows(pv, grid, batt, car, house)}
 
     def stats_sample(self, states: dict, entities: dict, now: float) -> Optional[Sample]:
         """This look's readings for the statistics (src/stats.py)."""

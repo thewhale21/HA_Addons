@@ -23,3 +23,33 @@ def test_house_load_from_the_balance_when_not_measured():
     assert house_load(0.0, 0.2, -1.0, -3.0) == 4.2  # battery and car discharging into the house
     assert house_load(1.0, 0.0, 0.0, 0.0, measured=0.4) == 0.4
     assert house_load(None, 0.0, 0.0, 0.0) is None
+
+
+def test_devices_off_the_house_need_a_power_sensor_and_to_be_plugged_in():
+    from src.manager import flow_devices
+    states = {"sensor.hv": {"state": "7100", "attributes": {"unit_of_measurement": "W"}},
+              "binary_sensor.hv_plugged": {"state": "on"}, "sensor.hp": {"state": "1.4"},
+              "binary_sensor.off": {"state": "off"}, "sensor.tub": {"state": "0.5"}}
+    devices = [{"name": "Hypervolt", "icon": "car", "power": "sensor.hv", "plugged": "binary_sensor.hv_plugged"},
+               {"name": "Heat pump", "icon": "heatpump", "power": "sensor.hp", "plugged": ""},
+               {"name": "Spare", "icon": "plug", "power": "", "plugged": ""},
+               {"name": "Hot tub", "icon": "plug", "power": "sensor.tub", "plugged": "binary_sensor.off"}]
+    assert flow_devices(devices, states) == [{"n": 0, "name": "Hypervolt", "icon": "car", "kw": 7.1},
+                                             {"n": 1, "name": "Heat pump", "icon": "heatpump", "kw": 1.4}]
+
+
+def test_flow_devices_are_checked():
+    import pytest
+    from src.ha_link import default_settings, validate_settings
+    s = default_settings()
+    assert [d["name"] for d in s["flow_devices"]] == ["Car charger", "Heat pump"]
+    out = validate_settings({"flow_devices": [{"name": " Hypervolt ", "icon": "car", "power": "sensor.hv"}],
+                             "flow_grid_power": "sensor.meter"}, s)
+    assert out["flow_devices"] == [{"name": "Hypervolt", "icon": "car", "power": "sensor.hv", "plugged": ""}]
+    assert out["flow_grid_power"] == "sensor.meter"
+    with pytest.raises(ValueError):
+        validate_settings({"flow_devices": [{"icon": "rocket"}]}, s)
+    with pytest.raises(ValueError):
+        validate_settings({"flow_devices": [{"power": "switch.x"}]}, s)
+    with pytest.raises(ValueError):
+        validate_settings({"flow_devices": [{}] * 7}, s)

@@ -68,7 +68,48 @@ ENTITY_KEYS = {
     # For the costs (e.g. the Octopus Energy integration's current rate sensors)
     "import_rate": ("sensor", "input_number", "number"),
     "export_rate": ("sensor", "input_number", "number"),
+    # The power flow card only: other sensors for solar, the grid and the home battery
+    # (empty: the ones above, which it decides from)
+    "flow_pv_power": ("sensor",),
+    "flow_grid_power": ("sensor",),
+    "flow_battery_power": ("sensor",),
 }
+# The power flow card's own devices off the house (a car charger, a heat pump...): each a
+# name, an icon, a power sensor and (optional) when it's plugged in. Not shown without a
+# power sensor, or while its plugged-in entity is off.
+FLOW_ICONS = ("car", "heatpump", "plug", "flash", "water")
+FLOW_POWER_DOMAINS = ("sensor",)
+FLOW_PLUGGED_DOMAINS = ("binary_sensor", "input_boolean", "switch", "sensor", "device_tracker")
+FLOW_DEVICES_MAX = 6
+DEFAULT_FLOW_DEVICES = [{"name": "Car charger", "icon": "car", "power": "", "plugged": ""},
+                        {"name": "Heat pump", "icon": "heatpump", "power": "", "plugged": ""}]
+
+
+def validate_flow_devices(raw) -> list:
+    """The power flow card's devices (raises ValueError)."""
+    if not isinstance(raw, list):
+        raise ValueError("flow_devices must be a list")
+    if len(raw) > FLOW_DEVICES_MAX:
+        raise ValueError(f"At most {FLOW_DEVICES_MAX} devices")
+    out = []
+    for n, d in enumerate(raw, 1):
+        if not isinstance(d, dict):
+            raise ValueError(f"Device {n} must be an object")
+        name = str(d.get("name") or "").strip()[:30] or f"Device {n}"
+        icon = d.get("icon") or "plug"
+        if icon not in FLOW_ICONS:
+            raise ValueError(f"Device {n}: the icon must be one of {', '.join(FLOW_ICONS)}")
+        dev = {"name": name, "icon": icon}
+        for key, domains in (("power", FLOW_POWER_DOMAINS), ("plugged", FLOW_PLUGGED_DOMAINS)):
+            value = d.get(key) or ""
+            if not isinstance(value, str):
+                raise ValueError(f"Device {n}: {key} must be an entity ID or empty")
+            value = value.strip()
+            if value and value.split(".", 1)[0] not in domains:
+                raise ValueError(f"Device {n}: {key} must be a {' or '.join(domains)} entity")
+            dev[key] = value
+        out.append(dev)
+    return out
 # What a new install starts with: the Sigenergy integration's entity IDs. The
 # limits, capacity and V2X mode are made as helpers when left empty
 # (src/helpers.py); the charge signal (e.g. Predbat) is optional.
@@ -94,7 +135,8 @@ DEFAULT_ENTITIES = {
 
 
 def default_settings() -> dict:
-    return {key: DEFAULT_ENTITIES.get(key, "") for key in ENTITY_KEYS}
+    return {**{key: DEFAULT_ENTITIES.get(key, "") for key in ENTITY_KEYS},
+            "flow_devices": [dict(d) for d in DEFAULT_FLOW_DEVICES]}
 
 
 def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
@@ -111,6 +153,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             if value and value.split(".", 1)[0] not in domains:
                 raise ValueError(f"{key} must be a {' or '.join(domains)} entity")
             out[key] = value
+    if "flow_devices" in raw:
+        out["flow_devices"] = validate_flow_devices(raw["flow_devices"])
     unknown = [k for k in raw if k not in out]
     if unknown:
         raise ValueError("Unknown setting: " + ", ".join(unknown))
@@ -147,7 +191,8 @@ class HaLink:
             try:
                 with open(path, encoding="utf-8") as f:
                     self.settings = validate_settings(
-                        {k: v for k, v in json.load(f).items() if k in ENTITY_KEYS}, default_settings())
+                        {k: v for k, v in json.load(f).items() if k in ENTITY_KEYS or k == "flow_devices"},
+                        default_settings())
                 self.configured = True
                 return
             except FileNotFoundError:
@@ -185,7 +230,10 @@ class HaLink:
 
     @property
     def watched(self) -> list[str]:
-        return sorted({v for k, v in self.settings.items() if k in ENTITY_KEYS and v})
+        own = {v for k, v in self.settings.items() if k in ENTITY_KEYS and v}
+        for d in self.settings.get("flow_devices") or []:
+            own |= {v for v in (d.get("power"), d.get("plugged")) if v}
+        return sorted(own)
 
     # --- reacting to states ----------------------------------------------------
 
@@ -418,9 +466,11 @@ class HaLink:
             "available": self.available,
             "connected": self.connected,
             "error": self.error,
-            "entities": {key: entity_info(self.states, value) for key, value in self.settings.items()},
+            "entities": {key: entity_info(self.states, value) for key, value in self.settings.items() if key in ENTITY_KEYS},
+            "devices": [{"power": entity_info(self.states, d.get("power")), "plugged": entity_info(self.states, d.get("plugged"))}
+                        for d in self.settings.get("flow_devices") or []],
             "own_sensors": list(ALL_SENSORS),
-            "automatic": {key: automatic(key, value) for key, value in self.settings.items()},
+            "automatic": {key: automatic(key, value) for key, value in self.settings.items() if key in ENTITY_KEYS},
         }
 
 

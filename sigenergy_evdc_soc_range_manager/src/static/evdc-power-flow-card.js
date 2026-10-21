@@ -8,8 +8,8 @@
  *
  * The add-on copies this file into Home Assistant's www folder and adds it to the
  * dashboards' resources itself (src/card.py). It draws the add-on's power flow sensor:
- * its attributes are each reading in kW (grid + importing, battery and car + charging)
- * and the kW along each line.
+ * its attributes are each reading in kW (grid + importing, battery and car + charging),
+ * the kW along each line, and the devices off the house picked on the add-on's Settings tab.
  */
 const ICONS = {
   solar: 'M4,2H20A2,2 0 0,1 22,4V14A2,2 0 0,1 20,16H15V20H18V22H13V16H11V22H6V20H9V16H4A2,2 0 0,1 2,14V4A2,2 0 0,1 4,2M4,4V8H11V4H4M4,14H11V10H4V14M20,14V10H13V14H20M20,4H13V8H20V4Z',
@@ -48,6 +48,7 @@ const STYLE = `
   text { fill: var(--primary-text-color); font-size: 12px; text-anchor: middle; font-family: var(--paper-font-body1_-_font-family, inherit); }
   text.lbl { fill: var(--secondary-text-color); font-size: 12.5px; }
   text.big { font-size: 13px; font-weight: 500; }
+  text.sm { fill: var(--secondary-text-color); font-size: 10.5px; }
   .ico { fill: var(--primary-text-color); }
   .msg { color: var(--secondary-text-color); padding: 8px 0; }
   @media (prefers-reduced-motion: reduce) { animateMotion { display: none; } }
@@ -57,6 +58,105 @@ const STYLE = `
 function reversePath(d) {
   const pts = d.match(/-?\d+(\.\d+)?,-?\d+(\.\d+)?/g);
   return d.includes('C') ? `M${pts[3]} C${pts[2]} ${pts[1]} ${pts[0]}` : `M${pts[1]} L${pts[0]}`;
+}
+// ---- The power flow drawing: the same in the add-on's page and the dashboard card ----
+// Devices off the house (a car charger, a heat pump...): a column to the right of it
+const DEV_ICONS = {
+  car: 'M5,11L6.5,6.5H17.5L19,11M17.5,16A1.5,1.5 0 0,1 16,14.5A1.5,1.5 0 0,1 17.5,13A1.5,1.5 0 0,1 19,14.5A1.5,1.5 0 0,1 17.5,16M6.5,16A1.5,1.5 0 0,1 5,14.5A1.5,1.5 0 0,1 6.5,13A1.5,1.5 0 0,1 8,14.5A1.5,1.5 0 0,1 6.5,16M18.92,6C18.72,5.42 18.16,5 17.5,5H6.5C5.84,5 5.28,5.42 5.08,6L3,12V20A1,1 0 0,0 4,21H5A1,1 0 0,0 6,20V19H18V20A1,1 0 0,0 19,21H20A1,1 0 0,0 21,20V12L18.92,6Z',
+  heatpump: 'M12,11A1,1 0 0,0 11,12A1,1 0 0,0 12,13A1,1 0 0,0 13,12A1,1 0 0,0 12,11M12.5,2C17,2 17.11,5.57 14.75,6.75C13.76,7.24 13.32,8.29 13.13,9.22C13.61,9.42 14.03,9.73 14.35,10.13C18.05,8.13 22.03,8.92 22.03,12.5C22.03,17 18.46,17.1 17.28,14.73C16.78,13.74 15.72,13.3 14.79,13.11C14.59,13.59 14.28,14 13.88,14.34C15.87,18.03 15.08,22 11.5,22C7,22 6.91,18.42 9.27,17.24C10.25,16.75 10.69,15.71 10.89,14.79C10.4,14.59 9.97,14.27 9.65,13.87C5.96,15.85 2,15.07 2,11.5C2,7 5.56,6.89 6.74,9.26C7.24,10.25 8.29,10.68 9.22,10.87C9.41,10.39 9.73,9.97 10.14,9.65C8.15,5.96 8.94,2 12.5,2Z',
+  plug: 'M16,7V3H14V7H10V3H8V7H8C7,7 6,8 6,9V14.5L9.5,18V21H14.5V18L18,14.5V9C18,8 17,7 16,7Z',
+  flash: 'M7,2V13H10V22L17,10H13L17,2H7Z',
+  water: 'M12,20A6,6 0 0,1 6,14C6,10 12,3.25 12,3.25C12,3.25 18,10 18,14A6,6 0 0,1 12,20Z',
+};
+const DEV_COLOURS = ['#26c6da', '#ff7043', '#9ccc65', '#ab47bc', '#ffca28', '#78909c'];
+const colourOf = (c) => c.startsWith('--') ? `var(${c})` : c;
+// Everything to draw: {vb (the viewBox), lines (the lines and moving dots), nodes, sig (changes
+// when the lines or the dots' speeds do, so the dots don't jump on every update)}
+function flowParts(f) {
+  const nodesAt = {...NODES}, lines = {...LINES}, lineColour = {...LINE_COLOUR}, flowsOf = {...FLOWS};
+  const devs = (f.devices || []).slice(0, 6), n = devs.length;
+  // Up to 4 in a column; 5 or 6 zigzag between two, so no line passes behind another device
+  const zig = n > 4, r = zig ? 24 : n > 3 ? 27 : 30;
+  const gapY = n > 1 ? Math.min(100, (zig ? 290 : 250) / (n - 1)) : 0;
+  devs.forEach((d, k) => {
+    const x = zig ? (k % 2 ? 580 : 492) : 500, y = Math.round(172 + (k - (n - 1) / 2) * gapY);
+    const key = 'dev' + k;
+    nodesAt[key] = [x, y];
+    // Out of the house, turning at x 430 (left of every device), then straight in: no line crosses a device
+    lines[`home_${key}`] = `M396,172 C430,172 430,${y} ${x - r},${y}`;
+    lineColour[`home_${key}`] = DEV_COLOURS[d.n % DEV_COLOURS.length];
+  });
+  const on = {}, dots = [];
+  const car = f.car_kw || 0;
+  for (const [key, kwv] of Object.entries(f.lines || {})) {
+    const [line, dir, colour] = flowsOf[key] || [];
+    if (!line) continue;
+    on[line] = colour;
+    dots.push([line, dir, colour, kwv]);
+  }
+  if (Math.abs(car) > 0.01) { on.car_home = '--f-car'; dots.push(['car_home', car < 0 ? 1 : -1, '--f-car', Math.abs(car)]); }
+  devs.forEach((d, k) => {
+    if ((d.kw || 0) > 0.01) { on[`home_dev${k}`] = lineColour[`home_dev${k}`]; dots.push([`home_dev${k}`, 1, lineColour[`home_dev${k}`], d.kw]); }
+  });
+  const sig = JSON.stringify([n, dots.map(([l, d, c, k]) => [l, d, c, Math.round(Math.log2(0.6 + k) * 4)])]);
+  let svg = '';
+  for (const [name, d] of Object.entries(lines)) {
+    svg += `<path class="ln ${on[name] ? 'on' : ''}" d="${d}" style="stroke:${colourOf(on[name] || lineColour[name])}"/>`;
+  }
+  for (const [line, dir, colour, kwv] of dots) {
+    const durS = Math.max(0.8, Math.min(4, 4 / (0.6 + kwv))).toFixed(2);
+    // Against the line's drawn direction: travel a reversed copy of it (works in every browser)
+    const path = dir < 0 ? reversePath(lines[line]) : lines[line];
+    for (const offset of [0, 0.5]) {
+      svg += `<circle r="3.5" style="fill:${colourOf(colour)}"><animateMotion dur="${durS}s" repeatCount="indefinite" begin="-${(offset * durS).toFixed(2)}s" path="${path}"/></circle>`;
+    }
+  }
+  // An optional reading above the icon, the flows below it
+  const node = (key, colour, label, labelAbove, rows2, top) => {
+    const [x, y] = nodesAt[key], rr = 38;
+    let out = `<circle class="node" cx="${x}" cy="${y}" r="${rr}" style="stroke:var(${colour})"/>`;
+    out += `<text class="lbl" x="${x}" y="${labelAbove ? y - rr - 8 : y + rr + 17}">${label}</text>`;
+    let iconTop = y - (rows2.length > 1 ? 27 : 17);
+    if (top) {
+      const base = y - (rows2.length > 1 ? 24 : 15);
+      out += `<text x="${x}" y="${base}" class="big">${top}</text>`;
+      iconTop = base + 3;
+    }
+    out += `<g transform="translate(${x - 10},${iconTop}) scale(0.84)"><path class="ico" d="${ICONS[key]}"/></g>`;
+    rows2.forEach(([text, c, cls], k) => {
+      out += `<text x="${x}" y="${iconTop + 33 + k * 13}" class="${cls === true ? 'big' : cls || ''}" ${c ? `style="fill:var(${c})"` : ''}>${text}</text>`;
+    });
+    return out;
+  };
+  const grid = f.grid_kw, batt = f.battery_kw;
+  let nodes = node('solar', '--f-solar', 'Solar', true, [[kwShort(f.pv_kw), null, true]]);
+  // ← sent to the grid, → taken from it
+  nodes += node('grid', '--f-export', 'Grid', false, [
+    [`← ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export'], [`→ ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import']]);
+  // With devices off it, the house shows what's left, and the whole below
+  nodes += n && f.home_kw != null
+    ? node('home', '--f-home', 'Home', false, [[kwShort(f.home_kw), null, true], [`of ${kwShort(f.house_kw)}`, null, 'sm']])
+    : node('home', '--f-home', 'Home', false, [[kwShort(f.house_kw), null, true]]);
+  // ↓ into the battery, ↑ out of it
+  nodes += node('battery', '--f-bout', 'Battery', false, [
+    [`↓ ${kwShort(batt != null && batt > 0 ? batt : 0)}`, '--f-bin'], [`↑ ${kwShort(batt != null && batt < 0 ? batt : 0)}`, '--f-bout']],
+    f.home_soc == null ? null : `${num(f.home_soc, 0)}%`);
+  // The car sits above the house: ↓ discharging (down into the house), ↑ charging (up from it)
+  nodes += node('car', '--f-car', 'Car', true, [[`${car < 0 ? '↓' : '↑'} ${kwShort(car)}`, '--f-car']],
+    f.car_soc == null ? null : `${num(f.car_soc, 0)}%`);
+  // The devices: a smaller circle in its colour, its icon and power, its name below
+  devs.forEach((d, k) => {
+    const [x, y] = nodesAt['dev' + k], c = lineColour['home_dev' + k];
+    const max = zig ? 10 : 16, name = String(d.name || '').length > max ? String(d.name).slice(0, max - 1) + '…' : String(d.name || '');
+    const esc2 = (s) => s.replace(/[&<>"]/g, (ch) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[ch]);
+    const sc = r > 26 ? 0.75 : 0.64, iw = 24 * sc;
+    nodes += `<circle class="node" cx="${x}" cy="${y}" r="${r}" style="stroke:${c}"/>`
+      + `<g transform="translate(${x - iw / 2},${y - (r > 26 ? 19 : 16)}) scale(${sc})"><path d="${DEV_ICONS[d.icon] || DEV_ICONS.plug}" style="fill:${c}"/></g>`
+      + `<text x="${x}" y="${y + (r > 26 ? 15 : 13)}" class="big" style="font-size:${r > 26 ? 12 : 11}px">${kwShort(d.kw)}</text>`
+      + `<text class="lbl" x="${x}" y="${y + r + 14}" style="font-size:${r > 26 ? 11.5 : 10.5}px">${esc2(name)}</text>`;
+  });
+  const w = !n ? 420 : zig ? 632 : 556;
+  return {vb: `0 -16 ${w} ${zig ? 384 : 362}`, lines: svg, nodes, sig};
 }
 const num = (v, d) => Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
 const kwShort = (v) => v == null ? '—' : Math.abs(v) < 1 ? `${Math.round(Math.abs(v) * 1000)} W` : `${num(Math.abs(v), 1)} kW`;
@@ -105,62 +205,10 @@ class EvdcPowerFlowCard extends HTMLElement {
       box.innerHTML = '<div class="msg">The SigEnergy EVDC SoC Range Manager add-on is stopped.</div>';
       return;
     }
-    const f = st.attributes || {};
-    const on = {}, dots = [];
-    const car = f.car_kw || 0;
-    for (const [key, kwv] of Object.entries(f.lines || {})) {
-      const [line, dir, colour] = FLOWS[key] || [];
-      if (!line) continue;
-      on[line] = colour;
-      dots.push([line, dir, colour, kwv]);
-    }
-    if (Math.abs(car) > 0.01) { on.car_home = '--f-car'; dots.push(['car_home', car < 0 ? 1 : -1, '--f-car', Math.abs(car)]); }
-    // Only rebuild the lines and moving dots when the flows change, so the dots don't jump
-    const sig = JSON.stringify(dots.map(([l, d, c, k]) => [l, d, c, Math.round(Math.log2(0.6 + k) * 4)]));
-    let svg = '';
-    for (const [name, d] of Object.entries(LINES)) {
-      svg += `<path class="ln ${on[name] ? 'on' : ''}" d="${d}" style="stroke:var(${on[name] || LINE_COLOUR[name]})"/>`;
-    }
-    for (const [line, dir, colour, kwv] of dots) {
-      const durS = Math.max(0.8, Math.min(4, 4 / (0.6 + kwv))).toFixed(2);
-      const path = dir < 0 ? reversePath(LINES[line]) : LINES[line];
-      for (const offset of [0, 0.5]) {
-        svg += `<circle r="3.5" style="fill:var(${colour})"><animateMotion dur="${durS}s" repeatCount="indefinite" begin="-${(offset * durS).toFixed(2)}s" path="${path}"/></circle>`;
-      }
-    }
-    // An optional reading above the icon, the flows below it
-    const node = (key, colour, label, labelAbove, lines, top) => {
-      const [x, y] = NODES[key], r = 38;
-      let out = `<circle class="node" cx="${x}" cy="${y}" r="${r}" style="stroke:var(${colour})"/>`;
-      out += `<text class="lbl" x="${x}" y="${labelAbove ? y - r - 8 : y + r + 17}">${label}</text>`;
-      let iconTop = y - (lines.length > 1 ? 27 : 17);
-      if (top) {
-        const base = y - (lines.length > 1 ? 24 : 15);
-        out += `<text x="${x}" y="${base}" class="big">${top}</text>`;
-        iconTop = base + 3;
-      }
-      out += `<g transform="translate(${x - 10},${iconTop}) scale(0.84)"><path class="ico" d="${ICONS[key]}"/></g>`;
-      lines.forEach(([text, c, big], n) => {
-        out += `<text x="${x}" y="${iconTop + 33 + n * 13}" class="${big ? 'big' : ''}" ${c ? `style="fill:var(${c})"` : ''}>${text}</text>`;
-      });
-      return out;
-    };
-    const grid = f.grid_kw, batt = f.battery_kw;
-    let nodes = node('solar', '--f-solar', 'Solar', true, [[kwShort(f.pv_kw), null, true]]);
-    // ← sent to the grid, → taken from it
-    nodes += node('grid', '--f-export', 'Grid', false, [
-      [`← ${kwShort(grid != null && grid < 0 ? grid : 0)}`, '--f-export'], [`→ ${kwShort(grid != null && grid > 0 ? grid : 0)}`, '--f-import']]);
-    nodes += node('home', '--f-home', 'Home', false, [[kwShort(f.house_kw), null, true]]);
-    // ↓ into the battery, ↑ out of it
-    nodes += node('battery', '--f-bout', 'Battery', false, [
-      [`↓ ${kwShort(batt != null && batt > 0 ? batt : 0)}`, '--f-bin'], [`↑ ${kwShort(batt != null && batt < 0 ? batt : 0)}`, '--f-bout']],
-      f.home_soc == null ? null : `${num(f.home_soc, 0)}%`);
-    // The car sits above the house: ↓ discharging (down into the house), ↑ charging (up from it)
-    nodes += node('car', '--f-car', 'Car', true, [[`${car < 0 ? '↓' : '↑'} ${kwShort(car)}`, '--f-car']],
-      f.car_soc == null ? null : `${num(f.car_soc, 0)}%`);
+    const {vb, lines: svg, nodes, sig} = flowParts(st.attributes || {});
     if (this._sig !== sig || !box.querySelector('.nodes')) {
       this._sig = sig;
-      box.innerHTML = `<svg viewBox="0 -16 420 362" role="img" aria-label="Power flow between solar, the grid, the home battery, the house and the car">${svg}<g class="nodes">${nodes}</g></svg>`;
+      box.innerHTML = `<svg viewBox="${vb}" style="max-width:${Math.round(460 * Number(vb.split(' ')[2]) / 420)}px" role="img" aria-label="Power flow between solar, the grid, the home battery, the house and the car">${svg}<g class="nodes">${nodes}</g></svg>`;
     } else {
       box.querySelector('.nodes').innerHTML = nodes;
     }
@@ -171,6 +219,6 @@ if (!customElements.get('evdc-power-flow-card')) customElements.define('evdc-pow
 window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === 'evdc-power-flow-card')) {
   window.customCards.push({type: 'evdc-power-flow-card', name: 'EVDC Power Flow',
-    description: 'Solar, the grid, the home battery, the house and the car (from the SigEnergy EVDC SoC Range Manager add-on)',
+    description: 'Solar, the grid, the home battery, the house, the car and your devices off the house (from the SigEnergy EVDC SoC Range Manager add-on)',
     preview: true});
 }

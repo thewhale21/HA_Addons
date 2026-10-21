@@ -711,3 +711,22 @@ def test_helpers_with_the_old_names_are_moved_to_the_new_ones(tmp_path):
     _run(ensure_helpers(yaml))
     assert yaml.settings["soc_high"] == "input_number.evdc_soc_range_high_limit"
     assert not [q for q in yaml.queries if q["type"].endswith("/delete")]
+
+
+def test_power_flow_takes_devices_off_the_house_and_the_cards_own_sensors(tmp_path):
+    m = Manager(str(tmp_path), press=Presses().press)
+    st = _states(running="Available", grid="9", battery="0")
+    st.update({"sensor.hv": {"state": "7000", "attributes": {"unit_of_measurement": "W"}},
+               "sensor.house": {"state": "10", "attributes": {"unit_of_measurement": "kW"}},
+               "sensor.meter": {"state": "8.5", "attributes": {"unit_of_measurement": "kW"}}})
+    ent = _entities(home_power="sensor.house", pv_power="",
+                    flow_devices=[{"name": "Hypervolt", "icon": "car", "power": "sensor.hv", "plugged": ""}])
+    m.observe(st, ent, _settings(), 1000.0)
+    f = m.power_flow()
+    assert f["house_kw"] == 10 and f["home_kw"] == 3.0 and f["grid_kw"] == 9
+    assert f["devices"] == [{"n": 0, "name": "Hypervolt", "icon": "car", "kw": 7.0}]
+    m.observe(st, {**ent, "flow_grid_power": "sensor.meter"}, _settings(), 1010.0)
+    assert m.power_flow()["grid_kw"] == 8.5  # the card's own grid sensor; the controller still uses its own
+    assert m.inputs.grid_kw == 9
+    m.observe(st, {**ent, "flow_devices": []}, _settings(), 1020.0)
+    assert m.power_flow()["home_kw"] is None and m.power_flow()["devices"] == []
