@@ -56,6 +56,21 @@ for _kind, _n in [(k, n) for k in ("charge", "discharge") for n in (2, 3)]:
             ("date", "date", "Date", {"icon": "mdi:calendar"})):
         SENSORS[f"{_kind}_{_n}_{_key}"] = (f"sensor.next_{_kind}_dispatch_{_n}_{_suffix}", {
             "friendly_name": f"Next {_kind.title()} Dispatch {_n} {_label}", **_attrs})
+# The battery's live readings and status (src/telemetry.py): key -> (telemetry field, name, attributes)
+POWER = {"device_class": "power", "state_class": "measurement", "unit_of_measurement": "kW"}
+TELEMETRY = {
+    "battery_state": ("state", "Battery State", {"icon": "mdi:home-battery"}),
+    "battery_soc": ("battery_soc", "Battery State Of Charge",
+                    {"device_class": "battery", "state_class": "measurement", "unit_of_measurement": "%"}),
+    "battery_power": ("battery_power_kw", "Battery Power", {**POWER, "icon": "mdi:home-battery"}),
+    "solar_power": ("solar_power_kw", "Solar Power", {**POWER, "icon": "mdi:solar-power"}),
+    "grid_power": ("grid_power_kw", "Grid Power", {**POWER, "icon": "mdi:transmission-tower"}),
+    "inverter_power": ("inverter_power_kw", "Inverter Power", {**POWER, "icon": "mdi:flash"}),
+    "home_consumption": ("home_consumption_kw", "Home Consumption", {**POWER, "icon": "mdi:home-lightning-bolt"}),
+    "export_power": ("export_power_kw", "Export Power", {**POWER, "icon": "mdi:transmission-tower-export"}),
+}
+for _key, (_field, _name, _attrs) in TELEMETRY.items():
+    SENSORS[_key] = (f"sensor.{PREFIX}_{_key}", {"friendly_name": f"Octopus Charge Pack {_name}", **_attrs})
 ALL_SENSORS = [entity_id for entity_id, _ in SENSORS.values()]
 # Sensors there were once and aren't now (0.9.2: the start and end dates; _date is the start date):
 # taken out of Home Assistant when the add-on connects
@@ -71,14 +86,31 @@ def values(state) -> dict:
     s = state.summary or {}
     out = {"status": (state.status, {"error": state.error, "device_id": state.device_id,
                                      "last_update": state.last_update})}
+    out.update(telemetry_values(getattr(state, "telemetry", None)))
     if not s:
-        return {**out, **{key: None for key in SENSORS if key != "status"}}
+        return {**out, **{key: None for key in SENSORS if key not in out}}
     out["planned"] = (s.get("count"), {"flexPlannedDispatches": s.get("dispatches") or []})
     out["now"] = (s.get("now") or "none", {"start": s.get("now_start"), "end": s.get("now_end"),
                                           "energy_kwh": s.get("now_kwh"), "minutes_left": s.get("now_minutes_left")})
-    for key in [k for k in SENSORS if k not in ("status", "planned", "now")]:
+    for key in [k for k in SENSORS if k not in ("status", "planned", "now") and k not in TELEMETRY]:
         out[key] = s.get(key)
     return out
+
+
+def telemetry_values(t: Optional[dict]) -> dict:
+    """The readings sensors: unknown until Octopus sends them (or for a device with none)."""
+    if not t:
+        return {key: None for key in TELEMETRY}
+    read = {"last_update": t.get("read_at")}
+    extra = {
+        "battery_state": {"status": t.get("status"), "is_suspended": t.get("is_suspended"),
+                          "battery_connection_status": t.get("battery_connection"),
+                          "inverter_connection_status": t.get("inverter_connection")},
+        "battery_power": {"connection_status": t.get("battery_connection")},
+        "inverter_power": {"connection_status": t.get("inverter_connection")},
+        "solar_power": {"peak_solar_power_kw": t.get("peak_solar_kw")},
+    }
+    return {key: (t.get(field), {**read, **extra.get(key, {})}) for key, (field, _, _) in TELEMETRY.items()}
 
 
 class SensorPublisher:

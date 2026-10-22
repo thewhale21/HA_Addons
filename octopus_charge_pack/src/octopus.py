@@ -1,5 +1,6 @@
 """The Octopus Energy API (GraphQL): a Kraken token from the API key, and the
-planned flex dispatches for a device. Optionally finds the device ID.
+planned flex dispatches for a device, with its status and live readings (an
+inverter's telemetry, see src/telemetry.py). Optionally finds the device ID.
 
 The token lasts an hour: it's renewed every TOKEN_RENEW_S, and straight away
 if the API says it's expired or not valid.
@@ -20,6 +21,13 @@ TOKEN_QUERY = ("mutation krakenTokenAuthentication($apiKey: String!) "
                "{ obtainKrakenToken(input: { APIKey: $apiKey }) { token } }")
 DISPATCHES_QUERY = ("query getPlanned($deviceId: String!) "
                     "{ flexPlannedDispatches(deviceId: $deviceId) { start end type energyAddedKwh } }")
+# The plan with the device's status and readings, in one go (the readings only come for inverters)
+DEVICE_QUERY = ("query getDevice($deviceId: String!, $accountNumber: String!) { "
+                "flexPlannedDispatches(deviceId: $deviceId) { start end type energyAddedKwh } "
+                "devices(accountNumber: $accountNumber, deviceId: $deviceId) { id status { current currentState isSuspended } "
+                "... on SmartFlexInverter { telemetry { inverter { connectionStatus powerInKw } "
+                "battery { connectionStatus powerInKw stateOfCharge } solar { powerInKw } grid { powerInKw } "
+                "site { consumptionInKw exportInKw } } details { solar { peakSolarPowerInKw } } } } }")
 ACCOUNTS_QUERY = "query { viewer { accounts { number } } }"
 DEVICES_QUERY = ("query devices($accountNumber: String!) "
                  "{ devices(accountNumber: $accountNumber) { id name deviceType provider } }")
@@ -103,6 +111,15 @@ class OctopusClient:
     async def planned_dispatches(self, device_id: str) -> list:
         data = await self.query(DISPATCHES_QUERY, {"deviceId": device_id})
         return list(data.get("flexPlannedDispatches") or [])
+
+    async def read_device(self, device_id: str, account: Optional[str]) -> tuple[list, Optional[dict]]:
+        """The planned dispatches and the device itself ({id, status, telemetry, details}, None if not
+        sent). Without the account number, only the dispatches."""
+        if not account:
+            return await self.planned_dispatches(device_id), None
+        data = await self.query(DEVICE_QUERY, {"deviceId": device_id, "accountNumber": account})
+        device = next((d for d in data.get("devices") or [] if isinstance(d, dict) and d.get("id") == device_id), None)
+        return list(data.get("flexPlannedDispatches") or []), device
 
     async def find_devices(self) -> list:
         """The devices on the account(s) the API key is for: [{id, name, deviceType, provider, account}]."""

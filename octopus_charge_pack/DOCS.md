@@ -10,7 +10,9 @@ See the README (the add-on's **Info** tab) for setting it up, its options
 and its sensors. In short: enter your Octopus API key on the
 **Configuration** tab and start it.
 
-1. **Overview** shows its status and what it's doing now, a timeline of
+1. **Overview** shows its status and what it's doing now, a **Power flow**
+   card (solar, the grid, your home and the battery around the inverter,
+   from the battery's live readings, with the readings beside it), a timeline of
    today and tomorrow (charges and discharges, idle time, completed ones
    ticked), then the next discharge (with its local date, start and end as
    the date and time sensors give them) and next charge, each with its own

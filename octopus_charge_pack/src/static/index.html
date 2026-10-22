@@ -333,6 +333,31 @@
   .bnr .stat b { color: #fff; } .bnr .stat span { color: rgba(255,255,255,.85); }
   .basic .bnr .stat b { color: var(--text); } .basic .bnr .stat span { color: var(--text2); }
   .bnr #o-now .chip { margin-top: 2px; }
+
+  /* ---- Power flow (Overview): the battery's live readings from Octopus ---- */
+  :root { --f-solar: #ff9800; --f-import: #488fc2; --f-export: #8353d1; --f-bin: #f06292; --f-bout: #4db6ac; --f-home: #5ec9b6; --f-hub: var(--text2); }
+  .pf { display: grid; grid-template-columns: minmax(240px, 420px) 1fr; gap: 8px 28px; align-items: center; }
+  @media (max-width: 720px) { .pf { grid-template-columns: 1fr; } }
+  .pf svg { width: 100%; height: auto; max-height: 340px; display: block; margin: 0 auto; overflow: visible; }
+  .pf .ln { fill: none; stroke-width: 3; stroke-linecap: round; opacity: .9; }
+  .pf .ln.idle { stroke: var(--divider) !important; stroke-dasharray: 2 7; opacity: 1; }
+  .pf .node { fill: var(--card); stroke-width: 3; }
+  .pf .hub { fill: var(--card); stroke: var(--divider); stroke-width: 2; }
+  .pf text { fill: var(--text); font-family: inherit; text-anchor: middle; dominant-baseline: middle; }
+  .pf .v { font-size: 15px; font-weight: 600; }
+  .pf .l { font-size: 12px; fill: var(--text2); }
+  .pf .s { font-size: 10.5px; fill: var(--text2); }
+  .pf .ico { opacity: .95; }
+  .pf .soc-bg { fill: none; stroke: var(--divider); stroke-width: 5; }
+  .pf .soc { fill: none; stroke-width: 5; stroke-linecap: round; transform: rotate(-90deg); transform-box: fill-box; transform-origin: center; transition: stroke-dasharray .6s ease; }
+  @media (prefers-reduced-motion: reduce) { .pf .dot { display: none; } }
+  .pf-list { display: grid; gap: 2px; margin: 0; }
+  .pf-row { display: grid; grid-template-columns: 12px 1fr auto; align-items: baseline; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--divider); }
+  .pf-row:last-child { border-bottom: 0; }
+  .pf-row i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; align-self: center; }
+  .pf-row b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pf-row .what { color: var(--text2); font-size: 12px; display: block; margin-top: 1px; }
+  .pf-empty { color: var(--text2); padding: 14px 0 4px; }
 </style>
 </head>
 <body>
@@ -369,6 +394,11 @@
           <div style="margin-top:10px" id="o-now"></div>
         </div>
       </div>
+    </div>
+    <div class="card" id="o-pf-card">
+      <h2>Power flow<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400" id="o-pf-when"></span></h2>
+      <div id="o-pf"><div class="pf-empty">Waiting for the first read</div></div>
+      <div class="note" style="margin:10px 0 0">The battery's live readings, as Octopus gets them from your inverter. <details class="more"><summary>More</summary><div>They can be a few minutes behind the battery itself, the same as in the Octopus app, and they show what the battery is actually doing, so they won't always match Octopus's plan (e.g. while it's controlled locally). Also Home Assistant sensors: <code>sensor.octopus_charge_pack_battery_power</code>, <code>_solar_power</code>, <code>_grid_power</code> and more (Diagnostics).</div></details></div>
     </div>
     <div class="card">
       <h2>Today and tomorrow</h2>
@@ -699,6 +729,96 @@ function span(start, end) {
   const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   return `${dateTime(start)}${end ? '–' + t(end) : ''}`;
 }
+
+// ---------- Power flow (Overview): Solar, Grid, Home and Battery, through the inverter ----------
+// Each line runs from the inverter (the middle) to one node; dots move the way the power goes,
+// faster for more kW. Grid power is + importing (as the sensor), battery power + discharging.
+const PF_ICONS = {
+  solar: 'M4,2H20A2,2 0 0,1 22,4V14A2,2 0 0,1 20,16H15V20H18V22H13V16H11V22H6V20H9V16H4A2,2 0 0,1 2,14V4A2,2 0 0,1 4,2M4,4V8H11V4H4M4,14H11V10H4V14M20,14V10H13V14H20M20,4H13V8H20V4Z',
+  grid: 'M8.28,5.45L6.5,4.55L7.76,2H16.23L17.5,4.55L15.72,5.44L15,4H9L8.28,5.45M18.62,8H14.09L13.3,5H10.7L9.91,8H5.38L4.1,10.55L5.89,11.44L6.62,10H17.38L18.1,11.45L19.89,10.56L18.62,8M17.77,22H15.7L15.46,21.1L12,15.9L8.53,21.1L8.3,22H6.23L9.12,11H11.19L10.83,12.35L12,14.1L13.16,12.35L12.81,11H14.88L17.77,22M11.4,15L10.5,13.65L9.32,18.13L11.4,15M14.68,18.12L13.5,13.64L12.6,15L14.68,18.12Z',
+  home: 'M10,20V14H14V20H19V12H22L12,3L2,12H5V20H10Z',
+  battery: 'M16,20H8V6H16M16.67,4H15V2H9V4H7.33A1.33,1.33 0 0,0 6,5.33V20.67C6,21.4 6.6,22 7.33,22H16.67A1.33,1.33 0 0,0 18,20.67V5.33C18,4.6 17.4,4 16.67,4Z',
+  flash: 'M7,2V13H10V22L17,10H13L17,2H7Z',
+};
+const PF_AT = {hub: [200, 150], solar: [200, 42], grid: [58, 150], home: [342, 150], battery: [200, 258]};
+const PF_IDLE = 0.05;  // kW: less than this is idle
+function pfKw(v) { return v == null ? '—' : `${num(Math.abs(v), Math.abs(v) < 10 ? 2 : 1)} kW`; }
+let pfSig = null;
+function drawPowerFlow(s) {
+  const el = $('o-pf'), t = s.telemetry;
+  // Only when the readings change: redrawing restarts the moving dots
+  const sig = JSON.stringify([t, !!s.last_update, document.documentElement.className]);
+  if (sig === pfSig) return;
+  pfSig = sig;
+  $('o-pf-when').textContent = t && t.read_at ? `From Octopus · updated ${hm(t.read_at)}` : '';
+  if (!t) {
+    el.innerHTML = `<div class="pf-empty">${s.last_update ? "Octopus hasn't sent live readings for this device (it only does for inverters, e.g. a Charge Pack battery)." : 'Waiting for the first read'}</div>`;
+    return;
+  }
+  const solar = t.solar_power_kw, grid = t.grid_power_kw, batt = t.battery_power_kw, home = t.home_consumption_kw;
+  const on = (v) => v != null && Math.abs(v) >= PF_IDLE;
+  // [node, colour, +1: into the inverter / -1: out of it / 0: idle, kW]
+  const flows = [
+    ['solar', '--f-solar', on(solar) && solar > 0 ? 1 : 0, solar],
+    ['grid', on(grid) ? (grid > 0 ? '--f-import' : '--f-export') : '--f-import', on(grid) ? (grid > 0 ? 1 : -1) : 0, grid],
+    ['battery', on(batt) ? (batt > 0 ? '--f-bout' : '--f-bin') : '--f-bout', on(batt) ? (batt > 0 ? 1 : -1) : 0, batt],
+    ['home', '--f-home', on(home) ? (home > 0 ? -1 : 1) : 0, home],
+  ];
+  const [hx, hy] = PF_AT.hub, R = 34;
+  let lines = '', dots = '', nodes = '';
+  const motion = !window.matchMedia || !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  for (const [key, colour, dir, kw] of flows) {
+    const [x, y] = PF_AT[key];
+    // from the node's edge to the hub's edge
+    const dx = hx - x, dy = hy - y, len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len;
+    const a = [x + ux * R, y + uy * R], b = [hx - ux * 24, hy - uy * 24];
+    const path = dir >= 0 ? `M${a[0]},${a[1]} L${b[0]},${b[1]}` : `M${b[0]},${b[1]} L${a[0]},${a[1]}`;
+    lines += `<path class="ln ${dir ? '' : 'idle'}" d="M${a[0]},${a[1]} L${b[0]},${b[1]}" style="stroke:var(${colour})"/>`;
+    if (dir && motion) {
+      const durS = Math.max(0.7, Math.min(3.5, 3.5 / (0.5 + Math.abs(kw)))).toFixed(2);
+      for (const off of [0, 0.5]) dots += `<circle class="dot" r="4" style="fill:var(${colour})"><animateMotion dur="${durS}s" begin="-${(off * durS).toFixed(2)}s" repeatCount="indefinite" path="${path}"/></circle>`;
+    }
+  }
+  const icon = (name, x, y, colour, size = 20) => `<g class="ico" transform="translate(${x - size / 2},${y - size / 2}) scale(${size / 24})"><path d="${PF_ICONS[name]}" style="fill:var(${colour})"/></g>`;
+  const node = (key, colour, label, value, sub) => {
+    const [x, y] = PF_AT[key], below = key !== 'solar';
+    return `<circle class="node" cx="${x}" cy="${y}" r="${R}" style="stroke:var(${colour})"/>`
+      + icon(key, x, y - 10, colour) + `<text class="v" x="${x}" y="${y + 13}">${esc(value)}</text>`
+      + `<text class="l" x="${x}" y="${below ? y + R + 15 : y - R - 12}">${esc(label)}</text>`
+      + (sub ? `<text class="s" x="${x}" y="${below ? y + R + 29 : y - R - 26}">${esc(sub)}</text>` : '');
+  };
+  const gridWord = !on(grid) ? 'Idle' : grid > 0 ? 'Importing' : 'Exporting';
+  const battWord = !on(batt) ? 'Idle' : batt > 0 ? 'Discharging' : 'Charging';
+  const fed = on(home) && home < 0;  // something else on the inverter (e.g. a DC car charger) feeding the home
+  nodes += node('solar', '--f-solar', 'Solar', pfKw(solar), on(solar) ? '' : 'Idle');
+  nodes += node('grid', flows[1][1], 'Grid', pfKw(grid), gridWord);
+  nodes += node('home', '--f-home', 'Home', (fed ? '−' : '') + pfKw(home), fed ? 'Fed by another source' : '');
+  // The battery: its state of charge as a ring, the % inside, the kW below it
+  const [bx, by] = PF_AT.battery, soc = t.battery_soc, C = 2 * Math.PI * (R + 7);
+  const socColour = soc == null ? '--text2' : soc < 15 ? '--err' : soc < 35 ? '--warn' : '--ok';
+  nodes += `<circle class="soc-bg" cx="${bx}" cy="${by}" r="${R + 7}"/>`
+    + (soc == null ? '' : `<circle class="soc" cx="${bx}" cy="${by}" r="${R + 7}" style="stroke:var(${socColour});stroke-dasharray:${(C * Math.max(0, Math.min(100, soc)) / 100).toFixed(1)} ${C.toFixed(1)}"/>`)
+    + `<circle class="node" cx="${bx}" cy="${by}" r="${R}" style="stroke:var(${flows[2][1]})"/>`
+    + `<text class="v" x="${bx}" y="${by - 6}">${soc == null ? '—' : num(soc, 0) + '%'}</text>`
+    + `<text class="s" x="${bx}" y="${by + 13}">${esc(pfKw(batt))}</text>`
+    + `<text class="l" x="${bx}" y="${by + R + 22}">Battery · ${esc(battWord)}</text>`;
+  // The inverter in the middle
+  nodes += `<circle class="hub" cx="${hx}" cy="${hy}" r="24"/>` + icon('flash', hx, hy - 6, '--f-hub', 16)
+    + `<text class="s" x="${hx}" y="${hy + 10}">${esc(pfKw(t.inverter_power_kw))}</text>`;
+  const title = `Solar ${pfKw(solar)}; grid ${gridWord.toLowerCase()} ${pfKw(grid)}; home ${pfKw(home)}; battery ${battWord.toLowerCase()} ${pfKw(batt)}, ${soc == null ? 'charge unknown' : num(soc, 0) + '% charged'}`;
+  const svg = `<svg viewBox="0 -8 400 320" role="img" aria-label="${esc(title)}">${lines}${dots}${nodes}</svg>`;
+  // The readings, to scan (and for screen readers)
+  const row = (colour, label, value, what) => `<div class="pf-row"><i style="background:var(${colour})"></i><span>${esc(label)}${what ? `<span class="what">${what}</span>` : ''}</span><b>${value}</b></div>`;
+  const stateText = {SMART_CONTROL_CAPABLE: 'Octopus can control it', SMART_CONTROL_NOT_AVAILABLE: "Octopus can't control it right now"}[t.state] || (t.state || '—');
+  const list = row(socColour, 'Battery charge', soc == null ? '—' : `${num(soc, 1)} %`, '')
+    + row(flows[2][1], 'Battery', pfKw(batt), battWord + (t.battery_connection && t.battery_connection !== 'ONLINE' ? ` · <span style="color:var(--err)">${esc(t.battery_connection)}</span>` : ''))
+    + row('--f-solar', 'Solar', pfKw(solar), t.peak_solar_kw ? `Peak ${pfKw(t.peak_solar_kw)}` : '')
+    + row(flows[1][1], 'Grid', pfKw(grid), gridWord + (on(t.export_power_kw) && Math.abs(Math.abs(grid || 0) - t.export_power_kw) >= PF_IDLE ? ` · exporting ${pfKw(t.export_power_kw)}` : ''))
+    + row('--f-home', 'Home', (fed ? '−' : '') + pfKw(home), fed ? 'Something else on the inverter (e.g. a DC car charger) is feeding the home' : 'Using')
+    + row('--f-hub', 'Inverter', pfKw(t.inverter_power_kw), (t.inverter_power_kw || 0) < -PF_IDLE ? 'Taking power in' : (t.inverter_power_kw || 0) > PF_IDLE ? 'Putting power out' : 'Idle')
+    + row('--text2', 'With Octopus', `<span class="chip ${t.is_suspended ? 'warn' : t.state === 'SMART_CONTROL_CAPABLE' ? 'ok' : ''}">${t.is_suspended ? 'Suspended' : esc(stateText)}</span>`, '');
+  el.innerHTML = `<div class="pf">${svg}<div class="pf-list">${list}</div></div>`;
+}
 function renderState(s) {
   state = s;
   const m = s.summary || {};
@@ -719,6 +839,7 @@ function renderState(s) {
     ? `Now: ${NOWCHIP[m.now]} until ${esc(hm(m.now_end))} · ${m.now_minutes_left} min left${m.now_kwh ? ' · ' + num(m.now_kwh, 2) + ' kWh' : ''}`
     : 'Now: <span class="chip">Nothing planned</span>';
   drawTimeline(m.dispatches || [], s.completed || []);
+  drawPowerFlow(s);
   // Calendar (Settings)
   const cal = s.calendar || {};
   if (document.activeElement !== $('s-cal')) $('s-cal').checked = cal.enabled !== false;

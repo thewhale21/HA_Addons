@@ -62,6 +62,15 @@ it's used until you pick one.
 | --- | --- |
 | `sensor.octopus_charge_pack_status` | OK, or what's wrong (attributes: `error`, `device_id`, `last_update`) |
 | `sensor.octopus_charge_pack_now` | What Octopus has the battery doing now: `charging`, `discharging`, `idle` or `none` (attributes: `start`, `end`, `energy_kwh`, `minutes_left`) |
+| `sensor.octopus_charge_pack_battery_soc` | The battery's state of charge (%), from Octopus |
+| `sensor.octopus_charge_pack_battery_power` | Battery power (kW): positive while discharging, negative while charging |
+| `sensor.octopus_charge_pack_solar_power` | Solar power (kW) (attribute `peak_solar_power_kw`) |
+| `sensor.octopus_charge_pack_grid_power` | Grid power (kW): positive while importing, negative while exporting, like the Octopus Energy integration's current demand |
+| `sensor.octopus_charge_pack_inverter_power` | Inverter power (kW): positive while putting power out, negative while taking it in |
+| `sensor.octopus_charge_pack_home_consumption` | What the home is using (kW); negative when something else on the inverter (e.g. a DC car charger) is feeding the home |
+| `sensor.octopus_charge_pack_export_power` | Export (kW): positive, 0 while importing |
+| `sensor.octopus_charge_pack_battery_state` | Octopus's state for the battery, e.g. `SMART_CONTROL_CAPABLE` (attributes: `status`, `is_suspended`, the battery's and inverter's connection status) |
+| *The readings above* | The battery's readings (`_battery_soc` to `_battery_state`) are Octopus's copy of your inverter's data, read with the plan: they can be a few minutes behind, the same as in the Octopus app, and only come for inverters (e.g. a Charge Pack battery) |
 | `calendar.octopus_charge_pack_charge` / `_discharge` | The planned charges, and the planned discharges, as calendar events (Local Calendars the add-on makes; can be turned off on the Settings tab). Use them in calendar triggers, e.g. 15 minutes before a discharge |
 | `sensor.octopus_planned_dispatches` | How many dispatches are planned; attribute `flexPlannedDispatches` (start, end, type, energyAddedKwh) |
 | `sensor.next_charge_dispatch_start` / `_end` | The next charge dispatch (timestamps) |

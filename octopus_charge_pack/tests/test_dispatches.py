@@ -71,6 +71,13 @@ def test_summary_for_the_sensors():
     assert (empty["charge_date"], empty["charge_start_time"], empty["charge_end_time"]) == (NO_DATE, "01:00:00", "01:00:00")
 
 
+# As Octopus sent it for a SigenStor charging from the grid
+TELEMETRY = {"inverter": {"connectionStatus": "ONLINE", "powerInKw": "-11.999"},
+             "battery": {"connectionStatus": "ONLINE", "powerInKw": "-4.397", "stateOfCharge": "9.900"},
+             "solar": {"powerInKw": "1.523"}, "grid": {"powerInKw": "-12.481"},
+             "site": {"consumptionInKw": "14.004", "exportInKw": "0"}}
+
+
 class FakeOctopus(OctopusClient):
     """Answers like the API: a token for the right key, dispatches for a good token."""
 
@@ -87,6 +94,10 @@ class FakeOctopus(OctopusClient):
             return {"data": {"obtainKrakenToken": {"token": f"tok{self.tokens}"}}}
         if self.replies:
             return self.replies.pop(0)
+        if "getDevice" in query:  # the plan, status and readings in one go
+            return {"data": {"flexPlannedDispatches": DISPATCHES, "devices": [{
+                "id": variables["deviceId"], "status": {"current": "LIVE", "currentState": "SMART_CONTROL_CAPABLE", "isSuspended": False},
+                "telemetry": TELEMETRY}]}}
         if "viewer" in query:
             return {"data": {"viewer": {"accounts": [{"number": "A-1"}]}}}
         if "devices" in query:
@@ -143,11 +154,13 @@ def test_the_device_picked_on_the_page_is_followed():
 
     class TwoDevices(FakeOctopus):
         async def _post(self, query, variables=None, token=None):
+            if "flexPlannedDispatches" in query:  # (first: the combined query asks for devices(...) too)
+                self.calls.append(("dispatches", variables["deviceId"]))
+                if "getDevice" in query:
+                    return {"data": {"flexPlannedDispatches": DISPATCHES, "devices": []}}
             if "devices(" in query:
                 self.calls.append(("devices", token))
                 return {"data": {"devices": [{"id": "meter"}, {"id": "dev-1", "name": "Battery"}]}}
-            if "flexPlannedDispatches" in query:
-                self.calls.append(("dispatches", variables["deviceId"]))
             return await super()._post(query, variables, token)
 
     c, state = TwoDevices("sk_live_good"), SharedState()
@@ -354,3 +367,46 @@ def test_idle_dispatches_arent_plan_changes():
     assert track_changes(kept, [], _at(13, 30)) == []  # idle taken off
     new = track_changes(kept, [dict(idle, energyAddedKwh=2.0)], _at(14))  # now a discharge
     assert [c["change"] for c in new] == ["added"] and kept["changes"][-1]["dispatch"]["kind"] == "discharge"
+
+
+def test_the_readings_come_with_the_plan():
+    from src.reader import read_once
+    from src.shared_state import SharedState
+
+    c, state = FakeOctopus("sk_live_good"), SharedState()
+    _run(read_once(state, c, {}, None))  # the account comes from the device list: one query for both
+    t = state.telemetry
+    assert state.summary["count"] == 3 and [q for q, _ in c.calls].count("getDevice") == 1
+    assert (t["battery_soc"], t["battery_power_kw"], t["inverter_power_kw"]) == (9.9, -4.397, -11.999)
+    assert t["grid_power_kw"] == 12.481  # importing: positive, like the meter's current demand (Octopus sends it negative)
+    assert (t["export_power_kw"], t["home_consumption_kw"], t["solar_power_kw"]) == (0.0, 14.004, 1.523)
+    assert (t["state"], t["status"], t["is_suspended"], t["battery_connection"]) == ("SMART_CONTROL_CAPABLE", "LIVE", False, "ONLINE")
+    assert t["read_at"] == state.last_update
+
+
+def test_no_readings_for_a_device_without_telemetry():
+    from src.telemetry import parse_device
+
+    assert parse_device(None) is None and parse_device({"id": "meter", "status": {"current": "LIVE"}}) is None
+    t = parse_device({"id": "x", "telemetry": {"grid": {"powerInKw": "5.775"}, "battery": None}})
+    assert t["grid_power_kw"] == -5.775 and t["battery_soc"] is None  # exporting: negative
+    assert parse_device({"id": "x", "telemetry": {"grid": {"powerInKw": "0"}}})["grid_power_kw"] == 0
+
+
+def test_the_readings_sensors():
+    from src.ha_entities import SENSORS, SensorPublisher
+    from src.shared_state import SharedState
+    from src.telemetry import parse_device
+
+    state = SharedState()
+    sent = {e: (v, a) for e, v, a in SensorPublisher().due(state, 0)}
+    assert sent["sensor.octopus_charge_pack_battery_power"][0] == "unknown"  # nothing read yet
+    state.telemetry = parse_device({"id": "x", "status": {"currentState": "SMART_CONTROL_CAPABLE"}, "telemetry": TELEMETRY}, "2026-10-22T14:50:58Z")
+    sent = {e: (v, a) for e, v, a in SensorPublisher().due(state, 0)}
+    assert sent["sensor.octopus_charge_pack_battery_soc"][0] == "9.9" and sent["sensor.octopus_charge_pack_battery_soc"][1]["unit_of_measurement"] == "%"
+    power = sent["sensor.octopus_charge_pack_grid_power"]
+    assert power[0] == "12.481" and power[1]["device_class"] == "power" and power[1]["unit_of_measurement"] == "kW"
+    assert power[1]["state_class"] == "measurement" and power[1]["last_update"] == "2026-10-22T14:50:58Z"
+    assert sent["sensor.octopus_charge_pack_battery_state"][0] == "SMART_CONTROL_CAPABLE"
+    assert sent["sensor.octopus_charge_pack_battery_power"][1]["friendly_name"] == "Octopus Charge Pack Battery Power"
+    assert all(e in SENSORS[k][0] for k, e in [("export_power", "export_power"), ("home_consumption", "home_consumption")])

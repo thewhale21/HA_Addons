@@ -12,6 +12,7 @@ import time
 from typing import Optional
 
 from src.dispatches import summarise, track_changes, track_completed
+from src.telemetry import parse_device
 from src.octopus import AuthError, OctopusClient
 from src.shared_state import SharedState
 
@@ -62,9 +63,14 @@ async def read_once(state: SharedState, client: OctopusClient, kept: dict, wante
         if state.device_id is not None:
             kept.pop("plan", None)  # another device: its plan isn't a change to this one's
         logger.info("Following device %s", device)
-        state.device_id, state.summary = device, {}
-    dispatches = await client.planned_dispatches(device)
+        state.device_id, state.summary, state.telemetry = device, {}, None
+    # With its account number (from the device list): the plan, status and readings in one go
+    account = next((d.get("account") for d in state.devices if d.get("id") == device), None)
+    dispatches, found = await client.read_device(device, account)
     now = datetime.datetime.now(datetime.timezone.utc)
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if found is not None or account is None:
+        state.telemetry = parse_device(found, stamp)
     state.summary = summarise(dispatches, now, None, kept)
     for kind in ("charge", "discharge"):
         kept[f"{kind}_start_time"] = state.summary.get(f"{kind}_start_time")
@@ -78,7 +84,7 @@ async def read_once(state: SharedState, client: OctopusClient, kept: dict, wante
         logger.debug("Plan change: %s %s %s to %s (%s kWh)%s", c["change"], d["kind"], d["start"], d["end"], d["energyAddedKwh"],
                      f", was {was.get('start')} to {was.get('end')} ({was.get('energyAddedKwh')} kWh)" if was else "")
     state.changes = list(kept.get("changes") or [])
-    state.last_update = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    state.last_update = stamp
 
 
 async def worker(state: SharedState, config, data_dir: Optional[str], settings=None,

@@ -19,6 +19,7 @@ class SharedState:
     changes: list = field(default_factory=list)  # changes to the plan, newest first (src/dispatches.py)
     soc_entity: Optional[str] = None  # the home battery's SoC sensor (Settings), for the History tab
     calendar: dict = field(default_factory=dict)  # the calendar of dispatches (src/calendar_sync.py)
+    telemetry: Optional[dict] = None  # the battery's readings and status (src/telemetry.py), None: none sent
 
     def to_dict(self) -> dict:
         return asdict(self)

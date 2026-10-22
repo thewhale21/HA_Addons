@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.0 — The battery's readings, and a power flow card
+
+- **New:** the battery's live readings, from Octopus (its copy of your
+  inverter's data, read with the plan): `sensor.octopus_charge_pack_battery_soc`
+  (%), `_battery_power`, `_solar_power`, `_grid_power`, `_inverter_power`,
+  `_home_consumption` and `_export_power` (kW), and `_battery_state`
+  (e.g. `SMART_CONTROL_CAPABLE`, with whether Octopus's control is
+  suspended). Battery power is positive while discharging; grid power is
+  positive while importing and negative while exporting, like the Octopus
+  Energy integration's current demand (Octopus sends it the other way round).
+  Only for inverters (e.g. a Charge Pack battery); unknown for other devices.
+- **New:** a **Power flow** card on the Overview, under Right now: solar,
+  the grid, your home and the battery (with its charge as a ring) around the
+  inverter, the power moving the way it's going, and the readings beside it.
+  The readings can be a few minutes behind the battery, the same as in the
+  Octopus app.
+
 ## 0.9.3 — Each tab from the top
 
 - **Change:** switching tab goes back to the top of the page, instead of
