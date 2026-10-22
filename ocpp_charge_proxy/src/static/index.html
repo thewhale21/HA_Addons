@@ -223,6 +223,11 @@
   .week .track.past .seg .sl { line-height: 16px; }
   .week .track.past .seg[data-ses] { cursor: pointer; }
   .week .track .seg.off { opacity: .35; filter: grayscale(.5); }
+  /* The hours over the supplier's daily limit: a red block of their own on top of the slot,
+     a gap of the card's colour on its left so it reads as a separate piece */
+  .week .track .seg.overpart { background: var(--err) !important; z-index: 2; opacity: 1;
+    box-shadow: -2px 0 0 var(--card); border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .week .track .seg.overpart.off { opacity: .45; }
   .week .track .seg.ghost { opacity: .4; pointer-events: none; box-shadow: none; }
   .week .track .seg.skip { opacity: 1; box-shadow: none; background: repeating-linear-gradient(135deg, var(--divider) 0 6px, transparent 6px 12px) !important;
     outline: 1px dashed var(--text2); outline-offset: -1px; }
@@ -860,7 +865,8 @@
         <span class="muted" style="font-size:13px;font-weight:400">Override</span>
         <label class="switch"><input type="checkbox" id="d-guards" aria-label="Override scheduling guards"><span></span></label>
       </h2>
-      <div class="note" style="margin:0">Off by default. On: the schedule, auto plug-in and Charge now can plug in for longer than <span class="supn" data-f="your supplier">your supplier</span>'s daily limit while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on. <details class="more"><summary>More</summary><div>Your supplier may not charge for the rest. Turning the guards back on needs the schedule to be within the limit again.</div></details></div>
+      <div class="note" style="margin:0">Off by default. On: the schedule, auto plug-in and Charge now can plug in for longer than <span class="supn" data-f="your supplier">your supplier</span>'s daily limit while Force schedule on <span class="supn" data-f="supplier">supplier</span> is on. <details class="more"><summary>More</summary><div>Your supplier may not charge for the rest. Turning the guards back on with the schedule still over the limit asks first: it can stay as it is, with the hours over in red.</div></details></div>
+      <div class="sub" id="d-guards-err" hidden style="margin-top:8px;color:var(--err)"></div>
     </div>
     <div class="card">
       <h2>Diagnostics bundle</h2>
@@ -2324,10 +2330,13 @@ $('a-wait').addEventListener('change', async (e) => {
   if (await post('automation/schedule', {unplug_wait_s: v})) toast(v ? `Waits up to ${v} s for ${sup('your supplier')} at unplug` : 'Unplugs straight away');
   refreshAutomation(false);
 });
+async function setForce(on, anyway) {
+  await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(anyway ? {ready_time: on, allow_over: true} : {ready_time: on})});
+}
 $('a-ready-on').addEventListener('change', async (e) => {
   const on = e.target.checked;
   try {
-    await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ready_time: on})});
+    await setForce(on, false);
     week.forceErr = null;
     toast(`Force schedule on ${supName() || 'supplier'}: ${on ? 'on' : 'off'}`);
     await refreshAutomation(false);
@@ -2343,7 +2352,7 @@ $('a-ready-on').addEventListener('change', async (e) => {
 function forceProblems() {
   const out = [], d = smart.data;
   if (!d || !d.found) return out;
-  if (weekPlan(auto.entries, null, true).over) out.push(`The schedule plugs in for more than ${limitText()} of smart charging in a day: shorten or delete the slots marked in red below.`);
+  if (weekPlan(auto.entries, null, true).over) out.push(`The schedule plugs in for more than ${limitText()} of smart charging in a day: shorten or delete the slots with red hours below, or turn it on anyway.`);
   if (d.ready_times) {
     const past = (e) => e.date && new Date(`${e.date}T${e.time}`) < new Date();
     const bad = [...new Set((auto.entries || []).filter((e) => e.enabled && e.action === 'unplug' && !past(e) && !d.ready_times.includes(e.time)).map((e) => e.time))];
@@ -2358,6 +2367,20 @@ function drawForceErr() {
   if (fe.problems && !now.length) { week.forceErr = null; el.hidden = true; toast(`Fixed: you can turn on Force schedule on ${sup('supplier')} now`); return; }
   el.hidden = false;
   el.innerHTML = `<b>Can't turn this on yet.</b> ` + (now.length ? now.join(' ') : esc(fe.msg));
+  // Only the daily limit in the way: it can go on anyway, with the hours over in red
+  const capOnly = now.length ? now.length === 1 && weekPlan(auto.entries, null, true).over : isOverErr(fe.msg);
+  if (capOnly) {
+    el.innerHTML += `<div class="row" style="margin-top:6px"><button class="btn small" id="a-ready-any">Turn on anyway</button>`
+      + `<span class="muted" style="font-size:12px">The hours over show in red; ${esc(sup('your supplier'))} may not charge then.</span></div>`;
+    $('a-ready-any').onclick = async () => {
+      try {
+        await setForce(true, true);
+        week.forceErr = null; toast(`Force schedule on ${supName() || 'supplier'}: on (over the daily limit)`);
+        await refreshAutomation(false);
+      } catch (err) { toast('Failed: ' + err.message); }
+      drawForceErr(); drawWeek();
+    };
+  }
 }
 function drawReplugStatus(r) {
   if (!r) return;
@@ -2420,9 +2443,10 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
   const nowMin = (Date.now() - today.getTime()) / 60000;
   let worst = null;
   const bad = [];
-  const capped = !!capMin()
-    && ((auto.data && auto.data.schedule.ready_time) || forceCap)
-    && !(auto.data && auto.data.schedule.override_guards);  // Diagnostics › Debug
+  // The limit applies while the schedule sets the ready time. Over it is shown in red even when
+  // saved anyway or with the guards overridden (Diagnostics › Debug): strict is when it's refused
+  const capped = !!capMin() && !!((auto.data && auto.data.schedule.ready_time) || forceCap);
+  const strict = capped && !(auto.data && auto.data.schedule.override_guards);
   const reset = limitReset(), r0 = reset ? tmin(reset) : null, span = limitHours() * 60;
   // Counted in real minutes, as the add-on and Octopus do: the night the
   // clocks go back, 23:30-05:30 is 7 hours (5 when they go forward)
@@ -2444,14 +2468,25 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
       if (a > nowMin - DAY_MIN && w <= 7 * DAY_MIN && rsegs.some(([rx, ry]) => rx < b && ry > a)) periods.push({w, a, b});
     }
   }
+  const overs = [];  // [from, to] by the clock: the minutes past the limit, each day in turn
   periods.forEach(({w, a, b}) => {
     let total = 0;
     const hit = [];
     rsegs.forEach(([rx, ry, x, y]) => { const o = Math.max(0, Math.min(ry, b) - Math.max(rx, a)); if (o) { total += o; hit.push([x, y]); } });
     if (!worst || total > worst.total) worst = {start: w, total};
-    if (capped && total > capMin()) bad.push(...hit);
+    if (capped && total > capMin()) {
+      bad.push(...hit);
+      let used = 0;
+      rsegs.forEach(([rx, ry, x]) => {
+        const s0 = Math.max(rx, a), e0 = Math.min(ry, b);
+        if (e0 <= s0) return;
+        const from = s0 + Math.max(0, capMin() - used);
+        if (from < e0) overs.push([x + (from - rx), x + (e0 - rx)]);
+        used += e0 - s0;
+      });
+    }
   });
-  return {segs, worst, bad, over: bad.length > 0};
+  return {segs, worst, bad, over: bad.length > 0, overs, strict};
 }
 
 // Slots: a plug-in time and the unplug that ends it, with the days (or the
@@ -2633,16 +2668,24 @@ function drawWeek() {
     const bars = d < 0 ? pastBars : occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi && !o.hidden).map(([o, k]) => {
       const s = model.slots[o.i];
       const {x0, x1} = span(o.a, o.b);
-      const red = !o.skipped && plan.bad.some(([x, y]) => x < o.b && y > o.a);
+      // The hours over the limit: a red piece of the slot, its own block
+      const over = o.skipped || !s.enabled ? [] : plan.overs.map(([x, y]) => [Math.max(x, o.a, lo), Math.min(y, o.b, hi)]).filter(([x, y]) => y > x)
+        .filter(([x, y], n, all) => all.findIndex(([x2, y2]) => x2 === x && y2 === y) === n);
+      const red = over.length > 0, overMin = over.reduce((t, [x, y]) => t + y - x, 0);
       const picked = ed && ed.mode === 'slot' && ed.k === k;
       const ty0 = typeOf(s), who = ty0 && ty0 !== 'once' ? ` (${TYPE[ty0][1]})` : s.kind === 'once' ? ' (One-off)' : '';
       const got = ses.filter((z) => z.a < o.b && z.b > o.a);
       const title = `${dayLabel(d)} ${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${who}`
-        + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ` (over ${limitText()} a day)` : '')
+        + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ` (${hmDur(overMin * 60)} over ${limitText()} a day, in red)` : '')
         + (got.length ? '\n' + got.map((z) => sesText(z.x)).join('\n') : '');
       const ty = typeOf(s);
       return `<div class="seg ${o.skipped ? 'skip' : ''} ${!on || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''}"
-        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${red ? 'background:var(--err);' : ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${x1 - x0 > 9 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}</span>` : ''}</div>`;
+        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${x1 - x0 > 9 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm((red && over[0][0] > Math.max(o.a, lo) ? over[0][0] : Math.min(o.b, hi)) - lo)}</span>` : ''}</div>`
+        + over.map(([x, y]) => {
+          const p = span(x, y);
+          return `<div class="seg overpart ${!on ? 'off' : ''}" data-occ="${k}" data-row="${d}" style="left:${p.x0}%;width:${p.x1 - p.x0}%"
+            title="${dayLabel(d)} ${hhmm(x - lo)}–${hhmm(y - lo)}: over ${limitText()} of smart charging a day. ${esc(sup('Your supplier'))} may not charge then · click to change the slot">${p.x1 - p.x0 > 6 ? '<span class="sl">Over</span>' : ''}</div>`;
+        }).join('');
     }).join('');
     const ticks = d < 0 ? '' : model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
       // not one that ends a slot (its own unplug skipped), or one skipped for a saving session
@@ -2679,7 +2722,7 @@ function drawWeek() {
   if (plan.over) {
     const w = plan.worst;
     $('w-warn').innerHTML = `<span class="chip err">Over ${capMin() / 60} hours</span> Plugged in for ${dur(w.total * 60)} in the ${limitReset() ? 'day' : `${limitHours()} hours`} from ${dayLabel(Math.floor(w.start / DAY_MIN))} ${hhmm(((w.start % DAY_MIN) + DAY_MIN) % DAY_MIN)}${limitReset() ? ` (the limit resets at ${limitReset()})` : ''}. `
-      + `${sup('Your supplier')} schedules at most ${capMin() / 60} hours of smart charging in ${limitHours() !== 24 ? `any ${limitHours()} hours` : 'a day'}: shorten the slots marked in red.`;
+      + `${sup('Your supplier')} schedules at most ${capMin() / 60} hours of smart charging in ${limitHours() !== 24 ? `any ${limitHours()} hours` : 'a day'}, so it may not charge in the hours over, in red. Shorten a slot to fit.`;
   }
 }
 
@@ -2786,10 +2829,19 @@ function newEntries(f, ids, source, mode) {
   }
   return out;
 }
-async function saveEditor(del) {
+// Over the supplier's daily limit: say so, with a button to go ahead anyway (the hours over
+// then show in red). id: the button's; what happens on it is up to the click handlers.
+const isOverErr = (msg) => /hours of smart charging/.test(String(msg || ''));
+function overChoice(el, msg, id, label) {
+  if (!el) return;
+  el.innerHTML = `${esc(msg)}<div class="row" style="margin-top:6px"><button class="btn small" id="${id}">${label}</button>`
+    + `<span class="muted" style="font-size:12px">The hours over show in red; ${esc(sup('your supplier'))} may not charge then.</span></div>`;
+}
+async function saveEditor(del, anyway = false) {
   const ed = week.edit; if (!ed) return;
   const f = ed.form, rules = readyRules();
   const fail = (m) => { const e = $('w-err'); if (e) e.textContent = m; };
+  const askOver = (m) => overChoice($('w-err'), m, 'w-anyway', 'Save anyway');
   if (f.kind === 'block') {
     if (!del && !f.days.length) return fail('Pick at least one day');
     if (!del && f.start === f.end) return fail('It must start and end at different times');
@@ -2825,25 +2877,28 @@ async function saveEditor(del) {
     else if (U) { U.days = U.days.filter((d) => !o.days.includes(d)); if (!U.days.length) { entries.splice(entries.indexOf(U), 1); ids.unplug = U.id; } }
   }
   if (!del) entries.push(...newEntries(f, ids, source, ed.mode));
-  // A change can't take a day further over the supplier's daily limit (shortening one that's over is fine)
+  // A change that takes a day further over the supplier's daily limit asks first (shortening one that's over is fine)
   const forced = !!week.forceErr, before = weekPlan(auto.entries, null, forced), after = weekPlan(entries, null, forced);
-  if (!del && after.over && (!before.over || after.worst.total > before.worst.total)) return fail(`That takes a day over ${limitText()} of smart charging: make it shorter`);
+  if (!del && !anyway && after.strict && after.over && (!before.over || after.worst.total > before.worst.total)) {
+    return askOver(`That takes a day over ${limitText()} of smart charging (${hmDur(after.worst.total * 60)}). Make it shorter, or save it anyway.`);
+  }
   const btn = $(del ? 'w-del' : 'w-save'); if (btn) btn.disabled = true;
   try {
-    const res = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({entries})});
+    const res = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(anyway ? {entries, allow_over: true} : {entries})});
     // A slot longer than the daily limit across its reset time is split there
     const split = res && res.schedule && res.schedule.entries.length > entries.length && limitReset();
     toast(del ? 'Deleted' : split ? `Schedule saved: split at ${limitReset()}, where the daily limit resets` : 'Schedule saved');
     week.edit = null;
     await refreshAutomation(true);
-  } catch (e) { fail(e.message); if (btn) btn.disabled = false; }
+  } catch (e) { if (!anyway && isOverErr(e.message)) askOver(e.message); else fail(e.message); if (btn) btn.disabled = false; }
 }
 $('w-grid').addEventListener('click', async (ev) => {
   const t = ev.target, ed = week.edit;
   if (t.id === 'w-close') { week.edit = null; drawWeek(); return; }
   if (t.id === 'w-save') { saveEditor(false); return; }
+  if (t.id === 'w-anyway') { t.disabled = true; saveEditor(false, true); return; }
   if (t.id === 'w-del') { saveEditor(true); return; }
-  if (t.id === 'w-skip') {
+  if (t.id === 'w-skip' || t.id === 'w-skip-any') {
     const o = week.occ[ed.k], s = week.model.slots[o.i];
     const times = [{entry_id: s.plug.id, date: o.date}];
     if (s.unplug && o.udate) times.push({entry_id: s.unplug.id, date: o.udate});
@@ -2851,13 +2906,15 @@ $('w-grid').addEventListener('click', async (ev) => {
       // Putting it back mustn't take a day over the supplier's daily limit
       const keys = new Set(times.map((x) => x.entry_id + '|' + x.date));
       const left = ((auto.data && auto.data.schedule.skips) || []).filter((x) => !keys.has(x.entry_id + '|' + x.date));
-      if (weekPlan(auto.entries, left).over && !weekPlan().over) {
-        const e = $('w-err'); if (e) e.textContent = `Putting it back would take a day over ${limitText()} of smart charging: shorten or delete another slot first`;
+      const after = weekPlan(auto.entries, left);
+      if (t.id !== 'w-skip-any' && after.strict && after.over && !weekPlan().over) {
+        overChoice($('w-err'), `Putting it back takes a day over ${limitText()} of smart charging. Shorten or delete another slot, or put it back anyway.`,
+          'w-skip-any', 'Put it back anyway');
         return;
       }
     }
     t.disabled = true;
-    if (await post('automation/skip', {times, skip: !o.skipped})) {
+    if (await post('automation/skip', t.id === 'w-skip-any' ? {times, skip: false, allow_over: true} : {times, skip: !o.skipped})) {
       toast(o.skipped ? 'Slot back on' : 'Skipped this once'); week.edit = null; await refreshAutomation(false);
     } else t.disabled = false;
     return;
@@ -3087,14 +3144,25 @@ $('d-level').addEventListener('click', async (e) => {
   const level = e.target.dataset.level; if (!level) return;
   if (await post('debug/log_level', {level})) { toast(`Log level: ${level[0].toUpperCase() + level.slice(1)}`); refreshDebug(); }
 });
-$('d-guards').addEventListener('change', async (e) => {
-  const on = e.target.checked;
+async function setGuards(on, anyway) {
+  const box = $('d-guards-err');
   try {
-    auto.data = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({override_guards: on})});
+    auto.data = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(anyway ? {override_guards: on, allow_over: true} : {override_guards: on})});
+    $('d-guards').checked = on; box.hidden = true;
     applyDailyLimit();
-    toast(on ? 'Scheduling guards overridden: no daily limit' : 'Scheduling guards back on');
-  } catch (err) { e.target.checked = !on; toast('Failed: ' + err.message); }
-});
+    toast(on ? 'Scheduling guards overridden: no daily limit' : anyway ? 'Scheduling guards back on (the schedule stays over the limit, in red)' : 'Scheduling guards back on');
+  } catch (err) {
+    $('d-guards').checked = !on;
+    // Back on with the schedule over the limit: keep the schedule as it is, if you like
+    if (!on && !anyway && isOverErr(err.message)) {
+      box.hidden = false;
+      overChoice(box, err.message, 'd-guards-any', 'Turn back on anyway');
+      $('d-guards-any').onclick = () => setGuards(false, true);
+    } else toast('Failed: ' + err.message);
+  }
+}
+$('d-guards').addEventListener('change', (e) => setGuards(e.target.checked, false));
 $('d-bundle').addEventListener('click', async () => {
   const btn = $('d-bundle'); btn.disabled = true;
   const parts = {state: 'state', schedule: 'automation', supplier_plan: 'smart_charging', sessions: 'sessions',
@@ -3208,7 +3276,7 @@ async function checkLimitClash(patch, before) {
   if (!plan || !plan.over) { box.hidden = true; return; }
   const w = plan.worst;
   box.innerHTML = `<span class="chip err">Over ${capMin() / 60} hours</span> With this, the schedule plugs in for ${dur(w.total * 60)} ${limitDay()}, `
-    + `over the limit: changes to it will be refused until it's shortened. Clear its charging slots (off-peak times stay)?`
+    + `over the limit (the hours over are in red; changes that add to it ask first). Clear its charging slots (off-peak times stay)?`
     + '<div class="row" style="margin-top:8px"><button class="btn small primary" id="sup-clash-clear">Clear the schedule</button>'
     + '<button class="btn small" id="sup-clash-undo">Put the setting back</button><button class="btn small" id="sup-clash-keep">Keep both</button></div>';
   box.hidden = false;

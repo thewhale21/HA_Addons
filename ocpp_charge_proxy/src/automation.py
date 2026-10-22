@@ -532,14 +532,16 @@ class Automation:
                      ready_time: Optional[bool] = None, ready_times: Optional[list] = None,
                      provider: str = "your supplier", daily_cap_min: Optional[int] = None,
                      unplug_wait_s=None, override_guards: Optional[bool] = None,
-                     blocks: Optional[list] = None) -> None:
+                     blocks: Optional[list] = None, allow_over: bool = False) -> None:
         """override_guards: with it on, daily_cap_min isn't applied (turning it
         back off checks the schedule, as turning on the ready time does).
         ready_times: the times your supplier accepts as a ready time (None:
         unknown). While the schedule sets it, unplug times must be among them,
         and with daily_cap_min (Octopus: 360) it can't plug in for longer than
         that in any 24 hours. Checked when times are saved or the ready time
-        is turned on, so the schedule can always be switched off."""
+        is turned on, so the schedule can always be switched off.
+        allow_over: save it anyway, over the daily limit (the page asks first,
+        and shows the hours over in red); the unplug times are still checked."""
         wait = None if unplug_wait_s is None else self._valid_wait(unplug_wait_s)
         new_entries = self.entries
         if entries is not None:
@@ -575,7 +577,7 @@ class Automation:
         if checking and (self.ready_time if ready_time is None else bool(ready_time)):
             if ready_times:
                 check_unplug_times([e for e in new_entries if not self._past_one_off(e)], ready_times, provider)
-            if daily_cap_min:
+            if daily_cap_min and not allow_over:
                 # Any 24 hours from the previous day on. Only saving times: one
                 # that's already over (e.g. after a Charge now) can still be
                 # changed, as long as it doesn't get worse.
@@ -600,6 +602,11 @@ class Automation:
             self.ready_time = bool(ready_time)
         if wait is not None:
             self.unplug_wait_s = wait
+        if allow_over and checking and daily_cap_min:
+            worst = self._longest_day(new_entries, new_skips)
+            if worst and worst[0] > daily_cap_min:
+                logger.info("Schedule: saved over %s's daily limit (%dh %02dm in %s), as asked",
+                            provider, worst[0] // 60, worst[0] % 60, limit_day_text(worst[1], self.limit_reset))
         if override_guards is not None and bool(override_guards) != self.override_guards:
             self.override_guards = bool(override_guards)
             logger.info("Scheduling guards %s", "overridden: no daily limit"
@@ -1505,11 +1512,11 @@ class Automation:
         return out
 
     def set_skips(self, times: list, skip: bool = True, daily_cap_min: Optional[int] = None,
-                  provider: str = "your supplier") -> None:
+                  provider: str = "your supplier", allow_over: bool = False) -> None:
         """Skip (or un-skip) several times at once, e.g. a slot's plug-in and
         unplug: [{"entry_id", "date"}, ...]. All or nothing. With daily_cap_min
         (Octopus, while the schedule sets its ready time), a change that takes a
-        day over it is refused, as when saving the schedule."""
+        day over it is refused, as when saving the schedule (unless allow_over)."""
         if not isinstance(times, list) or not times:
             raise ValueError("Say which times to skip")
         keys = []
@@ -1522,7 +1529,7 @@ class Automation:
             if not any(True for _ in self._occurrences(entry, day, 1)):
                 raise ValueError(f"That time doesn't run on {date}")
             keys.append(({"entry_id": entry_id, "date": day.isoformat()}, entry))
-        if daily_cap_min and self.ready_time and not self.override_guards:
+        if daily_cap_min and self.ready_time and not self.override_guards and not allow_over:
             new = list(self.skips)
             for key, _ in keys:
                 new = [k for k in new if k != key] + ([key] if skip else [])

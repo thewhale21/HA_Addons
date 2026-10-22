@@ -426,6 +426,7 @@ async def handle_schedule(request: web.Request) -> web.Response:
             unplug_wait_s=b.get("unplug_wait_s"),
             override_guards=b.get("override_guards"),
             blocks=b.get("blocks"),
+            allow_over=bool(b.get("allow_over")),  # save it anyway, over the daily limit
         ),
     )
 
@@ -445,6 +446,7 @@ async def handle_skip(request: web.Request) -> web.Response:
             # e.g. Octopus schedules at most 6 hours of smart charging a day
             daily_cap_min=sc.get("limit_min"),
             provider=sc.get("provider") or "your supplier",
+            allow_over=bool(b.get("allow_over")),
         ),
     )
 

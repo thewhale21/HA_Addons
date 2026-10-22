@@ -428,6 +428,15 @@ follows your Home Assistant theme. Settings save as soon as you change them.
     supplier on, if it would take any 24 hours (the previous 24 included)
     over the limit, it asks first, saying what would change; **Charge
     anyway** then goes ahead.
+  - **Over the daily limit** (Octopus: 6 hours, with Force schedule on
+    supplier on): saving a slot, putting back a skipped one, turning on
+    Force schedule on supplier or turning the scheduling guards back on
+    with the schedule over the limit says so, with a button to go ahead
+    anyway (**Save anyway**, **Put it back anyway**, **Turn on anyway**,
+    **Turn back on anyway**). The hours past the limit then show as a red
+    block of their own on the slot, e.g. 4 hours last night and a 3-hour
+    slot this morning (the same day from 12:00): its last hour is red. Your
+    supplier may not charge in them.
   - The plug-in schedule (see below): today and the next 6 days of when it
     has the car plugged in; Force schedule on supplier; auto
     plug-in, the car plugged in sensor and auto re-plug.

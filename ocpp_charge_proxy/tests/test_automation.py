@@ -936,6 +936,54 @@ def test_override_guards_lifts_the_six_hours():
     assert not a.override_guards
 
 
+
+def test_over_six_hours_can_be_saved_anyway():
+    """2.50.0: each refusal can be gone ahead with (allow_over); the page shows the hours over in red."""
+    every = list(range(7))
+    six = [{"time": "23:30", "action": "plug", "days": every}, {"time": "05:30", "action": "unplug", "days": every}]
+    seven = [{"time": "23:30", "action": "plug", "days": every}, {"time": "06:30", "action": "unplug", "days": every}]
+    a, clock = _automation()
+    a.set_schedule(entries=six, ready_time=True, daily_cap_min=360)
+    a.set_schedule(entries=seven, daily_cap_min=360, allow_over=True)  # saving a slot
+    assert [e["time"] for e in a.entries] == ["23:30", "06:30"]
+    a.set_schedule(entries=six + [{"time": "12:00", "action": "plug", "date": "2026-10-06"},
+                                  {"time": "13:00", "action": "unplug", "date": "2026-10-06"}],
+                   daily_cap_min=360, allow_over=True)  # and another over it, still fine
+    # Turning Force schedule on supplier on while over
+    b, _ = _automation()
+    b.set_schedule(entries=seven, daily_cap_min=360)
+    b.set_schedule(ready_time=True, daily_cap_min=360, allow_over=True)
+    assert b.ready_time
+    # The unplug times are still checked
+    try:
+        b.set_schedule(entries=[{"time": "23:30", "action": "plug", "days": every}, {"time": "06:40", "action": "unplug", "days": every}],
+                       ready_times=["06:30", "07:00"], daily_cap_min=360, allow_over=True)
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "06:40" in str(err)
+    # The guards back on while over
+    c, _ = _automation()
+    c.set_schedule(entries=six, ready_time=True, daily_cap_min=360)
+    c.set_schedule(override_guards=True, daily_cap_min=360)
+    c.set_schedule(entries=seven, daily_cap_min=360)
+    c.set_schedule(override_guards=False, daily_cap_min=360, allow_over=True)
+    assert not c.override_guards
+
+
+def test_unskip_over_six_hours_anyway():
+    a, clock = _automation(start=_at(12))  # Saturday 3 Oct
+    a.set_schedule(enabled=True, ready_time=True, daily_cap_min=360, entries=[
+        {"time": "18:00", "action": "plug", "days": [6]}, {"time": "22:00", "action": "unplug", "days": [6]}])
+    plug = next(e for e in a.entries if e["action"] == "plug")
+    unplug = next(e for e in a.entries if e["action"] == "unplug")
+    slot = [{"entry_id": plug["id"], "date": "2026-10-04"}, {"entry_id": unplug["id"], "date": "2026-10-04"}]
+    a.set_skips(slot, True, daily_cap_min=360)
+    a.set_schedule(entries=a.entries + [{"time": "13:00", "action": "plug", "date": "2026-10-04"},
+                                         {"time": "16:00", "action": "unplug", "date": "2026-10-04"}], daily_cap_min=360)
+    a.set_skips(slot, False, daily_cap_min=360, allow_over=True)  # 7 h, as asked
+    assert a.skips == []
+
+
 NIGHT = {"start": "23:30", "end": "05:30", "days": list(range(7))}
 
 

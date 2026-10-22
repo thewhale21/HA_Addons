@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.50.0 — Over the daily limit, if you choose
+
+- Everywhere the schedule is refused for going over your supplier's daily
+  limit (Octopus: 6 hours), you can now go ahead anyway: **Save anyway**
+  (saving a slot), **Put it back anyway** (undoing a skip), **Turn on
+  anyway** (Force schedule on supplier) and **Turn back on anyway**
+  (Diagnostics › Scheduling guards). Charge now already had **Charge anyway**
+- The schedule shows just the hours past the limit as a red block of their
+  own on the slot (it used to colour the whole slot red). E.g. 4 hours last
+  night and a 3-hour slot this morning, the same day from 12:00: its last
+  hour is red, as your supplier may not charge then. Also with the guards
+  overridden
+- The unplug times your supplier accepts are still checked
+
 ## 2.49.5 — Clearing the session history clears it all
 
 - Diagnostics › Clear data › Session history now also clears the plugged-in
