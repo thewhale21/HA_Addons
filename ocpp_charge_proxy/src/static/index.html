@@ -1561,7 +1561,7 @@ async function refreshSmart(force) {
   try { smart.data = await api('smart_charging'); } catch (e) { return; }
   applySupName();
   drawSmart(); drawStateSub(); drawChart();
-  if (auto.data) drawWeek();
+  if (auto.data) drawWeekSoon();
   applyDailyLimit();
 }
 // Each supplier's slots in its own colour on the chart
@@ -2271,7 +2271,7 @@ async function refreshAutomation(force) {
   auto.entries = JSON.parse(JSON.stringify(d.schedule.entries));
   $('a-sched-on').checked = d.schedule.enabled;
   $('a-ready-on').checked = !!d.schedule.ready_time;
-  if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); drawWeek(); });
+  if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); drawWeekSoon(); });
   else refreshSmart(false);  // the supplier's slots on the week view
   drawReadyStatus(d);
   const n = d.schedule.next;
@@ -2286,7 +2286,7 @@ async function refreshAutomation(force) {
   drawForceErr();
   drawAutoPlugLast(d);
   drawSaving();
-  drawWeek();
+  drawWeekSoon();
 }
 function drawReadyStatus(d) {
   if (!d) return;
@@ -2552,7 +2552,15 @@ function nextUnplug(entries, skips, after) {
 
 const week = {model: null, occ: [], edit: null};
 
+// The refreshes every few seconds mustn't redraw the week under an open slot editor while
+// you're using it: that closes a time drop-down mid-scroll. It's redrawn once you're done.
+function drawWeekSoon() {
+  const a = document.activeElement;
+  if (week.edit && a && a.closest && a.closest('#w-pop')) { week.redraw = true; return; }
+  drawWeek();
+}
 function drawWeek() {
+  week.redraw = false;
   const on = auto.data ? auto.data.schedule.enabled : false;
   // Grey outline when the schedule sets the supplier's ready time; the
   // supplier's planned slots as outlines in its colour
@@ -2879,6 +2887,10 @@ $('w-grid').addEventListener('click', async (ev) => {
   }
   const tick = t.closest('.tick[data-orphan]');
   if (tick) openEditor('orphan', Number(tick.dataset.row), {j: Number(tick.dataset.orphan)});
+});
+$('w-grid').addEventListener('focusout', (ev) => {
+  if (!week.redraw || (ev.relatedTarget && ev.relatedTarget.closest && ev.relatedTarget.closest('#w-pop'))) return;
+  setTimeout(() => { if (week.redraw) drawWeekSoon(); }, 0);
 });
 $('w-grid').addEventListener('change', (ev) => {
   const ed = week.edit, f = ev.target.dataset.f;

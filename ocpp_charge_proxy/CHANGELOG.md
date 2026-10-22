@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.49.4 — Time drop-downs stay open
+
+- Schedule: a slot's time drop-down no longer closes by itself while you
+  scroll through it. The page's refresh every few seconds redrew the week,
+  editor included; it now waits until you've finished with the editor
+
 ## 2.49.3 — Re-plug after means what it says
 
 - Auto re-plug: the wait is now the minutes set, from plugging in. It used
