@@ -213,3 +213,35 @@ def test_plugged_in_stretches_are_kept(tmp_path):
     assert snap["plugged"][1] == {"start": iso(-38), "end": iso(-32),
                                   "by": "schedule", "unplugged_by": "schedule"}
     assert snap["plugged_since"]
+
+
+def test_clearing_the_history_clears_everything_kept(tmp_path):
+    import datetime as dt
+    now = dt.datetime.now(dt.timezone.utc)
+    iso = lambda d: d.strftime("%Y-%m-%dT%H:%M:%SZ")
+    log = SessionLog(str(tmp_path))
+    log.plugged(True, "schedule", iso(now - dt.timedelta(hours=5)))
+    log.start(1, "TAG", 1000, iso(now - dt.timedelta(hours=5)))
+    log.stop(3500, "Remote", iso(now - dt.timedelta(hours=4)))
+    log.plugged(False, "schedule", iso(now - dt.timedelta(hours=3)))
+    log.plugged(True, "car", iso(now - dt.timedelta(minutes=5)))  # plugged in now: carries on
+    log.stop(3500, "Remote")  # (nothing running)
+    assert log.history and log.plugged_spans
+    log.clear_history()
+    for again in (SessionLog(str(tmp_path)), json.loads((tmp_path / "sessions.json.bak").read_text())):
+        snap = again.snapshot() if isinstance(again, SessionLog) else again
+        assert snap["history"] == []
+        assert [p for p in snap["plugged"] if p.get("end")] == []  # the chart's plugged-in times too
+        assert snap["cleared_at"]
+    assert SessionLog(str(tmp_path)).plugged_open["by"] == "car"
+
+
+def test_daily_totals_start_again_after_clearing():
+    import datetime as dt
+    today = dt.date(2026, 10, 22)
+    metered = {"2026-10-20": 12.0, "2026-10-21": 8.0, "2026-10-22": 3.0}
+    charging = {"2026-10-20": 3600, "2026-10-21": 1800, "2026-10-22": 600}
+    days = daily_from_sessions(3, [], today, metered, charging, since="2026-10-21T09:00:00Z")
+    assert [d["kwh"] for d in days] == [0, 0, 3.0]
+    assert [d["charging_s"] for d in days] == [0, 0, 600]
+    assert [d["kwh"] for d in daily_from_sessions(3, [], today, metered, charging)] == [12.0, 8.0, 3.0]

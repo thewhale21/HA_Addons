@@ -872,7 +872,7 @@
     <div class="card">
       <h2>Clear data</h2>
       <div class="row" style="margin-top:0">
-        <div class="grow">Session history<div class="note" style="margin:0">Finished sessions on the Sessions tab. A session in progress carries on.</div></div>
+        <div class="grow">Session history<div class="note" style="margin:0">Finished sessions, plug-ins and the 7-day chart on the Sessions tab; its energy totals start again. A session in progress carries on. <details class="more"><summary>More</summary><div>The Overview chart's power readings are Home Assistant's own history of the add-on's sensors, so they stay.</div></details></div></div>
         <button class="btn small" id="d-clear-sessions">Clear</button>
       </div>
       <div class="row">
@@ -3074,7 +3074,14 @@ function confirmClick(btn, run) {
   });
 }
 confirmClick($('d-restart'), async () => { if (await post('debug/restart')) toast('Restarting the add-on: the page reconnects when it\'s back'); });
-confirmClick($('d-clear-sessions'), async () => { if (await post('debug/clear', {what: 'sessions'})) { sessionsData = null; toast('Session history cleared'); } });
+confirmClick($('d-clear-sessions'), async () => {
+  if (!(await post('debug/clear', {what: 'sessions'}))) return;
+  // Nothing cached is drawn again: the Sessions tab, its chart and the schedule's last days
+  sessionsData = null; refreshSessionCard.at = 0; week.sessionsAt = 0; week.sessions = []; week.plugged = [];
+  sessionsOpen.clear(); sessDay = null;
+  toast('Session history cleared');
+  refreshSessionCard();
+});
 confirmClick($('d-clear-messages'), async () => { if (await post('debug/clear', {what: 'messages'})) { msgs.list = []; drawMessages(); toast('Message log cleared'); } });
 $('d-level').addEventListener('click', async (e) => {
   const level = e.target.dataset.level; if (!level) return;

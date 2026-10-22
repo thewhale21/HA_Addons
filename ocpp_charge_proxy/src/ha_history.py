@@ -310,7 +310,7 @@ class ChartHistory:
             return []
         return [p for p in long_samples(stats, rows) if p["t"] > since]
 
-    async def daily(self, days: int, sessions: list) -> list[dict]:
+    async def daily(self, days: int, sessions: list, since: Optional[str] = None) -> list[dict]:
         """kWh and time spent charging per day for the last `days` days.
 
         kWh: HA's daily statistics of the Energy sensor, or the kept sessions
@@ -345,4 +345,4 @@ class ChartHistory:
             except Exception as err:
                 self.error = f"Home Assistant statistics not available: {err}"
                 logger.debug("%s", self.error)
-        return daily_from_sessions(days, sessions, self._today(), metered, charging)
+        return daily_from_sessions(days, sessions, self._today(), metered, charging, since)

@@ -359,9 +359,10 @@ async def handle_energy_daily(request: web.Request) -> web.Response:
     try:
         sessions = gui.sessions()
         kept = list(sessions.get("history") or []) + ([sessions["current"]] if sessions.get("current") else [])
+        since = sessions.get("cleared_at")
     except Exception:
-        kept = []
-    return web.json_response({"days": await gui.history.daily(days, kept)}, dumps=_dumps)
+        kept, since = [], None
+    return web.json_response({"days": await gui.history.daily(days, kept, since)}, dumps=_dumps)
 
 
 async def handle_provider(request: web.Request) -> web.Response:

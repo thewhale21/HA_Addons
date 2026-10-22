@@ -203,6 +203,7 @@ class SessionLog:
         self.plugged_spans: list[dict] = []  # [{start, end, by, unplugged_by}], newest first
         self.plugged_open: Optional[dict] = None  # plugged in now: {start, by}
         self.plugged_since: Optional[str] = None  # when recording started
+        self.cleared_at: Optional[str] = None  # the history was last cleared (Diagnostics)
         self._load()
         if self.plugged_since is None:
             self.plugged_since = _now_iso()
@@ -223,6 +224,7 @@ class SessionLog:
                 opened = data.get("plugged_open")
                 self.plugged_open = opened if isinstance(opened, dict) else None
                 self.plugged_since = data.get("plugged_since") if isinstance(data.get("plugged_since"), str) else None
+                self.cleared_at = data.get("cleared_at") if isinstance(data.get("cleared_at"), str) else None
                 self._trim()
                 return
             except FileNotFoundError:
@@ -238,7 +240,7 @@ class SessionLog:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({"current": self.current, "plug": self.plug, "history": self.history,
                            "plugged": self.plugged_spans, "plugged_open": self.plugged_open,
-                           "plugged_since": self.plugged_since}, f)
+                           "plugged_since": self.plugged_since, "cleared_at": self.cleared_at}, f)
                 f.flush()
                 os.fsync(f.fileno())
             if os.path.exists(self._path):
@@ -339,8 +341,13 @@ class SessionLog:
 
     def clear_history(self) -> None:
         """Forget the finished sessions and no-session plug-ins (Diagnostics ›
-        Debug). The current session, if any, carries on."""
+        Debug), and the plugged-in times on the Sessions tab's chart. The
+        current session, if any, carries on (and a plug-in now). Saved twice,
+        so the backup copy doesn't keep the old history either."""
         self.history = []
+        self.plugged_spans = []
+        self.plugged_since = self.cleared_at = _now_iso()
+        self._save()
         self._save()
 
     def mark_supplier(self, periods: list, provider: Optional[str] = None) -> bool:
@@ -397,7 +404,7 @@ class SessionLog:
         if self.plugged_open is not None:
             plugged.insert(0, {**self.plugged_open, "end": None})
         return {"current": current, "waiting": waiting, "history": list(self.history),
-                "plugged": plugged, "plugged_since": self.plugged_since}
+                "plugged": plugged, "plugged_since": self.plugged_since, "cleared_at": self.cleared_at}
 
 
 # --- Power history for the chart ---------------------------------------------
@@ -434,7 +441,8 @@ class PowerHistory:
 
 
 def daily_from_sessions(days: int, sessions: Optional[list], today: datetime.date,
-                        metered: Optional[dict] = None, charging: Optional[dict] = None) -> list[dict]:
+                        metered: Optional[dict] = None, charging: Optional[dict] = None,
+                        since: Optional[str] = None) -> list[dict]:
     """kWh and charging time per day for the last `days` days.
 
     metered: date -> kWh from HA's statistics. Each kept session's energy
@@ -442,7 +450,8 @@ def daily_from_sessions(days: int, sessions: Optional[list], today: datetime.dat
     (HA's figure lags by up to an hour; sessions cover HA being unreachable).
     charging: date -> seconds Charging from HA's history. Days without it
     use the sessions' lengths (charging_estimated: true), which include any
-    paused time."""
+    paused time. since: when the history was cleared (ISO): HA's figures
+    aren't used up to that day, so the totals start again from then."""
     from_sessions: dict[str, float] = {}
     session_time: dict[str, float] = {}
     for s in sessions or []:
@@ -453,7 +462,12 @@ def daily_from_sessions(days: int, sessions: Optional[list], today: datetime.dat
             day = start.astimezone().date().isoformat()
             from_sessions[day] = from_sessions.get(day, 0.0) + float(s["energy_kwh"])
             session_time[day] = session_time.get(day, 0.0) + float(s.get("duration_s") or 0)
-    metered, charging = metered or {}, charging or {}
+    metered, charging = dict(metered or {}), dict(charging or {})
+    cleared = _parse_iso(since) if since else None
+    if cleared:
+        last = cleared.astimezone().date().isoformat()
+        metered = {d: v for d, v in metered.items() if d > last}
+        charging = {d: v for d, v in charging.items() if d > last}
     out = []
     for i in range(days - 1, -1, -1):
         day = (today - datetime.timedelta(days=i)).isoformat()

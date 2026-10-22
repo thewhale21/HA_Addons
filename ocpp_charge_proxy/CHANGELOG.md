@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.49.5 — Clearing the session history clears it all
+
+- Diagnostics › Clear data › Session history now also clears the plugged-in
+  times on the Sessions tab's 7-day chart, and the backup copy of the
+  history (it used to keep the old one). The energy totals on the Sessions
+  tab start again from the clear. The page redraws straight away
+- A session in progress, and a plug-in now, carry on. The Overview chart's
+  power readings are Home Assistant's own history, so they stay
+
 ## 2.49.4 — Time drop-downs stay open
 
 - Schedule: a slot's time drop-down no longer closes by itself while you
