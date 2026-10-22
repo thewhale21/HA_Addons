@@ -573,11 +573,11 @@ def test_unplug_wait_zero_unplugs_straight_away():
 
 
 
-def test_slot_running_with_no_session_re_plugs_after_the_half_hour():
+def test_slot_running_with_no_session_doesnt_re_plug():
+    """2.49.3: slots from the supplier (planned or running) are left to it."""
     from src.shared_state import SharedState, display_status
-    # The add-on restarted mid-slot at 16:41:50; the supplier may start at 17:00
-    a, clock = _automation(start=datetime.datetime(2026, 10, 3, 16, 41, 50, tzinfo=TZ))
-    a.set_replug(enabled=True, after_min=10, attempts=2)
+    a, clock = _automation(start=datetime.datetime(2026, 10, 3, 22, 14, 0, tzinfo=TZ))
+    a.set_replug(enabled=True, after_min=5, attempts=2)
     state = SharedState(state="Preparing", plugged_in=True, connected_to_server=True)
     calls = []
     seen = {}
@@ -590,27 +590,39 @@ def test_slot_running_with_no_session_re_plugs_after_the_half_hour():
 
     async def run():
         task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01,
-                                                     scheduled=lambda: True, slot_now=lambda: True))
+                                                     scheduled=lambda: False, slot_now=lambda: True))
         await asyncio.sleep(0.05)
         seen["status"] = display_status(state)
-        seen["replug"] = a.replug_status()  # "waiting", not "scheduled": a slot is running
-        clock.advance(minutes=23)  # 17:04:50: not yet
-        await asyncio.sleep(0.05)
-        seen["at_1705"] = list(calls)
-        clock.advance(minutes=6)  # 17:10:50
+        seen["replug"] = a.replug_status()
+        clock.advance(minutes=30)
         await asyncio.sleep(0.05)
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
 
     _run(run())
     assert seen["status"] == "Waiting for supplier"
-    assert seen["replug"]["status"] == "waiting" and "T17:10:00" in seen["replug"]["next_replug_at"]
-    assert seen["at_1705"] == []
-    assert calls == ["unplug"]  # re-plug started (it plugs back in 30 s later)
-    state.slot_now = False
-    assert display_status(state) == "Scheduled"
-    state.state = "Charging"
-    assert display_status(state) == "Charging"
+    assert seen["replug"]["status"] == "scheduled" and seen["replug"]["next_replug_at"] is None
+    assert calls == []
+
+
+def test_replug_wait_is_the_set_minutes_from_plug_in():
+    # No slots from the supplier: 22:14 + 5 min, not rounded to a half hour
+    a, clock = _automation(start=datetime.datetime(2026, 10, 3, 22, 14, 0, tzinfo=TZ))
+    a.set_replug(enabled=True, after_min=5, attempts=2)
+    assert not a.replug_due(True, False, True, scheduled=False, slot_now=False)
+    assert a.replug_status()["next_replug_at"] == "2026-10-03T22:19:00Z"
+    clock.advance(minutes=4)
+    assert not a.replug_due(True, False, True, scheduled=False, slot_now=False)
+    clock.advance(minutes=1)
+    assert a.replug_due(True, False, True, scheduled=False, slot_now=False)
+    # Changing it while waiting moves the re-plug
+    a2, clock2 = _automation(start=datetime.datetime(2026, 10, 3, 22, 14, 0, tzinfo=TZ))
+    a2.set_replug(after_min=20)
+    a2.replug_due(True, False, True, scheduled=None)
+    clock2.advance(minutes=6)
+    assert not a2.replug_due(True, False, True, scheduled=None)
+    a2.set_replug(after_min=5)
+    assert a2.replug_due(True, False, True, scheduled=None)
 
 
 def test_planned_slot_still_holds_off_re_plug():

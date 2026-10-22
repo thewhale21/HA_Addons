@@ -80,7 +80,6 @@ from src.saving_sessions import session_id
 logger = logging.getLogger(__name__)
 
 REPLUG_WAIT_S = 30
-HALF_HOUR_S = 1800
 STARTUP_READY_S = 180  # keep trying to set the ready time this long after start-up
 GRACEFUL_UNPLUG_S = 60  # with Force schedule on supplier: wait this long for it to stop a session (default)
 MAX_UNPLUG_WAIT_S = 600
@@ -1681,9 +1680,10 @@ class Automation:
                    scheduled: Optional[bool] = None, slot_now: Optional[bool] = None) -> bool:
         """Call regularly; True when it's time to re-plug.
 
-        scheduled: your supplier has a charge slot planned (None: unknown, so
-        only a session counts). slot_now: one is running now, so the wait
-        counts from the next half hour (when the supplier may start)."""
+        scheduled: your supplier has a charge slot planned or running (None:
+        unknown, so only a session counts): no re-plug while it has. Otherwise
+        the wait is the set minutes from plugging in. slot_now: one is running
+        now (shown on the page only)."""
         now = self._clock()
         self.scheduled = bool(scheduled) and plugged_in and not in_session
         self.slot_now = bool(slot_now) and plugged_in and not in_session
@@ -1721,10 +1721,7 @@ class Automation:
 
     def _replug_at(self) -> float:
         """When the wait for a session runs out (waiting_since must be set)."""
-        start = self.waiting_since
-        if self.slot_now:  # the supplier may only start at the next half hour
-            start = -(-start // HALF_HOUR_S) * HALF_HOUR_S
-        return start + self.replug["after_min"] * 60
+        return self.waiting_since + self.replug["after_min"] * 60
 
     async def run_replug(self, unplug: Callable[..., Awaitable[None]], plug: Callable[..., Awaitable[None]],
                          wait_s: Optional[float] = None) -> None:
@@ -1937,8 +1934,8 @@ async def automation_loop(
                 plugged_in=bool(shared_state.plugged_in) and shared_state.state == "Preparing",
                 in_session=shared_state.transaction_id is not None,
                 connected=bool(shared_state.connected_to_server),
-                # a slot running now with no session isn't an answer: re-plug
-                scheduled=shared_state.scheduled and not shared_state.slot_now,
+                # Your supplier has slots, planned or running: leave it to them (no re-plug)
+                scheduled=bool(shared_state.scheduled) or bool(shared_state.slot_now),
                 slot_now=shared_state.slot_now,
             ):
                 automation.publish(shared_state)

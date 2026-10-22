@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.49.3 — Re-plug after means what it says
+
+- Auto re-plug: the wait is now the minutes set, from plugging in. It used
+  to start at the next hour or half hour while your supplier's slot was
+  running, so 5 minutes at 22:14 re-plugged at 22:35
+- Your supplier's slots, planned or running now, are left to it: no
+  re-plug. With no slots, or no supplier found, it re-plugs after the wait
+
 ## 2.49.2 — Each tab from the top
 
 - **Change:** switching tab goes back to the top of the page, instead of
