@@ -563,6 +563,7 @@
           <span class="hero-on">On</span>
           <label class="switch"><input type="checkbox" id="a-sched-on" aria-label="Schedule on"><span></span></label>
         </div>
+        <div class="hero-cap" id="a-sched-err" hidden></div>
         <div class="hero-main">
           <div class="hero-next" id="a-next"></div>
           <div class="hero-charge">
@@ -2996,10 +2997,27 @@ $('w-grid').addEventListener('pointerup', () => {
   a = Math.min(a, DAY_MIN - 30); b = Math.min(b, DAY_MIN);
   openEditor('new', wdrag.row, {start: hhmm(a), end: hhmm(b % DAY_MIN)});
 });
-$('a-sched-on').addEventListener('change', async (e) => {
-  if (await post('automation/schedule', {enabled: e.target.checked})) { toast(e.target.checked ? 'Schedule on' : 'Schedule off'); refreshAutomation(true); }
-  else e.target.checked = !e.target.checked;
-});
+// The schedule on or off. Turned on, a charge planned while it was off joins the slots it meets:
+// if that takes a day over the supplier's daily limit, it asks first (Turn on anyway)
+async function setSchedule(on, anyway = false) {
+  const box = $('a-sched-err');
+  try {
+    await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(anyway ? {enabled: on, allow_over: true} : {enabled: on})});
+    box.hidden = true;
+    $('a-sched-on').checked = on;
+    toast(on ? (anyway ? 'Schedule on (over the daily limit)' : 'Schedule on') : 'Schedule off');
+  } catch (err) {
+    $('a-sched-on').checked = !on;
+    if (on && !anyway && isOverErr(err.message)) {
+      box.hidden = false;
+      overChoice(box, err.message + ' (a charge planned while the schedule was off joins its slots)', 'a-sched-any', 'Turn on anyway');
+      $('a-sched-any').onclick = () => setSchedule(true, true);
+    } else toast('Failed: ' + err.message);
+  }
+  refreshAutomation(true);
+}
+$('a-sched-on').addEventListener('change', (e) => setSchedule(e.target.checked));
 // Auto re-plug saves straight away, like the rest of the tab
 async function saveReplug(patch, msg) {
   if (await post('automation/replug', patch)) toast(msg);

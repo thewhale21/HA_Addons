@@ -63,6 +63,7 @@ Automations tab. Until they're saved, re-plug uses the defaults.
 from __future__ import annotations
 
 import asyncio
+import copy
 import datetime
 import json
 import logging
@@ -620,7 +621,23 @@ class Automation:
                 self.turned_off = True
             self.schedule_enabled = bool(enabled)
             if turned_on:
-                self._join_charges()
+                before = (copy.deepcopy(self.entries), list(self.skips))
+                joins = self._join_charges()
+                # A charge planned while the schedule was off only counted the other charges:
+                # joined with the schedule's slots, a day can go over the supplier's limit. Refused
+                # (as saving the schedule is) if the charges make it worse than the slots alone,
+                # unless asked to go ahead anyway (the hours over then show in red)
+                cap = daily_cap_min if (self.ready_time if ready_time is None else bool(ready_time)) else None  # (None with the guards overridden)
+                if joins and cap and not allow_over:
+                    slots_alone = [e for e in without_fallbacks(before[0]) if e.get("source") not in AUTO_SOURCES]
+                    running = without_fallbacks(self.entries)
+                    if self._makes_worse(cap, (slots_alone, before[1]), (running, self.skips)):
+                        try:
+                            self.check_daily_cap(running, cap, provider, self.skips)
+                        except ValueError:
+                            self.entries, self.skips = before
+                            self.schedule_enabled = False
+                            raise
                 self.turned_on = True  # the loop plugs in if it's inside a slot now (see automation_loop)
         if ready_time is not None:
             self.ready_time = bool(ready_time)
@@ -908,12 +925,16 @@ class Automation:
             if not joined:
                 continue
             timeline = self.timeline(start_day, days, running, self.skips)
-            plugs_at = {t for t, e, skipped in timeline if e["action"] == "plug" and not skipped}
-            unplugs_at = {t for t, e, skipped in timeline if e["action"] == "unplug" and not skipped}
+            # An unplug and a plug-in at the same time from the same kind (both the charge's, or
+            # both the schedule's) are a split on purpose (e.g. at the daily limit's reset): kept.
+            # A charge ending as a slot starts (or the other way round) just meets it: joined
+            kind = lambda e: e.get("source") in AUTO_SOURCES
+            meet = {(t, kind(e), e["action"]) for t, e, skipped in timeline if not skipped}
             new_skips = []
             for t, e, skipped in timeline:
-                if skipped or not lo < t < hi or (t in plugs_at and t in unplugs_at):
-                    continue  # (a back-to-back split, kept)
+                other = "plug" if e["action"] == "unplug" else "unplug"
+                if skipped or not lo < t < hi or (t, kind(e), other) in meet:
+                    continue
                 if e["action"] == "unplug":
                     if e["id"] == c["unplug"]["id"] and e.get("source") in AUTO_SOURCES:
                         e["only_off"] = True  # the charge's own: only when the schedule's off

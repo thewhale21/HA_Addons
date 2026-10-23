@@ -881,6 +881,33 @@ def test_a_charge_planned_with_the_schedule_off_joins_its_slot_when_turned_on():
     assert a.skips == []
 
 
+def test_turning_on_asks_first_if_a_joined_charge_goes_over_the_limit():
+    """2.50.3: a charge planned with the schedule off only counted the other charges. Turned on,
+    joined with the slots, a day over the supplier's limit is refused, unless asked anyway."""
+    from src.automation import CHARGE_NOW_SOURCE
+    a, clock = _sched_18_22(_at(14), enabled=False)
+    a.set_schedule(ready_time=True, daily_cap_min=360)
+    a.plan_auto_plug(240, source=CHARGE_NOW_SOURCE, cap_min=360)  # 14:00-18:00: 4 h, fine on its own
+    entries, skips = [dict(e) for e in a.entries], list(a.skips)
+    try:
+        a.set_schedule(enabled=True, daily_cap_min=360, provider="Octopus Energy")  # with 18-22: 8 h
+        raise AssertionError("should have refused")
+    except ValueError as err:
+        assert "6 hours" in str(err) and "8h 00m" in str(err)
+    assert not a.schedule_enabled and a.entries == entries and a.skips == skips  # nothing changed
+    a.set_schedule(enabled=True, daily_cap_min=360, allow_over=True)
+    assert a.schedule_enabled and [e for e in a.entries if e.get("only_off")]
+    # Within the limit, or without Force schedule on supplier: no question
+    b, _ = _sched_18_22(_at(16), enabled=False)
+    b.set_schedule(ready_time=True, daily_cap_min=360)
+    b.plan_auto_plug(60, source=CHARGE_NOW_SOURCE, cap_min=360)  # 16:00-17:00 + 18-22: 5 h
+    b.set_schedule(enabled=True, daily_cap_min=360)
+    c, _ = _sched_18_22(_at(14), enabled=False)
+    c.plan_auto_plug(240, source=CHARGE_NOW_SOURCE)
+    c.set_schedule(enabled=True, daily_cap_min=360)  # ready time off: no limit
+    assert b.schedule_enabled and c.schedule_enabled
+
+
 def test_turning_the_schedule_on_inside_a_slot_plugs_in():
     from src.automation import automation_loop
     from src.shared_state import SharedState

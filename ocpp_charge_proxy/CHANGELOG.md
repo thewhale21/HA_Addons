@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.50.3 — Turning the schedule on checks the daily limit
+
+- Turning the schedule on now checks your supplier's daily limit (Octopus: 6
+  hours, with Force schedule on supplier on). A charge planned while it was off
+  only counted the other charges, so joined with the schedule's slots a day
+  could go over. If it would, it asks first, with **Turn on anyway** (the hours
+  over then show in red). Not if the slots alone were already over
+- A charge that ends just as a scheduled slot starts (or starts as one ends)
+  now joins it too when the schedule's turned on
+
 ## 2.50.2 — Turning the schedule on and off
 
 - **Turned on during a slot:** it plugs in until the slot's end (as at
