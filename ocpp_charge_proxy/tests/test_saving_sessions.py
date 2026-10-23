@@ -232,6 +232,18 @@ def test_charge_before_takes_the_daily_limit_off_the_next_slot():
     assert "starts at 20:00" in a.saving_sessions[0]["notes"][-1]
 
 
+def test_charge_before_trims_your_slot_with_the_schedule_off_too():
+    """2.50.5: with the schedule off the charge before a session is separate from your slots, but
+    counts them for the daily limit (as if on) and trims the next one, as a car slot does."""
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.ready_time = True
+    a.set_schedule(enabled=False, entries=[{"time": "19:00", "action": "plug"}, {"time": "23:00", "action": "unplug"}])
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True, plug_hours=3, cap_min=360)
+    assert "starts at 20:00" in a.saving_sessions[0]["notes"][-1]
+    a.set_schedule(enabled=True)
+    assert _today(a) == [("05 15:00", "05 18:00"), ("05 20:00", "05 23:00")]
+
+
 def test_no_unplug_added_at_a_session_start():
     a, clock = _automation(start=_at(5, 12, 0))
     a.sync_saving_sessions([_session(5, 18, 19)], block=True)

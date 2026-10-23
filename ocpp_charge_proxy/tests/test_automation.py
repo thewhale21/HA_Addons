@@ -913,8 +913,8 @@ def test_turning_on_asks_first_if_a_joined_charge_goes_over_the_limit():
 
 
 def test_a_car_slot_alters_your_slots_with_the_schedule_off_too():
-    """2.50.4: planned as if the schedule were on, also with it off: it joins, trims or skips your
-    slots, so it all fits when the schedule's on. With it off, it ends at its own end."""
+    """2.50.5: with the schedule off, a car slot stays separate from your slots (it joins them when
+    the schedule's turned on), but trims or skips them for the daily limit, counted as if joined."""
     from src.automation import CHARGE_NOW_SOURCE
 
     def unplugs(a, clock, hours=7):
@@ -925,20 +925,20 @@ def test_a_car_slot_alters_your_slots_with_the_schedule_off_too():
             out += [clock.now().strftime("%H:%M") for e in a.due() if e["action"] == "unplug"]
         return out
 
-    # 17:00 for 2 hours meets 18:00-22:00: joined now, even with the schedule off
+    # 17:00 for 2 hours meets 18:00-22:00: separate with the schedule off (your slot untouched)
     a, clock = _sched_18_22(_at(17), enabled=False)
     out = a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
-    assert out["combined"] and out["end"].startswith("2026-10-03T22:00")
+    assert not out["combined"] and out["end"].startswith("2026-10-03T19:00") and a.skips == []
     assert unplugs(a, clock) == ["19:00"]  # off: the charge's own end
     a, clock = _sched_18_22(_at(17), enabled=False)
     a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
     a.set_schedule(enabled=True)
-    assert unplugs(a, clock) == ["22:00"]  # on: one slot to 22:00
-    # 4 hours from 14:00 with Force schedule on supplier: the 18:00 slot is trimmed for the limit
+    assert unplugs(a, clock) == ["22:00"]  # turned on: joined, one slot to 22:00
+    # 4 hours from 14:00 with Force schedule on supplier: separate, but the 18:00 slot is trimmed for the limit
     b, _ = _sched_18_22(_at(14), enabled=False)
     b.set_schedule(ready_time=True, daily_cap_min=360)
     out = b.plan_auto_plug(240, source=CHARGE_NOW_SOURCE, cap_min=360)
-    assert "the 22:00 slot now starts at 20:00" in out["notes"]
+    assert "the 22:00 slot now starts at 20:00" in out["notes"] and not out["combined"]
     b.set_schedule(enabled=True, daily_cap_min=360)  # (already joined and trimmed: no question)
     assert b.schedule_enabled
 

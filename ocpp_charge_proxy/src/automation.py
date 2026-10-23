@@ -796,6 +796,28 @@ class Automation:
                            now + datetime.timedelta(days=self._horizon_days(entries) - 1), self.limit_reset,
                            self._localize)
 
+    def _as_if_on(self, skips: Optional[list] = None) -> tuple[list, list]:
+        """The plugged-in windows as the schedule runs with it on, also while it's off, when car
+        slots stay separate from your slots: theirs and yours, overlapping ones as one (as they'd
+        join), and the stretches the same way. For the daily limit of a car slot planned while off."""
+        now, skips = self._now(), self.skips if skips is None else skips
+        running = without_fallbacks(self.entries)
+        start, days = now.date() - datetime.timedelta(days=1), self._horizon_days(running) + 2
+        if self.schedule_enabled:
+            return (self.windows(running, now, skips, open_ended=True),
+                    self._stretches(start, days, running, skips))
+        cars = [e for e in running if e.get("source") in AUTO_SOURCES]
+        mine = [e for e in running if e.get("source") not in AUTO_SOURCES]
+        merged = []
+        for a, b in sorted(self.windows(cars, now, skips, open_ended=True) + self.windows(mine, now, skips, open_ended=True)):
+            if merged and a <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+            else:
+                merged.append((a, b))
+        stretches = sorted(self._stretches(start, days, cars, skips) + self._stretches(start, days, mine, skips),
+                           key=lambda x: x["start"])
+        return merged, stretches
+
     def _reset_splits(self, entries: list, skips: list, cap_min: int, one_off: bool = False,
                       until: Optional[datetime.datetime] = None) -> list:
         """Entries that split each coming slot longer than `cap_min` where the
@@ -1089,10 +1111,12 @@ class Automation:
             return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(),
                                    "action": action, "source": src})
 
-        # Planned as if the schedule were on, also with it off: the charge joins your slots, trims
-        # or skips later ones for the daily limit and skips an unplug that'd cut it short, so it
-        # all fits when the schedule's on. With it off, the charge ends at its own end (below)
+        # With the schedule on, the charge joins the slots it meets. With it off it stays separate
+        # from your slots (it joins only other car slots), but it still counts them for the daily
+        # limit, as if joined, and trims or skips later ones of yours to keep within it, so it all
+        # fits when the schedule's turned back on (it joins them then: see _join_charges)
         active = without_fallbacks(self.entries)
+        car_slots = [e for e in active if e.get("source") in AUTO_SOURCES]
         seg_entries = []  # plug / unplug for each part but the last's unplug
         for i, (x, y) in enumerate(segments):
             seg_entries.append(one_off(x, "plug"))
@@ -1108,9 +1132,11 @@ class Automation:
             later = later[1:]  # one going now isn't trimmed
         can_trim = bool(later)
 
-        def build(cuts: dict):
+        def build(cuts: dict, joining: Optional[list] = None):
             """The entries and skips for the charge, with the first `cuts[i]`
-            minutes of later slot i taken off (all of it: skipped)."""
+            minutes of later slot i taken off (all of it: skipped). joining: the entries whose
+            slots it joins (and whose unplugs during it are skipped): all of them by default."""
+            joining = active if joining is None else joining
             added, skips, notes = list(seg_entries), list(self.skips), []
             for i, s in enumerate(later):
                 cut = cuts.get(i)
@@ -1130,7 +1156,7 @@ class Automation:
             # The schedule's own slots (as trimmed) that the charge meets or
             # overlaps join it: one slot, plugged in until whichever ends last
             # (not cut short at a slot's unplug when the charge goes on after it)
-            own = self._stretches(start_day, 5, active + [e for e in added if e not in seg_entries], skips)
+            own = self._stretches(start_day, 5, joining + [e for e in added if e not in seg_entries], skips)
             slot_end, joined, grew = end, [], True
             while grew:
                 grew = False
@@ -1159,7 +1185,7 @@ class Automation:
             # every day", or a joined slot's that ends before it) would end it
             # early: skipped this once
             parts = segments[:-1] + [(segments[-1][0], slot_end)]
-            for t, e, skipped in self.timeline(now.date() - datetime.timedelta(days=1), 4, active, skips):
+            for t, e, skipped in self.timeline(now.date() - datetime.timedelta(days=1), 4, joining, skips):
                 if not skipped and e["action"] == "unplug" and any(x < t < y for x, y in parts):
                     skips.append({"entry_id": e["id"], "date": t.date().isoformat()})
             return added, skips, combined, slot_end, note
@@ -1207,7 +1233,8 @@ class Automation:
                 if best:
                     cuts[i] = best[0]
                     after, left_over, near = best[1], best[2], best[3]
-        added, skips, combined, slot_end, moved = build(cuts)
+        # (the daily limit above is counted as if joined; with the schedule off, only car slots join)
+        added, skips, combined, slot_end, moved = build(cuts, None if self.schedule_enabled else car_slots)
         # Longer than the limit across its reset time (e.g. 08:00-18:00 with
         # Octopus's 12:00): split there, a fresh charge with its own ready time
         splits = self._reset_splits(active + without_fallbacks(added), skips, cap_min, one_off=True, until=slot_end) if cap_min else []
@@ -1577,12 +1604,14 @@ class Automation:
         span = ", ".join(f"{x.strftime('%H:%M')}–{y.strftime('%H:%M')}" for x, y in gaps)
         text = span + (" (joined with the slot it meets)" if joined else "")
         if cap_min:
-            # Over the daily limit: the next slot after the session starts later
-            worst = self._longest_day(self._active_entries(), self.skips)
+            # Over the daily limit: the next slot after the session starts later. Counted as the
+            # schedule runs with it on, also while it's off (your slots too), and the next slot
+            # can be yours, so it fits when the schedule's turned back on (as for a car plugged in)
+            wins, now_st = self._as_if_on()
+            worst = longest_day(wins, now - datetime.timedelta(days=1),
+                                now + datetime.timedelta(days=self._horizon_days() - 1), self.limit_reset, self._localize)
             if worst and worst[0] > cap_min:
                 over = int(math.ceil((worst[0] - cap_min) / 30)) * 30
-                now_st = self._stretches(now.date() - datetime.timedelta(days=1), self._horizon_days() + 2,
-                                         self._active_entries(), self.skips)
                 nxt = next((s for s in now_st if s["start"] >= _parse_iso(r["end"])), None)
                 if nxt is not None:
                     k_plug = key(nxt["plug"], nxt["start"])

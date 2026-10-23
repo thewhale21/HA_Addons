@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.50.5 — Car slots stay separate with the schedule off
+
+- With the schedule off, a car slot (low-SoC auto plug-in, the car plugged in
+  sensor, Charge now, or the charge before a saving session) stays separate
+  from your slots: it doesn't join them (2.50.4 joined them). It still trims
+  or skips your later slots to keep within your supplier's daily limit,
+  counted as if the schedule were on and joined, so it all fits when the
+  schedule's turned back on; it joins your slots then
+- The charge before a saving session now does the same: with the schedule
+  off it counts your slots for the daily limit and trims your next one
+
 ## 2.50.4 — Car slots with the schedule off
 
 - With the schedule off, the switch only pauses your own slots: they're greyed
