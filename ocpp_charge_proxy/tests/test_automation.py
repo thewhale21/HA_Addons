@@ -885,18 +885,22 @@ def test_turning_on_asks_first_if_a_joined_charge_goes_over_the_limit():
     """2.50.3: a charge planned with the schedule off only counted the other charges. Turned on,
     joined with the slots, a day over the supplier's limit is refused, unless asked anyway."""
     from src.automation import CHARGE_NOW_SOURCE
+    # A charge planned while the schedule was off by an older version (not joined then)
     a, clock = _sched_18_22(_at(14), enabled=False)
-    a.set_schedule(ready_time=True, daily_cap_min=360)
-    a.plan_auto_plug(240, source=CHARGE_NOW_SOURCE, cap_min=360)  # 14:00-18:00: 4 h, fine on its own
+    a.set_schedule(entries=a.entries + [
+        {"time": "14:00", "action": "plug", "date": "2026-10-03", "source": CHARGE_NOW_SOURCE},
+        {"time": "18:00", "action": "unplug", "date": "2026-10-03", "source": CHARGE_NOW_SOURCE}])
+    a.limit_reset = "12:00"
+    a.set_schedule(ready_time=True, daily_cap_min=360, allow_over=True)
     entries, skips = [dict(e) for e in a.entries], list(a.skips)
     try:
         a.set_schedule(enabled=True, daily_cap_min=360, provider="Octopus Energy")  # with 18-22: 8 h
         raise AssertionError("should have refused")
     except ValueError as err:
-        assert "6 hours" in str(err) and "8h 00m" in str(err)
+        assert "6 hours" in str(err) and "8h" in str(err)
     assert not a.schedule_enabled and a.entries == entries and a.skips == skips  # nothing changed
     a.set_schedule(enabled=True, daily_cap_min=360, allow_over=True)
-    assert a.schedule_enabled and [e for e in a.entries if e.get("only_off")]
+    assert a.schedule_enabled
     # Within the limit, or without Force schedule on supplier: no question
     b, _ = _sched_18_22(_at(16), enabled=False)
     b.set_schedule(ready_time=True, daily_cap_min=360)
@@ -906,6 +910,37 @@ def test_turning_on_asks_first_if_a_joined_charge_goes_over_the_limit():
     c.plan_auto_plug(240, source=CHARGE_NOW_SOURCE)
     c.set_schedule(enabled=True, daily_cap_min=360)  # ready time off: no limit
     assert b.schedule_enabled and c.schedule_enabled
+
+
+def test_a_car_slot_alters_your_slots_with_the_schedule_off_too():
+    """2.50.4: planned as if the schedule were on, also with it off: it joins, trims or skips your
+    slots, so it all fits when the schedule's on. With it off, it ends at its own end."""
+    from src.automation import CHARGE_NOW_SOURCE
+
+    def unplugs(a, clock, hours=7):
+        a.due()
+        out = []
+        for _ in range(hours * 12):
+            clock.advance(minutes=5)
+            out += [clock.now().strftime("%H:%M") for e in a.due() if e["action"] == "unplug"]
+        return out
+
+    # 17:00 for 2 hours meets 18:00-22:00: joined now, even with the schedule off
+    a, clock = _sched_18_22(_at(17), enabled=False)
+    out = a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
+    assert out["combined"] and out["end"].startswith("2026-10-03T22:00")
+    assert unplugs(a, clock) == ["19:00"]  # off: the charge's own end
+    a, clock = _sched_18_22(_at(17), enabled=False)
+    a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
+    a.set_schedule(enabled=True)
+    assert unplugs(a, clock) == ["22:00"]  # on: one slot to 22:00
+    # 4 hours from 14:00 with Force schedule on supplier: the 18:00 slot is trimmed for the limit
+    b, _ = _sched_18_22(_at(14), enabled=False)
+    b.set_schedule(ready_time=True, daily_cap_min=360)
+    out = b.plan_auto_plug(240, source=CHARGE_NOW_SOURCE, cap_min=360)
+    assert "the 22:00 slot now starts at 20:00" in out["notes"]
+    b.set_schedule(enabled=True, daily_cap_min=360)  # (already joined and trimmed: no question)
+    assert b.schedule_enabled
 
 
 def test_turning_the_schedule_on_inside_a_slot_plugs_in():

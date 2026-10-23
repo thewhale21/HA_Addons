@@ -575,7 +575,7 @@
         </div>
       </div>
       <div class="hero-result" id="c-charge-note"></div>
-      <div class="note" style="margin:0 0 10px">Plugs in and unplugs at set times, so <span class="supn" data-f="your supplier">your supplier</span> can charge then. <details class="more"><summary>More</summary><div>Each slot runs from a plug-in to its unplug, every week on the days you pick, or once on a date. Times are in your Home Assistant time zone. A time missed while the add-on is stopped isn't run later; if it starts inside a slot, it plugs in straight away. Unplugging during a session ends it. Two slots that meet (e.g. 06:00–12:00 and 12:00–18:00) unplug and plug straight back in where they meet, so each is its own charge with its own ready time (Octopus: 6 hours before a 12:00 reset and 6 after). With Force schedule on, a slot longer than the daily limit across its reset time is split there the same way, as is a charge from auto plug-in, the car plugged in sensor or Charge now. Skip a slot to stop it running once. Turning the schedule on during a slot plugs in until its end, and a charge from auto plug-in, the car plugged in sensor or Charge now joins the slots it meets. Turning it off during a slot unplugs, unless one of those charges is going: that carries on to its own end. An <b>off-peak time</b> (add one the same way, choosing Off-peak time) keeps the schedule out of your off-peak hours (when the car may charge anyway): it unplugs at its start (in case the car is plugged in by hand), slots can't go in it, and auto plug-in, the car plugged in sensor and Charge now unplug for it and plug back in after, still ending when they would have.</div></details></div>
+      <div class="note" style="margin:0 0 10px">Plugs in and unplugs at set times, so <span class="supn" data-f="your supplier">your supplier</span> can charge then. <details class="more"><summary>More</summary><div>Each slot runs from a plug-in to its unplug, every week on the days you pick, or once on a date. Times are in your Home Assistant time zone. A time missed while the add-on is stopped isn't run later; if it starts inside a slot, it plugs in straight away. Unplugging during a session ends it. Two slots that meet (e.g. 06:00–12:00 and 12:00–18:00) unplug and plug straight back in where they meet, so each is its own charge with its own ready time (Octopus: 6 hours before a 12:00 reset and 6 after). With Force schedule on, a slot longer than the daily limit across its reset time is split there the same way, as is a charge from auto plug-in, the car plugged in sensor or Charge now. Skip a slot to stop it running once. Turning the schedule on during a slot plugs in until its end, and a charge from auto plug-in, the car plugged in sensor or Charge now joins the slots it meets. Turning it off during a slot unplugs, unless one of those charges is going: that carries on to its own end. With the schedule off, those charges still go in the schedule (in colour; your slots are greyed out) and fit around your slots as they would with it on, so it's all ready when it's turned back on. An <b>off-peak time</b> (add one the same way, choosing Off-peak time) keeps the schedule out of your off-peak hours (when the car may charge anyway): it unplugs at its start (in case the car is plugged in by hand), slots can't go in it, and auto plug-in, the car plugged in sensor and Charge now unplug for it and plug back in after, still ending when they would have.</div></details></div>
       <div class="row" style="margin:0 0 10px;align-items:center">
         <div class="grow note" style="margin:0">Click a slot to change, skip or delete it; click or drag across a day to add a slot or an off-peak time.</div>
         <button class="btn small primary" id="w-add">+ Add a slot</button>
@@ -1190,7 +1190,7 @@ function renderState(s) {
   const chips = [];
   if (s.plugged_in) chips.push('<span class="chip info">Plugged in</span>');
   if (s.held_messages) chips.push(`<span class="chip warn">${s.held_messages} held</span>`);
-  if (s.schedule_enabled && s.schedule_next) chips.push(`<span class="chip">${s.schedule_next.action === 'plug' ? 'Plug in' : 'Unplug'} ${whenText(s.schedule_next.time)}</span>`);
+  if (s.schedule_next) chips.push(`<span class="chip">${s.schedule_next.action === 'plug' ? 'Plug in' : 'Unplug'} ${whenText(s.schedule_next.time)}</span>`);
   const rp = s.replug || {};
   if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving ${sup('your supplier')} time to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})}</span>`);
   const pc = s.plan_check;
@@ -2246,13 +2246,14 @@ function drawHeroNext(d) {
   $('a-hero').classList.toggle('off', !on);
   const until = (iso) => { const m = Math.max(0, Math.round((new Date(iso) - Date.now()) / 60000)); return m < 1 ? 'now' : 'in ' + hmDur(m * 60); };
   const last = lr ? `Last: ${lr.action === 'plug' ? 'plugged in' : 'unplugged'} ${ago(lr.timestamp)}${lr.startup ? ' (when the add-on started)' : ''}` : '';
-  const what = !on ? ['none', 'Schedule', 'Paused', 'Turn it on to run the slots below'] : !n ? ['none', 'Next', 'Nothing scheduled', 'Add a slot below'] : null;
+  const what = !on && !n ? ['none', 'Schedule', 'Paused', 'Turn it on to run your slots below. Car slots (auto plug-in, Charge now) still run']
+    : !n ? ['none', 'Next', 'Nothing scheduled', 'Add a slot below'] : null;
   $('a-next').innerHTML = what
     ? `<div class="ring">${HERO_ICON[what[0]]}</div><div style="min-width:0"><div class="k">${what[1]}</div><div class="big">${what[2]}</div><div class="sm">${what[3]}${last ? ' · ' + last : ''}</div></div>`
     : `<div class="ring">${HERO_ICON[n.action === 'plug' ? 'plug' : 'unplug']}</div><div style="min-width:0">`
-      + `<div class="k">Next<b>${until(n.time)}</b></div>`
+      + `<div class="k">${on ? 'Next' : 'Schedule paused · next car slot'}<b>${until(n.time)}</b></div>`
       + `<div class="big">${n.action === 'plug' ? 'Plug in' : 'Unplug'} ${esc(whenText(n.time))}</div>`
-      + `<div class="sm">${last || 'Nothing run yet'}</div></div>`;
+      + `<div class="sm">${!on ? 'Your slots are paused; car slots still run' + (last ? ' · ' + last : '') : last || 'Nothing run yet'}</div></div>`;
 }
 function whenText(iso) {
   if (!iso) return '';
@@ -2419,9 +2420,13 @@ function readyRules() {
 // next unplug), minutes from today 00:00, and (while the schedule sets the
 // supplier's ready time) where it goes over the supplier's daily limit in 24 hours
 // (or in a day, from the time it resets: Octopus 12:00)
-// A joined charge's own unplug only runs while the schedule is off (its slot's unplug ends it):
-// left out of the week view and the daily limit while it's on
-const runningEntries = (entries) => (auto.data && auto.data.schedule.enabled) ? (entries || []).filter((e) => !e.only_off) : (entries || []);
+// What runs: with the schedule on, everything but a joined charge's own unplug (its slot's unplug
+// ends it); with it off, only the car slots (auto plug-in, Charge now, the car plugged in sensor).
+// Counted for the daily limit (and the red hours). The week view draws the schedule's own slots
+// too with it off, greyed out (shownEntries)
+const scheduleOn = () => !!(auto.data && auto.data.schedule.enabled);
+const runningEntries = (entries) => scheduleOn() ? (entries || []).filter((e) => !e.only_off) : (entries || []).filter((e) => e.source);
+const shownEntries = (entries) => scheduleOn() ? (entries || []).filter((e) => !e.only_off) : (entries || []);
 function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
   entries = runningEntries(entries);
   const today = today0();
@@ -2497,7 +2502,7 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
 // Slots: a plug-in time and the unplug that ends it, with the days (or the
 // date) they run. Unplug times no slot ends at are "unplug only" ticks.
 function deriveSlots(entries) {
-  entries = runningEntries(entries);
+  entries = shownEntries(entries);
   const slots = [], usage = {}, usedOnce = new Set();
   const skipped = new Set(((auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
   const weeklyU = entries.filter((e) => e.action === 'unplug' && !e.date && /^\d{2}:\d{2}$/.test(e.time));
@@ -2685,18 +2690,18 @@ function drawWeek() {
         + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ` (${hmDur(overMin * 60)} over ${limitText()} a day, in red)` : '')
         + (got.length ? '\n' + got.map((z) => sesText(z.x)).join('\n') : '');
       const ty = typeOf(s);
-      return `<div class="seg ${o.skipped ? 'skip' : ''} ${!on || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''}"
+      return `<div class="seg ${o.skipped ? 'skip' : ''} ${(!on && !s.source) || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''}"
         data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${x1 - x0 > 9 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm((red && over[0][0] > Math.max(o.a, lo) ? over[0][0] : Math.min(o.b, hi)) - lo)}</span>` : ''}</div>`
         + over.map(([x, y]) => {
           const p = span(x, y);
-          return `<div class="seg overpart ${!on ? 'off' : ''}" data-occ="${k}" data-row="${d}" style="left:${p.x0}%;width:${p.x1 - p.x0}%"
+          return `<div class="seg overpart ${!on && !s.source ? 'off' : ''}" data-occ="${k}" data-row="${d}" style="left:${p.x0}%;width:${p.x1 - p.x0}%"
             title="${dayLabel(d)} ${hhmm(x - lo)}–${hhmm(y - lo)}: over ${limitText()} of smart charging a day. ${esc(sup('Your supplier'))} may not charge then · click to change the slot">${p.x1 - p.x0 > 6 ? '<span class="sl">Over</span>' : ''}</div>`;
         }).join('');
     }).join('');
     const ticks = d < 0 ? '' : model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
       // not one that ends a slot (its own unplug skipped), or one skipped for a saving session
       .filter(([o]) => { const k = o.u.id + '|' + (o.date || isoAt(d)); return !(week.extendedBy || new Set()).has(k) && !(week.savingSkips || new Set()).has(k); })
-      .map(([o, j]) => `<div class="tick ${!on || !o.u.enabled ? 'off' : ''}" data-orphan="${j}" data-row="${d}" style="left:${tmin(o.u.time) / 14.4}%"
+      .map(([o, j]) => `<div class="tick ${(!on && !o.u.source) || !o.u.enabled ? 'off' : ''}" data-orphan="${j}" data-row="${d}" style="left:${tmin(o.u.time) / 14.4}%"
         title="${dayLabel(d)} ${o.u.time}: unplug${o.date ? ' (One-off)' : ''}"></div>`).join('');
     const planned = (sc ? sc.periods || [] : []).map((p) => [(new Date(p.start) - day0) / 60000, (new Date(p.end) - day0) / 60000])
       .filter(([a, b]) => b > lo && a < hi).map(([a, b]) => {
@@ -2722,7 +2727,7 @@ function drawWeek() {
   $('w-grid').innerHTML = html;
   drawEditor();
   const empty = !model.slots.length && !model.orphans.length;
-  $('w-note').textContent = empty ? 'No times yet' : on ? '' : 'Off: shown, but won\'t run';
+  $('w-note').textContent = empty ? 'No times yet' : on ? '' : 'Off: only car slots run';
   $('w-empty').hidden = !empty;
   $('w-warn').hidden = !plan.over;
   if (plan.over) {

@@ -573,10 +573,9 @@ class Automation:
                 new_entries = [e for e in new_entries if e["id"] not in added]
                 new_skips = [k for k in new_skips if k not in (gone["trims"].get("skips") or [])]
                 logger.info("Schedule: a charge was deleted, putting back what it changed")
-        # (the checks below count the entries as they'll run: with the schedule on, not a
-        # joined charge's own unplug, kept for when it's off)
-        will_run = self.schedule_enabled if enabled is None else bool(enabled)
-        run_new = (lambda xs: without_fallbacks(xs)) if will_run else (lambda xs: xs)
+        # (the checks below count the entries as they run with the schedule on, also while it's
+        # off, as car slots are planned: not a joined charge's own unplug, kept for when it's off)
+        run_new = without_fallbacks
         guards_off = self.override_guards if override_guards is None else bool(override_guards)
         if guards_off:
             daily_cap_min = None
@@ -1090,7 +1089,10 @@ class Automation:
             return validate_entry({"time": t.strftime("%H:%M"), "date": t.date().isoformat(),
                                    "action": action, "source": src})
 
-        active = self._active_entries()
+        # Planned as if the schedule were on, also with it off: the charge joins your slots, trims
+        # or skips later ones for the daily limit and skips an unplug that'd cut it short, so it
+        # all fits when the schedule's on. With it off, the charge ends at its own end (below)
+        active = without_fallbacks(self.entries)
         seg_entries = []  # plug / unplug for each part but the last's unplug
         for i, (x, y) in enumerate(segments):
             seg_entries.append(one_off(x, "plug"))
@@ -1149,9 +1151,9 @@ class Automation:
                         skips.append({"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()})
             if not any(s["end"] == slot_end for s in joined):
                 added.append(unplug)  # the charge ends last: its own unplug
-            elif self.schedule_enabled:
-                # It ends with a scheduled slot's unplug. Its own is kept too, for if the
-                # schedule's turned off before then (that slot's unplug wouldn't run)
+            else:
+                # It ends with a scheduled slot's unplug. Its own is kept too, used while the
+                # schedule is off (that slot's unplug doesn't run then)
                 added.append(dict(unplug, only_off=True))
             # A scheduled unplug during the charge (e.g. an "unplug at 07:00
             # every day", or a joined slot's that ends before it) would end it
@@ -1750,12 +1752,14 @@ class Automation:
         return None
 
     def next_action(self) -> Optional[dict]:
-        if not self.schedule_enabled:
-            return None
+        """The next time that runs: the schedule's (on), or with it off a car slot's (auto
+        plug-in, Charge now, the car plugged in sensor), which run either way. "car_slot": true
+        for one of those."""
         now = self._now()
-        for occ, entry, skipped in self.timeline(now.date(), 8):
+        for occ, entry, skipped in self.timeline(now.date(), self._horizon_days()):
             if occ > now and not skipped:
-                return {"time": _iso_local(occ), "action": entry["action"], "entry_id": entry["id"]}
+                return {"time": _iso_local(occ), "action": entry["action"], "entry_id": entry["id"],
+                        "car_slot": entry.get("source") in AUTO_SOURCES}
         return None
 
     # --- the supplier's plan vs the schedule ------------------------------------

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.50.4 — Car slots with the schedule off
+
+- With the schedule off, the switch only pauses your own slots: they're greyed
+  out in the week, while car slots (auto plug-in, Charge now, the car plugged
+  in sensor) stay in colour, as they still run. The banner shows the next car
+  slot time (and so does the Overview's chip) instead of just "Paused"
+- A car slot planned with the schedule off now fits around your slots as it
+  would with it on: it joins the ones it meets, and trims or skips later ones
+  for your supplier's daily limit. With the schedule off it still ends at its
+  own end; turned back on, it's already one with your slots
+- The daily limit counts the schedule as it runs with it on, also while it's off
+
 ## 2.50.3 — Turning the schedule on checks the daily limit
 
 - Turning the schedule on now checks your supplier's daily limit (Octopus: 6
