@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.50.2 — Turning the schedule on and off
+
+- **Turned on during a slot:** it plugs in until the slot's end (as at
+  start-up), with the ready time set to it if Force schedule on supplier is on
+- **Turned on during a car slot** (a charge from auto plug-in, the car plugged
+  in sensor or Charge now, planned while the schedule was off): the charge
+  joins the slots it meets, as if planned with the schedule on, so it's
+  plugged in until whichever ends last. Before, the charge's own end cut the
+  slot short (or the slot's end cut the charge short)
+- **Turned off during a slot:** it unplugs. During a car slot it doesn't: the
+  charge separates from the slot it joined and carries on to its own end (the
+  ready time set back to it). Not plugged in by the schedule (e.g. by hand,
+  outside a slot): left alone
+
 ## 2.50.1 — Unplugged after the charge, with the schedule off
 
 - Auto plug-in, Charge now and the car plugged in sensor still unplug at the

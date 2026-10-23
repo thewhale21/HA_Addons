@@ -844,6 +844,133 @@ def test_a_joined_charge_still_unplugs_when_the_schedule_is_turned_off(tmp_path)
     assert not [e for e in a.entries if e.get("only_off")]
 
 
+def test_a_charge_planned_with_the_schedule_off_joins_its_slot_when_turned_on():
+    """2.50.2: turned on, a charge (planned while it was off) becomes one with the slots it meets."""
+    from src.automation import CHARGE_NOW_SOURCE
+
+    def unplugs(a, clock, hours=7):
+        a.due()
+        out = []
+        for _ in range(hours * 12):
+            clock.advance(minutes=5)
+            out += [clock.now().strftime("%H:%M") for e in a.due() if e["action"] == "unplug"]
+        return out
+
+    # 17:00-19:00, the schedule's 18:00-22:00: one stretch to 22:00 (not unplugged at 19:00)
+    a, clock = _sched_18_22(_at(17), enabled=False)
+    a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
+    a.set_schedule(enabled=True)
+    assert unplugs(a, clock) == ["22:00"]
+    # 17:00-23:00 over the slot: not unplugged at 22:00
+    a, clock = _sched_18_22(_at(17), enabled=False)
+    a.plan_auto_plug(360, source=CHARGE_NOW_SOURCE)
+    a.set_schedule(enabled=True)
+    assert unplugs(a, clock, 8) == ["23:00"]
+    # Off again: the charge's own end (as it would have been)
+    a, clock = _sched_18_22(_at(17), enabled=False)
+    a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
+    a.set_schedule(enabled=True)
+    a.set_schedule(enabled=False)
+    assert unplugs(a, clock) == ["19:00"]
+    # Deleting the charge puts the slot back as it was
+    a, clock = _sched_18_22(_at(17), enabled=False)
+    a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
+    a.set_schedule(enabled=True)
+    plug = next(e for e in a.entries if e.get("source") and e["action"] == "plug")
+    a.set_schedule(entries=[e for e in a.entries if e["id"] != plug["id"] and not e.get("source")])
+    assert a.skips == []
+
+
+def test_turning_the_schedule_on_inside_a_slot_plugs_in():
+    from src.automation import automation_loop
+    from src.shared_state import SharedState
+    a, clock = _sched_18_22(_at(19, 30), enabled=False)
+    state = SharedState(plugged_in=False)
+    calls, asked = [], []
+
+    async def plug(source=None):
+        calls.append(("plug", source))
+        state.plugged_in = True
+
+    async def unplug(source=None):
+        calls.append(("unplug", source))
+        state.plugged_in = False
+
+    async def set_ready(unplug_at):
+        asked.append(unplug_at.strftime("%H:%M"))
+        return {"ready": unplug_at.strftime("%H:%M")}
+
+    async def run():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01, set_ready_time=set_ready))
+        await asyncio.sleep(0.05)
+        seen = list(calls)
+        a.set_schedule(enabled=True, ready_time=True)  # 19:30, inside 18:00-22:00
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        return seen
+
+    seen = _run(run())
+    assert seen == []  # off: nothing
+    assert calls == [("plug", "schedule")] and asked == ["22:00"]  # on: plugged in to the slot's end
+    # Outside a slot: nothing
+    b, _ = _sched_18_22(_at(12), enabled=False)
+    b.set_schedule(enabled=True)
+    assert b.turned_on and b.in_plug_window() is None
+
+
+def test_turning_the_schedule_off_unplugs_unless_its_a_car_slot():
+    """2.50.2: off during a scheduled slot: unplugged. Off during a car slot (a charge, even one
+    joined with a slot): it carries on to the charge's own end. Not plugged in by the schedule
+    (e.g. by hand, outside a slot): left alone."""
+    from src.automation import CHARGE_NOW_SOURCE, automation_loop
+    from src.shared_state import SharedState
+
+    def turn_off(a, plugged=True):
+        state = SharedState(plugged_in=plugged)
+        calls, asked = [], []
+
+        async def plug(source=None):
+            calls.append(("plug", source))
+
+        async def unplug(source=None):
+            calls.append(("unplug", source))
+            state.plugged_in = False
+
+        async def set_ready(unplug_at):
+            asked.append(unplug_at.strftime("%H:%M"))
+            return {"ready": unplug_at.strftime("%H:%M")}
+
+        async def run():
+            task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01, set_ready_time=set_ready))
+            await asyncio.sleep(0.05)
+            a.set_schedule(enabled=False)
+            await asyncio.sleep(0.05)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+        _run(run())
+        return calls, asked
+
+    # 19:30, in the 18:00-22:00 slot: unplugged
+    a, clock = _sched_18_22(_at(19, 30))
+    assert turn_off(a) == ([("unplug", "schedule off")], [])
+    # 17:30, in a Charge now 17:00-19:00 joined with the slot: carries on, ready time back to 19:00
+    a, clock = _sched_18_22(_at(17))
+    a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
+    a.set_schedule(ready_time=True)
+    clock.advance(minutes=30)
+    assert turn_off(a) == ([], ["19:00"])
+    # 20:00, the joined charge's own end passed: the slot's part: unplugged
+    a, clock = _sched_18_22(_at(17))
+    a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
+    clock.advance(hours=3)
+    assert turn_off(a)[0] == [("unplug", "schedule off")]
+    # 12:00, plugged in by hand outside any slot: left alone
+    a, clock = _sched_18_22(_at(12))
+    assert turn_off(a) == ([], [])
+
+
 def test_auto_plug_charge_sets_the_ready_time():
     from src.automation import auto_plug_charge
     a, clock = _sched_18_22(_at(16, 30))

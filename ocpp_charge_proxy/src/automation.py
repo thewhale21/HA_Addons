@@ -389,6 +389,8 @@ class Automation:
         self._now = now
         self._clock = clock
         self.schedule_enabled = False
+        self.turned_on = False  # the schedule was just turned on (automation_loop takes it)
+        self.turned_off = False  # ... or off, while it had the car plugged in
         self.entries: list[dict] = []
         self.skips: list[dict] = []  # [{"entry_id", "date"}]: times skipped once
         self.ready_time = False  # set the supplier's ready time at scheduled plug-ins
@@ -611,7 +613,15 @@ class Automation:
         self.skips = [k for k in new_skips if k["entry_id"] in ids]
         self._prune()
         if enabled is not None:
+            turned_on = bool(enabled) and not self.schedule_enabled
+            # Turned off while the schedule has it plugged in: the loop unplugs, unless a car slot
+            # (a charge) is going now; that carries on to its own end (see automation_loop)
+            if not bool(enabled) and self.schedule_enabled and self.in_plug_window() is not None:
+                self.turned_off = True
             self.schedule_enabled = bool(enabled)
+            if turned_on:
+                self._join_charges()
+                self.turned_on = True  # the loop plugs in if it's inside a slot now (see automation_loop)
         if ready_time is not None:
             self.ready_time = bool(ready_time)
         if wait is not None:
@@ -869,6 +879,58 @@ class Automation:
                 source = next((e["source"] for e in ones if e.get("source") in AUTO_SOURCES), "one_off")
                 out.append({"start": _iso_local(s["start"]), "end": _iso_local(s["end"]), "source": source})
         return out[::-1]
+
+    def _join_charges(self) -> int:
+        """The schedule was just turned on: each charge still to come or going now (auto
+        plug-in, Charge now, the car plugged in sensor), planned while it was off, becomes one
+        with the scheduled slots it meets or overlaps, as if planned with it on: plugged in
+        until whichever ends last. Unplugs in between are skipped this once (the charge's own
+        becomes "only_off", for if the schedule's turned off again) and plug-ins in between
+        too (or the ready time would be set to an earlier unplug). Where an unplug and a plug-in
+        meet on purpose (a split at the daily limit's reset), they're left. Returns how many."""
+        now = self._now()
+        start_day = now.date() - datetime.timedelta(days=1)
+        days = self._horizon_days() + 1
+        running = without_fallbacks(self.entries)
+        auto = [e for e in running if e.get("source") in AUTO_SOURCES]
+        own = [e for e in running if e.get("source") not in AUTO_SOURCES]
+        slots = [x for x in self._stretches(start_day, days, own, self.skips) if x["end"] > now]
+        joins = 0
+        for c in [x for x in self._stretches(start_day, days, auto, self.skips) if x["end"] > now]:
+            lo, hi, joined, grew = c["start"], c["end"], [], True
+            while grew:
+                grew = False
+                for x in slots:
+                    if x in joined or x["start"] > hi or x["end"] < lo:
+                        continue
+                    joined.append(x)
+                    lo, hi, grew = min(lo, x["start"]), max(hi, x["end"]), True
+            if not joined:
+                continue
+            timeline = self.timeline(start_day, days, running, self.skips)
+            plugs_at = {t for t, e, skipped in timeline if e["action"] == "plug" and not skipped}
+            unplugs_at = {t for t, e, skipped in timeline if e["action"] == "unplug" and not skipped}
+            new_skips = []
+            for t, e, skipped in timeline:
+                if skipped or not lo < t < hi or (t in plugs_at and t in unplugs_at):
+                    continue  # (a back-to-back split, kept)
+                if e["action"] == "unplug":
+                    if e["id"] == c["unplug"]["id"] and e.get("source") in AUTO_SOURCES:
+                        e["only_off"] = True  # the charge's own: only when the schedule's off
+                    else:
+                        new_skips.append({"entry_id": e["id"], "date": t.date().isoformat()})
+                elif t > now:
+                    new_skips.append({"entry_id": e["id"], "date": t.date().isoformat()})
+            new_skips = [k for k in new_skips if k not in self.skips]
+            self.skips += new_skips
+            # Put back if the charge is deleted (as for one planned with the schedule on)
+            trims = c["plug"].setdefault("trims", {"skips": [], "added": []})
+            trims["skips"] = trims.get("skips", []) + new_skips
+            joins += 1
+            logger.info("Schedule on: the %s from %s joins the scheduled slot, plugged in until %s",
+                        SOURCE_NAMES.get(c["plug"].get("source"), "charge"), c["start"].strftime("%a %H:%M"),
+                        hi.strftime("%a %H:%M"))
+        return joins
 
     def _stretches(self, start: datetime.date, days: int, entries: list, skips: list) -> list:
         """Plugged-in stretches with the entries that make them:
@@ -1646,6 +1708,18 @@ class Automation:
         last = self.last_event(at or self._now())
         return last[0] if last and last[1]["action"] == "plug" else None
 
+    def in_charge_window(self, at: Optional[datetime.datetime] = None) -> Optional[datetime.datetime]:
+        """When the car slot (a charge: auto plug-in, Charge now, the car plugged in sensor) we're
+        in started, if one has the car plugged in at `at` (default now), on its own (as with the
+        schedule off: its own end, not a slot it joined); else None."""
+        at = at or self._now()
+        charges = [e for e in self.entries if e.get("source") in AUTO_SOURCES]
+        best = None
+        for occ, entry, skipped in self.timeline(at.date() - datetime.timedelta(days=7), 9, charges):
+            if occ <= at and not skipped:
+                best = (occ, entry)
+        return best[0] if best and best[1]["action"] == "plug" else None
+
     def next_unplug(self, after: datetime.datetime) -> Optional[datetime.datetime]:
         """The schedule's next unplug after `after` (within a week). Back-to-back
         slots each have their own: they unplug and plug back in where they meet."""
@@ -1895,6 +1969,7 @@ async def automation_loop(
             shared_state.slot_now = slot_now() if slot_now is not None else None
             if first:
                 first = False
+                automation.turned_on = automation.turned_off = False  # (start-up does the same check, just below)
                 since = automation.in_plug_window()
                 if since is not None and not shared_state.plugged_in:
                     logger.info("Started inside a scheduled plug-in (since %s): plugging in", since.strftime("%a %H:%M"))
@@ -1907,6 +1982,32 @@ async def automation_loop(
                 last_try = automation._clock() - started >= STARTUP_READY_S
                 result = await apply_ready_time(automation, set_ready_time, log_errors=last_try)
                 ready_pending = bool(result.get("error")) and not last_try
+            if automation.turned_on:
+                # The schedule was just turned on: inside a slot (or a charge joined with one),
+                # plugged in to its end, as at start-up; the ready time set to that end
+                automation.turned_on = False
+                since = automation.in_plug_window()
+                if since is not None:
+                    if not shared_state.plugged_in:
+                        logger.info("Schedule turned on inside a plug-in (since %s): plugging in", since.strftime("%a %H:%M"))
+                        await plug(source="schedule")
+                    if automation.ready_time and set_ready_time is not None:
+                        await apply_ready_time(automation, set_ready_time)
+            if automation.turned_off:
+                # The schedule was turned off while it had the car plugged in: unplugged, unless
+                # a car slot is going now (separated from the slot it joined: on to its own end)
+                automation.turned_off = False
+                if shared_state.plugged_in:
+                    since = automation.in_charge_window()
+                    if since is None:
+                        logger.info("Schedule turned off: unplugging (the schedule had it plugged in)")
+                        automation.unplug_at = None
+                        await unplug(source="schedule off")
+                    else:
+                        logger.info("Schedule turned off during a car slot (since %s): it carries on to its own end",
+                                    since.strftime("%a %H:%M"))
+                        if automation.ready_time and set_ready_time is not None:
+                            await apply_ready_time(automation, set_ready_time)  # the charge's own end
             for entry in automation.due():
                 automation.last_run = {
                     "entry_id": entry["id"], "action": entry["action"],
