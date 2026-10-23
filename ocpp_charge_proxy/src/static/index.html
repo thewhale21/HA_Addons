@@ -2418,7 +2418,11 @@ function readyRules() {
 // next unplug), minutes from today 00:00, and (while the schedule sets the
 // supplier's ready time) where it goes over the supplier's daily limit in 24 hours
 // (or in a day, from the time it resets: Octopus 12:00)
+// A joined charge's own unplug only runs while the schedule is off (its slot's unplug ends it):
+// left out of the week view and the daily limit while it's on
+const runningEntries = (entries) => (auto.data && auto.data.schedule.enabled) ? (entries || []).filter((e) => !e.only_off) : (entries || []);
 function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
+  entries = runningEntries(entries);
   const today = today0();
   const skips = new Set((skipList || (auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
   const events = [];
@@ -2492,6 +2496,7 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
 // Slots: a plug-in time and the unplug that ends it, with the days (or the
 // date) they run. Unplug times no slot ends at are "unplug only" ticks.
 function deriveSlots(entries) {
+  entries = runningEntries(entries);
   const slots = [], usage = {}, usedOnce = new Set();
   const skipped = new Set(((auto.data && auto.data.schedule.skips) || []).map((k) => k.entry_id + '|' + k.date));
   const weeklyU = entries.filter((e) => e.action === 'unplug' && !e.date && /^\d{2}:\d{2}$/.test(e.time));

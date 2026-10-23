@@ -806,6 +806,44 @@ def test_auto_plug_slot_runs_with_the_schedule_off():
     assert a.snapshot()["schedule"]["auto_plug_last"]["end"].startswith("2026-10-03T13:00")
 
 
+def test_a_joined_charge_still_unplugs_when_the_schedule_is_turned_off(tmp_path):
+    """2.50.1: a charge that joins a scheduled slot ends with the slot's unplug. Turned off, the
+    schedule's unplug doesn't run, so the charge keeps its own for then."""
+    from src.automation import CHARGE_NOW_SOURCE
+
+    def unplugs(a, clock, hours=6):
+        a.due()
+        out = []
+        for _ in range(hours * 12):
+            clock.advance(minutes=5)
+            out += [clock.now().strftime("%H:%M") for e in a.due() if e["action"] == "unplug"]
+        return out
+
+    # 17:00 for 2 hours meets the 18:00-22:00 slot: one slot to 22:00
+    a, clock = _sched_18_22(_at(17))
+    out = a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
+    assert out["combined"] and out["end"].startswith("2026-10-03T22:00")
+    assert unplugs(a, clock) == ["22:00"]  # schedule on: the slot's unplug, as before
+    a, clock = _sched_18_22(_at(17))
+    a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
+    a.set_schedule(enabled=False)
+    assert unplugs(a, clock) == ["19:00"]  # off: the charge's own end
+    # Inside the slot, kept through a restart
+    a, clock = _sched_18_22(_at(20))
+    a.data_dir = str(tmp_path)
+    a.plan_auto_plug(60, source=CHARGE_NOW_SOURCE)
+    assert [e["time"] for e in a.entries if e.get("only_off")] == ["21:00"]
+    assert not [y for x, y in a.windows() if y.strftime("%H:%M") == "21:00"]  # with the schedule on, it doesn't end a slot
+    a.set_schedule(enabled=False)
+    assert unplugs(a, clock, 3) == ["21:00"]
+    # Deleting the charge takes its own unplug too
+    a, clock = _sched_18_22(_at(17))
+    a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
+    plug = next(e for e in a.entries if e.get("source") and e["action"] == "plug")
+    a.set_schedule(entries=[e for e in a.entries if e["id"] != plug["id"]])
+    assert not [e for e in a.entries if e.get("only_off")]
+
+
 def test_auto_plug_charge_sets_the_ready_time():
     from src.automation import auto_plug_charge
     a, clock = _sched_18_22(_at(16, 30))

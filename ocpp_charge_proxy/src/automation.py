@@ -189,6 +189,11 @@ def minus(windows: list, cuts: list) -> list:
     return out
 
 
+def without_fallbacks(entries: list) -> list:
+    """The entries but the unplugs kept only for when the schedule is off ("only_off")."""
+    return [e for e in entries if not e.get("only_off")]
+
+
 def validate_entry(raw: dict) -> dict:
     """A schedule entry: {id, time "HH:MM", days [0=Mon..6=Sun], action, enabled},
     or a one-off: the same with "date": "YYYY-MM-DD" (days is then that day)."""
@@ -210,6 +215,11 @@ def validate_entry(raw: dict) -> dict:
         }
         if raw.get("source") in AUTO_SOURCES:
             out["source"] = raw["source"]
+            if raw.get("only_off"):
+                # A charge's own unplug where it joined a scheduled slot (the slot's unplug ends
+                # it): it only runs while the schedule is off, so turning the schedule off
+                # doesn't leave the car plugged in after the charge
+                out["only_off"] = True
         trims = raw.get("trims")
         if isinstance(trims, dict):  # what this charge changed in the schedule (put back if it's deleted)
             out["trims"] = {
@@ -560,13 +570,17 @@ class Automation:
                 new_entries = [e for e in new_entries if e["id"] not in added]
                 new_skips = [k for k in new_skips if k not in (gone["trims"].get("skips") or [])]
                 logger.info("Schedule: a charge was deleted, putting back what it changed")
+        # (the checks below count the entries as they'll run: with the schedule on, not a
+        # joined charge's own unplug, kept for when it's off)
+        will_run = self.schedule_enabled if enabled is None else bool(enabled)
+        run_new = (lambda xs: without_fallbacks(xs)) if will_run else (lambda xs: xs)
         guards_off = self.override_guards if override_guards is None else bool(override_guards)
         if guards_off:
             daily_cap_min = None
         if daily_cap_min and (self.ready_time if ready_time is None else bool(ready_time)):
             # A slot across the limit's reset time (Octopus: 12:00) that's longer
             # than the limit is split there: two charges, each with its own ready time
-            splits = self._reset_splits(new_entries, new_skips, daily_cap_min)
+            splits = self._reset_splits(run_new(new_entries), new_skips, daily_cap_min)
             if splits:
                 new_entries = new_entries + splits
                 logger.info("Schedule: split %s at %s, where %s's daily limit resets",
@@ -582,15 +596,15 @@ class Automation:
                 # that's already over (e.g. after a Charge now) can still be
                 # changed, as long as it doesn't get worse.
                 only_times = entries is not None and not ready_time and override_guards is None
-                if not only_times or self._makes_worse(daily_cap_min, (self.entries, self.skips), (new_entries, new_skips)):
-                    self.check_daily_cap(new_entries, daily_cap_min, provider, new_skips)
+                if not only_times or self._makes_worse(daily_cap_min, (run_new(self.entries), self.skips), (run_new(new_entries), new_skips)):
+                    self.check_daily_cap(run_new(new_entries), daily_cap_min, provider, new_skips)
         new_blocks = self.blocks
         if blocks is not None:
             if not isinstance(blocks, list) or len(blocks) > 20:
                 raise ValueError("Off-peak times must be a list (at most 20)")
             new_blocks = [validate_block(b) for b in blocks]
         if entries is not None or blocks is not None:
-            self.check_blocks(new_entries, new_blocks, new_skips)
+            self.check_blocks(run_new(new_entries), new_blocks, new_skips)
         self.blocks = new_blocks
         self.entries = new_entries
         ids = {e["id"] for e in self.entries}
@@ -683,10 +697,10 @@ class Automation:
         return out
 
     def _active_entries(self) -> list:
-        """The entries that run: all of them with the schedule on, else only
-        those an auto plug-in charge added."""
+        """The entries that run: all of them with the schedule on (but a joined charge's
+        own unplug, kept for when it's off), else only those an auto plug-in charge added."""
         if self.schedule_enabled:
-            return self.entries
+            return without_fallbacks(self.entries)
         return [e for e in self.entries if e.get("source") in AUTO_SOURCES]
 
     def _horizon_days(self, entries: Optional[list] = None) -> int:
@@ -1052,6 +1066,10 @@ class Automation:
                         skips.append({"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()})
             if not any(s["end"] == slot_end for s in joined):
                 added.append(unplug)  # the charge ends last: its own unplug
+            elif self.schedule_enabled:
+                # It ends with a scheduled slot's unplug. Its own is kept too, for if the
+                # schedule's turned off before then (that slot's unplug wouldn't run)
+                added.append(dict(unplug, only_off=True))
             # A scheduled unplug during the charge (e.g. an "unplug at 07:00
             # every day", or a joined slot's that ends before it) would end it
             # early: skipped this once
@@ -1070,7 +1088,7 @@ class Automation:
             same for the 24 hours that meet each later slot, which trimming it
             can fix: {i: minutes})."""
             added, skips, *_ = build(cuts)
-            wins = self.windows(active + added, now, skips)
+            wins = self.windows(active + without_fallbacks(added), now, skips)
             worst = excess = 0
             near = {}
             for a in limit_starts(wins + base, span[0], span[1], reset, loc):
@@ -1107,10 +1125,11 @@ class Automation:
         added, skips, combined, slot_end, moved = build(cuts)
         # Longer than the limit across its reset time (e.g. 08:00-18:00 with
         # Octopus's 12:00): split there, a fresh charge with its own ready time
-        splits = self._reset_splits(active + added, skips, cap_min, one_off=True, until=slot_end) if cap_min else []
+        splits = self._reset_splits(active + without_fallbacks(added), skips, cap_min, one_off=True, until=slot_end) if cap_min else []
         added += splits
         changed = {"skips": [k for k in skips if k not in self.skips],
-                   "added": [e["id"] for e in added if e["id"] not in {x["id"] for x in seg_entries + [unplug]}]}
+                   "added": [e["id"] for e in added if e["id"] not in {x["id"] for x in seg_entries + [unplug]}
+                             or e.get("only_off")]}  # (the fallback unplug goes if the charge is deleted)
         if changed["skips"] or changed["added"]:
             added[0] = dict(added[0], trims=changed)  # put back if this charge is deleted
         notes = ([shortened] if shortened else []) + blocked_notes
@@ -1533,13 +1552,14 @@ class Automation:
             new = list(self.skips)
             for key, _ in keys:
                 new = [k for k in new if k != key] + ([key] if skip else [])
-            if self._makes_worse(daily_cap_min, (self.entries, self.skips), (self.entries, new)):
-                self.check_daily_cap(self.entries, daily_cap_min, provider, new)  # raises, with the details
+            running = without_fallbacks(self.entries)
+            if self._makes_worse(daily_cap_min, (running, self.skips), (running, new)):
+                self.check_daily_cap(running, daily_cap_min, provider, new)  # raises, with the details
         if not skip:
             new = list(self.skips)
             for key, _ in keys:
                 new = [k for k in new if k != key]
-            self.check_blocks(self.entries, self.blocks, new)  # e.g. an off-peak time added while it was skipped
+            self.check_blocks(self._active_entries() if self.schedule_enabled else self.entries, self.blocks, new)  # e.g. an off-peak time added while it was skipped
         for key, entry in keys:
             self.skips = [k for k in self.skips if k != key] + ([key] if skip else [])
             logger.info("Schedule: %s the %s at %s on %s", "skipping" if skip else "no longer skipping",

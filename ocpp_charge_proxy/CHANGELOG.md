@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.50.1 — Unplugged after the charge, with the schedule off
+
+- Auto plug-in, Charge now and the car plugged in sensor still unplug at the
+  end of their charge after the schedule's turned off. A charge that met a
+  scheduled slot became one with it and ended with the slot's unplug, which
+  doesn't run with the schedule off, so the car stayed plugged in. It now
+  keeps its own unplug as well, used only while the schedule is off (not
+  shown in the week, or counted, while it's on)
+
 ## 2.50.0 — Over the daily limit, if you choose
 
 - Everywhere the schedule is refused for going over your supplier's daily
