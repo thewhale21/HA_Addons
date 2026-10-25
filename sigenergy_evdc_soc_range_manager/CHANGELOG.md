@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.30.0 — Discharge only
+
+- **New:** a **Discharge only** quick hold (Schedule tab › Limits now): the
+  high limit at the car's SoC now, for 1 to 8 hours or until a time, so the
+  car can discharge (down to the low limit) but isn't charged. Like the other
+  holds it's a one-off schedule entry, so it ends by itself.
+
 ## 0.29.0 — The house's whole use, if you like
 
 - **New:** Settings › Power flow card › **Take them off the house**: on

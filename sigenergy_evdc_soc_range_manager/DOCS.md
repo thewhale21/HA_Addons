@@ -123,7 +123,9 @@ The house's use comes from `sensor.sigen_plant_consumed_power` (or is
 worked out from the others if that isn't set).
 
 **Quick hold** (in the Schedule tab's **Limits now** banner) holds the car for a while, from now:
-**No discharging** puts the low limit at its SoC now, **Hold here** keeps
+**No discharging** puts the low limit at its SoC now, **Discharge only**
+puts the high limit at its SoC now (so it can discharge, down to the low
+limit, but isn't charged), **Hold here** keeps
 it where it is, and **Keep at least** sets a low limit you choose, for 1
 to 8 hours or until a time. Each is a one-off schedule entry, so it ends
 by itself; the ✕ on its chip ends it early.

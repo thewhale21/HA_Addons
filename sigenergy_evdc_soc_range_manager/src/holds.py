@@ -3,6 +3,8 @@ a time (or for so many hours), made from the car's SoC now.
 
 - no_discharge: the low limit at the car's SoC now, so it isn't discharged
   any further (it can still charge).
+- discharge_only: the high limit at the car's SoC now, so it isn't charged
+  any further (it can still discharge, down to the low limit).
 - hold: the low limit at the SoC now and the high limit 1% above it, so it
   stays where it is.
 - at_least: the low limit at a level you give (e.g. 90% for a trip).
@@ -17,7 +19,7 @@ from typing import Optional
 
 from src.controller import SOC_CEILING, SOC_FLOOR
 
-KINDS = ("no_discharge", "hold", "at_least")
+KINDS = ("no_discharge", "discharge_only", "hold", "at_least")
 MAX_HOURS = 23.75  # a one-off entry runs at most to the same time the next day
 
 
@@ -41,13 +43,16 @@ def make_hold(kind: str, soc: Optional[float], now: datetime.datetime, *, until:
         raise ValueError("Say how long: hours or until")
     if end - start < datetime.timedelta(minutes=15):
         raise ValueError("A hold lasts at least 15 minutes")
-    if kind in ("no_discharge", "hold") and soc is None:
+    if kind in ("no_discharge", "discharge_only", "hold") and soc is None:
         raise ValueError("The car's SoC isn't known yet")
     entry = {"kind": "once", "date": start.date().isoformat(), "start": start.strftime("%H:%M"),
              "end": end.strftime("%H:%M"), "high": None, "low": None}
     if kind == "no_discharge":
         entry["low"] = max(SOC_FLOOR, min(round(soc), SOC_CEILING - 1))
         entry["label"] = f"Hold: no discharging below {entry['low']:g}%"
+    elif kind == "discharge_only":
+        entry["high"] = max(SOC_FLOOR + 1, min(round(soc), SOC_CEILING))
+        entry["label"] = f"Hold: discharge only, no charging above {entry['high']:g}%"
     elif kind == "hold":
         entry["low"] = max(SOC_FLOOR, min(round(soc), SOC_CEILING - 1))
         entry["high"] = entry["low"] + 1

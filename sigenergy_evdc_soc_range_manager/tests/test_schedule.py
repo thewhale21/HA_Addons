@@ -110,6 +110,13 @@ def test_one_tap_holds(tmp_path):
     a = make_hold("at_least", None, now, until="10:00", low=90)
     assert a["low"] == 90 and a["label"] == "Hold: at least 90%"
     assert make_hold("no_discharge", 12, now, hours=1)["low"] == 20  # never below the floor
+    d = make_hold("discharge_only", 57.4, now, hours=2)
+    assert (d["end"], d["high"], d["low"]) == ("23:37", 57, None) and "discharge only" in d["label"]
+    assert make_hold("discharge_only", 12, now, hours=1)["high"] == 21  # above the floor
+    assert make_hold("discharge_only", 100, now, hours=1)["high"] == 99  # never above the ceiling
+    with pytest.raises(ValueError):
+        make_hold("discharge_only", None, now, hours=1)  # the SoC isn't known
+    Schedule(str(tmp_path / "d")).add(d)  # a valid schedule entry
     for bad in (dict(kind="hold", soc=None, hours=1), dict(kind="x", soc=50, hours=1), dict(kind="hold", soc=50, hours=30),
                 dict(kind="at_least", soc=50, hours=1), dict(kind="hold", soc=50)):
         with pytest.raises(ValueError):

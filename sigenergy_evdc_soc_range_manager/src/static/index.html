@@ -538,7 +538,7 @@
         <div class="side">
           <div class="k" style="margin-bottom:8px">Quick hold <span style="text-transform:none;letter-spacing:0;opacity:.85">· from now, for a while</span></div>
           <div class="hold">
-            <div class="seg" role="group" aria-label="Hold" id="hold-kind"><button data-k="no_discharge" aria-pressed="true" title="The low limit at the car's SoC now: it isn't discharged any further">No discharging</button><button data-k="hold" aria-pressed="false" title="Kept where it is: neither charged nor discharged by more than 1%">Hold here</button><button data-k="at_least" aria-pressed="false" title="The low limit at a level you choose">Keep at least</button></div>
+            <div class="seg" role="group" aria-label="Hold" id="hold-kind"><button data-k="no_discharge" aria-pressed="true" title="The low limit at the car's SoC now: it isn't discharged any further">No discharging</button><button data-k="discharge_only" aria-pressed="false" title="The high limit at the car's SoC now: it isn't charged any further, but can still discharge">Discharge only</button><button data-k="hold" aria-pressed="false" title="Kept where it is: neither charged nor discharged by more than 1%">Hold here</button><button data-k="at_least" aria-pressed="false" title="The low limit at a level you choose">Keep at least</button></div>
           </div>
           <div class="hold" style="margin-top:8px">
             <span class="field" id="hold-low-wrap" hidden><input type="number" id="hold-low" min="20" max="98" step="1" value="90" aria-label="Keep at least (%)"><span class="unit">%</span></span>
@@ -548,7 +548,7 @@
             </select>
             <button class="btn small primary" id="hold-go">Hold</button>
           </div>
-          <details class="more sm" style="display:block;margin-top:8px"><summary>How it works</summary><div><b>No discharging</b> puts the low limit at the car's SoC now, <b>Hold here</b> keeps it where it is, <b>Keep at least</b> sets a low limit you choose. Each is a one-off entry in the schedule below, so it ends by itself.</div></details>
+          <details class="more sm" style="display:block;margin-top:8px"><summary>How it works</summary><div><b>No discharging</b> puts the low limit at the car's SoC now, <b>Discharge only</b> puts the high limit there (so it can discharge but not charge), <b>Hold here</b> keeps it where it is, <b>Keep at least</b> sets a low limit you choose. Each is a one-off entry in the schedule below, so it ends by itself.</div></details>
           <div class="row" id="hold-now" style="margin-top:10px;gap:6px" hidden></div>
         </div>
       </div>

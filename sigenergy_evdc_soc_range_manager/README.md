@@ -99,7 +99,7 @@ over. The limits always stay between 20% and 99%.
   most of the time, and the car's battery capacity is set there too. Add schedule entries to change them for a while, every
   week (e.g. Tue and Thu 23:00–08:00, high 80% so the car's full for the
   commute) or once. **Skip next** leaves out one week's entry.
-- **Quick hold** (Schedule tab): **No discharging**, **Hold here**, or
+- **Quick hold** (Schedule tab): **No discharging**, **Discharge only**, **Hold here**, or
   **Keep at least** a %, for a few hours or until a time.
 - **Start / Stop by hand:** the Overview's Virtual battery card.
 - **Get told:** set a **Notify service** (Settings), e.g.
