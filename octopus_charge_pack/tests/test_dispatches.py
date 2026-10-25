@@ -239,6 +239,33 @@ def test_a_session_whose_end_moves_later_is_one_session():
     assert kept["completed"] == []
 
 
+def test_a_session_re_planned_part_way_through_is_one_session():
+    from src.dispatches import merge_overlapping, track_completed
+    at = lambda hh, mm=0: datetime.datetime(2026, 10, 25, hh, mm, tzinfo=datetime.timezone.utc)
+    kept = {}
+    whole, rest = _d("2026-10-25T04:30:00Z", "2026-10-25T05:00:00Z", -1.9), _d("2026-10-25T04:59:00Z", "2026-10-25T05:00:00Z", -0.07)
+    track_completed(kept, [whole], at(4, 58), 180)
+    track_completed(kept, [whole, rest], at(4, 59), 180)
+    done = track_completed(kept, [], at(5, 1), 180)
+    assert len(done) == 2  # (both ended)
+    assert [(c["start"], c["end"], c["energyAddedKwh"], c["kind"]) for c in kept["completed"]] == [
+        ("2026-10-25T04:30:00Z", "2026-10-25T05:00:00Z", round(-1.9 * 29 / 30 - 0.07, 3), "charge")]
+    # A later re-plan that runs on past the first's end
+    merged = merge_overlapping([dict(_d("2026-10-25T17:30:00Z", "2026-10-25T18:30:00Z", 2), kind="discharge"),
+                                dict(_d("2026-10-25T17:00:00Z", "2026-10-25T18:00:00Z", 4), kind="discharge", soc_result="discharged")])
+    assert [(c["start"], c["end"], c["energyAddedKwh"]) for c in merged] == [("2026-10-25T17:00:00Z", "2026-10-25T18:30:00Z", 4.0)]
+    assert "soc_result" not in merged[0]  # checked again over the whole session
+
+
+def test_sessions_that_only_touch_or_differ_in_kind_stay_apart():
+    from src.dispatches import merge_overlapping
+    sessions = [dict(_d("2026-10-25T18:00:00Z", "2026-10-25T19:00:00Z", -3), kind="charge"),
+                dict(_d("2026-10-25T17:30:00Z", "2026-10-25T18:30:00Z", 2), kind="discharge"),
+                dict(_d("2026-10-25T17:00:00Z", "2026-10-25T18:00:00Z", -4), kind="charge")]
+    assert [c["start"] for c in merge_overlapping(sessions)] == [
+        "2026-10-25T18:00:00Z", "2026-10-25T17:30:00Z", "2026-10-25T17:00:00Z"]
+
+
 def test_idle_dispatches_arent_sessions():
     from src.dispatches import track_completed
     at = lambda hh, mm=0: datetime.datetime(2026, 10, 15, hh, mm, tzinfo=datetime.timezone.utc)

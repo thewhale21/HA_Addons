@@ -48,7 +48,11 @@ and its sensors. In short: enter your Octopus API key on the
   dispatch that has started is followed (by its start: one whose end moves
   later is the same session), and once its end has passed it counts as
   completed if it was still listed within two reads (and a minute) of that
-  end. One taken off the plan earlier didn't happen. Kept in
+  end. One taken off the plan earlier didn't happen. Octopus sometimes
+  re-plans a session part-way through, as a new dispatch for the rest of it:
+  completed sessions of the same kind that overlap are combined into one (the
+  later dispatch's energy, plus the earlier one's for the time the later one
+  doesn't cover). Kept in
   `/data/state.json` for 30 days; one ending while the add-on is stopped
   isn't counted.
 - Plan changes: each read is compared with the last (dispatches matched by

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.1 — A re-planned session is one session
+
+- **Fix:** when Octopus re-plans a session part-way through (e.g. 04:30–05:00,
+  then 04:59–05:00 for the rest of it), the History tab showed it twice. Completed
+  sessions of the same kind that overlap are now combined into one, from the first
+  start to the last end, with the later dispatch's energy plus the earlier one's
+  for the time the later one doesn't cover. Its SoC result is checked again over
+  the whole session. Duplicates already kept are combined too.
+
 ## 0.10.0 — The battery's readings, and a power flow card
 
 - **New:** the battery's live readings, from Octopus (its copy of your
