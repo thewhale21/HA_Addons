@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.3 — Half hours stay apart
+
+- **Change:** back-to-back half-hour sessions (e.g. 04:30–05:00, then
+  05:00–05:30) aren't combined any more, as Octopus bills and credits by the
+  half hour. Sessions that touch are only combined within one half hour (a
+  half hour Octopus split in two, e.g. 12:30–12:47 and 12:47–13:00); ones
+  that overlap still are. Sessions 0.10.2 already combined stay combined.
+
 ## 0.10.2 — Back-to-back sessions are one session
 
 - **Change:** completed sessions of the same kind that touch are combined too,

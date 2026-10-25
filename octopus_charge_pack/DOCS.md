@@ -50,9 +50,11 @@ and its sensors. In short: enter your Octopus API key on the
   completed if it was still listed within two reads (and a minute) of that
   end. One taken off the plan earlier didn't happen. Octopus sometimes
   re-plans a session part-way through, as a new dispatch for the rest of it:
-  completed sessions of the same kind that overlap or touch (one ending as the
-  next starts) are combined into one (the later dispatch's energy, plus the
-  earlier one's for the time the later one doesn't cover). Kept in
+  completed sessions of the same kind that overlap, or touch within one half
+  hour (e.g. 12:30–12:47 and 12:47–13:00), are combined into one (the later
+  dispatch's energy, plus the earlier one's for the time the later one
+  doesn't cover). Back-to-back half hours stay apart, as Octopus bills and
+  credits by the half hour. Kept in
   `/data/state.json` for 30 days; one ending while the add-on is stopped
   isn't counted.
 - Plan changes: each read is compared with the last (dispatches matched by

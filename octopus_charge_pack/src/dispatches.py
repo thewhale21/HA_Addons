@@ -237,12 +237,18 @@ def track_completed(kept: dict, dispatches: list, now: datetime.datetime, grace_
 SOC_FIELDS = ("soc_entity", "soc_start", "soc_end", "soc_result")
 
 
+def _half_hour(t: datetime.datetime) -> datetime.datetime:
+    """The start of the half hour `t` is in."""
+    return t.replace(minute=t.minute - t.minute % 30, second=0, microsecond=0)
+
+
 def merge_overlapping(completed: list) -> list:
-    """Completed sessions of the same kind that overlap or touch made into one (newest first).
-    Octopus sometimes re-plans a session part-way through, as a new dispatch for the rest
-    of it (e.g. 04:30-05:00, then 04:59-05:00), or cuts it short and adds one for the rest
-    (12:30-12:47, then 12:47-13:00): both are completed, but it's one session. Back-to-back
-    ones (05:00-05:30 after 04:30-05:00) are one session too: the battery didn't stop.
+    """Completed sessions of the same kind that overlap, or touch within one half hour,
+    made into one (newest first). Octopus sometimes re-plans a session part-way through,
+    as a new dispatch for the rest of it (e.g. 04:30-05:00, then 04:59-05:00), or cuts it
+    short and adds one for the rest (12:30-12:47, then 12:47-13:00): both are completed,
+    but it's one session. Back-to-back half hours (05:00-05:30 after 04:30-05:00) stay
+    apart, as Octopus bills and credits by the half hour.
     The merged one runs from the first start to the last end. Its energy is the later
     dispatch's plus the earlier one's for the time the later one doesn't cover (pro rata;
     touching ones simply add up). Its SoC result is dropped, so it's checked again over
@@ -252,9 +258,12 @@ def merge_overlapping(completed: list) -> list:
     out = []
     for c in ordered:
         last = out[-1] if out else None
-        if last is not None and last.get("kind") == c.get("kind") and parse_time(c["start"]) <= parse_time(last["end"]):
-            a0, a1 = parse_time(last["start"]), parse_time(last["end"])
-            b0, b1 = parse_time(c["start"]), parse_time(c["end"])
+        a0, a1 = (parse_time(last["start"]), parse_time(last["end"])) if last is not None else (None, None)
+        b0, b1 = parse_time(c["start"]), parse_time(c["end"])
+        overlaps = last is not None and b0 < a1
+        # (touching: only within one half hour, i.e. a half hour split in two)
+        touches = last is not None and b0 == a1 and _half_hour(a0) == _half_hour(max(a1, b1) - datetime.timedelta(seconds=1))
+        if last is not None and last.get("kind") == c.get("kind") and (overlaps or touches):
             length = (a1 - a0).total_seconds()
             overlap = max(0, (min(a1, b1) - b0).total_seconds())
             share = 1 - overlap / length if length > 0 else 0

@@ -257,7 +257,7 @@ def test_a_session_re_planned_part_way_through_is_one_session():
     assert "soc_result" not in merged[0]  # checked again over the whole session
 
 
-def test_sessions_that_touch_are_one_session():
+def test_a_half_hour_split_in_two_is_one_session():
     from src.dispatches import merge_overlapping
     sessions = [dict(_d("2026-10-25T12:47:00Z", "2026-10-25T13:00:00Z", -0.75), kind="charge"),
                 dict(_d("2026-10-25T12:30:00Z", "2026-10-25T12:47:00Z", -0.003), kind="charge", soc_result="not_charged"),
@@ -266,7 +266,12 @@ def test_sessions_that_touch_are_one_session():
     merged = merge_overlapping(sessions)
     assert [(c["start"], c["end"], c["energyAddedKwh"]) for c in merged] == [
         ("2026-10-25T12:30:00Z", "2026-10-25T13:00:00Z", -0.753),
-        ("2026-10-25T04:30:00Z", "2026-10-25T05:30:00Z", -3.79)]
+        # back-to-back half hours stay apart: Octopus bills and credits by the half hour
+        ("2026-10-25T05:00:00Z", "2026-10-25T05:30:00Z", -1.89),
+        ("2026-10-25T04:30:00Z", "2026-10-25T05:00:00Z", -1.9)]
+    # a part of a half hour next to the following one stays apart too
+    assert len(merge_overlapping([dict(_d("2026-10-25T13:00:00Z", "2026-10-25T13:10:00Z", -0.2), kind="charge"),
+                                  dict(_d("2026-10-25T12:47:00Z", "2026-10-25T13:00:00Z", -0.75), kind="charge")])) == 2
     assert "soc_result" not in merged[0]  # checked again over the whole session
 
 
