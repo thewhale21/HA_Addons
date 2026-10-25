@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.2 — Back-to-back sessions are one session
+
+- **Change:** completed sessions of the same kind that touch are combined too,
+  as well as ones that overlap: a session Octopus cut short and finished with a
+  new dispatch (e.g. 12:30–12:47, then 12:47–13:00), and back-to-back slots
+  (04:30–05:00, then 05:00–05:30). Their energies add up, and the SoC is checked
+  over the whole session. Ones already kept are combined too.
+
 ## 0.10.1 — A re-planned session is one session
 
 - **Fix:** when Octopus re-plans a session part-way through (e.g. 04:30–05:00,

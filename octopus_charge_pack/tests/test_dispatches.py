@@ -257,13 +257,29 @@ def test_a_session_re_planned_part_way_through_is_one_session():
     assert "soc_result" not in merged[0]  # checked again over the whole session
 
 
-def test_sessions_that_only_touch_or_differ_in_kind_stay_apart():
+def test_sessions_that_touch_are_one_session():
     from src.dispatches import merge_overlapping
-    sessions = [dict(_d("2026-10-25T18:00:00Z", "2026-10-25T19:00:00Z", -3), kind="charge"),
+    sessions = [dict(_d("2026-10-25T12:47:00Z", "2026-10-25T13:00:00Z", -0.75), kind="charge"),
+                dict(_d("2026-10-25T12:30:00Z", "2026-10-25T12:47:00Z", -0.003), kind="charge", soc_result="not_charged"),
+                dict(_d("2026-10-25T05:00:00Z", "2026-10-25T05:30:00Z", -1.89), kind="charge"),
+                dict(_d("2026-10-25T04:30:00Z", "2026-10-25T05:00:00Z", -1.9), kind="charge")]
+    merged = merge_overlapping(sessions)
+    assert [(c["start"], c["end"], c["energyAddedKwh"]) for c in merged] == [
+        ("2026-10-25T12:30:00Z", "2026-10-25T13:00:00Z", -0.753),
+        ("2026-10-25T04:30:00Z", "2026-10-25T05:30:00Z", -3.79)]
+    assert "soc_result" not in merged[0]  # checked again over the whole session
+
+
+def test_sessions_with_a_gap_or_of_another_kind_stay_apart():
+    from src.dispatches import merge_overlapping
+    sessions = [dict(_d("2026-10-25T18:01:00Z", "2026-10-25T19:00:00Z", -3), kind="charge"),
                 dict(_d("2026-10-25T17:30:00Z", "2026-10-25T18:30:00Z", 2), kind="discharge"),
                 dict(_d("2026-10-25T17:00:00Z", "2026-10-25T18:00:00Z", -4), kind="charge")]
     assert [c["start"] for c in merge_overlapping(sessions)] == [
-        "2026-10-25T18:00:00Z", "2026-10-25T17:30:00Z", "2026-10-25T17:00:00Z"]
+        "2026-10-25T18:01:00Z", "2026-10-25T17:30:00Z", "2026-10-25T17:00:00Z"]
+    gap = [dict(_d("2026-10-25T18:01:00Z", "2026-10-25T19:00:00Z", -3), kind="charge"),
+           dict(_d("2026-10-25T17:00:00Z", "2026-10-25T18:00:00Z", -4), kind="charge")]
+    assert len(merge_overlapping(gap)) == 2
 
 
 def test_idle_dispatches_arent_sessions():

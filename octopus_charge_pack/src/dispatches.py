@@ -238,22 +238,25 @@ SOC_FIELDS = ("soc_entity", "soc_start", "soc_end", "soc_result")
 
 
 def merge_overlapping(completed: list) -> list:
-    """Completed sessions of the same kind that overlap made into one (newest first).
+    """Completed sessions of the same kind that overlap or touch made into one (newest first).
     Octopus sometimes re-plans a session part-way through, as a new dispatch for the rest
-    of it (e.g. 04:30-05:00, then 04:59-05:00): both are completed, but it's one session.
+    of it (e.g. 04:30-05:00, then 04:59-05:00), or cuts it short and adds one for the rest
+    (12:30-12:47, then 12:47-13:00): both are completed, but it's one session. Back-to-back
+    ones (05:00-05:30 after 04:30-05:00) are one session too: the battery didn't stop.
     The merged one runs from the first start to the last end. Its energy is the later
-    dispatch's plus the earlier one's for the time the later one doesn't cover (pro rata).
-    Its SoC result is dropped, so it's checked again over the whole session."""
+    dispatch's plus the earlier one's for the time the later one doesn't cover (pro rata;
+    touching ones simply add up). Its SoC result is dropped, so it's checked again over
+    the whole session."""
     ordered = sorted((c for c in completed if parse_time(c.get("start")) and parse_time(c.get("end"))),
                      key=lambda c: c["start"])
     out = []
     for c in ordered:
         last = out[-1] if out else None
-        if last is not None and last.get("kind") == c.get("kind") and parse_time(c["start"]) < parse_time(last["end"]):
+        if last is not None and last.get("kind") == c.get("kind") and parse_time(c["start"]) <= parse_time(last["end"]):
             a0, a1 = parse_time(last["start"]), parse_time(last["end"])
             b0, b1 = parse_time(c["start"]), parse_time(c["end"])
             length = (a1 - a0).total_seconds()
-            overlap = (min(a1, b1) - b0).total_seconds()
+            overlap = max(0, (min(a1, b1) - b0).total_seconds())
             share = 1 - overlap / length if length > 0 else 0
             merged = {k: v for k, v in last.items() if k not in SOC_FIELDS}
             merged["end"] = c["end"] if b1 > a1 else last["end"]
