@@ -1,5 +1,65 @@
 # Changelog
 
+## 2.52.0 — Fixes from a review, and clearer pages
+
+- **Fix:** turning the random start delay off while a plug-in was waiting
+  out the delay cancelled it: it now plugs in straight away
+- **Fix:** with the random start delay on, a slot that started while the car
+  was already plugged in didn't set your supplier's ready time; there's no
+  delay then now, just the ready time
+- **Fix:** the night the clocks go forward, a slot with a time that doesn't
+  exist (e.g. 01:30–02:30 in the UK) stayed plugged in for about 24 hours and
+  every change that week was refused as over the daily limit. A missing time
+  now runs at 02:00, and a slot that's all in the missing hour doesn't run
+- **Fix:** restarted where two slots meet (e.g. 06:00–12:00 and 12:00–18:00),
+  it unplugged and stayed unplugged until 18:00; it now stays plugged in,
+  with the ready time for the new slot. A plug-in waiting out its random
+  delay still waits after a restart
+- **Fix:** a Charge now, auto plug-in or car plugged in charge that started
+  while the add-on was stopped wasn't plugged in at start-up with the
+  schedule off
+- **Fix:** a scheduled plug-in due while auto re-plug had the car unplugged
+  (its Unplugged for time can be up to 5 minutes) could be dropped as late,
+  with no ready time set
+- **Fix:** the extra unplug and plug-in a saving session adds at the daily
+  limit's reset time were recorded against the wrong session, so cancelling
+  the right one left them behind
+- **Fix:** settings only take real true/false values (the text "false"
+  turned the schedule on), bad requests get a clear error instead of a
+  server error, one-off slots can be at most 62 days ahead (one years away
+  slowed everything down), and a refused change no longer leaves part of it
+  applied
+- **Feature:** **Stop for today** on a slot that's going now: it unplugs and
+  runs again next time. Deleting a weekly slot asks: every week, or just
+  this one? The slot editor shows the date, labels its on/off switch
+  (**Active**) and warns about **No unplug**
+- **Feature:** **Cancel this charge** after Charge now: it comes out of the
+  schedule, what it changed is put back, and it unplugs unless a slot has
+  the car plugged in
+- **Feature:** a **Plug in** / **Unplug** button on the Overview
+- **Improvement:** while a plug-in waits out its random start delay, the
+  Overview and the Automations banner say when it'll plug in, and the slot
+  is hatched until then
+- **Improvement:** Charge now says your supplier's daily limit in plain words
+  (Octopus: "at most 6 hours of smart charging from 12:00 one day to 12:00
+  the next"), from your supplier's settings: none is shown for a supplier
+  without one. The lengths over it are marked
+- **Improvement:** **+ Add a slot** starts at the next free 2 hours
+- **Improvement:** the add-on's Plugged In is called **Plugged In (virtual)**
+  on the page, so it isn't confused with your car's real cable; the
+  simulated car's start delay is now **Pause before drawing power**, and its
+  card is greyed out while your power sensor is used
+- **Improvement:** on a phone, the schedule and session timelines show fewer
+  hour labels and only the slot and charge labels that fit; the random start
+  delay's switch sits with its title
+- **Improvement:** older OCPP messages on the Overview show their date;
+  sessions outside your supplier's slots say so; Charge now and car plugged
+  in colours are easier to see in dark mode
+- **Docs:** switch your charger from the Status sensor (the Power sensor
+  reads 0 until the charger's on, if you use your own power sensor); a
+  section on your supplier's daily limit, with an example; the slot colours,
+  the random start delay and the Automations cards brought up to date
+
 ## 2.51.1 — Set the start delay before turning it on
 
 - **Improvement:** the random start delay's minutes can be changed with its

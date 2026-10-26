@@ -42,10 +42,12 @@ readings stay at `info` during a session (outside one, they're `debug` too).
 
 ### Controlling your charger
 
-Use the **Power** sensor (`sensor.ocpp_charge_proxy_power`) to trigger automations when
-your supplier starts or stops charging: with the simulated power, it's above
-0 while the charger is charging. For example, turn on a smart plug when it
-rises above 0 and off when it drops back to 0.
+Use the **Status** sensor (`sensor.ocpp_charge_proxy_status`) to switch your
+charger or smart plug: turn it on when the status becomes `Charging` and off
+when it stops being `Charging` (the README has the automation to paste).
+Don't use the Power sensor for this if you've picked your own power sensor
+(below): that reads 0 until the charger is switched on, so it would never
+switch on.
 
 ### Power entity
 
@@ -71,6 +73,35 @@ your car's own integration, reporting 0–100%. When set:
 Leave it unset (or clear it) and no SoC is reported and car-full never
 triggers. If the sensor becomes unavailable, SoC reporting pauses until it
 comes back.
+
+### Your supplier's daily limit
+
+Some suppliers only schedule so many hours of smart charging a day. The add-on
+keeps to your supplier's limit while **Force schedule on supplier** is on
+(Automations tab), and the page shows it wherever it matters:
+
+- **Octopus Energy:** 6 hours, counted from 12:00 one day to 12:00 the next.
+  So 23:30–05:30 (6 hours) is fine, and so is 06:00–12:00 then 12:00–18:00
+  (6 hours each side of 12:00); but 23:30–05:30 plus a 3-hour Charge now at
+  18:00 the evening before is 9 hours in one 12:00-to-12:00 day, so the
+  add-on asks first, and if you go ahead it starts that night's slot 3 hours
+  later (02:30–05:30) to stay within 6.
+- **Other suppliers** (EDF Energy, E.ON Next...) and **no supplier:** no limit.
+- **Settings › Your supplier** can change it (a number of hours, 0 for none,
+  or empty for automatic) and when it resets (a time of day, or rolling: any
+  24 hours). If Octopus changes its hours, set them there until the add-on
+  is updated.
+
+The details:
+
+- Hours are real hours, as suppliers count them: the night the clocks go
+  back, 23:30–05:30 is 7 hours (5 the night they go forward).
+- A slot or charge that would go over is shown with its extra hours in red,
+  and the add-on asks before saving it (**Save anyway**, **Charge anyway**...).
+- A charge that would go over trims your next slot by whole half hours (or
+  skips it, and trims the one after), for that day only.
+- With Force schedule on supplier off, or the scheduling guards overridden
+  (Diagnostics › Debug), there's no limit.
 
 ### Auto plug-in, the car plugged in sensor and Charge now
 
@@ -100,19 +131,14 @@ works the same way. In each case:
   during a session plugs in at its end for its full hours. For example,
   3 hours from 17:55 with an 18:00–19:00 session: 17:55–18:00, then
   19:00–22:00.
-- Octopus Energy, with Force schedule on supplier on: only the daily limit
-  (6 hours, in each day from 12:00 unless changed on the Settings tab) is scheduled, the earliest first, so up to 12 hours can be
-  chosen but a longer charge stops after 6 plugged-in hours (e.g. 12 hours
-  from 16:30 with 23:30–05:30 blocked: 16:30–22:30). If it puts more than 6 hours in any 24 (counting the previous
-  24 hours too), the next scheduled slot starts later, by whole half hours,
-  just enough to get back to 6; if skipping it isn't enough, the slot after
-  it is trimmed too, and so on, for that day only. For example, 4 hours scheduled 23:30–03:30 and a 3-hour
-  auto plug-in at 18:00: that night's slot starts at 00:30. With it off
-  there's no 6-hour limit, for auto plug-in, Charge now or the schedule.
-  Hours are real hours, as Octopus counts them: the night the clocks go
-  back, 23:30–05:30 is 7 hours (and 5 the night they go forward), so that
-  night's slot shows in red; skip it and add a one-off 23:30–04:30, or
-  leave it and Octopus schedules 6 of the 7.
+- With a [daily limit](#your-suppliers-daily-limit) (Octopus: 6 hours) and
+  Force schedule on supplier on: a charge longer than the limit is
+  scheduled for the limit only, the earliest hours first (e.g. 12 hours from
+  16:30 with 23:30–05:30 off peak: 16:30–22:30). If it takes a day over the
+  limit, the next scheduled slot starts later, just enough to get back
+  within it (for example, 4 hours scheduled 23:30–03:30 and a 3-hour auto
+  plug-in at 18:00: that night's slot starts at 00:30). Without a limit,
+  the whole charge is scheduled.
 - If it meets or overlaps scheduled slots, they become one slot, ending at
   whichever ends last: the charge's end, or the slot's unplug if that's
   later. The slots' own plug-ins and unplugs inside it are skipped that
@@ -187,15 +213,20 @@ is read every 5 minutes, up to 8 days ahead.
 
 - **Schedule** (**Automations** tab): today and the next 6 days are
   shown as slots, each running from a plug-in to its unplug, coloured by
-  type: weekly (blue), one-off (teal), auto plug-in (orange) and Charge now
-  (pink). **+ Add a slot** starts a new one from the next half hour. A
+  type: weekly (blue), one-off (teal), auto plug-in (orange), Charge now
+  (pink), the car plugged in sensor (brown), the charge before a saving
+  session (indigo) and a slot moved for a saving session (purple). **+ Add a
+  slot** starts a new one at the next free 2 hours. A
   green line shows when it has charged today (hover for the session's
   energy, length and what ended it; click to open it on the Sessions tab),
   and your supplier's slots are outlined. Earlier days are on the Sessions
   tab. Click or drag across a day to add a slot; click a slot to change its times, the days it repeats on
-  (**Every week**) or its date (**Once**), turn it off, delete it, or skip
-  it once (its plug-in and unplug both don't run; it shows hatched, and
-  **Undo skip** puts it back). Changes are saved straight away. An unplug
+  (**Every week**) or its date (**Once**), turn it off (**Active**), delete it
+  (a weekly slot asks: every week, or just this one), or skip it once (its
+  plug-in and unplug both don't run; it shows hatched, and **Undo skip** puts
+  it back). A slot that's going now has **Stop for today**: it unplugs now
+  and runs again next time. **No unplug** leaves it plugged in until you
+  unplug it or another unplug time comes. Changes are saved straight away. An unplug
   time with no plug-in before it (e.g. "unplug at 07:00 every day", to
   unplug anything left plugged in) shows as a small tick, and can be
   changed or deleted the same way. Times are in your Home Assistant time
@@ -217,11 +248,21 @@ is read every 5 minutes, up to 8 days ahead.
   it isn't the same time every day, e.g. a 23:30 slot plugs in at 23:34 one
   night and 23:38 the next. Only your own slots: auto plug-in, the car
   plugged in sensor, Charge now and the charge before a saving session plug
-  in straight away, as does a slot that starts where another ends. The
-  Overview shows "Plugging in at …" meanwhile. If the slot ends, is skipped
-  or the schedule's turned off before then, it doesn't plug in; plugging in
-  by hand meanwhile is left alone. The ready time (Force schedule on
-  supplier) is set when it plugs in.
+  in straight away, as does a slot that starts where another ends or while
+  it's already plugged in. The Overview and the Automations banner show
+  "Plug in at … (random delay)" meanwhile. If the slot ends, is skipped or
+  the schedule's turned off before then, it doesn't plug in; turning the
+  delay off plugs in straight away. Plugged in by hand meanwhile, it's left
+  as it is. The ready time (Force schedule on supplier) is set when it plugs
+  in (or is plugged in). The minutes can be set with the delay off.
+- **Restarts:** a plug-in waiting out its random start delay still waits
+  after a restart. Restarted where two slots meet (e.g. stopped from 11:59
+  to 12:02 with 06:00–12:00 and 12:00–18:00), it stays plugged in, and the
+  ready time is set for the new slot. A charge from auto plug-in, the car
+  plugged in sensor or Charge now that started while the add-on was stopped
+  is plugged in at start-up too, with the schedule off as well.
+- **Clocks going forward:** a time that doesn't exist that night (01:00–01:59
+  in the UK) runs at 02:00, and a slot that's all in that hour doesn't run.
 - **Starting inside a scheduled stretch:** if the add-on starts (or
   restarts) while the schedule has the car plugged in, e.g. at 02:00 with
   plug in 23:30 and unplug 07:00, and Plugged In is off, it plugs in
@@ -236,13 +277,13 @@ is read every 5 minutes, up to 8 days ahead.
   it's on, unplug times in the schedule are limited to those (the slot
   editor only offers those). E.ON Next's integration
   has no ready time setting. While it's on, the Automations tab outlines
-  the schedule's slots in grey, and with Octopus Energy the schedule can't plug in for more than
-  6 hours in any 24 (Octopus's daily smart charging cap): slots that go
-  over are marked in red, and a change that goes over isn't saved (nor is
-  putting a skipped slot back if that would go over). Any 24 hours from the
-  previous day on count, so a charge earlier in the day counts too; if
-  that's already over (e.g. after **Charge anyway**), slots can still be
-  changed as long as it doesn't get worse. If Force schedule on
+  the schedule's slots in grey, and the schedule keeps to your supplier's
+  [daily limit](#your-suppliers-daily-limit) (Octopus: 6 hours from 12:00 to
+  12:00; none for the others): slots that go over are marked in red, and a
+  change that goes over is only saved if you say so (the same for putting
+  a skipped slot back). A charge earlier in the day counts too; if that's
+  already over (e.g. after **Charge anyway**), slots can still be changed
+  as long as it doesn't get worse. If Force schedule on
   supplier can't be turned on because of this (or an unplug time your
   supplier doesn't accept), the reason stays in red under the switch, with
   the slots to change marked in red, until it's fixed. With Force schedule
@@ -293,11 +334,13 @@ is read every 5 minutes, up to 8 days ahead.
   It doesn't re-plug when the schedule unplugs before the car would be
   plugged back in (the **Unplugged for** time plus a minute), and it doesn't
   plug back in if a scheduled unplug came while it was unplugged.
-- **Start delay and ramp-up** (**Settings** tab, Simulated car): after
-  StartTransaction (or resuming after a charging-profile pause) the simulated
-  car waits the start delay (default 3s) before drawing current, then ramps
-  linearly to full power over the ramp-up (default 5s). 0 and 0 = full power
-  straight away. Not applied when power comes from your power sensor.
+- **Simulated car** (**Settings** tab): after StartTransaction (or resuming
+  after a charging-profile pause) the simulated car pauses (**Pause before
+  drawing power**, default 3 s) before drawing current, then ramps linearly
+  to full power over the **Ramp-up** (default 5 s). 0 and 0 = full power
+  straight away. Not used when power comes from your power sensor (the card
+  is greyed out then). Not to be confused with the schedule's **Random start
+  delay**, which is in minutes and delays the plug-in itself.
 
 The schedule and auto re-plug are saved in `/data/automation.json` (and
 when the schedule was last checked in `/data/automation_runtime.json`), auto
@@ -433,14 +476,16 @@ follows your Home Assistant theme. Settings save as soon as you change them.
     long until, and what it did last), its On switch, and **Charge now**.
   - **Charge now** (in the banner): click how long to plug in for (1, 2, 3, 4, 6, 8 or 12
     hours). It plugs in straight away and adjusts the schedule the same way
-    auto plug-in does (see [Auto plug-in](#auto-plug-in)): a one-off slot
+    auto plug-in does (see [Auto plug-in](#auto-plug-in-the-car-plugged-in-sensor-and-charge-now)): a one-off slot
     in the schedule below, the ready time set to its end, and it unplugs
-    then. With a daily limit (Octopus: 6 hours) and Force schedule on
-    supplier on, if it would take any 24 hours (the previous 24 included)
-    over the limit, it asks first, saying what would change; **Charge
-    anyway** then goes ahead.
-  - **Over the daily limit** (Octopus: 6 hours, with Force schedule on
-    supplier on): saving a slot, putting back a skipped one, turning on
+    then. **Cancel this charge** (after it's started) takes it out of the
+    schedule again, puts back anything it changed, and unplugs unless a
+    slot has the car plugged in. With your supplier's [daily
+    limit](#your-suppliers-daily-limit) (Octopus: 6 hours) and Force
+    schedule on supplier on, the banner says what it is, the lengths over
+    it are marked, and a charge that would go over asks first, saying what
+    would change; **Charge anyway** then goes ahead.
+  - **Over the daily limit** (with Force schedule on supplier on): saving a slot, putting back a skipped one, turning on
     Force schedule on supplier or turning the scheduling guards back on
     with the schedule over the limit says so, with a button to go ahead
     anyway (**Save anyway**, **Put it back anyway**, **Turn on anyway**,
@@ -449,12 +494,20 @@ follows your Home Assistant theme. Settings save as soon as you change them.
     slot this morning (the same day from 12:00): its last hour is red. Your
     supplier may not charge in them.
   - The plug-in schedule (see below): today and the next 6 days of when it
-    has the car plugged in; Force schedule on supplier; auto
-    plug-in, the car plugged in sensor and auto re-plug.
+    has the car plugged in, and under it the **Random start delay**.
+    While a plug-in waits out the delay, the banner and the Overview say
+    when it'll plug in, and the slot is hatched until then.
+  - **Your supplier:** Force schedule on supplier, the unplug wait and the
+    supplier's plan check.
+  - **Auto plug-in**, **Car plugged in** (the sensor for your car's real
+    cable), **Saving sessions** and **Auto re-plug**: one card each.
 - **Settings:** **Appearance**: **Colourful** (a coloured banner at the top
   of each tab, from blue to your supplier's colour, the default) or
-  **Basic** (plain cards), saved in each browser; controls for Plugged In, max current and **Continue session
-  after a restart**; the simulated car's start delay and ramp-up; your
+  **Basic** (plain cards), saved in each browser; controls for **Plugged In
+  (virtual)** (what your supplier sees: the add-on's charger cable, not your
+  car's real one; also a **Plug in** / **Unplug** button on the Overview),
+  max current and **Continue session after a restart**; the simulated car's
+  pause and ramp-up; your
   power and SoC sensors, with their live values; the **Voltage** card (a
   voltage sensor, or a set supply voltage; 230 V if neither) used to turn
   amps into kW for the simulated power and the ~kW figures; and **Your

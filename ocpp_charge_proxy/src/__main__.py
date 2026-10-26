@@ -281,6 +281,18 @@ async def run() -> None:
         take any 24 hours over the daily limit (the page shows what'd happen)."""
         return await charge(hours, CHARGE_NOW_SOURCE, "charge now", confirm)
 
+    async def cancel_charge_now() -> dict:
+        """Charge now's Cancel: out of the schedule, and unplugged unless a slot (or
+        another charge) has the car plugged in now."""
+        removed = automation.cancel_charge(CHARGE_NOW_SOURCE)
+        unplugged = False
+        if removed and shared_state.plugged_in and automation.in_plug_window() is None \
+                and automation.in_charge_window() is None:
+            await do_unplug(source="charge now cancelled")
+            unplugged = True
+        automation.publish(shared_state)
+        return {"removed": removed, "unplugged": unplugged}
+
     ha_link.on_auto_plug = on_auto_plug
 
     async def saving_sessions_loop() -> None:
@@ -411,6 +423,7 @@ async def run() -> None:
         on_set_ramp=cp.set_ramp,
         on_charge_now=charge_now,
         debug=debug,
+        on_cancel_charge=cancel_charge_now,
         app_settings=app_settings,
     )
     runner = web.AppRunner(api_app)

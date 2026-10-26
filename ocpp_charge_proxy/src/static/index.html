@@ -13,6 +13,7 @@
     --divider: rgba(0,0,0,0.12); --primary: #03a9f4; --on-primary: #fff;
     --hover: rgba(0,0,0,0.04); --code: #f3f3f3;
     --ok: #43a047; --warn: #f57c00; --err: #db4437; --info: #039be5; --violet: #8e24aa;
+    --c-charge-now: #d81b60; --c-car-plugged: #6d4c41;
     --radius: 12px;
     color-scheme: light;
   }
@@ -21,6 +22,7 @@
       --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
       --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
       --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+      --c-charge-now: #f06292; --c-car-plugged: #bcaaa4;
       color-scheme: dark;
     }
   }
@@ -28,6 +30,7 @@
     --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
     --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
     --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+    --c-charge-now: #f06292; --c-car-plugged: #bcaaa4;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
@@ -218,7 +221,15 @@
   .week .track .seg { position: absolute; top: 4px; bottom: 12px; border-radius: 6px; background: var(--primary); opacity: .9; cursor: pointer;
     box-shadow: 0 1px 2px rgba(0,0,0,.15); overflow: hidden; z-index: 1; }
   .week .track .seg:hover { filter: brightness(1.08); }
-  .week .track .seg .sl { display: block; color: #fff; font-size: 11px; font-weight: 500; line-height: 22px; padding: 0 7px; white-space: nowrap; overflow: hidden; text-overflow: clip; pointer-events: none; }
+  .week .track .seg .sl { display: block; color: #fff; font-size: 11px; font-weight: 500; line-height: 22px; padding: 0 7px; white-space: nowrap; overflow: hidden; text-overflow: clip; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,.45); }
+  .week .track .wait { position: absolute; top: 4px; bottom: 12px; border-radius: 6px; z-index: 2; pointer-events: none;
+    background: repeating-linear-gradient(135deg, rgba(255,255,255,.6) 0 3px, transparent 3px 7px); }
+  .seg button.over { color: var(--warn); }
+  .seg button.over[aria-pressed="true"] { color: var(--on-primary); }
+  .card.unused .row, .card.unused > .note:last-child { opacity: .5; }
+  @media (max-width: 560px) {
+    .week .axis span:nth-child(even), .stl .axis span:nth-child(even) { display: none; }
+  }
   .week .track.past .seg { top: 4px; bottom: 10px; opacity: .55; cursor: default; box-shadow: none; }
   .week .track.past .seg .sl { line-height: 16px; }
   .week .track.past .seg[data-ses] { cursor: pointer; }
@@ -489,6 +500,7 @@
             <div class="conn">
               <span><span class="dot" id="o-conn-dot"></span><span id="o-conn">—</span></span>
               <span><span class="sm">Transaction</span> <span id="o-tx">—</span></span>
+              <button class="btn small" id="o-plug" title="The add-on's virtual Plugged In: what your supplier sees, not your car's real cable">Plug in</button>
             </div>
           </div>
         </div>
@@ -587,11 +599,13 @@
       <div class="note" id="a-tz"></div>
       <div class="row" style="margin-top:12px">
         <div class="grow">Random start delay
-          <div class="note" style="margin:0">Plugs in up to this long after each of your slots starts, a different time each day. <details class="more"><summary>More</summary><div>Only your own slots: auto plug-in, Charge now, the car plugged in sensor and the charge before a saving session plug in straight away, as does a slot that starts where another ends. The delay is at most half the slot. If the slot ends, is skipped or the schedule is turned off before then, it doesn't plug in.</div></details></div>
-          <div id="a-delay-status" class="sub" style="margin-top:6px" hidden></div></div>
-        <span class="ctl"><span>up to</span><input type="number" id="a-delay-min" min="1" max="60" step="1" aria-label="Random start delay, up to (minutes)"> min</span>
+          <div class="note" style="margin:0">Plugs in a random time after each of your slots starts, so it isn't the same time every day. <details class="more"><summary>More</summary><div>Only your own slots: auto plug-in, Charge now, the car plugged in sensor and the charge before a saving session plug in straight away, as does a slot that starts where another ends, or one that starts while it's already plugged in. The delay is at most half the slot. If the slot ends, is skipped or the schedule is turned off before then, it doesn't plug in; turning the delay off plugs in straight away.</div></details></div></div>
         <label class="switch"><input type="checkbox" id="a-delay-on" aria-label="Random start delay"><span></span></label>
       </div>
+      <div class="row" style="margin-top:4px">
+        <span class="ctl"><span>Up to</span><input type="number" id="a-delay-min" min="1" max="60" step="1" aria-label="Random start delay, up to (minutes)"><span>min after each slot starts</span></span>
+      </div>
+      <div id="a-delay-status" class="sub" style="margin-top:6px" hidden></div>
     </div>
     <div class="card">
       <h2><span class="supn" data-f="Your supplier">Your supplier</span></h2>
@@ -722,7 +736,7 @@
       <div class="card">
         <h2>Controls</h2>
         <div class="row">
-          <div class="grow"><div>Plugged In</div><div class="note" style="margin:0">Simulate the car's cable</div></div>
+          <div class="grow"><div>Plugged In (virtual)</div><div class="note" style="margin:0">What <span class="supn" data-f="your supplier">your supplier</span> sees: the add-on's charger cable, not your car's real one</div></div>
           <label class="switch"><input type="checkbox" id="c-plug" aria-label="Plugged In"><span></span></label>
         </div>
         <div class="row">
@@ -734,11 +748,11 @@
           <label class="switch"><input type="checkbox" id="c-resume" aria-label="Continue session after a restart"><span></span></label>
         </div>
       </div>
-      <div class="card">
+      <div class="card" id="c-sim-card">
         <h2>Simulated car</h2>
-        <div class="note" style="margin:0 0 10px">How the simulated car starts drawing power. <details class="more"><summary>More</summary><div>After a session starts or resumes, like a real car. Not used when power comes from your power sensor.</div></details></div>
-        <div class="row"><div class="grow">Start delay<div class="note" style="margin:0">Seconds before it draws any current</div></div>
-          <span class="ctl"><input type="number" id="c-delay" min="0" max="60" step="0.5" aria-label="Start delay in seconds"> s</span></div>
+        <div class="note" style="margin:0 0 10px" id="c-sim-note">How the simulated car starts drawing power, after a session starts or resumes, like a real car.</div>
+        <div class="row"><div class="grow">Pause before drawing power<div class="note" style="margin:0">Seconds before it draws any current</div></div>
+          <span class="ctl"><input type="number" id="c-delay" min="0" max="60" step="0.5" aria-label="Pause before drawing power, in seconds"> s</span></div>
         <div class="row"><div class="grow">Ramp-up<div class="note" style="margin:0">Seconds to rise from 0 to full power</div></div>
           <span class="ctl"><input type="number" id="c-ramp" min="0" max="60" step="0.5" aria-label="Ramp-up in seconds"> s</span></div>
         <div class="note">0 and 0 = full power straight away. Changes apply from the next start or resume.</div>
@@ -1195,11 +1209,10 @@ function renderState(s) {
   $('o-tx').innerHTML = s.transaction_id === null || s.transaction_id === undefined ? '<span class="muted">None</span>'
     : `#${esc(s.transaction_id)}` + (s.transaction_id < 0 ? ' <span class="chip warn">provisional</span>' : '');
   const chips = [];
-  if (s.plugged_in) chips.push('<span class="chip info">Plugged in</span>');
+  if (s.plugged_in) chips.push('<span class="chip info" title="The add-on\'s virtual Plugged In (what your supplier sees), not your car\'s real cable">Plugged In (virtual)</span>');
   if (s.held_messages) chips.push(`<span class="chip warn">${s.held_messages} held</span>`);
-  if (s.schedule_next) chips.push(`<span class="chip">${s.schedule_next.action === 'plug' ? 'Plug in' : 'Unplug'} ${whenText(s.schedule_next.time)}</span>`);
+  if (s.schedule_next) chips.push(`<span class="chip"${s.schedule_next.delayed ? ' title="A random start delay, so it isn\'t the same time every day"' : ''}>${s.schedule_next.action === 'plug' ? 'Plug in' : 'Unplug'} ${whenText(s.schedule_next.time)}${s.schedule_next.delayed ? ' (random delay)' : ''}</span>`);
   const rp = s.replug || {};
-  if (s.plug_pending) chips.push(`<span class="chip" title="A random start delay, so it isn't the same time every day">Plugging in at ${new Date(s.plug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})}</span>`);
   if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving ${sup('your supplier')} time to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})}</span>`);
   const pc = s.plan_check;
   drawSmartCheck(pc);
@@ -1229,6 +1242,12 @@ function renderState(s) {
 
   // controls (don't fight the user while they're editing)
   $('c-plug').checked = !!s.plugged_in;
+  if (!(oPlug && oPlug.armed)) $('o-plug').textContent = s.plugged_in ? 'Unplug' : 'Plug in';
+  // The simulated car's settings aren't used while power comes from your power sensor
+  const simUnused = s.power_source && s.power_source !== 'simulated';
+  $('c-sim-card').classList.toggle('unused', !!simUnused);
+  $('c-sim-note').innerHTML = simUnused ? '<b>Not used now:</b> power comes from your power sensor (Settings › Sensors).'
+    : 'How the simulated car starts drawing power, after a session starts or resumes, like a real car.';
   document.querySelectorAll('#c-amps button').forEach((b) => b.setAttribute('aria-pressed', Number(b.dataset.amps) === max));
   $('c-power-note').textContent = s.power_source === 'entity'
     ? 'Your power sensor is set: it replaces this on its next change'
@@ -1248,11 +1267,13 @@ function renderCommand(id, c) {
   if (!c) { $(id).innerHTML = '<span class="muted">None yet</span>'; return; }
   const status = c.status ? `<span class="chip ${/error|reject/i.test(c.status) ? 'err' : 'ok'}">${esc(c.status)}</span>` : '<span class="chip">waiting</span>';
   const rtt = c.round_trip_ms != null ? ` · ${c.round_trip_ms} ms` : '';
+  const when = (iso) => !iso ? '—' : new Date(iso).toDateString() === new Date().toDateString() ? time(iso)
+    : `${new Date(iso).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} ${time(iso)}`;
   const recent = (c.recent || []).slice(1, 6).map((r) =>
-    `<div class="sub">${time(r.timestamp)} · ${esc(r.action)}${r.summary ? ' — ' + esc(r.summary) : ''}${r.status ? ' · ' + esc(r.status) : ''}</div>`).join('');
+    `<div class="sub">${when(r.timestamp)} · ${esc(r.action)}${r.summary ? ' — ' + esc(r.summary) : ''}${r.status ? ' · ' + esc(r.status) : ''}</div>`).join('');
   $(id).innerHTML = `<div class="row" style="gap:8px"><b>${esc(c.action)}</b>${status}</div>` +
     (c.summary ? `<div>${esc(c.summary)}</div>` : '') +
-    `<div class="sub">${time(c.timestamp)}${rtt}</div>` +
+    `<div class="sub">${when(c.timestamp)}${rtt}</div>` +
     (recent ? `<div style="margin-top:10px"><div class="label">Earlier</div>${recent}</div>` : '');
 }
 
@@ -1261,6 +1282,19 @@ AMPS.forEach((a) => { const b = document.createElement('button'); b.textContent 
 $('c-amps').addEventListener('click', async (e) => {
   const a = Number(e.target.dataset.amps); if (!a) return;
   if (await post('current', {amps: a})) toast(`Max current set to ${a} A`);
+});
+// Overview: plug in / unplug (unplugging mid-session ends it: tap twice within 4 s)
+var oPlug = {armed: 0};  // (var: renderState may run first)
+$('o-plug').addEventListener('click', async (e) => {
+  const on = !(state && state.plugged_in), btn = e.currentTarget;
+  if (!on && state && state.transaction_id != null && !(oPlug.armed && Date.now() - oPlug.armed < 4000)) {
+    oPlug.armed = Date.now(); btn.textContent = 'Tap again to end the session';
+    setTimeout(() => { if (oPlug.armed && Date.now() - oPlug.armed >= 4000) { oPlug.armed = 0; btn.textContent = state && state.plugged_in ? 'Unplug' : 'Plug in'; } }, 4100);
+    return;
+  }
+  oPlug.armed = 0; btn.disabled = true;
+  if (await post(on ? 'plug' : 'unplug')) toast(on ? 'Plugged in' : 'Unplugged');
+  btn.disabled = false; pollState();
 });
 $('c-plug').addEventListener('change', async (e) => {
   const on = e.target.checked;
@@ -1278,11 +1312,11 @@ function confirmInline(input) {
 ['c-delay', 'c-ramp'].forEach((id) => $(id).addEventListener('change', async () => {
   const delay = parseFloat($('c-delay').value), ramp = parseFloat($('c-ramp').value);
   if (!(delay >= 0 && delay <= 60) || !(ramp >= 0 && ramp <= 60)) {
-    toast('Start delay and ramp-up: 0–60 seconds');
+    toast('Simulated car: pause and ramp-up 0–60 seconds');
     if (state) { $('c-delay').value = state.start_delay_s; $('c-ramp').value = state.ramp_up_s; }
     return;
   }
-  if (await post('ramp', {start_delay_s: delay, ramp_up_s: ramp})) toast('Start delay and ramp-up saved');
+  if (await post('ramp', {start_delay_s: delay, ramp_up_s: ramp})) toast('Simulated car: pause and ramp-up saved');
   pollState();
 }));
 $('c-power-set').onclick = async () => {
@@ -1607,7 +1641,9 @@ function drawSmartCheck(pc) {
 function drawStateSub() {
   const s = state || {}, d = smart.data;
   let text = '';
-  if (s.state === 'Preparing' && d && d.found) {
+  if (s.plug_pending && !s.plugged_in) {
+    text = `The schedule plugs in at ${new Date(s.plug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})}: a random start delay, so it isn't the same time every day`;
+  } else if (s.state === 'Preparing' && d && d.found) {
     const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
     if (d.current) text = `${esc(d.provider)}'s charge slot runs until ${t(d.current.end)}, but it hasn't started charging yet`;
     else if (d.planned && d.planned.length) text = `Next slot ${slotText(d.planned[0])}`;
@@ -1703,7 +1739,7 @@ async function refreshSessions() {
   const tag = (startIso) => {
     const t = new Date(startIso);
     const r = runs.find((x) => new Date(x.start) <= t && t <= new Date(x.end));
-    return !r ? '' : ` <span class="chip info">${{auto_plug: 'Auto plug-in', charge_now: 'Charge now', car_plugged: 'Car plugged in', saving_session: 'Before a saving session'}[r.source] || 'One-off'}</span>`;
+    return !r ? '' : ` <span class="chip info" title="What plugged it in">${{auto_plug: 'Auto plug-in', charge_now: 'Charge now', car_plugged: 'Car plugged in', saving_session: 'Before a saving session'}[r.source] || 'One-off'}</span>`;
   };
   // Was the session inside the supplier's dispatch slots? (5 minutes' leeway)
   const supTag = (s) => {
@@ -1752,7 +1788,7 @@ async function refreshSessions() {
     } else {
       const ended = s.reason === 'Remote' ? ['ok', `✓ Stopped by ${esc(supName() || 'supplier')}`] : s.reason === 'EVDisconnected' ? ['info', 'Unplugged']
         : ['Reboot', 'PowerLoss', 'HardReset', 'SoftReset'].includes(s.reason) ? ['warn', esc(reasonText(s.reason))] : ['none', esc(reasonText(s.reason))];
-      row({key: s.start, sess: s, start: s.start, stop: s.stop, tags: (tag(s.start) + supTag(s)) || '<span class="muted">Session</span>', kwh: s.energy_kwh || 0, sub: subOf(s),
+      row({key: s.start, sess: s, start: s.start, stop: s.stop, tags: (tag(s.start) + supTag(s)) || `<span class="muted">${s.supplier_s != null && s.duration_s ? `Not in ${esc(s.supplier || "your supplier")}'s slots` : 'Session'}</span>`, kwh: s.energy_kwh || 0, sub: subOf(s),
         end: `<span class="pill ${ended[0]}">${ended[1]}</span>`, detail: () => sessionDetail(s)});
     }
   });
@@ -1783,8 +1819,8 @@ async function refreshSessions() {
 // The last 7 days, newest at the top: when the car was plugged in (a soft band, coloured
 // by what plugged it in) and when it charged (green blocks with their kWh), with each
 // day's total. Click a block to open that session in Recent sessions.
-const PLUG_BY = [['schedule', 'var(--primary)', 'Schedule'], ['auto plug-in', '#f57c00', 'Auto plug-in'], ['charge now', '#d81b60', 'Charge now'],
-  ['car plugged in sensor', '#6d4c41', 'Car plugged in'], ['saving session', '#5e35b1', 'Before a saving session']];
+const PLUG_BY = [['schedule', 'var(--primary)', 'Schedule'], ['auto plug-in', '#f57c00', 'Auto plug-in'], ['charge now', 'var(--c-charge-now)', 'Charge now'],
+  ['car plugged in sensor', 'var(--c-car-plugged)', 'Car plugged in'], ['saving session', '#5e35b1', 'Before a saving session']];
 function drawSessionTimeline(sd) {
   const el = $('s-tl'); if (!el) return;
   const day0 = new Date(); day0.setHours(0, 0, 0, 0);
@@ -1809,7 +1845,7 @@ function drawSessionTimeline(sd) {
       const w = pct(z.b) - pct(z.a);
       const title = `Charged ${t(z.a)}–${z.x.stop ? t(z.b) : 'now'} · ${num(z.x.energy_kwh, 2)} kWh · ${hmDur(z.x.duration_s || 0)}${z.x.reason ? ' · ended by ' + reasonText(z.x.reason) : ''}`;
       const sup = sessSupplier(z.x); usedSup.add(sup || '');
-      inner += `<div class="chg ${z.x.live ? 'live' : ''}" data-key="${esc(z.x.start)}" style="left:${pct(z.a)}%;width:${Math.max(w, 0.4)}%;${sessFill(z.x, '135deg')}" title="${esc(title)}">${w > 7 ? num(z.x.energy_kwh, 1) + ' kWh' : ''}</div>`;
+      inner += `<div class="chg ${z.x.live ? 'live' : ''}" data-key="${esc(z.x.start)}" style="left:${pct(z.a)}%;width:${Math.max(w, 0.4)}%;${sessFill(z.x, '135deg')}" title="${esc(title)}">${w * trackPx('s-tl') / 100 > 52 ? num(z.x.energy_kwh, 1) + ' kWh' : ''}</div>`;
     }
     if (n === 0) inner += `<div class="gone" style="left:${pct(now)}%"></div><div class="now" style="left:${pct(now)}%"></div>`;
     const d = new Date(lo), name = n === 0 ? 'Today' : n === -1 ? 'Yesterday' : d.toLocaleDateString([], {weekday: 'short'});
@@ -2163,7 +2199,7 @@ function drawSimulation() {
   const sensorList = (e.sensors || []).map((id) => `<code>${esc(id)}</code>`).join('<br>');
   $('sim-entities').innerHTML = (e.integration_conflict && e.integration_conflict.length
     ? `<dt>Old integration</dt><dd><span class="chip err">Still installed</span><div class="sub">Remove the OCPP Charge Proxy integration in Settings › Devices &amp; services, then restart this add-on. Until then the sensors below aren't updated by the add-on.</div></dd>` : '') + kv([
-    ['Plugged In', e.plugged_in ? `<code>${esc(e.plugged_in)}</code> <span class="muted">(helper, toggle it to plug in / unplug)</span>`
+    ['Plugged In (virtual)', e.plugged_in ? `<code>${esc(e.plugged_in)}</code> <span class="muted">(helper, toggle it to plug in / unplug)</span>`
       : `<span class="chip warn">Not set up</span>${e.error ? '<div class="sub">' + esc(e.error) + '</div>' : ''}`],
     ['Charge now', (e.charge_now || []).length ? e.charge_now.map((b) => `<code>${esc(b.entity_id)}</code>`).join('<br>')
       + ' <div class="muted">(buttons: press one, or call <code>input_button.press</code> from an automation, to charge now for that long)</div>'
@@ -2190,7 +2226,7 @@ function drawSimulation() {
     ['Status', !d.plug.entity ? '<span class="chip">No sensor</span>' : d.plug.on === false ? '<span class="chip">Off</span> <span class="muted">the sensor is kept, but doesn\'t plug in</span>'
       : '<span class="chip ok">On</span> <span class="muted">plugs in when the sensor turns on</span>'],
     ['Sensor', entityState(d.plug.entity)],
-    ['Plugged In', state && state.plugged_in ? '<span class="chip info">On</span>' : '<span class="chip">Off</span>'],
+    ['Plugged In (virtual)', state && state.plugged_in ? '<span class="chip info">On</span>' : '<span class="chip">Off</span>'],
   ]);
   const m = d.monitored_soc;
   $('sim-monitor').innerHTML = kv([
@@ -2261,7 +2297,7 @@ function drawHeroNext(d) {
     : `<div class="ring">${HERO_ICON[n.action === 'plug' ? 'plug' : 'unplug']}</div><div style="min-width:0">`
       + `<div class="k">${on ? 'Next' : 'Schedule paused · next car slot'}<b>${until(n.time)}</b></div>`
       + `<div class="big">${n.action === 'plug' ? 'Plug in' : 'Unplug'} ${esc(whenText(n.time))}</div>`
-      + `<div class="sm">${!on ? 'Your slots are paused; car slots still run' + (last ? ' · ' + last : '') : last || 'Nothing run yet'}</div></div>`;
+      + `<div class="sm">${n.delayed ? 'After a random start delay, so it isn\'t the same time every day' : !on ? 'Your slots are paused; car slots still run' + (last ? ' · ' + last : '') : last || 'Nothing run yet'}</div></div>`;
 }
 function whenText(iso) {
   if (!iso) return '';
@@ -2292,7 +2328,7 @@ async function refreshAutomation(force) {
   if (document.activeElement !== $('a-delay-min')) $('a-delay-min').value = sd.max_min;
   const pp = d.schedule.plug_pending;
   $('a-delay-status').hidden = !pp;
-  if (pp) $('a-delay-status').innerHTML = `<span class="chip">Plugging in at ${new Date(pp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})}</span> <span class="muted">after the random delay</span>`;
+  if (pp) $('a-delay-status').innerHTML = `<span class="chip">Plugging in at ${new Date(pp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})}</span> <span class="muted">after the random delay</span>`;
   if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); drawWeekSoon(); });
   else refreshSmart(false);  // the supplier's slots on the week view
   drawReadyStatus(d);
@@ -2622,6 +2658,19 @@ function nextUnplug(entries, skips, after) {
 }
 
 const week = {model: null, occ: [], edit: null};
+// How wide a day's track is, in pixels (labels only where they fit)
+function trackPx(id = 'w-grid') {
+  const t = $(id) && $(id).querySelector('.track');
+  return t && t.clientWidth ? t.clientWidth : Math.max(200, (($(id) && $(id).clientWidth) || 900) - 160);
+}
+// Today's slot waiting out the random start delay: hatched until it plugs in
+function waitPart(occ, nowMin) {
+  const pp = auto.data && auto.data.schedule.plug_pending;
+  if (!pp) return '';
+  const at = (new Date(pp) - today0()) / 60000, o = occ.find((x) => x.a <= nowMin && nowMin < x.b && !x.skipped);
+  if (!o || at <= o.a) return '';
+  return `<div class="wait" style="left:${o.a / 14.4}%;width:${(Math.min(at, o.b) - o.a) / 14.4}%" title="Waiting: plugs in at ${esc(hm(pp))} (random start delay)"></div>`;
+}
 
 // The refreshes every few seconds mustn't redraw the week under an open slot editor while
 // you're using it: that closes a time drop-down mid-scroll. It's redrawn once you're done.
@@ -2653,8 +2702,8 @@ function drawWeek() {
   const ed = week.edit;
   let html = '';
   // Slot colours by type (weekly ones stay blue)
-  const TYPE = {once: ['#00897b', 'One-off'], auto_plug: ['#f57c00', 'Auto plug-in'], charge_now: ['#d81b60', 'Charge now'],
-    car_plugged: ['#6d4c41', 'Car plugged in'], saving_session: ['#5e35b1', 'Before a saving session'],
+  const TYPE = {once: ['#00897b', 'One-off'], auto_plug: ['#f57c00', 'Auto plug-in'], charge_now: ['var(--c-charge-now)', 'Charge now'],
+    car_plugged: ['var(--c-car-plugged)', 'Car plugged in'], saving_session: ['#5e35b1', 'Before a saving session'],
     saving_move: ['#8e24aa', 'Moved for a saving session']};
   const movedIds = new Set(((auto.data && auto.data.schedule.saving_sessions) || []).flatMap((x) => x.moved || []));
   const typeOf = (s) => s.kind === 'once' && movedIds.has(s.plug.id) ? 'saving_move'
@@ -2716,11 +2765,11 @@ function drawWeek() {
         + (got.length ? '\n' + got.map((z) => sesText(z.x)).join('\n') : '');
       const ty = typeOf(s);
       return `<div class="seg ${o.skipped ? 'skip' : ''} ${(!on && !s.source) || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''}"
-        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${x1 - x0 > 9 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm((red && over[0][0] > Math.max(o.a, lo) ? over[0][0] : Math.min(o.b, hi)) - lo)}</span>` : ''}</div>`
+        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${(x1 - x0) * trackPx() / 100 > 76 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm((red && over[0][0] > Math.max(o.a, lo) ? over[0][0] : Math.min(o.b, hi)) - lo)}</span>` : ''}</div>`
         + over.map(([x, y]) => {
           const p = span(x, y);
           return `<div class="seg overpart ${!on && !s.source ? 'off' : ''}" data-occ="${k}" data-row="${d}" style="left:${p.x0}%;width:${p.x1 - p.x0}%"
-            title="${dayLabel(d)} ${hhmm(x - lo)}–${hhmm(y - lo)}: over ${limitText()} of smart charging a day. ${esc(sup('Your supplier'))} may not charge then · click to change the slot">${p.x1 - p.x0 > 6 ? '<span class="sl">Over</span>' : ''}</div>`;
+            title="${dayLabel(d)} ${hhmm(x - lo)}–${hhmm(y - lo)}: over ${limitText()} of smart charging a day. ${esc(sup('Your supplier'))} may not charge then · click to change the slot">${(p.x1 - p.x0) * trackPx() / 100 > 34 ? '<span class="sl">Over</span>' : ''}</div>`;
         }).join('');
     }).join('');
     const ticks = d < 0 ? '' : model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
@@ -2742,7 +2791,7 @@ function drawWeek() {
     const dname = d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : d === -1 ? 'Yesterday' : dd.toLocaleDateString([], {weekday: 'short'});
     html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${dname}<small>${dd.toLocaleDateString([], {day: 'numeric', month: 'short'})}</small></div>`
       + `<div class="track ${d < 0 ? 'past' : ''} ${d === 0 ? 'today' : ''}" data-row="${d}"${before ? ' title="Not recorded: the add-on keeps when the car was plugged in from 2.27.0 on"' : ''}>${blk}${bars}${ticks}${planned}${charged}`
-      + `${d === 0 ? `<div class="gone" style="width:${nowMin / 14.4}%"></div><div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
+      + `${d === 0 ? waitPart(occ, nowMin) + `<div class="gone" style="width:${nowMin / 14.4}%"></div><div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
     if (ed && !ed.top && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
   }
   html += '<div></div><div class="axis">' + [0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => `<span style="left:${h / 24 * 100}%">${String(h % 24).padStart(2, '0')}:00</span>`).join('') + '</div>';
@@ -2795,9 +2844,11 @@ function drawEditor() {
   const o = ed.mode === 'slot' ? week.occ[ed.k] : null;
   const nextDay = f.start && f.end && tmin(f.end) <= tmin(f.start);
   const block = f.kind === 'block';
-  const title = ed.mode === 'block' ? 'Off-peak time' : ed.mode === 'new' ? 'New' : ed.mode === 'orphan' ? 'Unplug only'
+  const title = (ed.mode === 'block' ? 'Off-peak time' : ed.mode === 'new' ? 'New' : ed.mode === 'orphan' ? 'Unplug only'
     : s.source === 'charge_now' ? 'Charge now slot' : s.source === 'auto_plug' ? 'Auto plug-in slot'
-    : s.source === 'car_plugged' ? 'Car plugged in slot' : 'Slot';
+    : s.source === 'car_plugged' ? 'Car plugged in slot' : 'Slot')
+    + (o ? ` · ${new Date(o.date + 'T12:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})}`
+      + (s.kind === 'weekly' ? ` (every ${s.days.map((x) => DAYS[x].slice(0, 2)).join(' ')})` : '') : '');
   const kind = ed.mode !== 'new' ? '' : `<div class="seg" role="group" aria-label="Kind">
       <button data-kind="slot" aria-pressed="${!block}">Charging slot</button><button data-kind="block" aria-pressed="${block}" title="Nothing is scheduled then: your off-peak hours, when the car may charge anyway">Off-peak time</button></div>`;
   const tip = rules ? `title="${esc(rules.provider)} ready times: unplug times are ${esc(rules.text)}"` : '';
@@ -2816,11 +2867,17 @@ function drawEditor() {
       ? `<div class="seg days" role="group" aria-label="Days">${DAYS.map((d, n) => `<button data-day="${n}" aria-pressed="${f.days.includes(n)}" title="${d}">${d.slice(0, 2)}</button>`).join('')}</div>`
       : `<input type="date" data-f="date" value="${esc(f.date)}" aria-label="Date">`}`;
   const canSkip = !block && s && o && new Date(`${o.date}T${s.start}`) > new Date();
+  // Going now: stop it for today (unplugged, its plug-in and unplug skipped today)
+  const nowMin = (Date.now() - today0().getTime()) / 60000;
+  const canStop = !block && s && o && !o.skipped && s.enabled && o.a <= nowMin && nowMin < o.b;
+  const noUnplug = !block && ed.mode !== 'orphan' && !f.end;
   pop.innerHTML = `<div class="ed">
     <b>${title}${ed.top ? (ed.row ? ' · tomorrow' : ' · today') : ''}</b>${kind}${times}${repeat}
-    ${block ? '' : `<label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label>`}
+    ${block ? '' : `<span class="ctl"><span class="muted">Active</span><label class="switch" title="Turn this slot off (every time) without deleting it"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="Slot active"><span></span></label></span>`}
+    ${noUnplug ? '<div class="sub" style="width:100%;color:var(--warn)">No unplug: it stays plugged in until you unplug it or another unplug time comes.</div>' : ''}
     <span class="acts"><button class="btn small primary" id="w-save">Save</button>
       ${ed.mode !== 'new' ? '<button class="btn small" id="w-del">Delete</button>' : ''}
+      ${canStop ? '<button class="btn small" id="w-stop" title="Unplug now; it runs again next time">Stop for today</button>' : ''}
       ${canSkip ? `<button class="btn small" id="w-skip">${o.skipped ? 'Undo skip' : 'Skip this one'}</button>` : ''}
       <button class="btn small" id="w-close">Cancel</button></span>
     <div class="sub" id="w-err" style="color:var(--err)"></div></div>`;
@@ -2933,7 +2990,30 @@ $('w-grid').addEventListener('click', async (ev) => {
   if (t.id === 'w-close') { week.edit = null; drawWeek(); return; }
   if (t.id === 'w-save') { saveEditor(false); return; }
   if (t.id === 'w-anyway') { t.disabled = true; saveEditor(false, true); return; }
-  if (t.id === 'w-del') { saveEditor(true); return; }
+  if (t.id === 'w-del' || t.id === 'w-del-all') {
+    // A weekly slot: every week, or just this one (skipped once, or stopped for today)?
+    const o = ed && ed.mode === 'slot' ? week.occ[ed.k] : null, s = o ? week.model.slots[o.i] : null;
+    if (t.id === 'w-del' && s && s.kind === 'weekly') {
+      const nowMin = (Date.now() - today0().getTime()) / 60000, going = o.a <= nowMin && nowMin < o.b;
+      $('w-err').innerHTML = `<div style="color:var(--text)">Delete it every week, or just this one?</div><div class="row" style="margin-top:6px;gap:6px">`
+        + '<button class="btn small" id="w-del-all">Every week</button>'
+        + (going ? '<button class="btn small" id="w-stop">Just today (stop now)</button>' : o.skipped ? '' : '<button class="btn small" id="w-skip">Just this one</button>')
+        + '</div>';
+      return;
+    }
+    saveEditor(true); return;
+  }
+  if (t.id === 'w-stop') {
+    const o = week.occ[ed.k], s = week.model.slots[o.i];
+    const times = [{entry_id: s.plug.id, date: o.date}];
+    if (s.unplug && o.udate) times.push({entry_id: s.unplug.id, date: o.udate});
+    t.disabled = true;
+    if (await post('automation/skip', {times, skip: true, allow_over: true})) {
+      if (state && state.plugged_in) await post('unplug');
+      toast('Stopped for today: it runs again next time'); week.edit = null; pollState(); await refreshAutomation(false);
+    } else t.disabled = false;
+    return;
+  }
   if (t.id === 'w-skip' || t.id === 'w-skip-any') {
     const o = week.occ[ed.k], s = week.model.slots[o.i];
     const times = [{entry_id: s.plug.id, date: o.date}];
@@ -2993,7 +3073,11 @@ $('w-grid').addEventListener('change', (ev) => {
 });
 // "+ Add a slot": a new slot from the next half hour, for 2 hours, on today's row
 $('w-add').addEventListener('click', () => {
-  const now = new Date(), m = Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / 30) * 30;
+  const now = new Date();
+  let m = Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / 30) * 30;
+  // (the first 2 hours from then that no slot already has: 30-minute steps, up to a day on)
+  const segs = weekPlan().segs || [];
+  for (let k = 0; k < 48 && segs.some(([x, y]) => x < m + 120 && y > m); k++) m += 30;
   const row = m >= DAY_MIN ? 1 : 0, a = m % DAY_MIN;
   openEditor('new', row, {start: hhmm(a), end: hhmm((a + 120) % DAY_MIN)});
   week.edit.top = true;  // opens above the week, not under today's row
@@ -3235,10 +3319,18 @@ $('d-bundle').addEventListener('click', async () => {
 });
 
 function applyDailyLimit() {
+  // The supplier's own limit (Octopus: 6 hours, 12:00 to 12:00), as found or set on the
+  // Settings tab; none for a supplier without one (or with no supplier)
   const on = limitApplies(), h = on ? capMin() / 60 : null;
   const rs = limitReset();
-  const text = !on ? '' : `Daily limit: up to ${h} h is scheduled ${rs ? `per day from ${rs}` : `in any ${limitHours()} h`}; a longer charge stops then.`;
+  const text = !on ? '' : `${esc(sup('Your supplier'))} schedules at most ${h} hours of smart charging `
+    + (rs ? `from ${rs} one day to ${rs} the next` : `in any ${limitHours()} hours`) + '. A charge that would go over is checked with you first.';
   ['c-charge-cap', 'sim-auto-cap', 'plug-cap'].forEach((id) => { $(id).innerHTML = text; $(id).hidden = !on; });
+  $('c-charge').querySelectorAll('button').forEach((btn) => {
+    const over = on && Number(btn.dataset.hours) * 60 > capMin();
+    btn.classList.toggle('over', over);
+    btn.title = over ? `Longer than ${sup('your supplier')}'s ${h} hours: you'll be asked first` : '';
+  });
 }
 // ---------- Charge now (Automations tab): plug in for a set time ----------
 // Added to the schedule as a one-off, so it can be changed in the schedule below.
@@ -3261,6 +3353,7 @@ async function chargeNow(h, confirm) {
       $('c-charge-note').innerHTML = until ? `Plugged in until <b>${until}</b>${r.plan.notes && r.plan.notes.length ? ' (' + esc(r.plan.notes.join('; ')) + ')' : ''}. `
         + 'Shown in the schedule below.' : '';
       if (from) $('c-charge-note').innerHTML = `Plugs in at <b>${from}</b>, until <b>${until}</b>. Shown in the schedule below.`;
+      if (until) $('c-charge-note').innerHTML += ' <button class="btn small" id="c-charge-cancel">Cancel this charge</button>';
       pollState(); refreshAutomation(true);
     }
   } catch (err) { toast('Failed: ' + err.message); }
@@ -3280,6 +3373,17 @@ function drawChargeConfirm(h, p) {
   $('c-charge-no').onclick = () => { $('c-charge-note').innerHTML = ''; };
 }
 $('c-charge').addEventListener('click', (e) => { const h = Number(e.target.dataset.hours); if (h) chargeNow(h, false); });
+// Cancel a Charge now: out of the schedule (what it changed put back), unplugged unless a slot has it plugged in
+$('c-charge-note').addEventListener('click', async (e) => {
+  if (e.target.id !== 'c-charge-cancel') return;
+  e.target.disabled = true;
+  try {
+    const r = await api('charge_now/cancel', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+    toast(!r.removed ? 'No Charge now to cancel' : r.unplugged ? 'Charge cancelled: unplugged' : 'Charge cancelled');
+    $('c-charge-note').innerHTML = '';
+    pollState(); refreshAutomation(true);
+  } catch (err) { toast('Failed: ' + err.message); e.target.disabled = false; }
+});
 
 // ---------- Settings › Your supplier: override what's found automatically ----------
 const HALF_HOURS = Array.from({length: 48}, (_, k) => `${String(Math.floor(k / 2)).padStart(2, '0')}:${k % 2 ? '30' : '00'}`);

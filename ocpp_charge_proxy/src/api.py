@@ -30,6 +30,7 @@ def create_api_app(
     on_charge_now: Callable[[float, bool], Awaitable[dict]] | None = None,
     debug=None,
     app_settings=None,
+    on_cancel_charge: Callable[[], Awaitable[dict]] | None = None,
 ) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state
@@ -45,6 +46,7 @@ def create_api_app(
     app["ha_link"] = ha_link  # src.ha_link.HaLink, or None
     app["on_set_ramp"] = on_set_ramp
     app["on_charge_now"] = on_charge_now
+    app["on_cancel_charge"] = on_cancel_charge
     app["debug"] = debug  # src.debug_tools.DebugTools, or None
     app["app_settings"] = app_settings  # src.app_settings.AppSettings, or None
     # Open /api/events streams (web pages)
@@ -59,6 +61,7 @@ def create_api_app(
     app.router.add_post("/api/plug", handle_plug)
     app.router.add_post("/api/unplug", handle_unplug)
     app.router.add_post("/api/charge_now", handle_charge_now)
+    app.router.add_post("/api/charge_now/cancel", handle_cancel_charge)
     app.router.add_post("/api/current", handle_current)
     app.router.add_post("/api/power", handle_power)
     app.router.add_post("/api/soc", handle_soc)
@@ -147,6 +150,19 @@ async def handle_charge_now(request: web.Request) -> web.Response:
         return web.json_response({"status": "error", "message": "hours must be 0.5 to 12, in half hours"}, status=400)
     try:
         out = await on_charge_now(hours, bool(body.get("confirm")))
+    except ValueError as err:
+        return web.json_response({"status": "error", "message": str(err)}, status=400)
+    return web.json_response({"status": "ok", **out}, dumps=_dumps)
+
+
+async def handle_cancel_charge(request: web.Request) -> web.Response:
+    """Cancel a Charge now that's going or still to come: out of the schedule (what it
+    changed put back), and unplugged if nothing else has the car plugged in now."""
+    on_cancel = request.app["on_cancel_charge"]
+    if on_cancel is None:
+        return web.json_response({"status": "error", "message": "Not available"}, status=503)
+    try:
+        out = await on_cancel()
     except ValueError as err:
         return web.json_response({"status": "error", "message": str(err)}, status=400)
     return web.json_response({"status": "ok", **out}, dumps=_dumps)
@@ -404,17 +420,38 @@ async def _automation_change(request: web.Request, apply) -> web.Response:
         if not isinstance(body, dict):
             raise ValueError("Send a JSON object")
         apply(automation, body)
-    except (ValueError, TypeError, json.JSONDecodeError) as err:
-        return web.json_response({"status": "error", "message": str(err)}, status=400)
+    except (ValueError, TypeError, AttributeError, KeyError, json.JSONDecodeError) as err:
+        return web.json_response({"status": "error", "message": str(err) or "Bad request"}, status=400)
     automation.publish(request.app["shared_state"])
     return web.json_response({"status": "ok", **automation.snapshot()}, dumps=_dumps)
+
+
+def _smart(request: web.Request) -> dict:
+    """Your supplier's smart charging info (its daily limit, ready times...), or {} if it can't be read."""
+    link = request.app["ha_link"]
+    if link is None:
+        return {}
+    try:
+        return link.smart_charging() or {}
+    except Exception:
+        logger.debug("Couldn't read the supplier's smart charging info", exc_info=True)
+        return {}
+
+
+def _bool(b: dict, key: str, default: bool = False) -> bool:
+    """A true/false field of a request: only real booleans (not "false")."""
+    value = b.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} must be true or false")
+    return value
 
 
 async def handle_schedule(request: web.Request) -> web.Response:
     """{"enabled": bool}, {"ready_time": bool}, {"unplug_wait_s": N}, {"start_delay": {"enabled", "max_min"}} and/or
     {"entries": [{time, days, action, enabled}, ...]}."""
-    link = request.app["ha_link"]
-    sc = link.smart_charging() if link is not None else {}
+    sc = _smart(request)
     if request.app["automation"] is not None:
         request.app["automation"].limit_reset = sc.get("limit_reset")  # e.g. Octopus: 12:00
     return await _automation_change(
@@ -426,7 +463,7 @@ async def handle_schedule(request: web.Request) -> web.Response:
             unplug_wait_s=b.get("unplug_wait_s"),
             override_guards=b.get("override_guards"),
             blocks=b.get("blocks"),
-            allow_over=bool(b.get("allow_over")),  # save it anyway, over the daily limit
+            allow_over=_bool(b, "allow_over"),  # save it anyway, over the daily limit
             start_delay=b.get("start_delay"),  # {"enabled", "max_min"}: a random wait before plug-ins
         ),
     )
@@ -436,18 +473,17 @@ async def handle_skip(request: web.Request) -> web.Response:
     """{"times": [{"entry_id", "date": "YYYY-MM-DD"}, ...], "skip": bool}: skip
     upcoming times once (a slot: its plug-in and unplug), or undo. A single
     {"entry_id", "date"} works too."""
-    link = request.app["ha_link"]
-    sc = link.smart_charging() if link is not None else {}
+    sc = _smart(request)
     if request.app["automation"] is not None:
         request.app["automation"].limit_reset = sc.get("limit_reset")  # e.g. Octopus: 12:00
     return await _automation_change(
         request, lambda a, b: a.set_skips(
             b.get("times") if "times" in b else [{"entry_id": b.get("entry_id"), "date": b.get("date")}],
-            bool(b.get("skip", True)),
+            _bool(b, "skip", True),
             # e.g. Octopus schedules at most 6 hours of smart charging a day
             daily_cap_min=sc.get("limit_min"),
             provider=sc.get("provider") or "your supplier",
-            allow_over=bool(b.get("allow_over")),
+            allow_over=_bool(b, "allow_over"),
         ),
     )
 

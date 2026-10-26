@@ -92,7 +92,9 @@ GRACEFUL_UNPLUG_S = 60  # with Force schedule on supplier: wait this long for it
 MAX_UNPLUG_WAIT_S = 600
 PENDING_TICK_S = 2  # check this often while waiting
 TICK_S = 15
-CATCH_UP_S = 300  # a scheduled time is still run if noticed within this (or if nothing's come after it)
+CATCH_UP_S = 600  # a scheduled time is still run if noticed within this (or if nothing's come after it): more
+# than the longest re-plug wait (off_s, 300 s), during which the loop doesn't look
+MAX_ONE_OFF_DAYS = 62  # a one-off slot can be at most this far ahead
 MISSED_MAX_S = 86400  # after a restart, times missed while stopped are looked for this far back
 REPLUG_UNPLUG_MARGIN_S = 60  # no re-plug if a scheduled unplug comes before it'd be plugged back in + this
 ACTIONS = ("plug", "unplug")
@@ -156,6 +158,16 @@ def _parse_iso(value) -> Optional[datetime.datetime]:
     return dt if dt.tzinfo else dt.astimezone()
 
 
+def _flag(value, name: str, default: bool) -> bool:
+    """A true/false setting: None is the default; anything but a real boolean is refused
+    (so the text "false" isn't taken as on)."""
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be true or false")
+    return value
+
+
 def _parse_date(value) -> datetime.date:
     try:
         return datetime.date.fromisoformat(str(value))
@@ -203,9 +215,10 @@ def without_fallbacks(entries: list) -> list:
     return [e for e in entries if not e.get("only_off")]
 
 
-def validate_entry(raw: dict) -> dict:
+def validate_entry(raw: dict, today: Optional[datetime.date] = None) -> dict:
     """A schedule entry: {id, time "HH:MM", days [0=Mon..6=Sun], action, enabled},
-    or a one-off: the same with "date": "YYYY-MM-DD" (days is then that day)."""
+    or a one-off: the same with "date": "YYYY-MM-DD" (days is then that day). With
+    `today` (a change being saved), a one-off can't be more than MAX_ONE_OFF_DAYS ahead."""
     if not isinstance(raw, dict):
         raise ValueError("Each entry must be an object")
     h, m = _parse_hhmm(raw.get("time"))
@@ -214,13 +227,15 @@ def validate_entry(raw: dict) -> dict:
         raise ValueError(f"Action must be one of {ACTIONS}, got {action!r}")
     if raw.get("date"):
         date = _parse_date(raw["date"])
+        if today is not None and date > today + datetime.timedelta(days=MAX_ONE_OFF_DAYS):
+            raise ValueError(f"A one-off slot can be at most {MAX_ONE_OFF_DAYS} days ahead")
         out = {
             "id": str(raw.get("id") or uuid.uuid4().hex[:8]),
             "time": f"{h:02d}:{m:02d}",
             "days": [date.weekday()],
             "date": date.isoformat(),
             "action": action,
-            "enabled": bool(raw.get("enabled", True)),
+            "enabled": _flag(raw.get("enabled"), "enabled", True),
         }
         if raw.get("source") in AUTO_SOURCES:
             out["source"] = raw["source"]
@@ -247,7 +262,7 @@ def validate_entry(raw: dict) -> dict:
         "time": f"{h:02d}:{m:02d}",
         "days": sorted(set(days)),
         "action": action,
-        "enabled": bool(raw.get("enabled", True)),
+        "enabled": _flag(raw.get("enabled"), "enabled", True),
     }
 
 
@@ -511,6 +526,8 @@ class Automation:
                 self._missed_since = float(last)
             if isinstance(data.get("unplug_at"), (int, float)):
                 self.unplug_at = float(data["unplug_at"])
+            if isinstance(data.get("plug_at"), (int, float)):
+                self.plug_at = float(data["plug_at"])
         except FileNotFoundError:
             pass
         except Exception:
@@ -520,13 +537,14 @@ class Automation:
         """Save the last check (to the minute) and any waiting unplug, when they change."""
         if not self._runtime_path or self._last_check is None:
             return
-        state = (int(self._last_check.timestamp() // 60), self.unplug_at)
+        state = (int(self._last_check.timestamp() // 60), self.unplug_at, self.plug_at)
         if state == self._runtime_saved:
             return
         try:
             tmp = self._runtime_path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"last_check": self._last_check.timestamp(), "unplug_at": self.unplug_at}, f)
+                json.dump({"last_check": self._last_check.timestamp(), "unplug_at": self.unplug_at,
+                           "plug_at": self.plug_at}, f)
             os.replace(tmp, self._runtime_path)
             self._runtime_saved = state
         except Exception:
@@ -571,6 +589,11 @@ class Automation:
         is turned on, so the schedule can always be switched off.
         allow_over: save it anyway, over the daily limit (the page asks first,
         and shows the hours over in red); the unplug times are still checked."""
+        enabled = None if enabled is None else _flag(enabled, "enabled", False)
+        ready_time = None if ready_time is None else _flag(ready_time, "ready_time", False)
+        override_guards = None if override_guards is None else _flag(override_guards, "override_guards", False)
+        # (put back as it was if turning the schedule on is refused, below)
+        undo = (copy.deepcopy(self.entries), list(self.skips), copy.deepcopy(self.blocks))
         wait = None if unplug_wait_s is None else self._valid_wait(unplug_wait_s)
         if start_delay is not None:
             if not isinstance(start_delay, dict):
@@ -582,7 +605,7 @@ class Automation:
                 raise ValueError("Entries must be a list")
             if len(entries) > 50:
                 raise ValueError("At most 50 schedule entries")
-            new_entries = [validate_entry(e) for e in entries]
+            new_entries = [validate_entry(e, today=self._now().date()) for e in entries]
         new_skips = list(self.skips)
         if entries is not None:
             # A charge (auto plug-in, Charge now...) that's deleted puts back the
@@ -654,7 +677,7 @@ class Automation:
                         try:
                             self.check_daily_cap(running, cap, provider, self.skips)
                         except ValueError:
-                            self.entries, self.skips = before
+                            self.entries, self.skips, self.blocks = undo
                             self.schedule_enabled = False
                             raise
                 self.turned_on = True  # the loop plugs in if it's inside a slot now (see automation_loop)
@@ -664,8 +687,7 @@ class Automation:
             self.unplug_wait_s = wait
         if start_delay is not None and delay != self.start_delay:
             self.start_delay = delay
-            if not delay["enabled"]:
-                self.plug_at = None  # a plug-in waiting now goes ahead (see automation_loop)
+            # (turned off, a plug-in waiting now goes ahead at the next look: see automation_loop)
             logger.info("Random start delay %s", f"on, up to {delay['max_min']} min" if delay["enabled"] else "off")
         if allow_over and checking and daily_cap_min:
             worst = self._longest_day(new_entries, new_skips)
@@ -700,7 +722,7 @@ class Automation:
             raise ValueError("The start delay must be a whole number of minutes") from None
         if not 1 <= max_min <= MAX_START_DELAY_MIN:
             raise ValueError(f"The start delay must be 1 to {MAX_START_DELAY_MIN} minutes")
-        return {"enabled": bool(values.get("enabled")), "max_min": max_min}
+        return {"enabled": _flag(values.get("enabled"), "The start delay's enabled", False), "max_min": max_min}
 
     def start_delay_s(self, entry: dict, at: datetime.datetime) -> float:
         """The random wait before a plug-in at `at` (seconds; 0: none): up to the
@@ -727,7 +749,7 @@ class Automation:
             raise ValueError("attempts must be 0 to 20")
         if not 5 <= off <= 300:
             raise ValueError("off_s must be 5 to 300 seconds")
-        return {"enabled": bool(values.get("enabled", True)), "after_min": after, "attempts": attempts, "off_s": off}
+        return {"enabled": _flag(values.get("enabled"), "Re-plug's enabled", True), "after_min": after, "attempts": attempts, "off_s": off}
 
     def set_replug(self, **changes) -> None:
         allowed = {k: v for k, v in changes.items() if k in ("enabled", "after_min", "attempts", "off_s") and v is not None}
@@ -744,13 +766,31 @@ class Automation:
 
     # --- schedule ------------------------------------------------------------
 
+    def _local(self, naive: datetime.datetime) -> datetime.datetime:
+        """A local wall time as an aware time. One that doesn't exist (the hour the clocks
+        go forward, e.g. 01:30 in the UK in spring) is the first time after it that does
+        (02:00), rather than an hour on (02:30)."""
+        def real(n):  # (an aware time for a wall time that exists, else None)
+            aware = self._localize(n)
+            back = aware.astimezone(datetime.timezone.utc).astimezone(aware.tzinfo)  # (normalised)
+            return aware if back.replace(tzinfo=None) == n else None
+
+        found = real(naive)
+        if found is not None:
+            return found
+        for minutes in range(1, 181):
+            found = real(naive + datetime.timedelta(minutes=minutes))
+            if found is not None:
+                return found
+        return self._localize(naive)
+
     def _occurrences(self, entry: dict, start: datetime.date, days: int):
         h, m = _parse_hhmm(entry["time"])
         once = entry.get("date")
         for i in range(days):
             day = start + datetime.timedelta(days=i)
             if (day.isoformat() == once) if once else (day.weekday() in entry["days"]):
-                yield self._localize(datetime.datetime(day.year, day.month, day.day, h, m))
+                yield self._local(datetime.datetime(day.year, day.month, day.day, h, m))
 
     def timeline(self, start: datetime.date, days: int, entries: Optional[list] = None,
                  skips: Optional[list] = None) -> list:
@@ -760,13 +800,26 @@ class Automation:
         for entry in self._active_entries() if entries is None else entries:
             if not entry["enabled"]:
                 continue
+            h, m = _parse_hhmm(entry["time"])
             for occ in self._occurrences(entry, start, days):
-                out.append((occ, entry, {"entry_id": entry["id"], "date": occ.date().isoformat()} in skips))
+                day = occ.date() if entry.get("date") is None else _parse_date(entry["date"])
+                wall = datetime.datetime(day.year, day.month, day.day, h, m)
+                out.append((occ, entry, {"entry_id": entry["id"], "date": day.isoformat()} in skips, wall))
         # an unplug at the same minute as a plug comes before it: back-to-back
         # slots (06:00-12:00 and 12:00-18:00) unplug and plug straight back in,
-        # so the supplier sees two charges, each with its own ready time
+        # so the supplier sees two charges, each with its own ready time. But where
+        # the clocks going forward put a plug-in and its unplug at the same time
+        # (01:00-02:00 in the UK), the slot is empty: neither runs.
         out.sort(key=lambda x: (x[0], x[1]["action"] == "plug"))
-        return out
+        drop = set()
+        for i, (occ, e, _, wall) in enumerate(out):
+            if e["action"] != "plug":
+                continue
+            for j, (occ2, e2, _, wall2) in enumerate(out):
+                if occ2 == occ and e2["action"] == "unplug" and wall2 > wall and j not in drop:
+                    drop.update((i, j))
+                    break
+        return [(occ, e, skipped) for i, (occ, e, skipped, _) in enumerate(out) if i not in drop]
 
     def _active_entries(self) -> list:
         """The entries that run: all of them with the schedule on (but a joined charge's
@@ -1376,6 +1429,7 @@ class Automation:
             self.saving_block = bool(block)
             changed = True
         moved = False
+        movers = []  # the sessions that moved a slot this time
         for r in keep:
             if r.get("v") != SAVING_MOVE_VERSION:
                 self._undo_session(r)  # moved the old way: put back, and moved again below
@@ -1392,12 +1446,17 @@ class Automation:
                 continue
             if _parse_iso(r["end"]) > now and self._move_for_session(r, ready_times):
                 moved = changed = True
+                movers.append(r)
         if moved and cap_min and self.ready_time and not self.override_guards:
             # a moved slot that's now across the daily limit's reset time is split there, as for Charge now
             splits = self._reset_splits(self._active_entries(), self.skips, cap_min, one_off=True)
             if splits:
                 self.entries = self.entries + splits
-                keep[0]["changes"]["added"] += [e["id"] for e in splits]
+                for e in splits:
+                    # (the session nearest the split, of those that moved a slot: put back with it)
+                    at = next(self._occurrences(e, _parse_date(e["date"]), 1))
+                    owner = min(movers or keep, key=lambda r: abs((_parse_iso(r["start"]) - at).total_seconds()))
+                    owner["changes"]["added"].append(e["id"])
             worst = self._longest_day(self._active_entries(), self.skips)
             if worst and worst[0] > cap_min:
                 logger.warning("Saving session: with the slots moved, the schedule plugs in for %dh %02dm in %s, "
@@ -1700,7 +1759,9 @@ class Automation:
             raise ValueError("Say which times to skip")
         keys = []
         for t in times:
-            entry_id, date = str((t or {}).get("entry_id") or ""), (t or {}).get("date")
+            if not isinstance(t, dict):
+                raise ValueError("Each time to skip must be {entry_id, date}")
+            entry_id, date = str(t.get("entry_id") or ""), t.get("date")
             entry = next((e for e in self.entries if e["id"] == entry_id), None)
             if entry is None:
                 raise ValueError("No such schedule time (save the schedule first)")
@@ -1726,6 +1787,28 @@ class Automation:
                         "plug-in" if entry["action"] == "plug" else "unplug", entry["time"], key["date"])
         self._prune()
         self._save()
+
+    def cancel_charge(self, source: str = CHARGE_NOW_SOURCE) -> int:
+        """Take a charge (Charge now, by default) that's going or still to come out of the
+        schedule: its plug-in and unplug go, and what it trimmed or skipped is put back.
+        Returns how many times were taken out (0: none to cancel)."""
+        now = self._now()
+        times = sorted(((next(self._occurrences(e, _parse_date(e["date"]), 1)), e) for e in self.entries
+                        if e.get("source") == source and e.get("date")), key=lambda x: (x[0], x[1]["action"] == "plug"))
+        cancel = set()
+        for i, (occ, e) in enumerate(times):
+            if occ > now:
+                cancel.add(e["id"])
+            elif e["action"] == "plug":
+                # going now: until its unplug
+                end = next(((o, x) for o, x in times[i + 1:] if x["action"] == "unplug"), None)
+                if end is None or end[0] > now:
+                    cancel.add(e["id"])
+        if not cancel:
+            return 0
+        self.set_schedule(entries=[e for e in self.entries if e["id"] not in cancel])
+        logger.info("Schedule: %s cancelled", SOURCE_NAMES.get(source, source))
+        return len(cancel)
 
     def upcoming(self, days: int = 7) -> list:
         """The next times over `days` days, for the page."""
@@ -1764,6 +1847,9 @@ class Automation:
                 continue  # a late plug-in, or a late unplug something's come after: leave it
             if first and entry["action"] == "plug":
                 continue  # after a restart, plugging in is the start-up check's job
+            if first and entry["action"] == "unplug" and any(
+                    occ <= o <= now and e["action"] == "plug" and not s for o, e, s in timeline):
+                continue  # ... and a missed unplug a plug-in came after (or at) is too: it'd leave it unplugged
             if prev < occ <= now:
                 if skipped:
                     logger.info("Schedule: %s at %s skipped",
@@ -1831,6 +1917,10 @@ class Automation:
         plug-in, Charge now, the car plugged in sensor), which run either way. "car_slot": true
         for one of those."""
         now = self._now()
+        if self.plug_at is not None and self.in_plug_window() is not None:
+            # A plug-in waiting out its random start delay comes first
+            at = datetime.datetime.fromtimestamp(self.plug_at, tz=now.tzinfo)
+            return {"time": _iso_local(at), "action": "plug", "entry_id": None, "car_slot": False, "delayed": True}
         for occ, entry, skipped in self.timeline(now.date(), self._horizon_days()):
             if occ > now and not skipped:
                 return {"time": _iso_local(occ), "action": entry["action"], "entry_id": entry["id"],
@@ -2073,13 +2163,24 @@ async def automation_loop(
             if first:
                 first = False
                 automation.turned_on = automation.turned_off = False  # (start-up does the same check, just below)
-                since = automation.in_plug_window()
-                if since is not None and not shared_state.plugged_in:
+                # Inside a slot of the schedule (on), or a car slot (which runs with it off too)
+                since = automation.in_plug_window() or automation.in_charge_window()
+                waiting = automation.plug_at is not None and automation._clock() < automation.plug_at
+                if since is None:
+                    automation.plug_at = None
+                elif not shared_state.plugged_in and not waiting:
+                    automation.plug_at = None
                     logger.info("Started inside a scheduled plug-in (since %s): plugging in", since.strftime("%a %H:%M"))
                     automation.last_run = {"entry_id": None, "action": "plug",
                                            "timestamp": _iso_from_epoch(automation._clock()), "startup": True}
                     await plug(source="schedule")
                     ready_pending = automation.ready_time and set_ready_time is not None
+                elif shared_state.plugged_in:
+                    automation.plug_at = None
+                    if automation._missed_since is not None and since.timestamp() > automation._missed_since:
+                        # Restarted across the start of this slot (e.g. where two slots meet): still
+                        # plugged in, but the ready time is this slot's now
+                        ready_pending = automation.ready_time and set_ready_time is not None
             if ready_pending:
                 # HA (or the supplier's sensor) may not be there yet just after start-up
                 last_try = automation._clock() - started >= STARTUP_READY_S
@@ -2117,7 +2218,8 @@ async def automation_loop(
             for entry in due:
                 if entry["action"] == "unplug" or entry.get("back_to_back"):
                     automation.plug_at = None  # a plug-in still waiting out its delay is overtaken
-                elif entry["time"] not in meets:
+                elif entry["time"] not in meets and not shared_state.plugged_in:
+                    # (already plugged in, e.g. by hand: nothing to wait for, just the ready time)
                     delay = automation.start_delay_s(entry, automation._now())
                     if delay >= 1:
                         automation.plug_at = automation._clock() + delay
@@ -2155,10 +2257,14 @@ async def automation_loop(
             if automation.plug_at is not None:
                 # A plug-in waiting out its random delay: not if the slot's over (or skipped, or
                 # the schedule's off) or it's plugged in already; with the delay turned off, now
-                if automation.in_plug_window() is None or shared_state.plugged_in:
-                    if automation.in_plug_window() is None:
-                        logger.info("Schedule: the slot ended during the random delay: not plugging in")
+                if automation.in_plug_window() is None:
+                    logger.info("Schedule: the slot ended during the random delay: not plugging in")
                     automation.plug_at = None
+                elif shared_state.plugged_in:
+                    # Plugged in meanwhile (by hand, Home Assistant...): the ready time is still this slot's
+                    automation.plug_at = None
+                    if automation.ready_time and set_ready_time is not None:
+                        await apply_ready_time(automation, set_ready_time)
                 elif automation._clock() >= automation.plug_at or not automation.start_delay["enabled"]:
                     automation.plug_at = None
                     automation.unplug_at = None

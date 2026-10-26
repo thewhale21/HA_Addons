@@ -111,7 +111,8 @@ Work through the tabs once, top to bottom.
 | Feature | Use it if… |
 | --- | --- |
 | **Schedule** | You plug in at set times, e.g. every night 23:30–05:30. Click or drag across a day to add a slot |
-| **Force schedule on supplier** | You want the supplier's ready time set to the schedule's unplug time for you. With Octopus it also keeps the schedule within 6 hours a day |
+| **Random start delay** | You'd rather your slots didn't plug in at exactly the same time every day: each plugs in up to the minutes you set after it starts |
+| **Force schedule on supplier** | You want the supplier's ready time set to the schedule's unplug time for you. It also keeps the schedule within your supplier's daily limit, if it has one (Octopus: 6 hours from 12:00 to 12:00) |
 | **Charge now** | You want a charge straight away for 1–12 hours |
 | **Auto plug-in** | You want it to plug in when the car's SoC drops below a level |
 | **Car plugged in** | You have a "cable connected" sensor and want it to plug in when you connect the car. Its switch turns it off without forgetting the sensor |
@@ -149,7 +150,7 @@ mode: queued
 | `input_boolean.ocpp_charge_proxy_plugged_in` | **Plugged In**: turn on to plug in, off to unplug (use it on a dashboard or in automations) |
 | `input_button.ocpp_charge_proxy_charge_now_1h` … `_12h` | **Charge now** for 1, 2, 3, 4, 6, 8 or 12 hours: press one (or `input_button.press` it from an automation) to do what the web page's Charge now button does |
 | `sensor.ocpp_charge_proxy_status` | Available, Preparing, **Charging**, Scheduled, Waiting for supplier… |
-| `sensor.ocpp_charge_proxy_power` | Power now (kW): above 0 while charging |
+| `sensor.ocpp_charge_proxy_power` | Power now (kW): simulated, or your own power sensor's reading |
 | `sensor.ocpp_charge_proxy_energy` | Energy total (kWh), for the Energy dashboard |
 | `sensor.ocpp_charge_proxy_current` | Current (A) |
 | `sensor.ocpp_charge_proxy_current_limit` | The current in use, with your max and the supplier's limit |

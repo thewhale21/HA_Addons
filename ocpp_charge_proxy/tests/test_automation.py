@@ -1758,7 +1758,7 @@ def test_a_late_unplug_still_runs_if_nothing_came_after_it():
     a, clock = _automation(start=datetime.datetime(2026, 10, 6, 23, 25, tzinfo=TZ))
     _night(a)
     a.due()
-    clock.advance(minutes=11)
+    clock.advance(minutes=16)  # (more than CATCH_UP_S, 10 minutes)
     assert a.due() == []  # a late plug-in isn't (as before)
 
 
@@ -1912,3 +1912,196 @@ def test_random_start_delay_settings_are_checked():
         with pytest.raises(ValueError):
             a.set_schedule(start_delay=bad)
     assert a.start_delay == {"enabled": False, "max_min": 10}
+
+
+# --- 2.52.0: from the review ---------------------------------------------------
+
+
+def _loop(a, clock, steps, state, set_ready=None):
+    """Run the loop through `steps` (datetimes); returns the plug/unplug calls."""
+    calls = []
+
+    async def plug(source=None):
+        calls.append(("plug", clock.dt.strftime("%H:%M")))
+        state.plugged_in = True
+
+    async def unplug(source=None):
+        calls.append(("unplug", clock.dt.strftime("%H:%M")))
+        state.plugged_in = False
+
+    async def scenario():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01, set_ready_time=set_ready))
+        await asyncio.sleep(0.03)
+        for t in steps:
+            clock.dt = t
+            await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(scenario())
+    return calls
+
+
+def test_turning_the_delay_off_lets_a_waiting_plug_in_go_ahead():
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 9, 59, 50, tzinfo=TZ))
+    a.set_schedule(enabled=True, entries=[{"time": "10:00", "action": "plug"}, {"time": "14:00", "action": "unplug"}],
+                   start_delay={"enabled": True, "max_min": 30})
+    a._random = lambda low, high: high
+    state = SharedState(connected_to_server=True)
+    at = lambda hh, mm, ss=0: datetime.datetime(2026, 10, 5, hh, mm, ss, tzinfo=TZ)
+
+    calls = []
+
+    async def plug(source=None):
+        calls.append(clock.dt.strftime("%H:%M"))
+        state.plugged_in = True
+
+    async def unplug(source=None):
+        state.plugged_in = False
+
+    async def scenario():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01))
+        await asyncio.sleep(0.03)
+        clock.dt = at(10, 0, 5)
+        await asyncio.sleep(0.05)
+        clock.dt = at(10, 5)
+        await asyncio.sleep(0.05)
+        assert calls == [] and a.plug_at is not None  # waiting until 10:30
+        a.set_schedule(start_delay={"enabled": False})
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(scenario())
+    assert calls == ["10:05"] and a.plug_at is None
+
+
+def test_already_plugged_in_at_a_slot_start_sets_the_ready_time_with_the_delay_on():
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 21, 59, 50, tzinfo=TZ))
+    a.set_schedule(enabled=True, ready_time=True, entries=[{"time": "22:00", "action": "plug"}, {"time": "04:00", "action": "unplug"}],
+                   start_delay={"enabled": True, "max_min": 30})
+    a._random = lambda low, high: high
+    asked = []
+
+    async def set_ready(unplug_at):
+        asked.append(unplug_at.strftime("%H:%M"))
+        return {"ready": unplug_at.strftime("%H:%M")}
+
+    state = SharedState(connected_to_server=True, plugged_in=True)
+    calls = _loop(a, clock, [datetime.datetime(2026, 10, 5, 22, 0, 5, tzinfo=TZ)], state, set_ready)
+    assert asked == ["04:00"] and a.plug_at is None
+
+
+def test_a_waiting_plug_in_survives_a_restart(tmp_path):
+    a, clock = _automation(tmp_path, start=datetime.datetime(2026, 10, 5, 9, 59, 50, tzinfo=TZ))
+    a.set_schedule(enabled=True, entries=[{"time": "10:00", "action": "plug"}, {"time": "14:00", "action": "unplug"}],
+                   start_delay={"enabled": True, "max_min": 30})
+    a._random = lambda low, high: 20 * 60
+    state = SharedState(connected_to_server=True)
+    _loop(a, clock, [datetime.datetime(2026, 10, 5, 10, 0, 5, tzinfo=TZ)], state)
+    assert a.plug_at is not None
+    # Restarted at 10:05: it still waits for 10:20
+    b = Automation(str(tmp_path), now=clock.now, clock=clock.epoch, localize=lambda naive: naive.replace(tzinfo=TZ))
+    assert b.plug_at == a.plug_at
+    state = SharedState(connected_to_server=True)
+    calls = _loop(b, clock, [datetime.datetime(2026, 10, 5, 10, 5, tzinfo=TZ), datetime.datetime(2026, 10, 5, 10, 20, 10, tzinfo=TZ)], state)
+    assert calls == [("plug", "10:20")]
+
+
+def test_a_restart_where_two_slots_meet_leaves_it_plugged_in(tmp_path):
+    thu = "2026-10-08"
+    a, clock = _automation(tmp_path, start=datetime.datetime(2026, 10, 8, 11, 59, 40, tzinfo=TZ))
+    a.set_schedule(enabled=True, entries=[
+        {"time": "06:00", "action": "plug", "date": thu}, {"time": "12:00", "action": "unplug", "date": thu},
+        {"time": "12:00", "action": "plug", "date": thu}, {"time": "18:00", "action": "unplug", "date": thu}])
+    a.due()
+    a.save_runtime()
+    clock.dt = datetime.datetime(2026, 10, 8, 12, 2, tzinfo=TZ)  # stopped 11:59:40-12:02
+    b = Automation(str(tmp_path), now=clock.now, clock=clock.epoch, localize=lambda naive: naive.replace(tzinfo=TZ))
+    state = SharedState(connected_to_server=True, plugged_in=True)
+    calls = _loop(b, clock, [datetime.datetime(2026, 10, 8, 13, 0, tzinfo=TZ)], state)
+    assert calls == [] and state.plugged_in
+
+
+def test_a_car_slot_is_plugged_in_at_start_up_with_the_schedule_off():
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 19, 2, tzinfo=TZ))
+    a.set_schedule(entries=[{"time": "19:00", "action": "plug", "date": "2026-10-05", "source": "charge_now"},
+                            {"time": "22:00", "action": "unplug", "date": "2026-10-05", "source": "charge_now"}])
+    assert not a.schedule_enabled
+    state = SharedState(connected_to_server=True)
+    calls = _loop(a, clock, [datetime.datetime(2026, 10, 5, 19, 3, tzinfo=TZ)], state)
+    assert calls == [("plug", "19:02")]
+
+
+def test_clocks_going_forward():
+    """A time that doesn't exist (01:30 on the UK's spring-forward night) is 02:00; a slot
+    that's all in the missing hour (01:00-02:00) doesn't run at all."""
+    from zoneinfo import ZoneInfo
+    LON = ZoneInfo("Europe/London")
+    a, clock = _automation(start=datetime.datetime(2027, 3, 26, 12, 0, tzinfo=LON))
+    a._localize = lambda naive: naive.replace(tzinfo=LON)
+    a.set_schedule(enabled=True, entries=[{"time": "01:30", "action": "plug"}, {"time": "02:30", "action": "unplug"}])
+    windows = [(x.isoformat(), y.isoformat()) for x, y in a.windows()]
+    assert ("2027-03-28T02:00:00+01:00", "2027-03-28T02:30:00+01:00") in windows
+    assert all(datetime.datetime.fromisoformat(y) - datetime.datetime.fromisoformat(x) < datetime.timedelta(hours=2)
+               for x, y in windows)
+    a.set_schedule(entries=[{"time": "01:00", "action": "plug"}, {"time": "02:00", "action": "unplug"}])
+    on_the_day = [occ for occ, e, _ in a.timeline(datetime.date(2027, 3, 28), 1)]
+    assert on_the_day == []
+
+
+def test_settings_only_take_real_booleans():
+    a, _ = _automation()
+    for bad in (dict(enabled="false"), dict(ready_time="no"), dict(override_guards=1),
+                dict(start_delay={"enabled": "true"}), dict(entries=[{"time": "10:00", "action": "plug", "enabled": "false"}])):
+        with pytest.raises(ValueError):
+            a.set_schedule(**bad)
+    assert not a.schedule_enabled
+    with pytest.raises(ValueError):
+        a.set_skips(["x"])  # not {entry_id, date}: refused, not a crash
+
+
+def test_one_offs_can_be_at_most_two_months_ahead():
+    a, _ = _automation()  # Mon 5 Oct 2026
+    a.set_schedule(entries=[{"time": "10:00", "action": "plug", "date": "2026-12-01"}])
+    with pytest.raises(ValueError):
+        a.set_schedule(entries=[{"time": "10:00", "action": "plug", "date": "2036-01-01"}])
+
+
+def test_a_refused_turn_on_puts_everything_back():
+    """Turning the schedule on with other changes in the same request: if it's refused, none apply."""
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 13, 0, tzinfo=TZ))
+    a.set_schedule(ready_time=True, entries=[{"time": "14:00", "action": "plug"}, {"time": "18:00", "action": "unplug"}])
+    entries, blocks = json.dumps(a.entries, sort_keys=True), json.dumps(a.blocks)
+
+    def refuse(*args, **kw):
+        raise ValueError("over the limit")
+    a._join_charges, a._makes_worse, a.check_daily_cap = (lambda: 1), (lambda *x: True), refuse
+    with pytest.raises(ValueError):
+        a.set_schedule(enabled=True, daily_cap_min=360, blocks=[{"start": "02:00", "end": "03:00"}],
+                       entries=[{"time": "14:00", "action": "plug"}, {"time": "19:00", "action": "unplug"}])
+    assert not a.schedule_enabled
+    assert json.dumps(a.blocks) == blocks and [e["time"] for e in a.entries] == ["14:00", "18:00"]
+
+
+def test_cancelling_a_charge_now_puts_the_schedule_back():
+    from src.automation import CHARGE_NOW_SOURCE
+    a, clock = _sched_18_22(_at(17))
+    before = [(x.isoformat(), y.isoformat()) for x, y in a.windows()]
+    a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)  # 17:00-19:00, joins the 18:00-22:00 slot
+    assert [(x.isoformat(), y.isoformat()) for x, y in a.windows()] != before
+    clock.advance(minutes=30)
+    assert a.cancel_charge() > 0
+    assert [(x.isoformat(), y.isoformat()) for x, y in a.windows()] == before
+    assert not [e for e in a.entries if e.get("source") == CHARGE_NOW_SOURCE]
+    assert a.cancel_charge() == 0  # nothing left to cancel
+
+
+def test_cancelling_a_charge_now_with_no_schedule():
+    from src.automation import CHARGE_NOW_SOURCE
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 10, 0, tzinfo=TZ))
+    a.plan_auto_plug(180, source=CHARGE_NOW_SOURCE)
+    clock.advance(minutes=30)
+    assert a.in_charge_window() is not None
+    assert a.cancel_charge() == 2 and a.entries == [] and a.in_charge_window() is None
+    assert a.next_action() is None
