@@ -20,6 +20,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Callable, Optional
 
+from src import jsonfile
 from src.shared_state import display_status
 from src.traffic import summarise_command
 
@@ -70,20 +71,12 @@ class MessageLog:
         self._load()
 
     def _load(self) -> None:
-        if not self._path:
-            return
-        for path in (self._path, self._path + ".bak"):
-            try:
-                with open(path, encoding="utf-8") as f:
-                    data = json.load(f)
-                entries = [e for e in data.get("messages") or [] if isinstance(e, dict) and "seq" in e]
-                self._entries.extend(entries[-self._entries.maxlen:])
-                self._seq = max([int(data.get("last_seq") or 0)] + [int(e["seq"]) for e in entries])
-                break
-            except FileNotFoundError:
-                continue
-            except Exception:
-                logger.warning("Message log %s is unreadable", path)
+        def use(data: dict) -> None:
+            entries = [e for e in data.get("messages") or [] if isinstance(e, dict) and "seq" in e]
+            seq = max([int(data.get("last_seq") or 0)] + [int(e["seq"]) for e in entries])
+            self._entries.extend(entries[-self._entries.maxlen:])
+            self._seq = seq
+        jsonfile.load(self._path, "Message log", use)
         if self._entries:
             self._seq += 1
             self._entries.append({
@@ -96,18 +89,9 @@ class MessageLog:
         """Write the log if it changed since the last save."""
         if not self._path or not self._dirty:
             return
-        try:
-            tmp = self._path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"last_seq": self._seq, "messages": list(self._entries)}, f, default=str)
-                f.flush()
-                os.fsync(f.fileno())
-            if os.path.exists(self._path):
-                os.replace(self._path, self._path + ".bak")
-            os.replace(tmp, self._path)
+        if jsonfile.save(self._path, {"last_seq": self._seq, "messages": list(self._entries)}, "the message log",
+                         default=str):
             self._dirty = False
-        except Exception:
-            logger.warning("Could not save the message log", exc_info=True)
 
     async def save_loop(self) -> None:
         import asyncio
@@ -209,45 +193,25 @@ class SessionLog:
             self.plugged_since = _now_iso()
 
     def _load(self) -> None:
-        if not self._path:
-            return
-        for path in (self._path, self._path + ".bak"):
-            try:
-                with open(path, encoding="utf-8") as f:
-                    data = json.load(f)
-                current = data.get("current")
-                self.current = current if isinstance(current, dict) else None
-                plug = data.get("plug")
-                self.plug = plug if isinstance(plug, dict) else None
-                self.history = [s for s in data.get("history") or [] if isinstance(s, dict)]
-                self.plugged_spans = [s for s in data.get("plugged") or [] if isinstance(s, dict)]
-                opened = data.get("plugged_open")
-                self.plugged_open = opened if isinstance(opened, dict) else None
-                self.plugged_since = data.get("plugged_since") if isinstance(data.get("plugged_since"), str) else None
-                self.cleared_at = data.get("cleared_at") if isinstance(data.get("cleared_at"), str) else None
-                self._trim()
-                return
-            except FileNotFoundError:
-                continue
-            except Exception:
-                logger.warning("Session history %s is unreadable", path)
+        def use(data: dict) -> None:
+            current = data.get("current")
+            self.current = current if isinstance(current, dict) else None
+            plug = data.get("plug")
+            self.plug = plug if isinstance(plug, dict) else None
+            self.history = [s for s in data.get("history") or [] if isinstance(s, dict)]
+            self.plugged_spans = [s for s in data.get("plugged") or [] if isinstance(s, dict)]
+            opened = data.get("plugged_open")
+            self.plugged_open = opened if isinstance(opened, dict) else None
+            self.plugged_since = data.get("plugged_since") if isinstance(data.get("plugged_since"), str) else None
+            self.cleared_at = data.get("cleared_at") if isinstance(data.get("cleared_at"), str) else None
+            self._trim()
+        jsonfile.load(self._path, "Session history", use)
 
     def _save(self) -> None:
-        if not self._path:
-            return
-        try:
-            tmp = self._path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"current": self.current, "plug": self.plug, "history": self.history,
-                           "plugged": self.plugged_spans, "plugged_open": self.plugged_open,
-                           "plugged_since": self.plugged_since, "cleared_at": self.cleared_at}, f)
-                f.flush()
-                os.fsync(f.fileno())
-            if os.path.exists(self._path):
-                os.replace(self._path, self._path + ".bak")
-            os.replace(tmp, self._path)
-        except Exception:
-            logger.warning("Could not save session history", exc_info=True)
+        jsonfile.save(self._path, {"current": self.current, "plug": self.plug, "history": self.history,
+                                   "plugged": self.plugged_spans, "plugged_open": self.plugged_open,
+                                   "plugged_since": self.plugged_since, "cleared_at": self.cleared_at},
+                      "session history")
 
     def _trim(self) -> None:
         """Keep the newest `size` sessions and the newest `size` no-session plug-ins."""

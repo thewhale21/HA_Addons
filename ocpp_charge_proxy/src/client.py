@@ -1285,7 +1285,6 @@ class ChargePoint(BaseChargePoint):
             # Still Charging here: count energy up to now so meterStop is complete
             self._checkpoint_energy()
             transaction_id = self._transaction_id
-            energy_delivered_kwh = (self._energy_register_wh - self._transaction_start_energy_wh) / 1000.0
             stop_ts = _now_iso()
             self._record_stop_txn_reading(
                 None, self._stop_txn_sampled, "Transaction.End", timestamp=stop_ts,

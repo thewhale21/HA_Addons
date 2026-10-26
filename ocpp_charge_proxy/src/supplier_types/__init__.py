@@ -25,8 +25,6 @@ Each module has:
 
 from __future__ import annotations
 
-from typing import Optional
-
 from src.supplier_types import kraken, schedule_sensor
 
 TYPES = {m.NAME: m for m in (kraken, schedule_sensor)}
@@ -42,8 +40,3 @@ def kind_of(supplier: dict):
             return m
     return None
 
-
-def name_of(raw: dict) -> Optional[str]:
-    """The kind a supplier's file entry is (for checking it), or None."""
-    m = kind_of(raw)
-    return m.NAME if m else None

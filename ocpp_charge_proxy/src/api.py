@@ -15,6 +15,11 @@ from src.shared_state import SharedState
 logger = logging.getLogger(__name__)
 
 
+def _error(message: str, status: int = 400) -> web.Response:
+    """A failed request: {"status": "error", "message"} with its HTTP status."""
+    return web.json_response({"status": "error", "message": message}, status=status)
+
+
 def create_api_app(
     shared_state: SharedState,
     on_plug: Callable[[], Awaitable[None]],
@@ -140,18 +145,18 @@ async def handle_charge_now(request: web.Request) -> web.Response:
     it's sent again with "confirm": true."""
     on_charge_now = request.app["on_charge_now"]
     if on_charge_now is None:
-        return web.json_response({"status": "error", "message": "Not available"}, status=503)
+        return _error("Not available", 503)
     try:
         body = await request.json()
         hours = float(body["hours"])
         if not 0.5 <= hours <= 12 or hours * 2 != int(hours * 2):
             raise ValueError
     except (ValueError, KeyError, TypeError, json.JSONDecodeError):
-        return web.json_response({"status": "error", "message": "hours must be 0.5 to 12, in half hours"}, status=400)
+        return _error("hours must be 0.5 to 12, in half hours", 400)
     try:
         out = await on_charge_now(hours, bool(body.get("confirm")))
     except ValueError as err:
-        return web.json_response({"status": "error", "message": str(err)}, status=400)
+        return _error(str(err), 400)
     return web.json_response({"status": "ok", **out}, dumps=_dumps)
 
 
@@ -160,11 +165,11 @@ async def handle_cancel_charge(request: web.Request) -> web.Response:
     changed put back), and unplugged if nothing else has the car plugged in now."""
     on_cancel = request.app["on_cancel_charge"]
     if on_cancel is None:
-        return web.json_response({"status": "error", "message": "Not available"}, status=503)
+        return _error("Not available", 503)
     try:
         out = await on_cancel()
     except ValueError as err:
-        return web.json_response({"status": "error", "message": str(err)}, status=400)
+        return _error(str(err), 400)
     return web.json_response({"status": "ok", **out}, dumps=_dumps)
 
 
@@ -173,15 +178,9 @@ async def handle_current(request: web.Request) -> web.Response:
         body = await request.json()
         amps = int(body["amps"])
     except Exception:
-        return web.json_response(
-            {"status": "error", "message": "Invalid request. Send JSON: {\"amps\": N}"},
-            status=400,
-        )
+        return _error("Invalid request. Send JSON: {\"amps\": N}", 400)
     if amps not in VALID_CURRENT_SETTINGS:
-        return web.json_response(
-            {"status": "error", "message": f"Invalid current. Valid: {VALID_CURRENT_SETTINGS}"},
-            status=400,
-        )
+        return _error(f"Invalid current. Valid: {VALID_CURRENT_SETTINGS}", 400)
     await request.app["on_set_current"](amps)
     return web.json_response({"status": "ok"})
 
@@ -189,20 +188,14 @@ async def handle_current(request: web.Request) -> web.Response:
 async def handle_power(request: web.Request) -> web.Response:
     on_set_power = request.app["on_set_power"]
     if on_set_power is None:
-        return web.json_response(
-            {"status": "error", "message": "Power override not supported"},
-            status=501,
-        )
+        return _error("Power override not supported", 501)
     try:
         body = await request.json()
         power_kw = body.get("power_kw")
         if power_kw is not None:
             power_kw = float(power_kw)
-    except (ValueError, Exception):
-        return web.json_response(
-            {"status": "error", "message": "Invalid request. Send JSON: {\"power_kw\": N} or {\"power_kw\": null}"},
-            status=400,
-        )
+    except Exception:
+        return _error("Invalid request. Send JSON: {\"power_kw\": N} or {\"power_kw\": null}", 400)
     await on_set_power(power_kw)
     return web.json_response({"status": "ok"})
 
@@ -211,9 +204,7 @@ async def handle_soc(request: web.Request) -> web.Response:
     """Car state of charge (%) set on the web page; null = unknown / not set."""
     on_set_soc = request.app["on_set_soc"]
     if on_set_soc is None:
-        return web.json_response(
-            {"status": "error", "message": "SoC not supported"}, status=501,
-        )
+        return _error("SoC not supported", 501)
     try:
         body = await request.json()
         soc = body.get("soc")
@@ -222,10 +213,7 @@ async def handle_soc(request: web.Request) -> web.Response:
             if not 0 <= soc <= 100:
                 raise ValueError("soc must be 0-100")
     except (ValueError, TypeError, AttributeError, json.JSONDecodeError):
-        return web.json_response(
-            {"status": "error", "message": "Invalid request. Send JSON: {\"soc\": 0-100} or {\"soc\": null}"},
-            status=400,
-        )
+        return _error("Invalid request. Send JSON: {\"soc\": 0-100} or {\"soc\": null}", 400)
     await on_set_soc(soc)
     return web.json_response({"status": "ok"})
 
@@ -234,14 +222,14 @@ async def handle_ramp(request: web.Request) -> web.Response:
     """Simulated car start-up: {"start_delay_s": 0-60, "ramp_up_s": 0-60}."""
     on_set_ramp = request.app["on_set_ramp"]
     if on_set_ramp is None:
-        return web.json_response({"status": "error", "message": "Not supported"}, status=501)
+        return _error("Not supported", 501)
     try:
         body = await request.json()
         on_set_ramp(float(body["start_delay_s"]), float(body["ramp_up_s"]))
     except (KeyError, TypeError, ValueError, AttributeError, json.JSONDecodeError) as err:
         message = str(err) if isinstance(err, ValueError) and "60" in str(err) else (
             "Send JSON: {\"start_delay_s\": 0-60, \"ramp_up_s\": 0-60}")
-        return web.json_response({"status": "error", "message": message}, status=400)
+        return _error(message, 400)
     return web.json_response({"status": "ok"})
 
 
@@ -319,7 +307,7 @@ async def _close_event_streams(app: web.Application) -> None:
 
 
 def _gui_unavailable() -> web.Response:
-    return web.json_response({"status": "error", "message": "Not available"}, status=501)
+    return _error("Not available", 501)
 
 
 def _number_param(request: web.Request, name: str, default: float = 0) -> float:
@@ -421,7 +409,7 @@ async def _automation_change(request: web.Request, apply) -> web.Response:
             raise ValueError("Send a JSON object")
         apply(automation, body)
     except (ValueError, TypeError, AttributeError, KeyError, json.JSONDecodeError) as err:
-        return web.json_response({"status": "error", "message": str(err) or "Bad request"}, status=400)
+        return _error(str(err) or "Bad request", 400)
     automation.publish(request.app["shared_state"])
     return web.json_response({"status": "ok", **automation.snapshot()}, dumps=_dumps)
 
@@ -520,7 +508,7 @@ async def handle_set_sensors(request: web.Request) -> web.Response:
         body = await request.json()
         await link.update_settings(body)
     except (ValueError, TypeError, json.JSONDecodeError) as err:
-        return web.json_response({"status": "error", "message": str(err)}, status=400)
+        return _error(str(err), 400)
     return web.json_response({"status": "ok", **link.snapshot()}, dumps=_dumps)
 
 
@@ -542,7 +530,7 @@ async def handle_sensor_entities(request: web.Request) -> web.Response:
     try:
         entities = await link.list_entities()
     except Exception as err:
-        return web.json_response({"status": "error", "message": f"Couldn't list entities: {err}"}, status=502)
+        return _error(f"Couldn't list entities: {err}", 502)
     return web.json_response({"entities": entities, "available": link.available}, dumps=_dumps)
 
 
@@ -564,7 +552,7 @@ async def handle_set_settings(request: web.Request) -> web.Response:
     try:
         out = settings.update(await request.json())
     except (ValueError, TypeError, json.JSONDecodeError) as err:
-        return web.json_response({"status": "error", "message": str(err)}, status=400)
+        return _error(str(err), 400)
     return web.json_response({"status": "ok", **out})
 
 
@@ -591,7 +579,7 @@ async def _debug_call(request: web.Request, apply) -> web.Response:
         if asyncio.iscoroutine(out):
             out = await out
     except (ValueError, TypeError, json.JSONDecodeError) as err:
-        return web.json_response({"status": "error", "message": str(err)}, status=400)
+        return _error(str(err), 400)
     return web.json_response({"status": "ok", **(out or {})}, dumps=_dumps)
 
 

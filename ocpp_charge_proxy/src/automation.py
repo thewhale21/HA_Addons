@@ -70,7 +70,6 @@ from __future__ import annotations
 import asyncio
 import copy
 import datetime
-import json
 import logging
 import math
 import os
@@ -80,6 +79,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
+from src import jsonfile
 from src.plan_check import SETTLE_S, check_plan
 from src.ready_time import ALL_DAY_TIMES, check_unplug_times
 from src.saving_sessions import session_id
@@ -457,19 +457,8 @@ class Automation:
     # --- persistence ---------------------------------------------------------
 
     def _load(self) -> None:
-        if not self._path:
-            return
-        data = None
-        for path in (self._path, self._path + ".bak"):
-            try:
-                with open(path, encoding="utf-8") as f:
-                    data = json.load(f)
-                break
-            except FileNotFoundError:
-                continue
-            except Exception:
-                logger.warning("Automation settings %s are unreadable", path)
-        if not isinstance(data, dict):
+        data: dict = {}
+        if not jsonfile.load(self._path, "Automation settings", data.update):
             return
         schedule = data.get("schedule") or {}
         self.schedule_enabled = bool(schedule.get("enabled", False))
@@ -516,11 +505,8 @@ class Automation:
 
     def _load_runtime(self) -> None:
         self._missed_since: Optional[float] = None  # the last check before a restart
-        if not self._runtime_path:
-            return
-        try:
-            with open(self._runtime_path, encoding="utf-8") as f:
-                data = json.load(f)
+
+        def use(data: dict) -> None:
             last = data.get("last_check")
             if isinstance(last, (int, float)) and 0 <= self._clock() - last <= MISSED_MAX_S:
                 self._missed_since = float(last)
@@ -528,10 +514,7 @@ class Automation:
                 self.unplug_at = float(data["unplug_at"])
             if isinstance(data.get("plug_at"), (int, float)):
                 self.plug_at = float(data["plug_at"])
-        except FileNotFoundError:
-            pass
-        except Exception:
-            logger.debug("Could not read %s", self._runtime_path, exc_info=True)
+        jsonfile.load(self._runtime_path, "The schedule's last check", use, backup=False)
 
     def save_runtime(self) -> None:
         """Save the last check (to the minute) and any waiting unplug, when they change."""
@@ -540,37 +523,19 @@ class Automation:
         state = (int(self._last_check.timestamp() // 60), self.unplug_at, self.plug_at)
         if state == self._runtime_saved:
             return
-        try:
-            tmp = self._runtime_path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"last_check": self._last_check.timestamp(), "unplug_at": self.unplug_at,
-                           "plug_at": self.plug_at}, f)
-            os.replace(tmp, self._runtime_path)
+        if jsonfile.save(self._runtime_path, {"last_check": self._last_check.timestamp(), "unplug_at": self.unplug_at,
+                                              "plug_at": self.plug_at}, "the schedule's last check", backup=False, quiet=True):
             self._runtime_saved = state
-        except Exception:
-            logger.debug("Could not save %s", self._runtime_path, exc_info=True)
 
     def _save(self) -> None:
-        if not self._path:
-            return
-        try:
-            tmp = self._path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({
-                    "schedule": {"enabled": self.schedule_enabled, "entries": self.entries,
-                                 "ready_time": self.ready_time, "skips": self.skips,
-                                 "unplug_wait_s": self.unplug_wait_s, "start_delay": self.start_delay,
-                                 "override_guards": self.override_guards, "blocks": self.blocks},
-                    "replug": self.replug,
-                    "saving": {"block": self.saving_block, "sessions": self.saving_sessions},
-                }, f, indent=1)
-                f.flush()
-                os.fsync(f.fileno())
-            if os.path.exists(self._path):
-                os.replace(self._path, self._path + ".bak")
-            os.replace(tmp, self._path)
-        except Exception:
-            logger.warning("Could not save automation settings", exc_info=True)
+        jsonfile.save(self._path, {
+            "schedule": {"enabled": self.schedule_enabled, "entries": self.entries,
+                         "ready_time": self.ready_time, "skips": self.skips,
+                         "unplug_wait_s": self.unplug_wait_s, "start_delay": self.start_delay,
+                         "override_guards": self.override_guards, "blocks": self.blocks},
+            "replug": self.replug,
+            "saving": {"block": self.saving_block, "sessions": self.saving_sessions},
+        }, "automation settings", indent=1)
 
     # --- settings ------------------------------------------------------------
 
@@ -1229,7 +1194,6 @@ class Automation:
                  if s["end"] > now and s["start"] < end + datetime.timedelta(days=3)]
         if later and later[0]["start"] <= now:
             later = later[1:]  # one going now isn't trimmed
-        can_trim = bool(later)
 
         def build(cuts: dict, joining: Optional[list] = None):
             """The entries and skips for the charge, with the first `cuts[i]`

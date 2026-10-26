@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.53.1 — Tidier code
+
+- **Change:** a tidy of the code, with no change to what the add-on does:
+  every JSON file in `/data` is now read and written by one helper
+  (`src/jsonfile.py`), so they're all written the safe way (atomically,
+  keeping a good `.bak` copy that a broken file never replaces) and fall
+  back to the copy the same way. The web API's errors come from one helper,
+  the page's times from one formatter, and unused code is gone
+
 ## 2.53.0 — Following your supplier's changes
 
 - **Feature:** your own changes to the supplier defaults, in `suppliers.json`

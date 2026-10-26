@@ -1586,7 +1586,7 @@ $('chart-wrap').addEventListener('mousemove', (e) => {
   }).join('<br>') + (g.isLong && chart.series === 'power' && best.power_max_kw != null ? `<br>Peak: ${fmtAxis(Math.round(best.power_max_kw * 100) / 100)} kW` : '')
     + `<br><span class="muted">${esc(best.state)}</span>`
     + g.marks.filter(([mt]) => Math.abs(g.x(mt) - mx) <= 6).map(([mt, kind]) =>
-      `<br><b>Session ${kind === 'start' ? 'start' : 'end'}</b> <span class="muted">${new Date(mt * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})}</span>`).join('');
+      `<br><b>Session ${kind === 'start' ? 'start' : 'end'}</b> <span class="muted">${hm(mt * 1000)}</span>`).join('');
   tip.style.display = 'block';
   const left = Math.min(Math.max(g.x(best.t) + 10, 0), rect.width - tip.offsetWidth - 4);
   tip.style.left = left + 'px'; tip.style.top = '8px';
@@ -1638,7 +1638,7 @@ const sessFill = (x, dir = '90deg') => { const c = SUPPLIER_COLOURS[sessSupplier
 function drawSmartCheck(pc) {
   const el = $('sc-check'); if (!el) return;
   if (!pc || !(smart.data && smart.data.found)) { el.innerHTML = ''; return; }
-  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '—';
+  const t = hm;
   const span = `${t(pc.start)}–${t(pc.end)}`;
   const line = {
     waiting: `<span class="chip">Checking at ${t(pc.check_at)}</span> <span class="muted">against your schedule (plugged in ${span})</span>`,
@@ -1654,9 +1654,9 @@ function drawStateSub() {
   const s = state || {}, d = smart.data;
   let text = '';
   if (s.plug_pending && !s.plugged_in) {
-    text = `The schedule plugs in at ${new Date(s.plug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})}: a random start delay, so it isn't the same time every day`;
+    text = `The schedule plugs in at ${hm(s.plug_pending)}: a random start delay, so it isn't the same time every day`;
   } else if (s.state === 'Preparing' && d && d.found) {
-    const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+    const t = hm;
     if (d.current) text = `${esc(d.provider)}'s charge slot runs until ${t(d.current.end)}, but it hasn't started charging yet`;
     else if (d.planned && d.planned.length) text = `Next slot ${slotText(d.planned[0])}`;
     else text = `Waiting for ${esc(d.provider)} to schedule a charge`;
@@ -1680,7 +1680,7 @@ function drawSmart() {
       <div class="sub">${d.error ? esc(d.error) : `Install your supplier's Home Assistant integration (${esc(knownSuppliers())}) to see the charge slots it plans.`}</div>${supplierProblems(d.problems)}`;
     return;
   }
-  const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+  const t = hm;
   const c = d.current;
   const now = c
     ? `<span class="chip ok">Slot now</span> <span>${t(c.start)}–${t(c.end)}</span>${c.charge_kwh != null
@@ -1770,7 +1770,7 @@ async function refreshSessions() {
   // shown), and how it ended. Click a row for the details and power curve.
   const rows = [];
   const maxKwh = Math.max(0.1, ...h.map((s) => s.energy_kwh || 0), sessionsData.current ? sessionsData.current.energy_kwh || 0 : 0);
-  const hmT = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '';
+  const hmT = (iso) => iso ? hm(iso) : '';
   const dayOf = (iso) => new Date(iso).toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
   const by = (src) => src ? `<span>plugged in by ${esc(src)}</span>` : '';
   const row = ({key, cls = '', start, stop, tags, kwh, sub, end, detail, sess}) => {
@@ -1838,7 +1838,7 @@ function drawSessionTimeline(sd) {
   const el = $('s-tl'); if (!el) return;
   const day0 = new Date(); day0.setHours(0, 0, 0, 0);
   const DAY = 86400000, now = Date.now();
-  const t = (ms) => new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+  const t = (ms) => hm(ms);
   const byOf = (by) => PLUG_BY.find(([k]) => by && (by === k || by.startsWith(k))) || [by, '#9e9e9e', 'Another way'];
   const plugs = (sd.plugged || []).map((p) => ({a: new Date(p.start).getTime(), b: p.end ? new Date(p.end).getTime() : now, p, by: byOf(p.by)}));
   const sess = [...(sd.current ? [{...sd.current, live: true}] : []), ...(sd.history || []).filter((x) => x.type !== 'no_session')]
@@ -2141,7 +2141,7 @@ function drawAutoPlugLast(d) {
   const el = $('sim-auto-last'); if (!el) return;
   const a = d && d.schedule && d.schedule.auto_plug_last;
   if (!a || a.source !== 'auto_plug') { el.innerHTML = ''; return; }  // Charge now's shows on its own card
-  const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+  const t = hm;
   el.innerHTML = a.nothing ? `Last: ${dateTime(a.at)}, nothing scheduled (${a.notes.map(esc).join('; ')})` : `Last: ${dateTime(a.at)}, until ${t(a.end)}${a.notes && a.notes.length ? ` (${a.notes.map(esc).join('; ')})` : ''}`;
 }
 // A text box that filters the list as you type (every word must match the
@@ -2341,7 +2341,7 @@ async function refreshAutomation(force) {
   if (document.activeElement !== $('a-delay-min')) $('a-delay-min').value = sd.max_min;
   const pp = d.schedule.plug_pending;
   $('a-delay-status').hidden = !pp;
-  if (pp) $('a-delay-status').innerHTML = `<span class="chip">Plugging in at ${new Date(pp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})}</span> <span class="muted">after the random delay</span>`;
+  if (pp) $('a-delay-status').innerHTML = `<span class="chip">Plugging in at ${hm(pp)}</span> <span class="muted">after the random delay</span>`;
   if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); drawWeekSoon(); });
   else refreshSmart(false);  // the supplier's slots on the week view
   drawReadyStatus(d);
@@ -2362,7 +2362,7 @@ async function refreshAutomation(force) {
 function drawReadyStatus(d) {
   if (!d) return;
   const r = d.schedule.ready_status, on = d.schedule.ready_time;
-  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '—';
+  const t = hm;
   let html = '';
   if (on && smart.data && !smart.data.found) html = `<span class="chip warn">Supplier integration not found</span> <span class="muted">Needs your supplier's integration (${esc(knownSuppliers())})</span>`;
   else if (on && smart.data && smart.data.has_ready_time === false) html = `<span class="chip warn">Not supported</span> <span class="muted">The ${esc(smart.data.provider)} integration has no ready time setting</span>`;
@@ -2377,7 +2377,7 @@ function drawReadyStatus(d) {
 }
 function drawPlanCheck(pc) {
   const el = $('a-plan'); if (!el) return;
-  const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '—';
+  const t = hm;
   if (!pc) { el.innerHTML = '<span class="muted">Checked while the schedule has the car plugged in.</span>'; return; }
   const span = `${t(pc.start)}–${t(pc.end)}`;
   const head = {
@@ -3370,7 +3370,7 @@ async function chargeNow(h, confirm) {
       toast('Nothing scheduled');
       $('c-charge-note').innerHTML = `Nothing scheduled: ${esc(r.plan.notes.join('; '))}.`;
     } else {
-      const until = r.plan && r.plan.end ? new Date(r.plan.end).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : null;
+      const until = r.plan && r.plan.end ? hm(r.plan.end) : null;
       const from = r.plan && !r.plan.plug_now && r.plan.segments.length ? hm(r.plan.segments[0].start) : null;
       toast(from ? `Plugs in at ${from}, until ${until}` : until ? `Plugged in until ${until}` : 'Plugged in');
       $('c-charge-note').innerHTML = until ? `Plugged in until <b>${until}</b>${r.plan.notes && r.plan.notes.length ? ' (' + esc(r.plan.notes.join('; ')) + ')' : ''}. `

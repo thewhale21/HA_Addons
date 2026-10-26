@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 import random
+
+from src import jsonfile
 
 logger = logging.getLogger(__name__)
 
@@ -24,71 +25,18 @@ class Persistence:
     def data_dir(self) -> str:
         return self._data_dir
 
-    # Files are written atomically: the data goes to a temp file which is
-    # flushed to disk and then renamed over the target in one step, so a
-    # power cut mid-write leaves the old file or the new one, never half of
-    # one. A ".bak" copy of the previous good version is kept as well; if the
-    # main file is still unreadable, the backup is used instead of the
-    # default (for the energy register, the default would be 0).
+    # Files are written atomically, with a ".bak" copy of the previous good
+    # version; if the main file is unreadable, the backup is used instead of the
+    # default (for the energy register, the default would be 0). See src/jsonfile.py.
 
     def _read(self, filename: str, key: str, default):
-        path = os.path.join(self._data_dir, filename)
-        for candidate in (path, path + ".bak"):
-            try:
-                with open(candidate) as f:
-                    data = json.load(f)
-            except FileNotFoundError:
-                continue
-            except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-                logger.warning("%s is unreadable or corrupt", candidate)
-                continue
-            if not isinstance(data, dict):
-                logger.warning("%s has unexpected content", candidate)
-                continue
-            if candidate != path:
-                logger.warning("Using backup %s (main file missing or corrupt)", candidate)
-            return data.get(key, default)
+        found: dict = {}
+        if jsonfile.load(os.path.join(self._data_dir, filename), filename, found.update):
+            return found.get(key, default)
         return default
 
     def _write(self, filename: str, key: str, value):
-        path = os.path.join(self._data_dir, filename)
-        tmp = f"{path}.tmp"
-        try:
-            # 1. New content fully on disk first
-            with open(tmp, "w") as f:
-                json.dump({key: value}, f, default=str)
-                f.flush()
-                os.fsync(f.fileno())
-            # 2. Current file becomes the backup, if it's valid (a corrupt
-            #    main file must never overwrite a good backup)
-            if self._is_valid(path):
-                os.replace(path, path + ".bak")
-            # 3. Swap the new file in, in one step
-            os.replace(tmp, path)
-            self._fsync_dir()
-        except OSError:
-            logger.warning("Failed to write %s", path, exc_info=True)
-
-    @staticmethod
-    def _is_valid(path: str) -> bool:
-        try:
-            with open(path) as f:
-                return isinstance(json.load(f), dict)
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-            return False
-
-    def _fsync_dir(self) -> None:
-        """Make the renames durable too (best effort; not supported everywhere)."""
-        try:
-            fd = os.open(self._data_dir, os.O_RDONLY)
-        except OSError:
-            return
-        try:
-            os.fsync(fd)
-        except OSError:
-            pass
-        finally:
-            os.close(fd)
+        jsonfile.save(os.path.join(self._data_dir, filename), {key: value}, filename, default=str)
 
     def load_energy_register_wh(self) -> int:
         return self._read(_ENERGY_FILE, "energy_wh", 0)

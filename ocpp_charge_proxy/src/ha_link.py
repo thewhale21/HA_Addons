@@ -27,7 +27,7 @@ import time
 from typing import Awaitable, Callable, Optional
 
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
-from src import suppliers
+from src import jsonfile, suppliers
 from src.ready_time import ALL_DAY_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity, target_time_ids
 from src.smart_charging import check_supplier, find_dispatch_sensors, provider_name, smart_charging
 from src.saving_sessions import find_calendar, is_saving_calendar, parse_events, supplier_of
@@ -294,28 +294,14 @@ class HaLink:
     # --- your supplier's integration: its version, and signs it has changed ------
 
     def _load_versions(self) -> None:
-        if not self._versions_path:
-            return
-        try:
-            with open(self._versions_path, encoding="utf-8") as f:
-                data = json.load(f)
+        def use(data: dict) -> None:
             self.integration_versions = dict(data.get("versions") or {})
             self.integration_changes = [c for c in data.get("changes") or [] if isinstance(c, dict)]
-        except FileNotFoundError:
-            pass
-        except Exception:
-            logger.debug("Could not read %s", self._versions_path, exc_info=True)
+        jsonfile.load(self._versions_path, "Supplier integration versions", use, backup=False)
 
     def _save_versions(self) -> None:
-        if not self._versions_path:
-            return
-        try:
-            tmp = self._versions_path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"versions": self.integration_versions, "changes": self.integration_changes}, f, indent=1)
-            os.replace(tmp, self._versions_path)
-        except Exception:
-            logger.debug("Could not save %s", self._versions_path, exc_info=True)
+        jsonfile.save(self._versions_path, {"versions": self.integration_versions, "changes": self.integration_changes},
+                      "the supplier integrations' versions", backup=False, quiet=True, indent=1)
 
     async def _check_versions(self, call, states: list) -> None:
         """Each supplier integration that's in HA (it has entities): its version, logged
@@ -375,35 +361,14 @@ class HaLink:
     # --- settings ------------------------------------------------------------
 
     def _load(self) -> None:
-        if not self._path:
-            return
-        for path in (self._path, self._path + ".bak"):
-            try:
-                with open(path, encoding="utf-8") as f:
-                    data = json.load(f)
-                self.settings = validate_settings(data, default_settings())
-                self.configured = True
-                break
-            except FileNotFoundError:
-                continue
-            except Exception:
-                logger.warning("Sensor settings %s are unreadable", path)
+        def use(data: dict) -> None:
+            self.settings = validate_settings(data, default_settings())
+            self.configured = True
+        jsonfile.load(self._path, "Sensor settings", use)
         self._reset_logic()
 
     def _save(self) -> None:
-        if not self._path:
-            return
-        try:
-            tmp = self._path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(self.settings, f, indent=1)
-                f.flush()
-                os.fsync(f.fileno())
-            if os.path.exists(self._path):
-                os.replace(self._path, self._path + ".bak")
-            os.replace(tmp, self._path)
-        except Exception:
-            logger.warning("Could not save sensor settings", exc_info=True)
+        jsonfile.save(self._path, self.settings, "sensor settings", indent=1)
 
     def _reset_logic(self) -> None:
         s = self.settings
