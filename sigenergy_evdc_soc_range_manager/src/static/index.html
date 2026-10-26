@@ -1128,7 +1128,9 @@ function flowParts(f) {
   const nodesAt = {...NODES}, lines = {...LINES}, lineColour = {...LINE_COLOUR}, flowsOf = {...FLOWS};
   delete lines.car_home; delete lineColour.car_home;  // the car joins the column
   const car = f.car_kw || 0;
-  const devs = [{car: true, name: 'Car', icon: 'car', kw: Math.abs(car)}, ...(f.devices || []).slice(0, 6)], n = devs.length;
+  // (the car only while it's plugged in: car_plugged false hides it)
+  const devs = [...(f.car_plugged === false ? [] : [{car: true, name: 'Car', icon: 'car', kw: Math.abs(car)}]),
+    ...(f.devices || []).slice(0, 6)], n = devs.length;
   // The same size as the others, and the drawing as narrow as it can be (so it's as big as it
   // can be on a phone): the car above the house and one device below it fit the usual square.
   // With more, a column to the right of the house; more than 3 zigzag between two columns, so

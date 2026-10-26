@@ -119,6 +119,8 @@ grid shows ← sent to the grid and → taken from it, the home battery ↓ in
 and ↑ out, and the car (above the house) ↓ discharging into the house and
 ↑ charging. Solar is shared out to the house
 first, then the home battery, then the grid; the car hangs off the house.
+The car is only drawn while it's plugged into the EVDC: unplugged, it's left
+off the diagram (on the page and the dashboard card).
 The house's use comes from `sensor.sigen_plant_consumed_power` (or is
 worked out from the others if that isn't set).
 

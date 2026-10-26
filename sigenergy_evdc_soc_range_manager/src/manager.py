@@ -615,6 +615,7 @@ class Manager:
         rest = None if house is None else round(max(0.0, house - used), 3)
         # (or, with "Take them off the house" off, its whole use: home_kw None)
         return {"pv_kw": pv, "grid_kw": grid, "battery_kw": batt, "car_kw": car,
+                "car_plugged": bool(i.plugged_in),  # (the car's left off the diagram while it's unplugged)
                 "house_kw": None if house is None else round(house, 3),
                 "home_kw": rest if devices and r.get("flow_subtract", True) else None,
                 "home_soc": r.get("home_soc"), "devices": devices,

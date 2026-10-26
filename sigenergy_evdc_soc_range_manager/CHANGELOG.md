@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.30.1 — No car when it's unplugged
+
+- **Change:** the power flow (the Overview and the dashboard card) leaves the
+  car off while it isn't plugged into the EVDC; it comes back when it's
+  plugged in. The power flow sensor has a new `car_plugged` attribute
+
 ## 0.30.0 — Discharge only
 
 - **New:** a **Discharge only** quick hold (Schedule tab › Limits now): the

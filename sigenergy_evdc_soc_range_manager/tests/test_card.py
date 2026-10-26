@@ -53,13 +53,13 @@ def test_card_install_says_what_went_wrong(tmp_path):
 
 def test_power_flow_sensor_is_posted_at_most_every_second():
     entity = SENSORS["power_flow"][0]
-    state = SharedState(flow={"pv_kw": 1.234, "grid_kw": -0.5, "battery_kw": 0.2, "car_kw": 3.0, "house_kw": 0.734,
+    state = SharedState(flow={"pv_kw": 1.234, "grid_kw": -0.5, "battery_kw": 0.2, "car_kw": 3.0, "car_plugged": True, "house_kw": 0.734,
                               "home_soc": 55.0, "lines": {"solar_house": 0.734, "solar_grid": 0.5}},
                         inputs={"soc": 61})
     pub = SensorPublisher()
     first = {e: (v, a) for e, v, a in pub.due(state, 0)}
     value, attrs = first[entity]
-    assert value == "0.73" and attrs["pv_kw"] == 1.23 and attrs["car_soc"] == 61 and attrs["lines"]["solar_grid"] == 0.5
+    assert value == "0.73" and attrs["pv_kw"] == 1.23 and attrs["car_soc"] == 61 and attrs["car_plugged"] is True and attrs["lines"]["solar_grid"] == 0.5
     assert "state_class" not in attrs  # not kept in the long-term statistics
     state.flow = {**state.flow, "house_kw": 0.9}
     assert entity not in [e for e, _, _ in pub.due(state, 0.5)]  # changed, but only 0.5 s later

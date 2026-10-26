@@ -725,6 +725,9 @@ def test_power_flow_takes_devices_off_the_house_and_the_cards_own_sensors(tmp_pa
     f = m.power_flow()
     assert f["house_kw"] == 10 and f["home_kw"] == 3.0 and f["grid_kw"] == 9
     assert f["devices"] == [{"n": 0, "name": "Hypervolt", "icon": "car", "kw": 7.0}]
+    assert f["car_plugged"] is False  # (Available: unplugged, so the diagram leaves the car off)
+    m.observe(_states(running="Occupied", grid="9", battery="0"), ent, _settings(), 1005.0)
+    assert m.power_flow()["car_plugged"] is True
     m.observe(st, {**ent, "flow_grid_power": "sensor.meter"}, _settings(), 1010.0)
     assert m.power_flow()["grid_kw"] == 8.5  # the card's own grid sensor; the controller still uses its own
     assert m.inputs.grid_kw == 9

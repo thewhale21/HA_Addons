@@ -139,7 +139,7 @@ def _power_flow(state):
         return None
     return (_r2(f.get("house_kw")), {
         "pv_kw": _r2(f.get("pv_kw")), "grid_kw": _r2(f.get("grid_kw")), "battery_kw": _r2(f.get("battery_kw")),
-        "car_kw": _r2(f.get("car_kw")), "house_kw": _r2(f.get("house_kw")),
+        "car_kw": _r2(f.get("car_kw")), "car_plugged": f.get("car_plugged"), "house_kw": _r2(f.get("house_kw")),
         "home_soc": _r2(f.get("home_soc")), "car_soc": _r2((state.inputs or {}).get("soc")),
         "lines": {k: _r2(v) for k, v in (f.get("lines") or {}).items()},
         # Devices off the house: drawn coming off it, the house showing what's left (home_kw)
