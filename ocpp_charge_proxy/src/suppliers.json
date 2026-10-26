@@ -1,33 +1,91 @@
 {
   "_about": [
-    "Defaults for each supplier. Edit this file and rebuild the add-on to change them.",
+    "Defaults for each supplier. To change them without a new version of the add-on, put your changes in suppliers.json in the add-on's own folder in Home Assistant (/addon_configs/<this add-on>/, over Samba or the File editor): the same layout, only what's different (a supplier with the same name has those fields changed; a new name is added). It's read again within a few minutes of changing.",
     "Anything set on the web page (Settings > Your supplier) still wins over these.",
     "name: shown on the page, and how a supplier is matched in the other settings.",
-    "dispatch_prefix: the start of the supplier's smart charging (intelligent dispatching) binary sensor's entity ID.",
-    "schedule_sensor_suffix: instead, a sensor whose entity ID contains this, with a 'schedule' attribute (E.ON Next).",
+    "type: how its integration shows the plan in Home Assistant: kraken (a dispatching binary sensor and a ready time entity, Octopus Energy and EDF Energy) or schedule_sensor (a sensor with a schedule attribute, E.ON Next); src/supplier_types/ has one file for each.",
+    "integration: its Home Assistant integration's domain, so the add-on notices when it's updated (Diagnostics > Health).",
+    "colour: its colour on the page (#rrggbb).",
+    "dispatch_prefix: the start of its smart charging (intelligent dispatching) binary sensor's entity ID. With it: dispatch_suffix (the end of that entity ID, default dispatching), ready_entity_suffix (what replaces it for the ready time entity, a time. or select. one: default target_time), planned_attribute and completed_attribute (the sensor's attributes listing the slots: default planned_dispatches and completed_dispatches).",
+    "schedule_sensor_suffix: instead, a sensor whose entity ID contains this, with the slots in schedule_attribute (default schedule) (E.ON Next).",
+    "slot_fields: the names of each slot's fields: start, end, kwh (the energy) and source (default start, end, charge_in_kwh, source).",
+    "calendar_words: words in its saving sessions calendar's ID or name that say it's this supplier's.",
     "ready_times: the ready (target) times its app accepts, from / to on the hour or half hour; null: it has no ready time.",
     "daily_limit_h: the most hours of smart charging it schedules (Force schedule on supplier keeps within it); null: no limit.",
     "limit_reset: when that limit starts again: a time (HH:MM, every day), or \"rolling\" (any 24 hours).",
-    "other: used for a supplier that isn't listed."
+    "other: used for a supplier that isn't listed.",
+    "saving_sessions: words (in a calendar's ID or name) that mean saving sessions, not_words that mean the opposite (e.g. Power Up), and prefer: picked first when several are found."
   ],
   "suppliers": [
     {
       "name": "Octopus Energy",
+      "type": "kraken",
+      "integration": "octopus_energy",
+      "colour": "#8e24aa",
       "dispatch_prefix": "binary_sensor.octopus_energy_",
-      "ready_times": {"from": "00:00", "to": "23:30"},
+      "dispatch_suffix": "dispatching",
+      "ready_entity_suffix": "target_time",
+      "planned_attribute": "planned_dispatches",
+      "completed_attribute": "completed_dispatches",
+      "slot_fields": {
+        "start": "start",
+        "end": "end",
+        "kwh": "charge_in_kwh",
+        "source": "source"
+      },
+      "calendar_words": [
+        "octopus"
+      ],
+      "ready_times": {
+        "from": "00:00",
+        "to": "23:30"
+      },
       "daily_limit_h": 6,
       "limit_reset": "12:00"
     },
     {
       "name": "EDF Energy",
+      "type": "kraken",
+      "integration": "edf_energy",
+      "colour": "#f9a825",
       "dispatch_prefix": "binary_sensor.edf_energy_",
-      "ready_times": {"from": "04:00", "to": "11:00"},
+      "dispatch_suffix": "dispatching",
+      "ready_entity_suffix": "target_time",
+      "planned_attribute": "planned_dispatches",
+      "completed_attribute": "completed_dispatches",
+      "slot_fields": {
+        "start": "start",
+        "end": "end",
+        "kwh": "charge_in_kwh",
+        "source": "source"
+      },
+      "calendar_words": [
+        "edf"
+      ],
+      "ready_times": {
+        "from": "04:00",
+        "to": "11:00"
+      },
       "daily_limit_h": null,
       "limit_reset": "rolling"
     },
     {
       "name": "E.ON Next",
+      "type": "schedule_sensor",
+      "integration": "eon_next",
+      "colour": "#e53935",
       "schedule_sensor_suffix": "smart_charging_schedule",
+      "schedule_attribute": "schedule",
+      "slot_fields": {
+        "start": "start",
+        "end": "end",
+        "kwh": "energy_added_kwh",
+        "source": "type"
+      },
+      "calendar_words": [
+        "eon",
+        "e_on"
+      ],
       "ready_times": null,
       "daily_limit_h": null,
       "limit_reset": "rolling"
@@ -35,8 +93,35 @@
   ],
   "other": {
     "name": "Your supplier",
-    "ready_times": {"from": "04:00", "to": "11:00"},
+    "ready_times": {
+      "from": "04:00",
+      "to": "11:00"
+    },
     "daily_limit_h": null,
     "limit_reset": "rolling"
+  },
+  "saving_sessions": {
+    "words": [
+      "power_down",
+      "saving_session",
+      "savings_session",
+      "saver_session",
+      "saver",
+      "demand_flex",
+      "flexibility",
+      "turn_down",
+      "peak_save",
+      "beat_the_peak"
+    ],
+    "not_words": [
+      "power_up",
+      "free_electricity",
+      "free_power",
+      "free_session",
+      "boost"
+    ],
+    "prefer": [
+      "power_down"
+    ]
   }
 }

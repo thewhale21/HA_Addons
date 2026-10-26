@@ -18,10 +18,10 @@ import datetime
 import re
 from typing import Optional
 
-# Words in a calendar's ID or name that mean saving sessions (lower case, "_" for spaces)
-SAVING_WORDS = ("power_down", "saving_session", "savings_session", "saver_session", "saver",
-                "demand_flex", "flexibility", "turn_down", "peak_save", "beat_the_peak")
-NOT_SAVING_WORDS = ("power_up", "free_electricity", "free_power", "free_session", "boost")
+from src import suppliers
+
+# The words in a calendar's ID or name that mean saving sessions (and the
+# opposite), and each supplier's own words, are in src/suppliers.json
 MAX_SESSION = datetime.timedelta(hours=6)  # longer than this isn't a saving session (e.g. a bad event)
 
 
@@ -34,21 +34,19 @@ def is_saving_calendar(entity_id: str, name: str = "") -> bool:
     if not str(entity_id).startswith("calendar."):
         return False
     text = _norm(entity_id) + "__" + _norm(name)
-    if any(w in text for w in NOT_SAVING_WORDS):
+    words = suppliers.saving_words()
+    if any(w in text for w in words["not_words"]):
         return False
-    return any(w in text for w in SAVING_WORDS)
+    return any(w in text for w in words["words"])
 
 
 def supplier_of(entity_id: str, name: str = "") -> Optional[str]:
     """Whose calendar it is, if its ID or name says (for the page)."""
     text = _norm(entity_id) + "_" + _norm(name)
     tokens = set(text.split("_"))
-    if "octopus" in tokens:
-        return "Octopus Energy"
-    if "eon" in tokens or "e_on" in text:
-        return "E.ON Next"
-    if "edf" in tokens:
-        return "EDF"
+    for s in suppliers.all_suppliers():
+        if any((w in tokens) if "_" not in w else (w in text) for w in s.get("calendar_words") or []):
+            return s["name"]
     return None
 
 
@@ -59,7 +57,8 @@ def find_calendar(states: list) -> Optional[str]:
              if is_saving_calendar(st.get("entity_id", ""), ((st.get("attributes") or {}).get("friendly_name") or ""))]
     if not found:
         return None
-    return sorted(found, key=lambda e: (0 if "power_down" in e else 1, e))[0]
+    prefer = suppliers.saving_words()["prefer"]
+    return sorted(found, key=lambda e: (0 if any(w in e for w in prefer) else 1, e))[0]
 
 
 def _when(value) -> Optional[datetime.datetime]:

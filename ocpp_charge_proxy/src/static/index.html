@@ -1608,13 +1608,25 @@ async function refreshSmart(force) {
   if (!force && smart.data && Date.now() - smart.at < 60000) return;
   smart.at = Date.now();
   try { smart.data = await api('smart_charging'); } catch (e) { return; }
+  Object.assign(SUPPLIER_COLOURS, smart.data.colours || {});  // (from the supplier defaults)
   applySupName();
   drawSmart(); drawStateSub(); drawChart();
   if (auto.data) drawWeekSoon();
   applyDailyLimit();
 }
-// Each supplier's slots in its own colour on the chart
-const SUPPLIER_COLOURS = {'Octopus Energy': '#8e24aa', 'EDF Energy': '#f9a825', 'E.ON Next': '#e53935'};
+// Each supplier's slots in its own colour on the chart: from the supplier defaults
+// (src/suppliers.json, and your changes to it), filled in by refreshSmart
+const SUPPLIER_COLOURS = {};
+// The suppliers the add-on knows, for the "not found" texts: "Octopus Energy, EDF Energy or E.ON Next"
+function knownSuppliers() {
+  const k = (smart.data && smart.data.known) || [];
+  return k.length > 1 ? `${k.slice(0, -1).join(', ')} or ${k[k.length - 1]}` : (k[0] || 'your supplier');
+}
+// What looks wrong with your supplier's integration's data: warnings first
+function supplierProblems(list) {
+  return (list || []).slice().sort((x, y) => (x.level === 'warn' ? 0 : 1) - (y.level === 'warn' ? 0 : 1))
+    .map((p) => `<div class="sub" style="margin-top:6px;overflow-wrap:anywhere">${p.level === 'warn' ? '<span class="chip warn">Check</span> ' : ''}<span${p.level === 'warn' ? '' : ' class="muted"'}>${esc(p.text)}</span></div>`).join('');
+}
 function providerColor(name) {
   return SUPPLIER_COLOURS[name] || cssVar('--primary');
 }
@@ -1665,7 +1677,7 @@ function drawSmart() {
   if (!d.found) {
     $('sc-src').innerHTML = '';
     $('sc-body').innerHTML = `<div class="empty">Smart charging information not found</div>
-      <div class="sub">${d.error ? esc(d.error) : 'Install your supplier\'s Home Assistant integration (Octopus Energy, EDF Energy or E.ON Next) to see the charge slots it plans.'}</div>`;
+      <div class="sub">${d.error ? esc(d.error) : `Install your supplier's Home Assistant integration (${esc(knownSuppliers())}) to see the charge slots it plans.`}</div>${supplierProblems(d.problems)}`;
     return;
   }
   const t = (iso) => new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
@@ -1680,7 +1692,8 @@ function drawSmart() {
     : `<div class="muted" style="margin-top:4px">${c ? 'Nothing more planned after this slot' : 'None planned yet'}</div>`;
   $('sc-body').innerHTML = `<div class="row">${now}</div>
     <div style="margin-top:12px"><span class="label">${c ? 'After this slot' : 'Planned'}</span>${d.planned_kwh != null ? ` <span class="muted" style="font-size:12px">· ${num(Math.abs(d.planned_kwh), 1)} kWh</span>` : ''}</div>${next}`;
-  $('sc-src').innerHTML = `<div class="sub" style="margin-top:10px;overflow-wrap:anywhere">From <code>${esc(d.entity_id)}</code>${d.others && d.others.length ? ` (also found: ${d.others.map(esc).join(', ')})` : ''}</div>`;
+  $('sc-src').innerHTML = `<div class="sub" style="margin-top:10px;overflow-wrap:anywhere">From <code>${esc(d.entity_id)}</code>${d.others && d.others.length ? ` (also found: ${d.others.map(esc).join(', ')})` : ''}</div>`
+    + supplierProblems(d.problems);
 }
 
 // ---------- zoom: drag across the chart, or scroll over it ----------
@@ -2351,8 +2364,8 @@ function drawReadyStatus(d) {
   const r = d.schedule.ready_status, on = d.schedule.ready_time;
   const t = (iso) => iso ? new Date(iso).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) : '—';
   let html = '';
-  if (on && smart.data && !smart.data.found) html = '<span class="chip warn">Supplier integration not found</span> <span class="muted">Needs the Octopus Energy or EDF Energy integration</span>';
-  else if (on && smart.data && smart.data.provider === 'E.ON Next') html = '<span class="chip warn">Not supported</span> <span class="muted">The E.ON Next integration has no ready time setting</span>';
+  if (on && smart.data && !smart.data.found) html = `<span class="chip warn">Supplier integration not found</span> <span class="muted">Needs your supplier's integration (${esc(knownSuppliers())})</span>`;
+  else if (on && smart.data && smart.data.has_ready_time === false) html = `<span class="chip warn">Not supported</span> <span class="muted">The ${esc(smart.data.provider)} integration has no ready time setting</span>`;
   if (r) html += `<div class="sub">${r.error
     ? `<span class="chip warn">Not set</span> ${esc(r.error)}`
     : `<span class="chip ok">Set to ${esc(r.ready)}</span> for the unplug at ${t(r.unplug)}`} <span class="muted">· ${ago(r.at)}</span></div>`;
@@ -3193,7 +3206,17 @@ async function refreshHealth() {
       return sc.found
         ? `<span class="chip ok">${esc(sc.provider)}</span><div class="sub" style="overflow-wrap:anywhere"><code>${esc(sc.entity_id)}</code>`
           + (sc.others && sc.others.length ? `<br>Also found: ${sc.others.map((e) => `<code>${esc(e)}</code>`).join(', ')}` : '') + `<br>${when}</div>`
-        : `<span class="chip">Not found</span><div class="sub">No Octopus Energy, EDF Energy or E.ON Next smart charging sensor in Home Assistant. ${when}.</div>`;
+        : `<span class="chip">Not found</span><div class="sub">No ${esc(knownSuppliers())} smart charging sensor in Home Assistant. ${when}.</div>`;
+    })() + (h.smart_charging ? supplierProblems(h.smart_charging.problems) : '')],
+    ['Supplier integrations', (() => {
+      const v = (h.smart_charging && h.smart_charging.versions) || {};
+      return Object.keys(v).length ? Object.entries(v).map(([k, x]) => `<code>${esc(k)}</code> ${esc(x)}`).join('<br>') : '—';
+    })()],
+    ['Supplier defaults', (() => {
+      const df = (h.smart_charging && h.smart_charging.defaults) || {};
+      return df.override_error ? `<span class="chip err">Your changes can't be used</span><div class="sub" style="overflow-wrap:anywhere">${esc(df.override_error)}</div>`
+        : df.override ? `<span class="chip ok">With your changes</span><div class="sub"><code>${esc(df.override)}</code></div>`
+        : `Built in <div class="sub">To change them without an update: <code>${esc(df.override_path || '/config/suppliers.json')}</code> (the add-on's folder in Home Assistant, <code>/addon_configs/</code>). See the docs.</div>`;
     })()],
   ]);
   const held = h.held_messages || [];

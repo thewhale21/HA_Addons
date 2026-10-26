@@ -1,6 +1,6 @@
 name: "OCPP Charge Proxy"
 description: "Virtual OCPP 1.6 chargepoint for smart tariff suppliers"
-version: "2.52.0"
+version: "2.53.0"
 slug: "ocpp_charge_proxy"
 url: "https://github.com/thewhale21/HA_Addons/tree/main/ocpp_charge_proxy"
 arch:
@@ -10,6 +10,10 @@ init: false
 startup: "services"
 homeassistant_api: true
 hassio_api: true
+# /config: the add-on's own folder in Home Assistant (/addon_configs/...), for
+# your changes to the supplier defaults (suppliers.json, see the docs)
+map:
+  - addon_config:rw
 ingress: true
 panel_icon: "mdi:ev-station"
 panel_title: "OCPP Charge Proxy"

@@ -28,8 +28,8 @@ from typing import Awaitable, Callable, Optional
 
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
 from src import suppliers
-from src.ready_time import ALL_DAY_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity
-from src.smart_charging import find_dispatch_sensors, provider_name, smart_charging
+from src.ready_time import ALL_DAY_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity, target_time_ids
+from src.smart_charging import check_supplier, find_dispatch_sensors, provider_name, smart_charging
 from src.saving_sessions import find_calendar, is_saving_calendar, parse_events, supplier_of
 from src.ha_entities import (
     ALL_SENSORS, CHARGE_NOW_HOURS, CHARGE_NOW_ICON, HELPER_ICON, HELPER_ID, HELPER_NAME,
@@ -43,6 +43,7 @@ SUPERVISOR_WS = "ws://supervisor/core/websocket"
 SUPERVISOR_API = "http://supervisor/core/api"
 RECONNECT_DELAYS = (2, 5, 10, 20, 30, 60)
 DISPATCH_SEARCH_S = 600  # look for a supplier's dispatching sensor again this often
+VERSION_CHANGE_KEEP_S = 7 * 86400  # a supplier integration's update is shown this long
 ENTITY_LIST_TTL_S = 30
 _UNKNOWN_STATES = ("unavailable", "unknown", "none", "")
 DEFAULT_AUTO_PLUG_HOURS = 3.0
@@ -242,6 +243,12 @@ class HaLink:
         unplug: Optional[Callable[[], Awaitable[None]]] = None,
     ) -> None:
         self._path = os.path.join(data_dir, "sensors.json") if data_dir else None
+        # Your supplier integrations' versions as last seen, and when they changed
+        self._versions_path = os.path.join(data_dir, "supplier_versions.json") if data_dir else None
+        self.integration_versions: dict = {}  # domain -> version
+        self.integration_changes: list = []  # [{"supplier", "domain", "from", "to", "at"}]
+        # Signs that your supplier's integration has changed (src/smart_charging.py check_supplier)
+        self.supplier_problems: list = []
         self._shared = shared_state
         self._set_power = set_power
         self._set_soc = set_soc
@@ -282,6 +289,88 @@ class HaLink:
                                   "read_at": None, "count": 0}
         self._reset_logic()
         self._load()
+        self._load_versions()
+
+    # --- your supplier's integration: its version, and signs it has changed ------
+
+    def _load_versions(self) -> None:
+        if not self._versions_path:
+            return
+        try:
+            with open(self._versions_path, encoding="utf-8") as f:
+                data = json.load(f)
+            self.integration_versions = dict(data.get("versions") or {})
+            self.integration_changes = [c for c in data.get("changes") or [] if isinstance(c, dict)]
+        except FileNotFoundError:
+            pass
+        except Exception:
+            logger.debug("Could not read %s", self._versions_path, exc_info=True)
+
+    def _save_versions(self) -> None:
+        if not self._versions_path:
+            return
+        try:
+            tmp = self._versions_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"versions": self.integration_versions, "changes": self.integration_changes}, f, indent=1)
+            os.replace(tmp, self._versions_path)
+        except Exception:
+            logger.debug("Could not save %s", self._versions_path, exc_info=True)
+
+    async def _check_versions(self, call, states: list) -> None:
+        """Each supplier integration that's in HA (it has entities): its version, logged
+        and kept for a week (Diagnostics › Health) when it changes, as a first thing
+        to look at if your supplier's smart charging stops being found."""
+        ids = [str(st.get("entity_id", "")).split(".", 1)[-1] for st in states]
+        changed = False
+        for s in suppliers.all_suppliers():
+            domain = s.get("integration")
+            if not domain or not any(i.startswith(domain + "_") for i in ids):
+                continue
+            try:
+                manifest = await call({"type": "manifest/get", "integration": domain}, timeout=15) or {}
+            except Exception as err:
+                logger.debug("Couldn't read %s's version: %s", domain, err)
+                continue
+            version = manifest.get("version")
+            if not version:
+                continue
+            was = self.integration_versions.get(domain)
+            if was != version:
+                if was:
+                    logger.warning("%s's integration (%s) was updated from %s to %s: if smart charging stops "
+                                   "being found, see Diagnostics › Health", s["name"], domain, was, version)
+                    self.integration_changes.append({"supplier": s["name"], "domain": domain, "from": was,
+                                                     "to": version, "at": time.time()})
+                self.integration_versions[domain] = version
+                changed = True
+        cutoff = time.time() - VERSION_CHANGE_KEEP_S
+        kept = [c for c in self.integration_changes if (c.get("at") or 0) >= cutoff]
+        if changed or len(kept) != len(self.integration_changes):
+            self.integration_changes = kept
+            self._save_versions()
+
+    def _check_supplier(self, states: list, ids: list) -> list:
+        """What looks wrong with your supplier's integration's data (for the page)."""
+        problems = check_supplier(states, ids[0] if ids else None)
+        if ids and not self.settings.get("ready_entity"):
+            s = suppliers.for_entity(ids[0])
+            expected = target_time_ids(ids[0])
+            by_id = {st.get("entity_id") for st in states}
+            if s.get("ready_times") is not None and expected and not any(e in by_id for e in expected):
+                problems.append({"level": "info", "text": f"{s['name']}'s ready time entity wasn't found (looked for "
+                                 f"{' and '.join(expected)}), so Force schedule on supplier can't set it. Pick it on "
+                                 "Settings › Your supplier, or its name may have changed (ready_entity_suffix in "
+                                 "suppliers.json)"})
+        for c in self.integration_changes:
+            problems.append({"level": "info", "text": f"{c['supplier']}'s integration was updated from {c['from']} to "
+                             f"{c['to']} on {time.strftime('%d %b', time.localtime(c.get('at') or 0))}"})
+        if suppliers.INFO.get("override_error"):
+            problems.append({"level": "warn", "text": f"Your supplier changes can't be used: {suppliers.INFO['override_error']}"})
+        if suppliers.INFO.get("error"):
+            problems.append({"level": "warn", "text": f"The add-on's supplier defaults can't be used ({suppliers.INFO['error']}): "
+                             "the built-in ones are used"})
+        return problems
 
     # --- settings ------------------------------------------------------------
 
@@ -581,7 +670,12 @@ class HaLink:
                         event = None
                     if event is not None:
                         await self.handle_entities_event(event)
-                    if time.monotonic() - self._dispatch_searched >= DISPATCH_SEARCH_S:
+                    # Your changes to the supplier defaults (the override file): looked at every minute
+                    reread = suppliers.refresh()
+                    if reread:
+                        logger.info("Supplier defaults read again%s", " (your changes in "
+                                    f"{suppliers.INFO['override']})" if suppliers.INFO.get("override") else "")
+                    if reread or time.monotonic() - self._dispatch_searched >= DISPATCH_SEARCH_S:
                         if await self._find_dispatch_sensor(call):
                             self._changed.set()  # follow the new sensor
                     if self._changed.is_set():
@@ -727,6 +821,18 @@ class HaLink:
         chosen = self.settings.get("supplier_entity")  # picked on the Settings tab
         if chosen:
             ids = [chosen] + [i for i in ids if i != chosen]
+        problems = self._check_supplier(states, ids)
+        if [p["text"] for p in problems] != [p["text"] for p in self.supplier_problems]:
+            for p in problems:
+                if p["text"] not in [q["text"] for q in self.supplier_problems] and p["level"] == "warn":
+                    logger.warning("Smart charging: %s", p["text"])
+        self.supplier_problems = problems
+        try:
+            await self._check_versions(call, states)
+        except Exception:
+            logger.debug("Couldn't check the supplier integrations' versions", exc_info=True)
+        # (the version check may have added an update to show)
+        self.supplier_problems = self._check_supplier(states, ids)
         first = by_id.get(ids[0]) if ids else None
         if first:  # until the subscription brings it
             self.states[first["entity_id"]] = {"state": first.get("state"), "attributes": first.get("attributes") or {}}
@@ -795,15 +901,23 @@ class HaLink:
         return None if hours == 24 else f"{hours}h"
 
     def smart_charging(self) -> dict:
-        """Your supplier's planned charge slots, if its integration is installed."""
+        """Your supplier's planned charge slots, if its integration is installed; with
+        what looks wrong with its data ("problems"), each supplier's colour and the
+        suppliers known (src/suppliers.json), for the page."""
+        extra = {"problems": list(self.supplier_problems), "colours": suppliers.colours(),
+                 "known": [s["name"] for s in suppliers.all_suppliers()]}
         if not self.dispatch_entities:
-            return {"found": False}
+            return {"found": False, **extra}
         entity_id = self.dispatch_entities[0]
         st = self.states.get(entity_id) or {}
         info = smart_charging([{"entity_id": entity_id, **st}], time.time())
+        live = [p for p in check_supplier([{"entity_id": entity_id, **st}], entity_id)
+                if p["text"] not in [q["text"] for q in extra["problems"]]]
+        info.update(extra, problems=extra["problems"] + live) if info.get("found") else info.update(extra)
         if info.get("found"):
             info["others"] = self.dispatch_entities[1:]
             info["ready_time_entity"] = self.ready_entity
+            info["has_ready_time"] = suppliers.for_entity(entity_id).get("ready_times") is not None
             info["ready_times"] = self.ready_times
             info["limit_min"] = self.daily_limit_min(info.get("provider"))
             info["limit_reset"] = self.limit_reset(info.get("provider"))
@@ -854,6 +968,11 @@ class HaLink:
             "found": bool(info.get("found")),
             "provider": info.get("provider"),
             "entity_id": info.get("entity_id"),
+            "problems": info.get("problems") or [],
+            "known": info.get("known") or [],
+            "versions": dict(self.integration_versions),
+            "defaults": {"override": suppliers.INFO.get("override"), "override_path": suppliers.OVERRIDE_PATH,
+                         "override_error": suppliers.INFO.get("override_error"), "error": suppliers.INFO.get("error")},
             "others": self.dispatch_entities[1:],
             "searched": None if self.dispatch_searched_at is None else time.strftime(
                 "%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.dispatch_searched_at)),
@@ -939,7 +1058,9 @@ class HaLink:
                 "state": st.get("state"),
                 # for the Your supplier pickers (Settings tab)
                 "dispatch": bool(find_dispatch_sensors([st])),
-                "ready": domain in ("time", "select") and "target_time" in entity_id,
+                "ready": domain in ("time", "select") and any(
+                    (s.get("ready_entity_suffix") or "") and s["ready_entity_suffix"] in entity_id
+                    for s in suppliers.all_suppliers()),
                 "saving": is_saving_calendar(entity_id, attrs.get("friendly_name") or ""),
             })
         out.sort(key=lambda e: (e["name"] or "").lower())

@@ -89,8 +89,10 @@ keeps to your supplier's limit while **Force schedule on supplier** is on
 - **Other suppliers** (EDF Energy, E.ON Next...) and **no supplier:** no limit.
 - **Settings › Your supplier** can change it (a number of hours, 0 for none,
   or empty for automatic) and when it resets (a time of day, or rolling: any
-  24 hours). If Octopus changes its hours, set them there until the add-on
-  is updated.
+  24 hours). If Octopus changes its hours, set them there, or in your own
+  `suppliers.json` (see [When your supplier changes
+  something](#when-your-supplier-changes-something)), until the add-on is
+  updated.
 
 The details:
 
@@ -346,6 +348,76 @@ The schedule and auto re-plug are saved in `/data/automation.json` (and
 when the schedule was last checked in `/data/automation_runtime.json`), auto
 plug-in and your sensors in `/data/sensors.json`.
 
+## When your supplier changes something
+
+Everything the add-on knows about a supplier is in its **supplier defaults**,
+not its code: the daily limit and when it resets, the ready times its app
+accepts, the names of its smart charging sensor, the attributes and fields
+its planned slots are in, its ready time entity, the words that pick out its
+saving sessions calendar, its colour on the page, and its Home Assistant
+integration. So when a supplier (or its integration) changes something, it
+can usually be followed by changing a setting, without a new version of the
+add-on.
+
+**Noticing.** The add-on checks the supplier integration's data every 10
+minutes, and the Overview's Smart charging card and **Diagnostics › Health**
+say when something looks wrong (an amber **Check**). The log says it too.
+For example:
+
+- its smart charging sensor is there, but without the attribute the slots
+  are in (`planned_dispatches` for Octopus Energy and EDF Energy);
+- the slots are there, but not with the fields expected (`start`, `end`);
+- its integration is in Home Assistant, but no smart charging sensor was
+  found (fine if you're not on its smart charging tariff);
+- its ready time entity wasn't found next to the sensor;
+- the sensor is unavailable.
+
+Health also shows each supplier integration's version, and for a week after
+one is updated, from which version to which: the first thing to look at if
+smart charging stops being found.
+
+**Fixing it yourself.** The add-on reads `suppliers.json` from its own
+folder in Home Assistant (`/addon_configs/<this add-on>/`, which you can
+reach with the Samba share or the File editor add-on). It's read again
+within a minute or so of changing, and Diagnostics › Health says whether
+your changes are being used (or why not, if the file has a mistake: it's
+left out then, and the add-on's own defaults are used). It only needs
+what's different; `suppliers.example.json` in the same folder has the
+add-on's own defaults, with what each field means, to copy from. For
+example, if the Octopus Energy integration renamed `planned_dispatches` to
+`planned_slots` and Octopus allowed 7 hours a day:
+
+```json
+{"suppliers": [
+  {"name": "Octopus Energy", "planned_attribute": "planned_slots", "daily_limit_h": 7}
+]}
+```
+
+A supplier with the same name has just those fields changed; a new name
+adds a supplier. The fields:
+
+| Field | What it is |
+| --- | --- |
+| `type` | How its integration shows the plan: `kraken` (a dispatching binary sensor and a ready time entity: Octopus Energy, EDF Energy) or `schedule_sensor` (a sensor with a schedule attribute: E.ON Next) |
+| `integration` | Its Home Assistant integration's domain (e.g. `octopus_energy`), to notice when it's updated |
+| `colour` | Its colour on the page, `#rrggbb` |
+| `dispatch_prefix`, `dispatch_suffix` | `kraken`: the start and end of its dispatching sensor's entity ID |
+| `planned_attribute`, `completed_attribute` | `kraken`: the sensor's attributes listing the planned and completed slots |
+| `ready_entity_suffix` | `kraken`: what replaces `dispatch_suffix` for its ready time entity (`time.` or `select.`) |
+| `schedule_sensor_suffix`, `schedule_attribute` | `schedule_sensor`: part of its sensor's entity ID, and the attribute with the slots |
+| `slot_fields` | The names of each slot's `start`, `end`, `kwh` and `source` |
+| `calendar_words` | Words in its saving sessions calendar's ID or name |
+| `ready_times` | The ready times its app accepts, `{"from": "04:00", "to": "11:00"}`; `null`: none |
+| `daily_limit_h`, `limit_reset` | Its daily limit in hours (`null`: none) and when it resets (`"12:00"`, or `"rolling"`) |
+
+And `saving_sessions` (`words`, `not_words`, `prefer`) for finding the
+saving sessions calendar. Anything set on Settings › Your supplier still
+wins over all of these.
+
+If a supplier's integration changes in a way these fields can't follow (a
+new way of showing its plan), it needs a change to the add-on: each kind is
+one file in `src/supplier_types/`, and a new kind is a new file there.
+
 ## How it works
 
 1. The add-on connects to your supplier's OCPP server via WebSocket
@@ -532,13 +604,10 @@ follows your Home Assistant theme. Settings save as soon as you change them.
     that time, and a charge across it can be longer: 08:00 for 12 hours is
     08:00–18:00 (4 hours before 12:00, then 6 after).
   Each shows what's in use, and whether it was found or picked.
-  The automatic values come from `src/suppliers.json` in the repository:
-  for each supplier, its daily limit (`daily_limit_h`, null for none), when
-  it resets (`limit_reset`: a time, or `"rolling"`), the ready times its
-  app accepts (`ready_times` from / to) and how its smart charging sensor is
-  found. Edit that file and rebuild the add-on if a supplier changes its
-  rules; anything set on this tab still wins. If the file can't be read,
-  the built-in values are used and the log says why.
+  The automatic values come from the supplier defaults (`src/suppliers.json`,
+  with your own changes on top: see [When your supplier changes
+  something](#when-your-supplier-changes-something)); anything set on this
+  tab still wins.
 - **Diagnostics**, in two parts:
   - **Health:** version, uptime, reconnects and the last drop's reason,
     heartbeat and clock offset, the Home Assistant link and the add-on's

@@ -143,6 +143,14 @@ actions:
 mode: queued
 ```
 
+## If your supplier changes something
+
+The add-on says so on the Overview and Diagnostics › Health (e.g. its smart
+charging sensor lost the slots, or its integration was updated), and most
+changes can be followed without an update: put your changes in
+`suppliers.json` in the add-on's folder in Home Assistant. See the
+Documentation tab, *When your supplier changes something*.
+
 ## Its Home Assistant entities
 
 | Entity | |

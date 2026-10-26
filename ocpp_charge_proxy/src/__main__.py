@@ -20,7 +20,7 @@ from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_fi
 from src.ha_history import ChartHistory
 from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, auto_plug_charge, automation_loop
 from src.ha_link import HaLink
-from src import log_filters
+from src import log_filters, suppliers
 from src.persistence import Persistence
 from src.shared_state import SharedState
 
@@ -100,6 +100,9 @@ async def run() -> None:
     log_buffer = install_log_buffer(log_format)  # recent lines for Diagnostics › Debug
 
     logger.info("Starting OCPP Charge Proxy, connecting to %s", config.redacted_url)
+    # The supplier defaults, to copy your changes from (src/suppliers.py)
+    if suppliers.write_example():
+        logger.debug("Supplier defaults copied to %s/suppliers.example.json", os.path.dirname(suppliers.OVERRIDE_PATH))
 
     # Seed energy register if initial_energy_wh is set (cleared by s6 run script)
     if config.initial_energy_wh > 0:

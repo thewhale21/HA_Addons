@@ -25,7 +25,11 @@ too.
   "<charger serial> Smart Charging Schedule" with a `schedule` attribute:
   a list of {start, end, type, energy_added_kwh} (planned slots only).
 
-Nothing to set up; if none is found the page says so.
+Nothing to set up; if none is found the page says so. The entity names,
+attributes and fields above are each supplier's in src/suppliers.json (and the
+override file), not fixed here, so a supplier's change can be followed there.
+check_supplier() looks for signs that a supplier's integration has changed
+(its sensor there without the slots, slots in another format...).
 
 Kept free of I/O so it can be tested on its own; HaLink fetches the states.
 """
@@ -35,13 +39,19 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
-from src import suppliers
+from src import supplier_types, suppliers
+from src.supplier_types import kraken
 
-# From src/suppliers.json: dispatching sensor entity ID prefix -> name shown on
-# the page, and schedule sensor suffix (E.ON Next) -> name
-PROVIDERS = tuple((s["dispatch_prefix"], s["name"]) for s in suppliers.all_suppliers() if s.get("dispatch_prefix"))
-SCHEDULE_SENSORS = tuple((s["schedule_sensor_suffix"], s["name"]) for s in suppliers.all_suppliers()
-                         if s.get("schedule_sensor_suffix"))
+
+def _kinds() -> list:
+    """(supplier, its kind's module) for each supplier in src/suppliers.json (read
+    again when the override changes) that has a kind (src/supplier_types)."""
+    out = []
+    for s in suppliers.all_suppliers():
+        kind = supplier_types.kind_of(s)
+        if kind:
+            out.append((s, kind))
+    return out
 
 
 def _ts(value) -> Optional[float]:
@@ -64,21 +74,23 @@ def _iso(t: Optional[float]) -> Optional[str]:
     return datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _slots(items) -> list[dict]:
+def _slots(items, fields: Optional[dict] = None) -> list[dict]:
+    """A supplier's slots, read with its field names (slot_fields in src/suppliers.json)."""
+    f = {**suppliers.KRAKEN["slot_fields"], **(fields or {})}
     out = []
     for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
-        start, end = _ts(item.get("start")), _ts(item.get("end"))
+        start, end = _ts(item.get(f["start"])), _ts(item.get(f["end"]))
         if start is None or end is None or end <= start:
             continue
-        kwh = item.get("charge_in_kwh", item.get("energy_added_kwh"))
+        kwh = item.get(f["kwh"])
         try:
             kwh = None if kwh is None else round(float(kwh), 2)
         except (TypeError, ValueError):
             kwh = None
         out.append({"start": _iso(start), "end": _iso(end), "charge_kwh": kwh,
-                    "source": item.get("source"), "_s": start, "_e": end})
+                    "source": item.get(f["source"]), "_s": start, "_e": end})
     out.sort(key=lambda s: s["_s"])
     return out
 
@@ -98,34 +110,77 @@ def _merge(slots: list[dict]) -> list[dict]:
     return merged
 
 
-def _is_eon(st: dict) -> bool:
-    entity_id = str(st.get("entity_id", ""))
-    return (entity_id.startswith("sensor.") and any(sfx in entity_id for sfx, _ in SCHEDULE_SENSORS)
-            and isinstance((st.get("attributes") or {}).get("schedule"), list))
-
-
 def provider_name(entity_id: str) -> str:
-    for prefix, name in PROVIDERS:
-        if entity_id.startswith(prefix):
-            return name
-    for suffix, name in SCHEDULE_SENSORS:
-        if entity_id.startswith("sensor.") and suffix in entity_id:
-            return name
-    return suppliers.DATA["other"]["name"]
+    return suppliers.for_entity(entity_id)["name"]
+
+
+def _owner(st: dict):
+    """The supplier (and its kind) whose smart charging sensor this is, or (None, None)."""
+    for s, kind in _kinds():
+        if kind.is_sensor(st, s):
+            return s, kind
+    return None, None
+
+
+def _any_kraken(st: dict) -> bool:
+    """Any binary sensor with Kraken-style slots: a renamed entity, or another integration
+    using the same format (src/supplier_types/kraken.py)."""
+    return kraken.is_sensor(st, {})
 
 
 def find_dispatch_sensors(states: list[dict]) -> list[dict]:
-    """Supplier smart charging sensors (Kraken dispatching binary sensors, or
-    E.ON Next's schedule sensor), known suppliers first."""
-    found = [
-        st for st in states or []
-        if (str(st.get("entity_id", "")).startswith("binary_sensor.")
-            and isinstance((st.get("attributes") or {}).get("planned_dispatches"), list))
-        or _is_eon(st)
-    ]
-    known = [p for p, _ in PROVIDERS]
-    found.sort(key=lambda st: (not (any(st["entity_id"].startswith(p) for p in known) or _is_eon(st)), st["entity_id"]))
+    """Supplier smart charging sensors (a known supplier's, by its kind in
+    src/supplier_types, or any Kraken-style one), known suppliers first."""
+    found = [st for st in states or [] if _owner(st)[0] is not None or _any_kraken(st)]
+    found.sort(key=lambda st: (_owner(st)[0] is None, st["entity_id"]))
     return found
+
+
+def _lists(st: dict) -> tuple:
+    """(planned items, completed items, slot field names) from a sensor's state."""
+    s, kind = _owner(st)
+    if s is None:
+        s, kind = suppliers.for_entity(st.get("entity_id")), kraken
+    planned, completed = kind.slot_lists(st, s)
+    return planned, completed, s.get("slot_fields")
+
+
+def check_supplier(states: list[dict], chosen: Optional[str] = None) -> list[dict]:
+    """Signs that a supplier's integration has changed, from all of HA's states:
+    [{"level": "warn" | "info", "text"}]. `chosen`: the sensor in use, if any.
+    - a supplier's sensor (by name) is there, but without the slots attribute
+      (each kind's check(), src/supplier_types);
+    - the sensor in use has slots, but none in the format expected;
+    - the sensor in use is unavailable;
+    - nothing found, but the supplier's integration has entities in HA."""
+    by_id = {str(st.get("entity_id", "")): st for st in states or []}
+    out = []
+    for s, kind in _kinds():
+        out += kind.check(by_id, s)
+    st = by_id.get(chosen) if chosen else None
+    if st is not None:
+        s = suppliers.for_entity(chosen)
+        if str(st.get("state")).lower() == "unavailable":
+            out.append({"level": "warn", "text": f"{chosen} is unavailable: {s['name']}'s integration isn't "
+                        "giving its plan at the moment"})
+        planned, completed, fields = _lists(st)
+        f = {**suppliers.KRAKEN["slot_fields"], **(fields or {})}
+        for what, items in (("planned", planned), ("completed", completed)):
+            if isinstance(items, list) and items and not _slots(items, fields):
+                keys = sorted({k for i in items if isinstance(i, dict) for k in i})
+                out.append({"level": "warn", "text": f"{chosen}'s {what} slots ({len(items)}) aren't in the format "
+                            f"expected ({f['start']} and {f['end']}; they have {', '.join(keys) or 'nothing'}): "
+                            f"{s['name']}'s integration may have changed (slot_fields in suppliers.json)"})
+    elif not chosen:
+        for s, _ in _kinds():
+            base = (s.get("dispatch_prefix") or "").split(".", 1)[-1] or ((s.get("integration") or "") + "_")
+            if base.strip("_") and any(eid.split(".", 1)[-1].startswith(base) for eid in by_id):
+                out.append({"level": "info", "text": f"{s['name']}'s integration is in Home Assistant, but no smart "
+                            "charging sensor was found. That's expected if you're not on its smart charging tariff; "
+                            "otherwise its sensor may have been renamed (dispatch_prefix / dispatch_suffix in "
+                            "suppliers.json)"})
+                break
+    return out
 
 
 def smart_charging(states: list[dict], now: float) -> dict:
@@ -135,9 +190,9 @@ def smart_charging(states: list[dict], now: float) -> dict:
         return {"found": False}
     st = sensors[0]
     attrs = st.get("attributes") or {}
-    planned = _merge(sorted(_slots(attrs.get("planned_dispatches")) + _slots(attrs.get("schedule")),
-                            key=lambda s: s["_s"]))
-    completed = _merge(_slots(attrs.get("completed_dispatches")))
+    planned_items, completed_items, fields = _lists(st)
+    planned = _merge(_slots(planned_items, fields))
+    completed = _merge(_slots(completed_items, fields))
     current = next((s for s in planned if s["_s"] <= now < s["_e"]), None)
     upcoming = [s for s in planned if s["_s"] > now]
     # For the chart: everything known (completed and planned), merged

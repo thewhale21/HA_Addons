@@ -6,7 +6,8 @@ to the schedule's next unplug, so the car is charged by the time it's
 "unplugged". Done once per scheduled plug-in, never at other times.
 
 Octopus Energy and EDF Energy (both Kraken) have a target time entity next
-to their dispatching sensor:
+to their dispatching sensor (the names are each supplier's dispatch_suffix and
+ready_entity_suffix in src/suppliers.json):
 
 - time.<prefix>_intelligent_target_time    (time.set_value)
 - select.<prefix>_intelligent_target_time  (select.select_option, "HH:MM")
@@ -25,23 +26,36 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
-from src import suppliers
+from src import supplier_types, suppliers
+from src.supplier_types import kraken
 
 ALL_DAY_TIMES = list(suppliers.ALL_DAY)  # every half hour (Octopus)
-# A supplier's ready times come from src/suppliers.json; these are for one
-# that isn't listed there (04:00-11:00 unless changed)
-DEFAULT_TIMES = suppliers.ready_times(suppliers.DATA["other"]) or list(ALL_DAY_TIMES)
+
+
+def default_times() -> list[str]:
+    """A supplier's ready times come from src/suppliers.json; these are for one
+    that isn't listed there (04:00-11:00 unless changed)."""
+    return suppliers.ready_times(suppliers.other()) or list(ALL_DAY_TIMES)
+
+
+DEFAULT_TIMES = default_times()  # (as loaded at start-up)
+
+
+def target_time_ids(dispatch_entity: Optional[str]) -> list[str]:
+    """The entity IDs its ready (target) time entity would have, the newer (time.) first:
+    the dispatching sensor's ID with its dispatch_suffix swapped for ready_entity_suffix."""
+    if not dispatch_entity:
+        return []
+    s = suppliers.for_entity(dispatch_entity)
+    kind = supplier_types.kind_of(s) or kraken  # (an unknown supplier's: the Kraken names)
+    return kind.ready_entity_ids(dispatch_entity, s)
 
 
 def target_time_entity(states: list[dict], dispatch_entity: Optional[str]) -> Optional[dict]:
     """The target time entity belonging to the supplier's dispatching sensor."""
-    if not dispatch_entity or not dispatch_entity.startswith("binary_sensor.") \
-            or not dispatch_entity.endswith("_dispatching"):
-        return None
-    base = dispatch_entity[len("binary_sensor."):-len("dispatching")]  # e.g. octopus_energy_<id>_intelligent_
     by_id = {st.get("entity_id"): st for st in states or []}
-    for domain in ("time", "select"):  # the time entity is the newer one
-        st = by_id.get(f"{domain}.{base}target_time")
+    for entity_id in target_time_ids(dispatch_entity):
+        st = by_id.get(entity_id)
         if st and str(st.get("state")).lower() not in ("unavailable",):
             return st
     return None
@@ -55,7 +69,7 @@ def allowed_times(entity: Optional[dict]) -> list[str]:
         valid = [o for o in options if isinstance(o, str) and len(o) == 5 and o[2] == ":"]
         if valid:
             return valid
-    return suppliers.ready_times(suppliers.for_entity((entity or {}).get("entity_id"))) or list(DEFAULT_TIMES)
+    return suppliers.ready_times(suppliers.for_entity((entity or {}).get("entity_id"))) or default_times()
 
 
 def describe_times(allowed: list[str]) -> str:

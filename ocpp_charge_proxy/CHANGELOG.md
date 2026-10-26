@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.53.0 — Following your supplier's changes
+
+- **Feature:** your own changes to the supplier defaults, in `suppliers.json`
+  in the add-on's folder in Home Assistant (`/addon_configs/...`): only
+  what's different, read again within a minute or so of changing, so a
+  supplier's change can be followed the same day without an update.
+  `suppliers.example.json` there has the add-on's own, to copy from
+- **Feature:** the add-on notices when your supplier's integration looks
+  changed and says so on the Overview's Smart charging card, Diagnostics ›
+  Health and in the log: its sensor without the slots, slots in another
+  format, its integration there but no smart charging sensor, no ready time
+  entity, or the sensor unavailable. Health shows each supplier
+  integration's version, and for a week after one's updated, from what to
+  what
+- **Change:** everything the add-on knows about a supplier is now in the
+  supplier defaults, not the code: as well as its limit and ready times, the
+  names of its sensor, the attributes and fields of its slots, its ready
+  time entity, its saving sessions calendar's words, its colour and its
+  integration. Each kind of supplier integration (Kraken: Octopus Energy and
+  EDF Energy; a schedule sensor: E.ON Next) is one file in
+  `src/supplier_types/`
+- **Change:** the add-on now maps its own folder in Home Assistant (for
+  `suppliers.json`)
+- **Docs:** *When your supplier changes something*: how it's noticed, and
+  how to follow it with `suppliers.json`, with every field
+
 ## 2.52.0 — Fixes from a review, and clearer pages
 
 - **Fix:** turning the random start delay off while a plug-in was waiting

@@ -315,7 +315,7 @@ def test_supplier_dispatch_sensor_found_and_followed():
 def test_no_supplier_sensor():
     fake = FakeHA(helper_exists=True)
     link, _, _ = _scenario(fake, [])
-    assert link.smart_charging() == {"found": False} and link.scheduled() is None and link.slot_now() is None
+    assert link.smart_charging()["found"] is False and link.scheduled() is None and link.slot_now() is None
     assert link.smart_charging_health()["found"] is False
 
 
