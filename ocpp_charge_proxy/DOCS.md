@@ -211,6 +211,17 @@ is read every 5 minutes, up to 8 days ahead.
   run it's kept for 14 days: sessions on the **Sessions** tab that ran in
   a one-off slot are tagged **One-off** (or **Auto plug-in** / **Charge
   now**). A skipped unplug isn't used for the ready time.
+- **Random start delay** (**Automations** tab, under the schedule, off by
+  default): each of your slots plugs in a random time after it starts, up
+  to the minutes set (1 to 60, 10 by default) and at most half the slot, so
+  it isn't the same time every day, e.g. a 23:30 slot plugs in at 23:34 one
+  night and 23:38 the next. Only your own slots: auto plug-in, the car
+  plugged in sensor, Charge now and the charge before a saving session plug
+  in straight away, as does a slot that starts where another ends. The
+  Overview shows "Plugging in at …" meanwhile. If the slot ends, is skipped
+  or the schedule's turned off before then, it doesn't plug in; plugging in
+  by hand meanwhile is left alone. The ready time (Force schedule on
+  supplier) is set when it plugs in.
 - **Starting inside a scheduled stretch:** if the add-on starts (or
   restarts) while the schedule has the car plugged in, e.g. at 02:00 with
   plug in 23:30 and unplug 07:00, and Plugged In is off, it plugs in

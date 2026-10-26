@@ -585,6 +585,13 @@
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
       <div class="legend wlegend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-types"></span><span><b class="band" style="background:var(--ok);height:4px;opacity:1"></b>Charged</span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="opacity:1;background:repeating-linear-gradient(45deg, rgba(84,110,122,.7) 0 2px, rgba(84,110,122,.25) 2px 4px)"></b>Off-peak time</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span></div>
       <div class="note" id="a-tz"></div>
+      <div class="row" style="margin-top:12px">
+        <div class="grow">Random start delay
+          <div class="note" style="margin:0">Plugs in up to this long after each of your slots starts, a different time each day. <details class="more"><summary>More</summary><div>Only your own slots: auto plug-in, Charge now, the car plugged in sensor and the charge before a saving session plug in straight away, as does a slot that starts where another ends. The delay is at most half the slot. If the slot ends, is skipped or the schedule is turned off before then, it doesn't plug in.</div></details></div>
+          <div id="a-delay-status" class="sub" style="margin-top:6px" hidden></div></div>
+        <span class="ctl"><span>up to</span><input type="number" id="a-delay-min" min="1" max="60" step="1" aria-label="Random start delay, up to (minutes)"> min</span>
+        <label class="switch"><input type="checkbox" id="a-delay-on" aria-label="Random start delay"><span></span></label>
+      </div>
     </div>
     <div class="card">
       <h2><span class="supn" data-f="Your supplier">Your supplier</span></h2>
@@ -1192,6 +1199,7 @@ function renderState(s) {
   if (s.held_messages) chips.push(`<span class="chip warn">${s.held_messages} held</span>`);
   if (s.schedule_next) chips.push(`<span class="chip">${s.schedule_next.action === 'plug' ? 'Plug in' : 'Unplug'} ${whenText(s.schedule_next.time)}</span>`);
   const rp = s.replug || {};
+  if (s.plug_pending) chips.push(`<span class="chip" title="A random start delay, so it isn't the same time every day">Plugging in at ${new Date(s.plug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})}</span>`);
   if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving ${sup('your supplier')} time to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})}</span>`);
   const pc = s.plan_check;
   drawSmartCheck(pc);
@@ -2279,6 +2287,13 @@ async function refreshAutomation(force) {
   auto.entries = JSON.parse(JSON.stringify(d.schedule.entries));
   $('a-sched-on').checked = d.schedule.enabled;
   $('a-ready-on').checked = !!d.schedule.ready_time;
+  const sd = d.schedule.start_delay || {enabled: false, max_min: 10};
+  $('a-delay-on').checked = !!sd.enabled;
+  if (document.activeElement !== $('a-delay-min')) $('a-delay-min').value = sd.max_min;
+  $('a-delay-min').disabled = !sd.enabled;
+  const pp = d.schedule.plug_pending;
+  $('a-delay-status').hidden = !pp;
+  if (pp) $('a-delay-status').innerHTML = `<span class="chip">Plugging in at ${new Date(pp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})}</span> <span class="muted">after the random delay</span>`;
   if (!smart.data) refreshSmart(true).then(() => { drawReadyStatus(auto.data); drawWeekSoon(); });
   else refreshSmart(false);  // the supplier's slots on the week view
   drawReadyStatus(d);
@@ -2326,6 +2341,17 @@ function drawPlanCheck(pc) {
   const problems = (pc.problems || []).map((p) => `<div class="sub" style="color:var(--err)">${esc(p)}</div>`).join('');
   el.innerHTML = head + problems;
 }
+$('a-delay-on').addEventListener('change', async (e) => {
+  const on = e.target.checked;
+  if (await post('automation/schedule', {start_delay: {enabled: on}})) toast(on ? `Your slots plug in up to ${$('a-delay-min').value} min after they start` : 'Your slots plug in on time');
+  refreshAutomation(false);
+});
+$('a-delay-min').addEventListener('change', async (e) => {
+  const v = parseInt(e.target.value, 10);
+  if (!(v >= 1 && v <= 60)) { toast('Delay: 1–60 minutes'); refreshAutomation(false); return; }
+  if (await post('automation/schedule', {start_delay: {max_min: v}})) toast(`Up to ${v} min after each slot starts`);
+  refreshAutomation(false);
+});
 $('a-wait').addEventListener('change', async (e) => {
   const v = parseInt(e.target.value, 10);
   if (!(v >= 0 && v <= 600)) { toast('Wait: 0–600 seconds'); refreshAutomation(false); return; }

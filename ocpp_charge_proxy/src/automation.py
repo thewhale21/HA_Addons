@@ -52,6 +52,11 @@
   doesn't already cover (sync_saving_sessions, _plan_precharge).
 - Off-peak times: at the start of each, it unplugs if plugged in (by hand,
   Home Assistant...), as nothing should charge then (block_starts_due).
+- Random start delay: optionally, each of your slots' plug-ins waits a random
+  time (up to the minutes set, and at most half the slot) before plugging in,
+  so it isn't the same time every day. Not car slots (auto plug-in, Charge
+  now...), which start straight away, nor where two slots meet. If the slot
+  ends, is skipped or the schedule is turned off meanwhile, it doesn't plug in.
 - Ready time: optionally, when the schedule plugs in, set your supplier's
   smart charging ready-by time to the schedule's next unplug
   (src/ready_time.py). Only at a scheduled plug-in.
@@ -69,6 +74,7 @@ import json
 import logging
 import math
 import os
+import random
 import time
 import uuid
 from dataclasses import dataclass
@@ -102,6 +108,8 @@ SAVING_MOVE_VERSION = 3  # how slots are moved (2.43.1: earlier, keeping their e
 # the session's start); older moves are redone
 MIN_PRECHARGE_MIN = 15  # less than this left before a session: no charge before it
 ONE_OFF_KEEP = datetime.timedelta(days=14)  # one-off times (and skips) are kept this long after they ran
+MAX_START_DELAY_MIN = 60  # the random start delay is at most this
+DEFAULT_START_DELAY = {"enabled": False, "max_min": 10}
 
 
 @dataclass(frozen=True)
@@ -398,6 +406,8 @@ class Automation:
         self.ready_status: Optional[dict] = None  # the last time it was set (or why not)
         self.auto_plug_last: Optional[dict] = None  # the last auto plug-in charge planned
         self.unplug_wait_s = GRACEFUL_UNPLUG_S
+        self.start_delay = dict(DEFAULT_START_DELAY)  # a random wait before your slots' plug-ins
+        self._random = random.uniform
         self.blocks: list[dict] = []  # off-peak times: nothing is scheduled in them
         # Saving sessions from the calendar: [{"id", "start", "end" (ISO), "summary",
         # "changes": {"skips", "added"}, "precharged", "notes"}]; with saving_block
@@ -422,6 +432,7 @@ class Automation:
         self.last_replug: Optional[float] = None
         self.last_run: Optional[dict] = None  # last schedule entry run
         self.unplug_at: Optional[float] = None  # a scheduled unplug waiting for the supplier, until
+        self.plug_at: Optional[float] = None  # a scheduled plug-in waiting out its random delay, until
         self._last_check: Optional[datetime.datetime] = None
         self._block_check: Optional[datetime.datetime] = None  # off-peak time starts looked at up to
         self._first_check = True
@@ -459,6 +470,10 @@ class Automation:
         try:
             self.unplug_wait_s = self._valid_wait(schedule.get("unplug_wait_s", GRACEFUL_UNPLUG_S))
         except ValueError:
+            pass
+        try:
+            self.start_delay = self._valid_delay({**DEFAULT_START_DELAY, **(schedule.get("start_delay") or {})})
+        except (ValueError, TypeError):
             pass
         entries = []
         for raw in schedule.get("entries") or []:
@@ -526,7 +541,7 @@ class Automation:
                 json.dump({
                     "schedule": {"enabled": self.schedule_enabled, "entries": self.entries,
                                  "ready_time": self.ready_time, "skips": self.skips,
-                                 "unplug_wait_s": self.unplug_wait_s,
+                                 "unplug_wait_s": self.unplug_wait_s, "start_delay": self.start_delay,
                                  "override_guards": self.override_guards, "blocks": self.blocks},
                     "replug": self.replug,
                     "saving": {"block": self.saving_block, "sessions": self.saving_sessions},
@@ -545,7 +560,8 @@ class Automation:
                      ready_time: Optional[bool] = None, ready_times: Optional[list] = None,
                      provider: str = "your supplier", daily_cap_min: Optional[int] = None,
                      unplug_wait_s=None, override_guards: Optional[bool] = None,
-                     blocks: Optional[list] = None, allow_over: bool = False) -> None:
+                     blocks: Optional[list] = None, allow_over: bool = False,
+                     start_delay: Optional[dict] = None) -> None:
         """override_guards: with it on, daily_cap_min isn't applied (turning it
         back off checks the schedule, as turning on the ready time does).
         ready_times: the times your supplier accepts as a ready time (None:
@@ -556,6 +572,10 @@ class Automation:
         allow_over: save it anyway, over the daily limit (the page asks first,
         and shows the hours over in red); the unplug times are still checked."""
         wait = None if unplug_wait_s is None else self._valid_wait(unplug_wait_s)
+        if start_delay is not None:
+            if not isinstance(start_delay, dict):
+                raise ValueError("start_delay must be {enabled, max_min}")
+            delay = self._valid_delay({**self.start_delay, **start_delay})
         new_entries = self.entries
         if entries is not None:
             if not isinstance(entries, list):
@@ -642,6 +662,11 @@ class Automation:
             self.ready_time = bool(ready_time)
         if wait is not None:
             self.unplug_wait_s = wait
+        if start_delay is not None and delay != self.start_delay:
+            self.start_delay = delay
+            if not delay["enabled"]:
+                self.plug_at = None  # a plug-in waiting now goes ahead (see automation_loop)
+            logger.info("Random start delay %s", f"on, up to {delay['max_min']} min" if delay["enabled"] else "off")
         if allow_over and checking and daily_cap_min:
             worst = self._longest_day(new_entries, new_skips)
             if worst and worst[0] > daily_cap_min:
@@ -666,6 +691,27 @@ class Automation:
         if not 0 <= wait <= MAX_UNPLUG_WAIT_S:
             raise ValueError(f"The unplug wait must be 0 to {MAX_UNPLUG_WAIT_S} seconds")
         return wait
+
+    @staticmethod
+    def _valid_delay(values: dict) -> dict:
+        try:
+            max_min = int(values["max_min"])
+        except (KeyError, TypeError, ValueError):
+            raise ValueError("The start delay must be a whole number of minutes") from None
+        if not 1 <= max_min <= MAX_START_DELAY_MIN:
+            raise ValueError(f"The start delay must be 1 to {MAX_START_DELAY_MIN} minutes")
+        return {"enabled": bool(values.get("enabled")), "max_min": max_min}
+
+    def start_delay_s(self, entry: dict, at: datetime.datetime) -> float:
+        """The random wait before a plug-in at `at` (seconds; 0: none): up to the
+        minutes set, and at most half the slot. Only your own slots' plug-ins."""
+        if not self.start_delay["enabled"] or entry.get("source") in AUTO_SOURCES:
+            return 0.0
+        most = self.start_delay["max_min"] * 60
+        unplug = self.next_unplug(at)
+        if unplug is not None:
+            most = min(most, (unplug - at).total_seconds() / 2)
+        return max(0.0, self._random(0, most)) if most > 0 else 0.0
 
     @staticmethod
     def _valid_replug(values: dict) -> dict:
@@ -1944,6 +1990,8 @@ class Automation:
                 "auto_plug_last": self.auto_plug_last,
                 "one_off_runs": self.one_off_runs(),
                 "unplug_wait_s": self.unplug_wait_s,
+                "start_delay": self.start_delay,
+                "plug_pending": _iso_from_epoch(self.plug_at),
                 "override_guards": self.override_guards,
                 "blocks": self.blocks,
                 "saving_sessions": self.saving_snapshot(),
@@ -1960,6 +2008,7 @@ class Automation:
         shared_state.schedule_next = self.next_action()
         shared_state.replug = self.replug_status()
         shared_state.unplug_pending = _iso_from_epoch(self.unplug_at)
+        shared_state.plug_pending = _iso_from_epoch(self.plug_at)
         shared_state.plan_check = self.plan_check
 
 
@@ -2062,7 +2111,20 @@ async def automation_loop(
                                     since.strftime("%a %H:%M"))
                         if automation.ready_time and set_ready_time is not None:
                             await apply_ready_time(automation, set_ready_time)  # the charge's own end
-            for entry in automation.due():
+            due = automation.due()
+            # Where two slots meet it carries on: no random delay for the plug-in there
+            meets = {e["time"] for e in due if e.get("back_to_back")}
+            for entry in due:
+                if entry["action"] == "unplug" or entry.get("back_to_back"):
+                    automation.plug_at = None  # a plug-in still waiting out its delay is overtaken
+                elif entry["time"] not in meets:
+                    delay = automation.start_delay_s(entry, automation._now())
+                    if delay >= 1:
+                        automation.plug_at = automation._clock() + delay
+                        logger.info("Schedule: plug-in at %s, after a random delay of %d min %02d s (at %s)",
+                                    entry["time"], delay // 60, delay % 60,
+                                    datetime.datetime.fromtimestamp(automation.plug_at).strftime("%H:%M:%S"))
+                        continue
                 automation.last_run = {
                     "entry_id": entry["id"], "action": entry["action"],
                     "timestamp": _iso_from_epoch(automation._clock()),
@@ -2090,6 +2152,22 @@ async def automation_loop(
                 else:
                     logger.info("Schedule: unplugging at %s", entry["time"])
                     await unplug(source="schedule")
+            if automation.plug_at is not None:
+                # A plug-in waiting out its random delay: not if the slot's over (or skipped, or
+                # the schedule's off) or it's plugged in already; with the delay turned off, now
+                if automation.in_plug_window() is None or shared_state.plugged_in:
+                    if automation.in_plug_window() is None:
+                        logger.info("Schedule: the slot ended during the random delay: not plugging in")
+                    automation.plug_at = None
+                elif automation._clock() >= automation.plug_at or not automation.start_delay["enabled"]:
+                    automation.plug_at = None
+                    automation.unplug_at = None
+                    automation.last_run = {"entry_id": None, "action": "plug",
+                                           "timestamp": _iso_from_epoch(automation._clock()), "delayed": True}
+                    logger.info("Schedule: plugging in (after the random delay)")
+                    await plug(source="schedule")
+                    if automation.ready_time and set_ready_time is not None:
+                        await apply_ready_time(automation, set_ready_time)
             for start in automation.block_starts_due():
                 # In case it's plugged in by hand (or from Home Assistant): nothing
                 # charges in an off-peak time
@@ -2128,4 +2206,9 @@ async def automation_loop(
             raise
         except Exception:
             logger.warning("Automation cycle failed", exc_info=True)
-        await asyncio.sleep(min(tick_s, PENDING_TICK_S) if automation.unplug_at is not None else tick_s)
+        wait = tick_s
+        if automation.unplug_at is not None:
+            wait = min(tick_s, PENDING_TICK_S)
+        if automation.plug_at is not None:
+            wait = min(wait, max(PENDING_TICK_S, automation.plug_at - automation._clock()))
+        await asyncio.sleep(wait)

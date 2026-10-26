@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.51.0 — Random start delay
+
+- **Feature:** a **Random start delay** for your schedule (Automations tab,
+  under the schedule; off by default): each of your slots plugs in a random
+  time after it starts, up to the minutes you set (1 to 60) and at most half
+  the slot, so it isn't the same time every day. Only your own slots: auto
+  plug-in, the car plugged in sensor, Charge now and the charge before a
+  saving session still plug in straight away, as does a slot that starts
+  where another ends. The Overview shows "Plugging in at …" while it waits
+
 ## 2.50.5 — Car slots stay separate with the schedule off
 
 - With the schedule off, a car slot (low-SoC auto plug-in, the car plugged in

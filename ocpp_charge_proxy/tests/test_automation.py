@@ -1792,3 +1792,121 @@ def test_a_waiting_unplug_survives_a_restart(tmp_path):
     a.save_runtime()
     b, _ = _automation(tmp_path, start=datetime.datetime(2026, 10, 6, 7, 0, 30, tzinfo=TZ))
     assert b.unplug_at == a.unplug_at
+
+
+# --- random start delay ------------------------------------------------------
+
+
+def _delay_loop(a, clock, steps, state=None):
+    """Run the loop, moving the clock to each of `steps` (datetimes) in turn; the plug/unplug calls."""
+    state = state or SharedState(connected_to_server=True)
+    calls = []
+
+    async def plug(source=None):
+        calls.append(("plug", clock.dt.strftime("%H:%M:%S")))
+        state.plugged_in = True
+        state.state = "Preparing"
+
+    async def unplug(source=None):
+        calls.append(("unplug", clock.dt.strftime("%H:%M:%S")))
+        state.plugged_in = False
+
+    async def scenario():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01))
+        await asyncio.sleep(0.03)
+        for t in steps:
+            clock.dt = t
+            await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(scenario())
+    return calls, state
+
+
+def test_random_start_delay_plugs_in_later(tmp_path):
+    a, clock = _automation(tmp_path, start=datetime.datetime(2026, 10, 5, 23, 29, 50, tzinfo=TZ))
+    a.set_schedule(enabled=True, entries=[{"time": "23:30", "action": "plug"}, {"time": "07:00", "action": "unplug"}],
+                   start_delay={"enabled": True, "max_min": 10})
+    a._random = lambda low, high: 7 * 60  # 7 minutes
+    at = lambda hh, mm, ss=0: datetime.datetime(2026, 10, 5, hh, mm, ss, tzinfo=TZ)
+    calls, state = _delay_loop(a, clock, [at(23, 30, 5), at(23, 36), at(23, 37, 10), at(23, 40)])
+    assert calls == [("plug", "23:37:10")]  # (7 minutes after it was due, at 23:30:05)
+    assert a.plug_at is None and state.plug_pending is None
+    # Saved with the schedule
+    again = Automation(str(tmp_path), now=clock.now, clock=clock.epoch)
+    assert again.start_delay == {"enabled": True, "max_min": 10}
+
+
+def test_random_start_delay_shows_while_waiting():
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 23, 29, 50, tzinfo=TZ))
+    a.set_schedule(enabled=True, entries=[{"time": "23:30", "action": "plug"}, {"time": "07:00", "action": "unplug"}],
+                   start_delay={"enabled": True, "max_min": 10})
+    a._random = lambda low, high: 5 * 60
+    calls, state = _delay_loop(a, clock, [datetime.datetime(2026, 10, 5, 23, 30, 5, tzinfo=TZ)])
+    assert calls == [] and state.plug_pending and a.snapshot()["schedule"]["plug_pending"]
+
+
+def test_random_start_delay_not_if_the_schedule_is_turned_off_meanwhile():
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 23, 29, 50, tzinfo=TZ))
+    a.set_schedule(enabled=True, entries=[{"time": "23:30", "action": "plug"}, {"time": "07:00", "action": "unplug"}],
+                   start_delay={"enabled": True, "max_min": 10})
+    a._random = lambda low, high: 5 * 60
+    at = lambda hh, mm, ss=0: datetime.datetime(2026, 10, 5, hh, mm, ss, tzinfo=TZ)
+    state = SharedState(connected_to_server=True)
+    calls = []
+
+    async def plug(source=None):
+        calls.append("plug")
+
+    async def unplug(source=None):
+        calls.append("unplug")
+
+    async def scenario():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01))
+        await asyncio.sleep(0.03)
+        clock.dt = at(23, 30, 5)
+        await asyncio.sleep(0.05)
+        a.set_schedule(enabled=False)
+        clock.dt = at(23, 36)
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(scenario())
+    assert calls == [] and a.plug_at is None
+
+
+def test_random_start_delay_is_only_for_your_own_slots():
+    """Auto plug-in, Charge now, the car plugged in sensor and the charge before a saving
+    session plug in straight away; the delay is at most half the slot."""
+    from src.automation import AUTO_SOURCES
+    a, clock = _automation()
+    a.set_schedule(enabled=True, entries=[{"time": "23:30", "action": "plug"}, {"time": "23:40", "action": "unplug"}],
+                   start_delay={"enabled": True, "max_min": 30})
+    a._random = lambda low, high: high
+    at = datetime.datetime(2026, 10, 5, 23, 30, tzinfo=TZ)
+    mine = next(e for e in a.entries if e["action"] == "plug")
+    assert a.start_delay_s(mine, at) == 300  # half the 10-minute slot, not 30 minutes
+    for source in AUTO_SOURCES:
+        assert a.start_delay_s(dict(mine, source=source), at) == 0
+    a.set_schedule(start_delay={"enabled": False})
+    assert a.start_delay_s(mine, at) == 0 and a.start_delay["max_min"] == 30
+
+
+def test_a_charge_now_plugs_in_straight_away_with_the_delay_on():
+    a, clock = _automation(start=datetime.datetime(2026, 10, 5, 23, 29, 50, tzinfo=TZ))
+    a.set_schedule(enabled=True, entries=[{"time": "23:30", "action": "plug", "date": "2026-10-05", "source": "charge_now"},
+                                          {"time": "23:59", "action": "unplug", "date": "2026-10-05", "source": "charge_now"}],
+                   start_delay={"enabled": True, "max_min": 10})
+    a._random = lambda low, high: 5 * 60
+    calls, _ = _delay_loop(a, clock, [datetime.datetime(2026, 10, 5, 23, 30, 5, tzinfo=TZ)])
+    assert calls == [("plug", "23:30:05")]
+
+
+def test_random_start_delay_settings_are_checked():
+    a, _ = _automation()
+    for bad in ({"max_min": 0}, {"max_min": 61}, {"max_min": "x"}, "on"):
+        with pytest.raises(ValueError):
+            a.set_schedule(start_delay=bad)
+    assert a.start_delay == {"enabled": False, "max_min": 10}

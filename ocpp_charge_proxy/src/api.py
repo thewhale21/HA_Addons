@@ -411,7 +411,7 @@ async def _automation_change(request: web.Request, apply) -> web.Response:
 
 
 async def handle_schedule(request: web.Request) -> web.Response:
-    """{"enabled": bool}, {"ready_time": bool}, {"unplug_wait_s": N} and/or
+    """{"enabled": bool}, {"ready_time": bool}, {"unplug_wait_s": N}, {"start_delay": {"enabled", "max_min"}} and/or
     {"entries": [{time, days, action, enabled}, ...]}."""
     link = request.app["ha_link"]
     sc = link.smart_charging() if link is not None else {}
@@ -427,6 +427,7 @@ async def handle_schedule(request: web.Request) -> web.Response:
             override_guards=b.get("override_guards"),
             blocks=b.get("blocks"),
             allow_over=bool(b.get("allow_over")),  # save it anyway, over the daily limit
+            start_delay=b.get("start_delay"),  # {"enabled", "max_min"}: a random wait before plug-ins
         ),
     )
 

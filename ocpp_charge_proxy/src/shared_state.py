@@ -49,6 +49,7 @@ class SharedState:
     slot_now: Optional[bool] = None  # ... or one running now
     # A scheduled unplug waiting (until this time) for the supplier to stop the session
     unplug_pending: Optional[str] = None
+    plug_pending: Optional[str] = None  # a scheduled plug-in waiting out its random delay, until
     # Force schedule on supplier: the supplier's plan checked against the schedule
     plan_check: Optional[dict] = None
 
