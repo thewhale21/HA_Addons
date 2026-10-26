@@ -205,6 +205,16 @@ def track_completed(kept: dict, dispatches: list, now: datetime.datetime, grace_
     tracking = kept.setdefault("tracking", {})
     completed = kept.setdefault("completed", [])
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def counted(start, end, kind):
+        # Already in the completed sessions (as their half hours): all its time covered
+        t = start
+        for c0, c1 in sorted((parse_time(c.get("start")), parse_time(c.get("end"))) for c in completed
+                             if c.get("kind") == kind and parse_time(c.get("start")) and parse_time(c.get("end"))):
+            if c0 <= t < c1:
+                t = c1
+        return t >= end
+
     for d in dispatches or []:
         if not isinstance(d, dict):
             continue
@@ -212,6 +222,8 @@ def track_completed(kept: dict, dispatches: list, now: datetime.datetime, grace_
         kwh = _kwh(d)
         if start is None or end is None or start > now or kwh == 0:
             continue  # (idle ones, with no energy, aren't sessions)
+        if end <= now and counted(start, end, kind_of(d)):
+            continue  # Octopus still lists it a little after its end: it's been counted
         tracking[d["start"]] = {"start": d["start"], "end": d["end"], "energyAddedKwh": kwh,
                                 "type": d.get("type"), "kind": "charge" if kwh < 0 else "discharge" if kwh > 0 else None,
                                 "last_seen": stamp}
@@ -224,17 +236,20 @@ def track_completed(kept: dict, dispatches: list, now: datetime.datetime, grace_
         if end > now:
             continue
         tracking.pop(key)
-        if (end - seen).total_seconds() <= grace_s and not any(c["start"] == t["start"] for c in completed):
+        if (end - seen).total_seconds() <= grace_s and not counted(parse_time(t["start"]) or end, end, t["kind"]):
             entry = {k: t[k] for k in ("start", "end", "energyAddedKwh", "type", "kind")}
             done.append(entry)
     if done:
         completed[:0] = sorted(done, key=lambda c: c["start"], reverse=True)
     cutoff = now - datetime.timedelta(days=KEEP_DAYS)
-    kept["completed"] = merge_overlapping([c for c in completed if (parse_time(c["end"]) or now) >= cutoff])[:KEEP_MAX]
+    kept["completed"] = half_hour_sessions([c for c in completed if (parse_time(c["end"]) or now) >= cutoff])[:KEEP_MAX]
     return done
 
 
 SOC_FIELDS = ("soc_entity", "soc_start", "soc_end", "soc_result")
+
+
+HALF_HOUR = datetime.timedelta(minutes=30)
 
 
 def _half_hour(t: datetime.datetime) -> datetime.datetime:
@@ -242,35 +257,56 @@ def _half_hour(t: datetime.datetime) -> datetime.datetime:
     return t.replace(minute=t.minute - t.minute % 30, second=0, microsecond=0)
 
 
-def merge_overlapping(completed: list) -> list:
-    """Completed sessions of the same kind that overlap, or touch within one half hour,
-    made into one (newest first). Octopus sometimes re-plans a session part-way through,
-    as a new dispatch for the rest of it (e.g. 04:30-05:00, then 04:59-05:00), or cuts it
-    short and adds one for the rest (12:30-12:47, then 12:47-13:00): both are completed,
-    but it's one session. Back-to-back half hours (05:00-05:30 after 04:30-05:00) stay
-    apart, as Octopus bills and credits by the half hour.
-    The merged one runs from the first start to the last end. Its energy is the later
-    dispatch's plus the earlier one's for the time the later one doesn't cover (pro rata;
-    touching ones simply add up). Its SoC result is dropped, so it's checked again over
-    the whole session."""
-    ordered = sorted((c for c in completed if parse_time(c.get("start")) and parse_time(c.get("end"))),
-                     key=lambda c: c["start"])
+def _iso(t: datetime.datetime) -> str:
+    return t.isoformat()
+
+
+def half_hour_sessions(completed: list) -> list:
+    """Completed sessions as half hours (newest first), as Octopus plans, bills and credits
+    them: a session over several half hours is one per half hour (04:00-05:01 is 04:00-04:30,
+    04:30-05:00 and 05:00-05:01), and the parts of one half hour are one (05:00-05:01,
+    05:01-05:19 and 05:19-05:30 are 05:00-05:30). Each runs from the first time anything
+    ran in that half hour to the last. Where Octopus re-planned the rest of a session (e.g.
+    04:30-05:00, then 04:59-05:00: they overlap), the later one counts for the time they
+    share. Energy is shared out by time. A half hour that's changed loses its SoC result,
+    so it's checked again; one that hasn't keeps it."""
+    valid = [c for c in completed if isinstance(c, dict) and parse_time(c.get("start")) and parse_time(c.get("end"))
+             and parse_time(c["end"]) > parse_time(c["start"])]
+    before = {(c.get("kind"), c["start"], c["end"]): c for c in valid}
+    buckets = {}
+    for kind in sorted({c.get("kind") or "" for c in valid}):
+        # [start, end, kWh a second, type], the later one winning where they overlap
+        pieces = []
+        for c in sorted((c for c in valid if (c.get("kind") or "") == kind), key=lambda c: c["start"]):
+            b0, b1 = parse_time(c["start"]), parse_time(c["end"])
+            kept_pieces = []
+            for s0, s1, rate, typ in pieces:
+                if s1 <= b0 or s0 >= b1:
+                    kept_pieces.append((s0, s1, rate, typ))
+                    continue
+                if s0 < b0:
+                    kept_pieces.append((s0, b0, rate, typ))
+                if s1 > b1:
+                    kept_pieces.append((b1, s1, rate, typ))
+            pieces = kept_pieces + [(b0, b1, _kwh(c) / (b1 - b0).total_seconds(), c.get("type"))]
+        for s0, s1, rate, typ in pieces:
+            h = _half_hour(s0)
+            while h < s1:
+                a, z = max(s0, h), min(s1, h + HALF_HOUR)
+                if z > a:
+                    k = (kind, h)
+                    got = buckets.setdefault(k, {"start": a, "end": z, "kwh": 0.0, "type": typ})
+                    got["start"], got["end"] = min(got["start"], a), max(got["end"], z)
+                    got["kwh"] += rate * (z - a).total_seconds()
+                h += HALF_HOUR
     out = []
-    for c in ordered:
-        last = out[-1] if out else None
-        a0, a1 = (parse_time(last["start"]), parse_time(last["end"])) if last is not None else (None, None)
-        b0, b1 = parse_time(c["start"]), parse_time(c["end"])
-        overlaps = last is not None and b0 < a1
-        # (touching: only within one half hour, i.e. a half hour split in two)
-        touches = last is not None and b0 == a1 and _half_hour(a0) == _half_hour(max(a1, b1) - datetime.timedelta(seconds=1))
-        if last is not None and last.get("kind") == c.get("kind") and (overlaps or touches):
-            length = (a1 - a0).total_seconds()
-            overlap = max(0, (min(a1, b1) - b0).total_seconds())
-            share = 1 - overlap / length if length > 0 else 0
-            merged = {k: v for k, v in last.items() if k not in SOC_FIELDS}
-            merged["end"] = c["end"] if b1 > a1 else last["end"]
-            merged["energyAddedKwh"] = round(_kwh(last) * share + _kwh(c), 3)
-            out[-1] = merged
-        else:
-            out.append(c)
-    return list(reversed(out))
+    for (kind, h), got in buckets.items():
+        entry = {"start": _iso(got["start"]), "end": _iso(got["end"]), "energyAddedKwh": round(got["kwh"], 3),
+                 "type": got["type"], "kind": kind or None}
+        same = next((c for (k, s0, s1), c in before.items() if k == entry["kind"]
+                     and parse_time(s0) == got["start"] and parse_time(s1) == got["end"]), None)
+        if same is not None:
+            entry["energyAddedKwh"] = same["energyAddedKwh"] if round(_kwh(same), 3) == entry["energyAddedKwh"] else entry["energyAddedKwh"]
+            entry.update({k: same[k] for k in SOC_FIELDS if k in same})
+        out.append(entry)
+    return sorted(out, key=lambda c: parse_time(c["start"]), reverse=True)

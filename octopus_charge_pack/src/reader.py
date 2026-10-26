@@ -11,7 +11,7 @@ import os
 import time
 from typing import Optional
 
-from src.dispatches import merge_overlapping, summarise, track_changes, track_completed
+from src.dispatches import half_hour_sessions, summarise, track_changes, track_completed
 from src.telemetry import parse_device
 from src.octopus import AuthError, OctopusClient
 from src.shared_state import SharedState
@@ -93,7 +93,7 @@ async def worker(state: SharedState, config, data_dir: Optional[str], settings=N
     dispatches and work out the sensors. The account's devices are read again every DEVICES_EVERY_S."""
     path = os.path.join(data_dir, "state.json") if data_dir else None
     kept = _load(path)
-    kept["completed"] = merge_overlapping(kept.get("completed") or [])  # (ones kept before they were merged)
+    kept["completed"] = half_hour_sessions(kept.get("completed") or [])  # (ones kept before, as half hours)
     state.completed = list(kept["completed"])
     state.changes = list(kept.get("changes") or [])
     wake = wake or asyncio.Event()

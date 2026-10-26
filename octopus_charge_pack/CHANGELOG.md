@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.4 — A session for each half hour
+
+- **Change:** completed sessions are now shown by the half hour, as Octopus
+  plans, bills and credits them: a charge from 04:00 to 05:30 is three sessions
+  (04:00–04:30, 04:30–05:00 and 05:00–05:30), each with its share of the energy
+  and its own SoC check. The parts of a half hour Octopus split up (e.g.
+  05:00–05:01, 05:01–05:19 and 05:19–05:30) are one session, and where it
+  re-planned the rest of a session (they overlap) the later dispatch counts for
+  the time they share. Sessions already kept are split up the same way.
+- **Fix:** a dispatch Octopus still listed for a few minutes after its end was
+  completed again on every read (and its SoC checked again) once it had been
+  combined into another session.
+
 ## 0.10.3 — Half hours stay apart
 
 - **Change:** back-to-back half-hour sessions (e.g. 04:30–05:00, then

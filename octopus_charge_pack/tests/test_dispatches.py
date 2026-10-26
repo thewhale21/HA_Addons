@@ -223,7 +223,8 @@ def test_a_session_still_listed_at_its_end_is_completed():
     # the charge, taken off the plan half-way: it didn't happen
     track_completed(kept, plan[1:], at(20, 10), 180)
     assert track_completed(kept, [], at(21, 1), 180) == []
-    assert [c["start"] for c in kept["completed"]] == ["2026-10-15T17:00:00Z"] and kept["tracking"] == {}
+    assert [c["start"] for c in kept["completed"]] == ["2026-10-15T17:30:00+00:00", "2026-10-15T17:00:00+00:00"]  # (its half hours)
+    assert kept["tracking"] == {}
 
 
 def test_a_session_whose_end_moves_later_is_one_session():
@@ -239,52 +240,66 @@ def test_a_session_whose_end_moves_later_is_one_session():
     assert kept["completed"] == []
 
 
-def test_a_session_re_planned_part_way_through_is_one_session():
-    from src.dispatches import merge_overlapping, track_completed
-    at = lambda hh, mm=0: datetime.datetime(2026, 10, 25, hh, mm, tzinfo=datetime.timezone.utc)
+def _spans(completed):
+    return [(c["start"][11:16], c["end"][11:16], c["energyAddedKwh"]) for c in completed]
+
+
+def test_sessions_are_half_hours():
+    """26 Oct: 03:00-04:00, then 04:00-05:30 planned, cut at 05:01 (04:00-05:01, then
+    05:01-05:30) and that cut at 05:19: a session for each half hour."""
+    from src.dispatches import track_completed
+    at = lambda hh, mm=0, ss=0: datetime.datetime(2026, 10, 26, hh, mm, ss, tzinfo=datetime.timezone.utc)
     kept = {}
-    whole, rest = _d("2026-10-25T04:30:00Z", "2026-10-25T05:00:00Z", -1.9), _d("2026-10-25T04:59:00Z", "2026-10-25T05:00:00Z", -0.07)
-    track_completed(kept, [whole], at(4, 58), 180)
-    track_completed(kept, [whole, rest], at(4, 59), 180)
-    done = track_completed(kept, [], at(5, 1), 180)
-    assert len(done) == 2  # (both ended)
-    assert [(c["start"], c["end"], c["energyAddedKwh"], c["kind"]) for c in kept["completed"]] == [
-        ("2026-10-25T04:30:00Z", "2026-10-25T05:00:00Z", round(-1.9 * 29 / 30 - 0.07, 3), "charge")]
-    # A later re-plan that runs on past the first's end
-    merged = merge_overlapping([dict(_d("2026-10-25T17:30:00Z", "2026-10-25T18:30:00Z", 2), kind="discharge"),
-                                dict(_d("2026-10-25T17:00:00Z", "2026-10-25T18:00:00Z", 4), kind="discharge", soc_result="discharged")])
-    assert [(c["start"], c["end"], c["energyAddedKwh"]) for c in merged] == [("2026-10-25T17:00:00Z", "2026-10-25T18:30:00Z", 4.0)]
-    assert "soc_result" not in merged[0]  # checked again over the whole session
+    track_completed(kept, [_d("2026-10-26T03:00:00+00:00", "2026-10-26T04:00:00+00:00", -4.4)], at(3, 59), 180)
+    track_completed(kept, [_d("2026-10-26T04:00:00+00:00", "2026-10-26T05:30:00+00:00", -6.6)], at(4, 0, 38), 180)
+    track_completed(kept, [_d("2026-10-26T04:00:00+00:00", "2026-10-26T05:01:00+00:00", -4.6)], at(5, 0, 50), 180)
+    track_completed(kept, [_d("2026-10-26T05:01:00+00:00", "2026-10-26T05:30:00+00:00", -2.13)], at(5, 1, 5), 180)
+    track_completed(kept, [_d("2026-10-26T05:01:00+00:00", "2026-10-26T05:19:00+00:00", -1.32)], at(5, 18, 50), 180)
+    late = _d("2026-10-26T05:19:00+00:00", "2026-10-26T05:30:00+00:00", -0.81)
+    track_completed(kept, [late], at(5, 19, 24), 180)
+    assert len(track_completed(kept, [late], at(5, 30, 8), 180)) == 1
+    # Octopus still lists it for a few minutes after its end: not completed again
+    for minute in range(31, 40):
+        assert track_completed(kept, [late], at(5, minute), 180) == []
+    assert _spans(kept["completed"]) == [
+        ("05:00", "05:30", round(-4.6 / 61 - 1.32 - 0.81, 3)),
+        ("04:30", "05:00", round(-4.6 * 30 / 61, 3)),
+        ("04:00", "04:30", round(-4.6 * 30 / 61, 3)),
+        ("03:30", "04:00", -2.2),
+        ("03:00", "03:30", -2.2)]
+    # Done again (e.g. at start-up): the same
+    from src.dispatches import half_hour_sessions
+    assert half_hour_sessions(kept["completed"]) == kept["completed"]
 
 
-def test_a_half_hour_split_in_two_is_one_session():
-    from src.dispatches import merge_overlapping
-    sessions = [dict(_d("2026-10-25T12:47:00Z", "2026-10-25T13:00:00Z", -0.75), kind="charge"),
-                dict(_d("2026-10-25T12:30:00Z", "2026-10-25T12:47:00Z", -0.003), kind="charge", soc_result="not_charged"),
-                dict(_d("2026-10-25T05:00:00Z", "2026-10-25T05:30:00Z", -1.89), kind="charge"),
-                dict(_d("2026-10-25T04:30:00Z", "2026-10-25T05:00:00Z", -1.9), kind="charge")]
-    merged = merge_overlapping(sessions)
-    assert [(c["start"], c["end"], c["energyAddedKwh"]) for c in merged] == [
-        ("2026-10-25T12:30:00Z", "2026-10-25T13:00:00Z", -0.753),
-        # back-to-back half hours stay apart: Octopus bills and credits by the half hour
-        ("2026-10-25T05:00:00Z", "2026-10-25T05:30:00Z", -1.89),
-        ("2026-10-25T04:30:00Z", "2026-10-25T05:00:00Z", -1.9)]
-    # a part of a half hour next to the following one stays apart too
-    assert len(merge_overlapping([dict(_d("2026-10-25T13:00:00Z", "2026-10-25T13:10:00Z", -0.2), kind="charge"),
-                                  dict(_d("2026-10-25T12:47:00Z", "2026-10-25T13:00:00Z", -0.75), kind="charge")])) == 2
-    assert "soc_result" not in merged[0]  # checked again over the whole session
+def test_a_session_re_planned_part_way_through():
+    """04:30-05:00, then 04:59-05:00 for the rest of it (they overlap): the later one counts
+    for the minute they share, in the one half hour."""
+    from src.dispatches import half_hour_sessions
+    out = half_hour_sessions([dict(_d("2026-10-25T04:59:00+00:00", "2026-10-25T05:00:00+00:00", -0.07), kind="charge"),
+                              dict(_d("2026-10-25T04:30:00+00:00", "2026-10-25T05:00:00+00:00", -1.9), kind="charge")])
+    assert _spans(out) == [("04:30", "05:00", round(-1.9 * 29 / 30 - 0.07, 3))]
 
 
-def test_sessions_with_a_gap_or_of_another_kind_stay_apart():
-    from src.dispatches import merge_overlapping
-    sessions = [dict(_d("2026-10-25T18:01:00Z", "2026-10-25T19:00:00Z", -3), kind="charge"),
-                dict(_d("2026-10-25T17:30:00Z", "2026-10-25T18:30:00Z", 2), kind="discharge"),
-                dict(_d("2026-10-25T17:00:00Z", "2026-10-25T18:00:00Z", -4), kind="charge")]
-    assert [c["start"] for c in merge_overlapping(sessions)] == [
-        "2026-10-25T18:01:00Z", "2026-10-25T17:30:00Z", "2026-10-25T17:00:00Z"]
-    gap = [dict(_d("2026-10-25T18:01:00Z", "2026-10-25T19:00:00Z", -3), kind="charge"),
-           dict(_d("2026-10-25T17:00:00Z", "2026-10-25T18:00:00Z", -4), kind="charge")]
-    assert len(merge_overlapping(gap)) == 2
+def test_parts_of_a_half_hour_are_one_and_keep_their_soc_if_unchanged():
+    from src.dispatches import half_hour_sessions
+    done = dict(_d("2026-10-25T04:30:00+00:00", "2026-10-25T05:00:00+00:00", -1.9), kind="charge", soc_result="charged")
+    out = half_hour_sessions([dict(_d("2026-10-25T12:47:00+00:00", "2026-10-25T13:00:00+00:00", -0.75), kind="charge"),
+                              dict(_d("2026-10-25T12:30:00+00:00", "2026-10-25T12:47:00+00:00", -0.003), kind="charge",
+                                   soc_result="not_charged"), done])
+    assert _spans(out) == [("12:30", "13:00", -0.753), ("04:30", "05:00", -1.9)]
+    assert "soc_result" not in out[0]  # changed: checked again
+    assert out[1]["soc_result"] == "charged"  # unchanged: kept
+
+
+def test_a_part_of_a_half_hour_stays_that_part():
+    from src.dispatches import half_hour_sessions
+    out = half_hour_sessions([dict(_d("2026-10-25T18:01:00+00:00", "2026-10-25T18:20:00+00:00", -1), kind="charge"),
+                              dict(_d("2026-10-25T17:30:00+00:00", "2026-10-25T18:30:00+00:00", 2), kind="discharge"),
+                              dict(_d("2026-10-25T17:10:00+00:00", "2026-10-25T17:30:00+00:00", -4), kind="charge")])
+    assert [(c["start"][11:16], c["end"][11:16], c["kind"]) for c in out] == [
+        ("18:01", "18:20", "charge"), ("18:00", "18:30", "discharge"), ("17:30", "18:00", "discharge"),
+        ("17:10", "17:30", "charge")]
 
 
 def test_idle_dispatches_arent_sessions():
