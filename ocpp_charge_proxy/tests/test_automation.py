@@ -1892,6 +1892,8 @@ def test_random_start_delay_is_only_for_your_own_slots():
         assert a.start_delay_s(dict(mine, source=source), at) == 0
     a.set_schedule(start_delay={"enabled": False})
     assert a.start_delay_s(mine, at) == 0 and a.start_delay["max_min"] == 30
+    a.set_schedule(start_delay={"max_min": 20})  # changed with it off: kept for when it's on
+    assert a.start_delay == {"enabled": False, "max_min": 20}
 
 
 def test_a_charge_now_plugs_in_straight_away_with_the_delay_on():

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.51.1 — Set the start delay before turning it on
+
+- **Improvement:** the random start delay's minutes can be changed with its
+  switch off, so it's ready before you turn it on
+
 ## 2.51.0 — Random start delay
 
 - **Feature:** a **Random start delay** for your schedule (Automations tab,

@@ -2290,7 +2290,6 @@ async function refreshAutomation(force) {
   const sd = d.schedule.start_delay || {enabled: false, max_min: 10};
   $('a-delay-on').checked = !!sd.enabled;
   if (document.activeElement !== $('a-delay-min')) $('a-delay-min').value = sd.max_min;
-  $('a-delay-min').disabled = !sd.enabled;
   const pp = d.schedule.plug_pending;
   $('a-delay-status').hidden = !pp;
   if (pp) $('a-delay-status').innerHTML = `<span class="chip">Plugging in at ${new Date(pp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})}</span> <span class="muted">after the random delay</span>`;
@@ -2349,7 +2348,7 @@ $('a-delay-on').addEventListener('change', async (e) => {
 $('a-delay-min').addEventListener('change', async (e) => {
   const v = parseInt(e.target.value, 10);
   if (!(v >= 1 && v <= 60)) { toast('Delay: 1–60 minutes'); refreshAutomation(false); return; }
-  if (await post('automation/schedule', {start_delay: {max_min: v}})) toast(`Up to ${v} min after each slot starts`);
+  if (await post('automation/schedule', {start_delay: {max_min: v}})) toast($('a-delay-on').checked ? `Up to ${v} min after each slot starts` : `Up to ${v} min, once it's turned on`);
   refreshAutomation(false);
 });
 $('a-wait').addEventListener('change', async (e) => {
