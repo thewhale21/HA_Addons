@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.53.2 — Slots can be changed again
+
+- **Fix:** changing, turning off or deleting a slot could fail with "At most
+  50 schedule entries": the limit counted one-off times that had already run
+  (kept for 14 days, for the Sessions tab) and the charges the add-on adds
+  (auto plug-in, Charge now, the car plugged in sensor...), so after a
+  couple of weeks of auto plug-ins no slot could be changed. Now only your
+  own count (weekly times and one-offs still to come: up to 100, i.e. 50
+  slots); Cancel this charge was affected too
+
 ## 2.53.1 — Tidier code
 
 - **Change:** a tidy of the code, with no change to what the add-on does:

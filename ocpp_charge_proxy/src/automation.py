@@ -95,6 +95,10 @@ TICK_S = 15
 CATCH_UP_S = 600  # a scheduled time is still run if noticed within this (or if nothing's come after it): more
 # than the longest re-plug wait (off_s, 300 s), during which the loop doesn't look
 MAX_ONE_OFF_DAYS = 62  # a one-off slot can be at most this far ahead
+# How many schedule times can be saved: your own (weekly, and one-offs still to come) and
+# everything (with the charges the add-on adds, and one-offs kept for 14 days after they ran)
+MAX_YOUR_ENTRIES = 100
+MAX_ENTRIES = 1000
 MISSED_MAX_S = 86400  # after a restart, times missed while stopped are looked for this far back
 REPLUG_UNPLUG_MARGIN_S = 60  # no re-plug if a scheduled unplug comes before it'd be plugged back in + this
 ACTIONS = ("plug", "unplug")
@@ -568,9 +572,17 @@ class Automation:
         if entries is not None:
             if not isinstance(entries, list):
                 raise ValueError("Entries must be a list")
-            if len(entries) > 50:
-                raise ValueError("At most 50 schedule entries")
-            new_entries = [validate_entry(e, today=self._now().date()) for e in entries]
+            today = self._now().date()
+            new_entries = [validate_entry(e, today=today) for e in entries]
+            # Only your own count towards the limit: not the charges the add-on adds (auto
+            # plug-in, Charge now...) nor one-offs that have run (kept 14 days, for the
+            # Sessions tab), which would otherwise stop any slot being changed
+            yours = [e for e in new_entries if not e.get("source") and not (e.get("date") and e["date"] < today.isoformat())]
+            if len(yours) > MAX_YOUR_ENTRIES:
+                raise ValueError(f"At most {MAX_YOUR_ENTRIES} schedule times of your own "
+                                 f"({MAX_YOUR_ENTRIES // 2} slots): delete some first")
+            if len(new_entries) > MAX_ENTRIES:
+                raise ValueError(f"At most {MAX_ENTRIES} schedule times")
         new_skips = list(self.skips)
         if entries is not None:
             # A charge (auto plug-in, Charge now...) that's deleted puts back the

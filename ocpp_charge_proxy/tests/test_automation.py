@@ -2105,3 +2105,27 @@ def test_cancelling_a_charge_now_with_no_schedule():
     assert a.in_charge_window() is not None
     assert a.cancel_charge() == 2 and a.entries == [] and a.in_charge_window() is None
     assert a.next_action() is None
+
+
+def test_slots_can_be_changed_with_lots_of_past_one_offs_and_charges():
+    """2.53.2: the 50-entry limit counted one-offs that had run (kept 14 days) and the charges
+    the add-on adds, so with a fortnight of auto plug-ins no slot could be changed."""
+    a, clock = _automation(start=datetime.datetime(2026, 10, 26, 12, 0, tzinfo=TZ))
+    past = []
+    for d in range(1, 14):
+        day = (datetime.date(2026, 10, 26) - datetime.timedelta(days=d)).isoformat()
+        past += [{"time": "06:30", "action": "plug", "date": day, "source": "auto_plug"},
+                 {"time": "08:30", "action": "unplug", "date": day, "source": "auto_plug"},
+                 {"time": "12:00", "action": "plug", "date": day}, {"time": "13:00", "action": "unplug", "date": day}]
+    mine = [{"time": "18:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}]
+    a.set_schedule(enabled=True, entries=past + mine)
+    assert len(a.entries) > 50
+    # turning the slot off, and moving it 30 minutes
+    entries = [dict(e, enabled=False) if e.get("time") == "18:30" and not e.get("date") else e for e in a.entries]
+    a.set_schedule(entries=entries)
+    entries = [dict(e, time="19:00") if e.get("time") == "18:30" and not e.get("date") else e for e in a.entries]
+    a.set_schedule(entries=entries)
+    assert [e["time"] for e in a.entries if not e.get("date")] == ["19:00", "21:30"]
+    # your own are still limited
+    with pytest.raises(ValueError, match="of your own"):
+        a.set_schedule(entries=[{"time": f"{h:02d}:{m:02d}", "action": "plug"} for h in range(24) for m in (0, 10, 20, 30, 40)])
