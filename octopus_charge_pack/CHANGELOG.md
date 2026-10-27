@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.5 — Today and tomorrow across a clock change
+
+- **Fix:** on the days the clocks change (and the day before), the Today and
+  Tomorrow timeline drew dispatches an hour out and started Tomorrow an hour
+  early or late. Each day now runs midnight to midnight by the calendar and
+  dispatches are placed by the clock.
+
 ## 0.10.4 — A session for each half hour
 
 - **Change:** completed sessions are now shown by the half hour, as Octopus

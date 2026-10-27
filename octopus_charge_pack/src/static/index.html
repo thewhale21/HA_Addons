@@ -963,7 +963,7 @@ $('s-cal').addEventListener('change', (ev) => saveSetting({calendar: ev.target.c
 // row a day; charges and discharges as labelled blocks, idle as a soft band, the past dimmed
 function drawTimeline(dispatches, completed) {
   const day0 = new Date(); day0.setHours(0, 0, 0, 0);
-  const DAY = 86400000, now = Date.now();
+  const now = Date.now();
   const t = (ms) => new Date(ms).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
   // Completed ones: a green tick, or a red cross when the battery's SoC shows it didn't charge or discharge
   const doneKeys = new Map(completed.map((c) => [new Date(c.start).getTime() + '|' + new Date(c.end).getTime(), c]));
@@ -975,8 +975,13 @@ function drawTimeline(dispatches, completed) {
   });
   let html = '';
   for (let n = 0; n < 2; n++) {
-    const lo = day0.getTime() + n * DAY, hi = lo + DAY;
-    const pct = (ms) => (Math.min(Math.max(ms, lo), hi) - lo) / DAY * 100;
+    // Each day from midnight to midnight by the calendar (a clock-change day is 23 or 25
+    // hours), and times placed by the clock, so 15:30 is drawn at 15:30 either side of it
+    const d0 = new Date(day0); d0.setDate(d0.getDate() + n);
+    const d1 = new Date(d0); d1.setDate(d1.getDate() + 1);
+    const lo = d0.getTime(), hi = d1.getTime();
+    const pct = (ms) => { if (ms <= lo) return 0; if (ms >= hi) return 100; const c = new Date(ms);
+      return Math.min(100, (c.getHours() * 3600 + c.getMinutes() * 60 + c.getSeconds()) / 864); };
     let inner = [3, 6, 9, 12, 15, 18, 21].map((h) => `<div class="grid3" style="left:${h / 24 * 100}%"></div>`).join('');
     for (const x of [...all.values()].filter((x) => x.b > lo && x.a < hi).sort((p, q) => p.a - q.a)) {
       const l = pct(x.a), w = Math.max(pct(x.b) - l, 0.4);
