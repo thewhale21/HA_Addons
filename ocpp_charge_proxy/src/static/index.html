@@ -1367,9 +1367,23 @@ function drawNext() {
     steps.push({t: x.a, cls: 'save', head: x.a <= now ? 'Now' : when(x.a), small: '–' + hm(x.b), w: `Saving session${x.summary ? ` (${esc(x.summary)})` : ''}`,
       s: sch.saving_block ? `nothing plugged in until ${hm(x.b)}` : "charging isn't changed for it"});
   steps.sort((p, q) => p.t - q.t);
-  const shown = [steps[0], ...steps.slice(1).filter((x) => x.t > now).slice(0, 4)];
-  $('o-next').innerHTML = shown.map((x) => `<div class="un-step ${x.cls}"><span class="dot"${x.colour ? ` style="border-color:${x.colour}"` : ''}></span>`
-    + `<div class="t">${x.head}${x.small ? `<small>${x.small}</small>` : ''}</div><div class="w">${x.w}</div>${x.s ? `<div class="s">${x.s}</div>` : ''}</div>`).join('')
+  // Things at the same time share a box (and anything going already joins Now's)
+  const groups = [[steps[0]]];
+  for (const x of steps.slice(1)) {
+    const g = x.t <= now ? groups[0] : groups.length > 1 && Math.floor(groups[groups.length - 1][0].t / 60000) === Math.floor(x.t / 60000) ? groups[groups.length - 1] : null;
+    if (g) g.push(x); else groups.push([x]);
+  }
+  const shown = groups.slice(0, 5);
+  const RANK = ['now', 'save', 'sup', 'plug'];
+  const box = (g) => {
+    const lead = g.slice().sort((p, q) => RANK.findIndex((r) => p.cls.startsWith(r)) - RANK.findIndex((r) => q.cls.startsWith(r)))
+      .find((x) => RANK.some((r) => x.cls.startsWith(r))) || g[0];
+    const one = g.length === 1, head = g[0].head;
+    const lines = g.map((x, n) => `<div class="w"${n ? ' style="margin-top:6px"' : ''}>${x.w}${!one && x.small && !x.cls.startsWith('save') ? ` <span class="muted">${x.small.replace('–', 'until ')}</span>` : ''}</div>${x.s ? `<div class="s">${x.s}</div>` : ''}`).join('');
+    return `<div class="un-step ${lead.cls}"><span class="dot"${lead.colour ? ` style="border-color:${lead.colour}"` : ''}></span>`
+      + `<div class="t">${head}${one && g[0].small ? `<small>${g[0].small}</small>` : ''}</div>${lines}</div>`;
+  };
+  $('o-next').innerHTML = shown.map(box).join('')
     + (shown.length === 1 ? '<div class="un-step"><span class="dot"></span><div class="w muted" style="margin-top:6px">Nothing planned in the next 16 hours</div></div>' : '');
   // The strip
   const pct = (t) => (Math.min(Math.max(t, now), end) - now) / (end - now) * 100;

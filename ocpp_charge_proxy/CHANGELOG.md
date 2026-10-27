@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.57.1 — Together
+
+- **Improvement:** **What happens next** lists things at the same time in
+  one box (e.g. an unplug at 18:00 and a saving session from 18:00), and a
+  saving session that's going already in Now's
+
 ## 2.57.0 — What happens next, and notifications
 
 - **Feature:** **What happens next** on the Overview: now, then the next few
