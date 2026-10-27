@@ -32,7 +32,7 @@ def test_to_dict_includes_all_fields():
         "current_amps_setting", "transaction_id", "connected_to_server",
         "meter_interval", "power_source", "power_entity_value",
         "server_config", "last_command_received", "last_command_sent",
-        "soc_percent", "held_messages",
+        "soc_percent", "held_messages", "tag_refused",
         "current_amps_effective", "current_amps_provider_limit",
         "last_heartbeat",
         "schedule_enabled", "schedule_next", "replug", "scheduled", "slot_now", "unplug_pending", "plug_pending", "plan_check",

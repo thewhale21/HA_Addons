@@ -1423,6 +1423,9 @@ function renderState(s) {
   if (s.unplug_pending) chips.push(`<span class="chip warn" title="Giving ${sup('your supplier')} time to stop the session first">Unplugging by ${new Date(s.unplug_pending).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'})}</span>`);
   const pc = s.plan_check;
   drawSmartCheck(pc);
+  // The supplier didn't accept the session's ID tag (StartTransaction / Authorize)
+  const tr = s.tag_refused;
+  if (tr) chips.push(`<span class="chip err" title="${esc(`${supName() || 'Your supplier'} answered ${tr.status} for the ID tag at ${hm(tr.at)}`)}">${esc(`ID tag ${tr.status}: ${{suspended: 'no energy delivered', stopped: 'session stopped', 'not started': 'session not started'}[tr.what] || tr.what}`)}</span>`);
   if (pc && pc.status === 'error') chips.push(`<span class="chip err" title="${esc(pc.problems.join('\n'))}">${sup('Supplier')}'s plan doesn't match the schedule</span>`);
   if (activeTab === 'automation') drawPlanCheck(pc);
   if (rp.status === 'waiting' && rp.next_replug_at) chips.push(`<span class="chip warn">Re-plug ${hm(rp.next_replug_at)} if no session</span>`);
