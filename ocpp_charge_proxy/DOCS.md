@@ -626,15 +626,14 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   colour with their kWh, and when the schedule plugs in, a dashed band),
   and each day's energy and
   time charging; click a day to show only its sessions, or a charge to open
-  it), and the last 20 charging
-  sessions (energy, duration, peak power, what ended them; transaction ID
+  it), and the charging sessions of those 7 days (energy, duration, peak power, what ended them; transaction ID
   and ID tag in the details; tagged with what started it: **Schedule**,
   **Charge now**, **Auto plug-in**, **Car plugged in**, **Before a saving
   session**, **Saving session adjusted**, **One-off**, **By hand** or
   **Home Assistant**; and with your supplier's name, e.g.
   **Octopus Energy slot**, when the whole session was in its dispatch
   slots, or **Partly Octopus Energy slot** when only some was), kept across restarts,
-  and the last 20 plug-ins that never got a session: when, for how long, who
+  and the plug-ins of those 7 days that never got a session: when, for how long, who
   plugged in, and whether auto re-plug gave up on it or it was unplugged
   first.
 - **Automations:**

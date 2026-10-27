@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.58.0 — A week of sessions
+
+- **Change:** the Sessions tab keeps the last 7 days of sessions and
+  plug-ins that never got a session (today and the 6 days before, as its
+  timeline shows), rather than the last 20 of each. Older ones are dropped
+
 ## 2.57.1 — Together
 
 - **Improvement:** **What happens next** lists things at the same time in

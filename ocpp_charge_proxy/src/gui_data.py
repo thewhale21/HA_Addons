@@ -27,7 +27,8 @@ from src.traffic import summarise_command
 logger = logging.getLogger(__name__)
 
 MESSAGE_LOG_SIZE = 300
-SESSION_HISTORY_SIZE = 20
+SESSION_HISTORY_SIZE = 500  # at most this many of each kind (the last week's are kept: SESSION_KEEP_DAYS)
+SESSION_KEEP_DAYS = 7  # sessions are kept for the Sessions tab's 7 days (today and the 6 before)
 HISTORY_SAMPLE_S = 10
 RECENT_MINUTES = 60  # kept in memory; older chart data comes from HA (src/ha_history.py)
 # Files from before 2.3.0, when the add-on kept its own chart history
@@ -169,8 +170,9 @@ class SessionLog:
 
     Plug-ins that never got a session are kept too (type "no_session"): from
     Plugged In turning on until it's turned off again with no session having
-    started, with who plugged in / unplugged. The last `size` of each kind are
-    kept.
+    started, with who plugged in / unplugged. Those of the last
+    SESSION_KEEP_DAYS days are kept (from 00:00 six days ago: the Sessions
+    tab's 7 days), at most `size` of each kind.
 
     Every plugged-in stretch of the last PLUGGED_KEEP_DAYS days is kept too
     ("plugged": start, end, who plugged in and unplugged), for the
@@ -213,11 +215,25 @@ class SessionLog:
                                    "plugged_since": self.plugged_since, "cleared_at": self.cleared_at},
                       "session history")
 
+    @staticmethod
+    def _keep_from() -> datetime.datetime:
+        """00:00 (local time) SESSION_KEEP_DAYS - 1 days ago: the oldest day shown."""
+        today = datetime.datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+        return (today - datetime.timedelta(days=SESSION_KEEP_DAYS - 1)).astimezone()
+
+    def _recent(self, entry: dict, since: datetime.datetime) -> bool:
+        when = _parse_iso(entry.get("stop")) or _parse_iso(entry.get("start"))
+        return when is None or when >= since
+
     def _trim(self) -> None:
-        """Keep the newest `size` sessions and the newest `size` no-session plug-ins."""
+        """Keep the sessions and no-session plug-ins of the last SESSION_KEEP_DAYS
+        days, at most the newest `size` of each."""
         counts = {"session": 0, "no_session": 0}
         kept = []
+        since = self._keep_from()
         for entry in self.history:
+            if not self._recent(entry, since):
+                continue
             kind = "no_session" if entry.get("type") == "no_session" else "session"
             counts[kind] += 1
             if counts[kind] <= self._size:
@@ -367,7 +383,8 @@ class SessionLog:
         plugged = list(self.plugged_spans)
         if self.plugged_open is not None:
             plugged.insert(0, {**self.plugged_open, "end": None})
-        return {"current": current, "waiting": waiting, "history": list(self.history),
+        since = self._keep_from()  # (dropped from the file at the next change)
+        return {"current": current, "waiting": waiting, "history": [s for s in self.history if self._recent(s, since)],
                 "plugged": plugged, "plugged_since": self.plugged_since, "cleared_at": self.cleared_at}
 
 

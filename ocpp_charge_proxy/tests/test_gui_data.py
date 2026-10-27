@@ -1,7 +1,10 @@
+import datetime as _dt
 import json
 
 from src.gui_data import Health, MessageLog, PowerHistory, SessionLog, daily_from_sessions, remove_old_history_files
 from src.shared_state import SharedState
+
+DAY = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=1)).date().isoformat()  # (sessions are kept a week)
 
 
 def test_message_log_pairs_replies_with_their_call():
@@ -28,10 +31,10 @@ def test_message_log_keeps_the_newest_and_ignores_junk():
 
 def test_sessions_survive_a_restart(tmp_path):
     log = SessionLog(str(tmp_path))
-    log.start(1, "TAG", 1000, "2026-10-02T15:00:00Z")
+    log.start(1, "TAG", 1000, DAY + "T15:00:00Z")
     log.sample(1.2)
     log.sample(1.4)
-    log.stop(3500, "Remote", "2026-10-02T16:30:00Z")
+    log.stop(3500, "Remote", DAY + "T16:30:00Z")
     again = SessionLog(str(tmp_path))
     assert again.current is None
     s = again.history[0]
@@ -55,6 +58,23 @@ def test_history_is_capped(tmp_path):
         log.start(i, "T", 0)
         log.stop(1000, "Remote")
     assert [s["transaction_id"] for s in log.history] == [2, 1]
+
+
+def test_only_the_last_7_days_are_kept(tmp_path):
+    import datetime
+    import json
+    now = datetime.datetime.now().astimezone()
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    at = lambda days, hour: (today - datetime.timedelta(days=days)).replace(hour=hour).isoformat()
+    history = [{"start": at(0, 1), "stop": at(0, 2), "transaction_id": 1},
+               {"start": at(6, 0), "stop": at(6, 1), "transaction_id": 2},  # the oldest day shown: kept
+               {"start": at(7, 22), "stop": at(6, 0), "transaction_id": 3},  # ended on it: kept
+               {"start": at(7, 20), "stop": at(7, 23), "transaction_id": 4},  # the day before: gone
+               {"type": "no_session", "start": at(9, 1), "stop": at(9, 2)}]
+    (tmp_path / "sessions.json").write_text(json.dumps({"history": history}))
+    log = SessionLog(str(tmp_path))
+    assert [s.get("transaction_id") for s in log.history] == [1, 2, 3]
+    assert [s.get("transaction_id") for s in log.snapshot()["history"]] == [1, 2, 3]
 
 
 def test_session_log_without_disk():
@@ -93,9 +113,9 @@ def test_health_counts_reconnects():
 
 def test_plug_in_without_session_recorded(tmp_path):
     log = SessionLog(str(tmp_path))
-    log.plugged(True, "schedule", "2026-10-02T22:30:00Z")
+    log.plugged(True, "schedule", DAY + "T22:30:00Z")
     assert SessionLog(str(tmp_path)).plug["plugged_by"] == "schedule"  # survives a restart
-    log.plugged(False, "auto re-plug", "2026-10-02T22:40:00Z")
+    log.plugged(False, "auto re-plug", DAY + "T22:40:00Z")
     entry = log.history[0]
     assert entry["type"] == "no_session" and entry["reason"] == "replugged"
     assert entry["duration_s"] == 600 and entry["plugged_by"] == "schedule"

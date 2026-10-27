@@ -50,8 +50,9 @@ def test_log_buffer_and_level():
 
 def test_clear_sessions_and_messages(tmp_path):
     sessions = SessionLog(str(tmp_path))
-    sessions.start(1, "tag", 0, timestamp="2026-10-01T10:00:00+00:00")
-    sessions.stop(1000, "Remote", timestamp="2026-10-01T11:00:00+00:00")
+    sessions.start(1, "tag", 0)
+    sessions.stop(1000, "Remote")
+    assert len(sessions.history) == 1
     messages = MessageLog(data_dir=str(tmp_path))
     messages.record('[2, "1", "Heartbeat", {}]', incoming=False)
     d = DebugTools(sessions=sessions, messages=messages)
