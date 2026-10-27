@@ -2973,10 +2973,11 @@ function occurrences(model) {
       const b = s.end ? (n + udays) * DAY_MIN + tmin(s.end) : 9 * DAY_MIN;
       const key = s.plug.id + '|' + iso;
       let end = b, udate = s.end ? addDays(iso, udays) : null;
-      // Its unplug skipped that day (e.g. a charge before a saving session joined
-      // it): it ends at the next unplug that does run
+      // Its unplug skipped that day (e.g. a charge before a saving session joined it, or
+      // it was going when a session cut it short): it ends at the first unplug after its
+      // start that does run, as the add-on runs it (sooner, e.g. 18:00 for a session then)
       if (s.unplug && udate && skips.has(s.unplug.id + '|' + udate) && !skips.has(key)) {
-        const next = nextUnplug(model.entries, skips, b);
+        const next = nextUnplug(model.entries, skips, a);
         if (next) { end = next.t; udate = addDays(iso, Math.floor(next.t / DAY_MIN) - n); extendedBy.add(next.key); }
       }
       // skipped for a saving session: not drawn (its moved times are)

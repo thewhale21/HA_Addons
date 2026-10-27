@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.58.4 — Cut short, drawn short
+
+- **Fix:** a slot that was going when a saving session cut it short (e.g.
+  15:30–21:30 with an 18:00–20:00 session found at 16:20: 15:30–18:00, then
+  20:00–23:30) was drawn on the Automations tab as one slot to 23:30, with
+  the 18:00 unplug as a tick. It runs as it should; it's now drawn that way
+  too, 15:30–18:00 and 20:00–23:30
+
 ## 2.58.3 — Over which days
 
 - **Fix:** on the Automations tab, a slot over your supplier's daily limit
