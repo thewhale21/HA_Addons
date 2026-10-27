@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.58.5 — Not past off-peak
+
+- **Fix:** a slot that ends later for a saving session (it had started, or
+  starting earlier would be in the past) carried on around your off-peak
+  hours, e.g. 20:00–23:30 and then 05:30–06:00 the next morning. It now stops
+  at the start of an off-peak time, since the car can charge then anyway;
+  the note says so. Sessions already found aren't moved again: turn **No
+  charging during a session** off and on to redo them
+
 ## 2.58.4 — Cut short, drawn short
 
 - **Fix:** a slot that was going when a saving session cut it short (e.g.

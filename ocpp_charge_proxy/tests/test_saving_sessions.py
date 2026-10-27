@@ -227,16 +227,25 @@ def test_found_at_13_45_starts_at_14_00():
     assert [w for w in _windows(a) if w[0].startswith("05")] == [("05 14:00", "05 18:00"), ("05 20:00", "05 22:00")]
 
 
-def test_ending_later_goes_around_a_no_charging_time_and_joins_the_next_slot():
+def test_ending_later_joins_the_next_slot():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"},
+                                          {"time": "22:30", "action": "plug"}, {"time": "23:30", "action": "unplug"}])
+    clock.dt = _at(5, 15, 10)  # (its start kept)
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True)
+    assert [w for w in _windows(a) if w[0].startswith("05")] == [("05 15:30", "05 18:00"), ("05 19:00", "05 23:30")]
+    assert "joined with the next slot" in a.saving_sessions[0]["notes"][0]
+
+
+def test_ending_later_stops_at_a_short_off_peak_time_too():
     a, clock = _automation(start=_at(5, 12, 0))
     a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"},
                                           {"time": "23:00", "action": "plug"}, {"time": "23:30", "action": "unplug"}],
                    blocks=[{"start": "21:30", "end": "22:00"}])
-    clock.dt = _at(5, 15, 10)  # (its start kept)
+    clock.dt = _at(5, 15, 10)
     a.sync_saving_sessions([_session(5, 18, 19)], block=True)
     assert [w for w in _windows(a) if w[0].startswith("05")] == [
-        ("05 15:30", "05 18:00"), ("05 19:00", "05 21:30"), ("05 22:00", "05 23:30")]
-    assert "joined with the next slot" in a.saving_sessions[0]["notes"][0]
+        ("05 15:30", "05 18:00"), ("05 19:00", "05 21:30"), ("05 23:00", "05 23:30")]
 
 
 def _today(a, day=5):
@@ -332,3 +341,15 @@ def test_auto_plug_in_just_before_a_session_carries_on_after_it():
     clock.dt = _at(5, 17, 55)
     plan = a.plan_auto_plug(180)
     assert [(s["start"][11:16], s["end"][11:16]) for s in plan["segments"]] == [("17:55", "18:00"), ("19:00", "22:00")]
+
+
+def test_ending_later_stops_at_an_off_peak_time():
+    """A 15:30-22:00 slot going when an 18:00-20:00 session cuts it: what's left
+    goes after the session up to the off-peak time (23:30), not on past it to the
+    next morning (the car can charge in the off-peak hours anyway)."""
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "22:00", "action": "unplug"}],
+                   blocks=[{"start": "23:30", "end": "05:30"}])
+    clock.dt = _at(5, 16, 20)
+    a.sync_saving_sessions([_session(5, 18, 20)], block=True)
+    assert [w for w in _windows(a) if w[0].startswith(("05", "06 0"))] == [("05 15:30", "05 18:00"), ("05 20:00", "05 23:30")]

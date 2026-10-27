@@ -200,7 +200,7 @@ Assistant starts) the sessions already found are kept, not cancelled.
   the session is found at 14:40), the slot starts at the next half hour
   instead (if that's before its own start) and ends later by what's left:
   15:00–18:00 and 19:00–22:00 (found at 15:10, it keeps its 15:30 start:
-  15:30–18:00 and 19:00–22:30), around any off-peak time,
+  15:30–18:00 and 19:00–22:30), not on past the start of an off-peak time (the car can charge then anyway: what's left is dropped, not carried on to the next morning),
   unplugging at a ready time your supplier accepts (with Force schedule on
   supplier), and joining the next slot if it meets it. A slot already
   running when the session is found unplugs for it (straight away, if it's

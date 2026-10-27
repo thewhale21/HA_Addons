@@ -1565,6 +1565,7 @@ class Automation:
             cuts = self.block_windows(hit["start"].date() - datetime.timedelta(days=1), 4)
             added, skips = [], []
             running = hit["start"] <= now
+            stopped_at = None  # (ending later: cut short at an off-peak time)
             c = max(cut_from, hit["start"])
             needed = hit["end"] - (c if running else hit["start"])
             if running:
@@ -1581,9 +1582,17 @@ class Automation:
                 # as soon as it can: the next half hour (or its own start, if sooner)
                 first = c if running else max(min(hit["start"], _next_half_hour(soon)), soon)
                 segs = self._place(first, needed, cuts)
+                # ... but not past an off-peak time: the car can charge then anyway, so
+                # what's left isn't carried on after it (e.g. to 05:30 the next morning)
+                peak = [a for a, b in self.block_windows(hit["start"].date() - datetime.timedelta(days=1), 4,
+                                                         sessions=False) if a >= first]
+                stop = min(peak) if peak else None
+                if stop is not None and any(y > stop for x, y in segs):
+                    segs = [(x, min(y, stop)) for x, y in segs if x < stop]
+                    stopped_at = stop
                 if segs and self.ready_time and ready_times:
                     ready = self.first_ready_at(segs[-1][1], ready_times)
-                    if ready is not None and ready > segs[-1][1]:
+                    if ready is not None and ready > segs[-1][1] and (stop is None or ready <= stop):
                         segs[-1] = (segs[-1][0], ready)
             # A slot it now meets or runs into joins it: the one before (plugged in
             # from its start) or, ending later, the one after (until its end)
@@ -1624,7 +1633,9 @@ class Automation:
                         " (starts at the next half hour and ends later: starting earlier would be in the past)"
                         if segs and segs[0][0] < hit["start"] else
                         " (ends later: starting earlier would be in the past)")
-                       if later_end else ""))
+                       if later_end else "")
+                    + (f" (the rest isn't carried on past the off-peak time at {stopped_at.strftime('%H:%M')})"
+                       if stopped_at is not None else ""))
             r["notes"] = (r.get("notes") or []) + [note]
             logger.info("Saving session %s–%s: %s", sa.strftime("%a %H:%M"), sb.strftime("%H:%M"), note)
             moved = True
