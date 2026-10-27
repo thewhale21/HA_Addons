@@ -204,10 +204,27 @@ def test_slots_moved_by_2_43_0_are_moved_again():
 def test_start_in_the_past_ends_later_instead():
     a, clock = _automation(start=_at(5, 12, 0))
     a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
-    clock.dt = _at(5, 14, 40)  # 14:30 has gone
+    clock.dt = _at(5, 14, 40)  # 14:30 has gone: from the next half hour
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True)
+    assert [w for w in _windows(a) if w[0].startswith("05")] == [("05 15:00", "05 18:00"), ("05 19:00", "05 22:00")]
+    assert "starts at the next half hour and ends later" in a.saving_sessions[0]["notes"][0]
+
+
+def test_found_after_the_next_half_hour_would_be_its_start_keeps_its_start():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    clock.dt = _at(5, 15, 10)
     a.sync_saving_sessions([_session(5, 18, 19)], block=True)
     assert [w for w in _windows(a) if w[0].startswith("05")] == [("05 15:30", "05 18:00"), ("05 19:00", "05 22:30")]
-    assert "ends later" in a.saving_sessions[0]["notes"][0]
+    assert "(ends later: starting earlier would be in the past)" in a.saving_sessions[0]["notes"][0]
+
+
+def test_found_at_13_45_starts_at_14_00():
+    a, clock = _automation(start=_at(5, 12, 0))
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    clock.dt = _at(5, 13, 45)
+    a.sync_saving_sessions([_session(5, 18, 20)], block=True)
+    assert [w for w in _windows(a) if w[0].startswith("05")] == [("05 14:00", "05 18:00"), ("05 20:00", "05 22:00")]
 
 
 def test_ending_later_goes_around_a_no_charging_time_and_joins_the_next_slot():
@@ -215,7 +232,7 @@ def test_ending_later_goes_around_a_no_charging_time_and_joins_the_next_slot():
     a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"},
                                           {"time": "23:00", "action": "plug"}, {"time": "23:30", "action": "unplug"}],
                    blocks=[{"start": "21:30", "end": "22:00"}])
-    clock.dt = _at(5, 14, 40)
+    clock.dt = _at(5, 15, 10)  # (its start kept)
     a.sync_saving_sessions([_session(5, 18, 19)], block=True)
     assert [w for w in _windows(a) if w[0].startswith("05")] == [
         ("05 15:30", "05 18:00"), ("05 19:00", "05 21:30"), ("05 22:00", "05 23:30")]

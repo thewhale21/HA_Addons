@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.55.2 — As soon as it can
+
+- **Change:** when a saving session is found too late for a slot to start
+  earlier by the time it takes out (its start would be in the past), the
+  slot now starts at the next half hour and ends later only by what's left,
+  rather than keeping its start and ending later by the whole session. A
+  15:30–21:30 slot with an 18:00–20:00 session found at 13:45: 14:00–18:00
+  and 20:00–22:00 (was 15:30–18:00 and 20:00–23:30). Found within half an
+  hour of the slot's start, it keeps its start as before. Sessions already
+  found aren't moved again
+
 ## 2.55.1 — Saving session adjusted
 
 - **Change:** on the Sessions tab, a charge from one of your slots that was

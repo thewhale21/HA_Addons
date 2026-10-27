@@ -132,6 +132,12 @@ class ReplugOptions:
         return {"enabled": self.enabled, "after_min": self.after_min, "attempts": self.attempts, "off_s": self.off_s}
 
 
+def _next_half_hour(t: datetime.datetime) -> datetime.datetime:
+    """`t` if it's on the hour or half hour, else the next one (14:01 -> 14:30)."""
+    t = t.replace(second=0, microsecond=0)
+    return t if t.minute in (0, 30) else t + datetime.timedelta(minutes=30 - t.minute % 30)
+
+
 def _iso_local(dt: Optional[datetime.datetime]) -> Optional[str]:
     return dt.isoformat(timespec="seconds") if dt else None
 
@@ -1526,8 +1532,10 @@ class Automation:
         keeps its end (its ready time) and its length, and is not plugged in
         during the session, so it starts that much earlier (e.g. 15:30–21:30
         with an 18:00–19:00 session: 14:30–18:00 and 19:00–21:30), around any
-        other off-peak time. If that start would be in the past, it keeps
-        its start and ends that much later instead (15:30–18:00, 19:00–22:30),
+        other off-peak time. If that start would be in the past, it starts at
+        the next half hour instead (if that's before its own start) and ends
+        that much later (found at 14:40: 15:00–18:00, 19:00–22:00; found at
+        15:10, its start kept: 15:30–18:00, 19:00–22:30),
         unplugging at a ready time your supplier accepts (with Force schedule
         on). A slot already running unplugs at the session (or now) and carries
         on after it the same way. Recorded in r["changes"], so it can be put back."""
@@ -1570,7 +1578,9 @@ class Automation:
             segs = [] if running else self._place_back(hit["end"], needed, cuts, soon)
             later_end = sum((y - x for x, y in segs), datetime.timedelta(0)) < needed
             if later_end:
-                segs = self._place(c if running else max(hit["start"], soon), needed, cuts)
+                # as soon as it can: the next half hour (or its own start, if sooner)
+                first = c if running else max(min(hit["start"], _next_half_hour(soon)), soon)
+                segs = self._place(first, needed, cuts)
                 if segs and self.ready_time and ready_times:
                     ready = self.first_ready_at(segs[-1][1], ready_times)
                     if ready is not None and ready > segs[-1][1]:
@@ -1610,7 +1620,10 @@ class Automation:
             note = (f"the {hit['start'].strftime('%H:%M')}–{hit['end'].strftime('%H:%M')} slot is now {span}"
                     + (" (joined with the slot before)" if earlier is not None else "")
                     + (" (joined with the next slot)" if after is not None else "")
-                    + ((" (ends later: it had begun)" if running else " (ends later: starting earlier would be in the past)")
+                    + ((" (ends later: it had begun)" if running else
+                        " (starts at the next half hour and ends later: starting earlier would be in the past)"
+                        if segs and segs[0][0] < hit["start"] else
+                        " (ends later: starting earlier would be in the past)")
                        if later_end else ""))
             r["notes"] = (r.get("notes") or []) + [note]
             logger.info("Saving session %s–%s: %s", sa.strftime("%a %H:%M"), sb.strftime("%H:%M"), note)

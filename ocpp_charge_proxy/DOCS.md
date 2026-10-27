@@ -197,8 +197,10 @@ Assistant starts) the sessions already found are kept, not cancelled.
   an 18:00–19:00 session becomes 14:30–18:00 and 19:00–21:30; a 17:30–18:30
   slot with a 17:00–19:00 session becomes 16:00–17:00. If that meets an
   earlier slot they join. If starting earlier would be in the past (e.g.
-  the session is found at 14:40), the slot keeps its start and ends later
-  instead: 15:30–18:00 and 19:00–22:30, around any off-peak time,
+  the session is found at 14:40), the slot starts at the next half hour
+  instead (if that's before its own start) and ends later by what's left:
+  15:00–18:00 and 19:00–22:00 (found at 15:10, it keeps its 15:30 start:
+  15:30–18:00 and 19:00–22:30), around any off-peak time,
   unplugging at a ready time your supplier accepts (with Force schedule on
   supplier), and joining the next slot if it meets it. A slot already
   running when the session is found unplugs for it (straight away, if it's
