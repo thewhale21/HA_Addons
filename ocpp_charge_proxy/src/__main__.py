@@ -408,7 +408,8 @@ async def run() -> None:
                     raise RuntimeError((reply or {}).get("message") or f"HTTP {resp.status}")
                 return (reply or {}).get("data") or {}
 
-    mover = migrate.Mover(data_dir, health.version, supervisor_call, debug_restart, suppliers.OVERRIDE_PATH)
+    mover = migrate.Mover(data_dir, health.version, supervisor_call, debug_restart, suppliers.OVERRIDE_PATH,
+                          in_session=lambda: shared_state.transaction_id is not None)
 
     def on_settings_change(changes: dict) -> None:
         if "log_level" in changes:

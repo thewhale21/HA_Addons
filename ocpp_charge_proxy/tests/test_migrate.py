@@ -148,3 +148,27 @@ def test_the_serial_from_the_configuration_tab_replaces_a_made_up_one(tmp_path):
     migrate.stage(str(new), bundle)
     migrate.apply_pending(str(new))
     assert json.load(open(new / "serial_number.json")) == {"serial": "654321"}
+
+
+def test_not_while_a_session_is_going(tmp_path):
+    """Its meter readings (the energy register, the session so far) would be split between installs."""
+    old = _old_install(tmp_path / "old")
+    going = {"now": True}
+
+    async def supervisor(method, path, body=None):
+        return {}
+
+    async def restart():
+        return {}
+
+    mover = migrate.Mover(old, "2.54.2", supervisor, restart, in_session=lambda: going["now"])
+    with pytest.raises(ValueError, match="in progress"):
+        mover.export(history=True, password=True)
+    bundle = migrate.export(old, "2.54.2")
+    with pytest.raises(ValueError, match="in progress"):
+        asyncio.run(mover.check(bundle))
+    with pytest.raises(ValueError, match="in progress"):
+        asyncio.run(mover.import_now(bundle))
+    assert not os.path.exists(os.path.join(old, migrate.PENDING))
+    going["now"] = False
+    assert mover.export(history=True, password=True)["files"]

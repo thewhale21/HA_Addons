@@ -184,7 +184,10 @@ async def handle_migrate_export(request: web.Request) -> web.Response:
     mover = request.app["mover"]
     if mover is None:
         return _error("Not available", 503)
-    out = mover.export(history=request.query.get("history") != "0", password=request.query.get("password") != "0")
+    try:
+        out = mover.export(history=request.query.get("history") != "0", password=request.query.get("password") != "0")
+    except ValueError as err:  # (a session in progress)
+        return _error(str(err), 409)
     name = f"ocpp_charge_proxy_settings_{out['exported_at'][:16].replace(':', '-').replace('T', '_')}.json"
     return web.json_response(out, dumps=_dumps, headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
@@ -204,7 +207,7 @@ async def handle_migrate_check(request: web.Request) -> web.Response:
     try:
         return web.json_response({"status": "ok", **await mover.check(await _migrate_body(request))}, dumps=_dumps)
     except ValueError as err:
-        return _error(str(err), 400)
+        return _error(str(err), 409 if "in progress" in str(err) else 400)
 
 
 async def handle_migrate_import(request: web.Request) -> web.Response:

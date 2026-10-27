@@ -902,6 +902,7 @@
         <label class="ctl" style="font-size:13px"><input type="checkbox" id="m-password" checked> With the password</label>
       </div>
       <div class="sub" id="m-export-note" style="margin-top:4px"></div>
+      <div class="sub" id="m-busy" style="margin-top:4px" hidden><span class="chip warn">Session in progress</span> Export and import once it has finished (or unplug first), so its meter readings stay in one place.</div>
       <div class="row">
         <div class="grow">Import<div class="note" style="margin:0">A file Export made on the other install: you'll see what's in it before anything changes</div></div>
         <input type="file" id="m-file" accept=".json,application/json" hidden>
@@ -1261,6 +1262,10 @@ function renderState(s) {
 
   // controls (don't fight the user while they're editing)
   $('c-plug').checked = !!s.plugged_in;
+  // Diagnostics › Move to another install: not during a session (its meter readings)
+  const busy = s.transaction_id !== null && s.transaction_id !== undefined;
+  $('m-busy').hidden = !busy; $('m-export').disabled = busy; $('m-pick').disabled = busy;
+  if (busy && $('m-import')) $('m-import').disabled = true;
   if (!(oPlug && oPlug.armed)) $('o-plug').textContent = s.plugged_in ? 'Unplug' : 'Plug in';
   // The simulated car's settings aren't used while power comes from your power sensor
   const simUnused = s.power_source && s.power_source !== 'simulated';

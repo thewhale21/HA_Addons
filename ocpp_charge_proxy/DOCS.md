@@ -355,7 +355,9 @@ e.g. from the `ocpp_charge_proxy` repository's add-on to the `HA_Addons` one
 (or to a new Home Assistant):
 
 1. On the old add-on (2.54.0 or later: update it first), **Diagnostics ›
-   Move to another install › Export**. It downloads one file with:
+   Move to another install › Export**, when no charging session is going
+   (Export and Import wait for it to finish, or unplug first, so the
+   session's meter readings stay in one place). It downloads one file with:
    - the Configuration tab (server, chargepoint ID, the password unless you
      untick **With the password**, and the charger's details);
    - the schedule and everything else on the Automations tab, your sensors

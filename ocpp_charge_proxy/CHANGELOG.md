@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.54.2 — Not during a session
+
+- **Change:** **Move to another install**'s Export and Import wait while a
+  charging session is going (the page says so and greys them out), so the
+  session's meter readings and the energy register aren't split between the
+  two installs. Unplug, or wait for it to finish
+
 ## 2.54.1 — The serial number, moved
 
 - **Fix:** moving to another install where the old one had its serial number

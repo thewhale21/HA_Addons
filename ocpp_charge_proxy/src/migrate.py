@@ -183,11 +183,22 @@ class Mover:
     supervisor(method, path, body=None) -> the reply's "data" (raises if it can't), and
     restart() (the add-on restarting itself, as Diagnostics › Debug › Restart does)."""
 
-    def __init__(self, data_dir: str, version: str, supervisor, restart, suppliers_path: Optional[str] = None):
+    def __init__(self, data_dir: str, version: str, supervisor, restart, suppliers_path: Optional[str] = None,
+                 in_session=lambda: False):
         self.data_dir, self.version = data_dir, version
         self._supervisor, self._restart, self._suppliers = supervisor, restart, suppliers_path
+        self._in_session = in_session  # () -> True while a charging session is going
+
+    def _not_in_session(self, doing: str) -> None:
+        """Not while a session is going: its meter readings (the energy register, the session's
+        start and readings so far) would be moved part of the way through, and carried on by
+        neither install cleanly."""
+        if self._in_session():
+            raise ValueError(f"A charging session is in progress: {doing} once it has finished "
+                             "(or unplug first), so its meter readings stay in one place")
 
     def export(self, history: bool, password: bool) -> dict:
+        self._not_in_session("export")
         return export(self.data_dir, self.version, history=history, password=password,
                       suppliers_path=self._suppliers)
 
@@ -205,6 +216,7 @@ class Mover:
 
     async def check(self, bundle) -> dict:
         info = check(bundle)
+        self._not_in_session("import")
         warnings = []
         others = await self._others_running()
         if others:
@@ -221,6 +233,7 @@ class Mover:
     async def import_now(self, bundle) -> dict:
         """Save the file for the next start, set the options, and restart."""
         check(bundle)
+        self._not_in_session("import")
         current = _read(os.path.join(self.data_dir, "options.json")) or {}
         stage(self.data_dir, bundle)
         options = options_after(current, bundle)
