@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.61.0 — The ID tag, checked
+
+- **Feature:** with `AuthorizeRemoteTxRequests` on (the default, as the
+  add-on has always reported), a start your supplier asks for checks the ID
+  tag with it first (`Authorize`), as a real charger does, and only starts if
+  it's accepted. Offline, or if the check fails, it starts anyway. Your
+  supplier can turn the setting off
+- **Feature:** your supplier's answer to `StartTransaction` is followed: if it
+  says the ID tag isn't valid (Invalid, Blocked, Expired, ConcurrentTx), with
+  `StopTransactionOnInvalidId` off (the default) the session stays open but
+  no energy is delivered (SuspendedEVSE) until your supplier stops it; with
+  it on, the session is stopped (DeAuthorized). Before, the answer was
+  ignored and it carried on charging. A red chip on the Overview says so
+
 ## 2.60.0 — Amps and volts
 
 - **Feature:** meter values include the current the car draws

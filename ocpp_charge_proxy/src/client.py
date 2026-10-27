@@ -141,6 +141,10 @@ class ChargePoint(BaseChargePoint):
         # in StartTransaction and StopTransaction.
         self._pending_id_tag: Optional[str] = None
         self._transaction_id_tag: Optional[str] = None
+        # The supplier said the session's ID tag isn't valid (StartTransaction's idTagInfo):
+        # its status. With StopTransactionOnInvalidId off, the session stays open but no
+        # energy is delivered (SuspendedEVSE) until the supplier stops it
+        self._deauthorized: Optional[str] = None
         # The BootNotification sent at connect, re-sent verbatim if the server
         # requests one via TriggerMessage.
         self._boot_request: Optional[call.BootNotificationPayload] = None
@@ -526,6 +530,8 @@ class ChargePoint(BaseChargePoint):
                             self._drop_transaction(entry["local_tx_id"])
                         else:
                             self._remap_transaction_id(entry["local_tx_id"], real_id)
+                            if self._transaction_id == real_id:  # still going: was its tag accepted?
+                                asyncio.create_task(self._check_start_tag(response))  # (after the flush)
             finally:
                 if sent_held:
                     logger.info("Sent %d held message(s) after reconnecting", sent_held)
@@ -548,6 +554,7 @@ class ChargePoint(BaseChargePoint):
             "stop_txn_data": self._stop_txn_data,
             "profile": self._tx_profile,
             "resume": self._suspending,  # left open on purpose, to continue after a restart
+            "deauthorized": self._deauthorized,
         })
 
     def suspend_for_restart(self) -> bool:
@@ -566,6 +573,7 @@ class ChargePoint(BaseChargePoint):
         """Continue a transaction left open by suspend_for_restart."""
         self._transaction_id = saved["transaction_id"]
         self._transaction_id_tag = saved.get("id_tag")
+        self._deauthorized = saved.get("deauthorized") or None
         self._transaction_start_energy_wh = int(saved.get("start_energy_wh", self._energy_register_wh))
         self._stop_txn_sampled = list(saved.get("stop_txn_sampled") or [])
         self._stop_txn_data = list(saved.get("stop_txn_data") or [])
@@ -966,7 +974,9 @@ class ChargePoint(BaseChargePoint):
             self._profile_scheduler.get_current_limit_kw()
             if self._profile_scheduler.has_profile else None
         )
-        if limit_kw is not None and limit_kw <= 0:
+        if self._deauthorized:
+            target = ChargePointStatus.suspended_evse  # the server didn't accept the ID tag
+        elif limit_kw is not None and limit_kw <= 0:
             target = ChargePointStatus.suspended_evse
         elif self.car_full:
             target = ChargePointStatus.suspended_ev
@@ -983,7 +993,9 @@ class ChargePoint(BaseChargePoint):
                 logger.info("Resuming charge (car no longer full)")
             self._charger_sim.start_charging()
         else:
-            if target == ChargePointStatus.suspended_evse:
+            if self._deauthorized:
+                logger.info("ID tag not accepted (%s) — no energy delivered", self._deauthorized)
+            elif target == ChargePointStatus.suspended_evse:
                 logger.info("Profile says pause — suspending charge")
             else:
                 logger.info("Car full (SoC %.0f%%) — car stopped drawing power", self._soc)
@@ -1206,6 +1218,69 @@ class ChargePoint(BaseChargePoint):
             except Exception:
                 logger.warning("Clock-aligned meter values failed", exc_info=True)
 
+    def _config_on(self, key: str) -> bool:
+        """A true/false configuration key (as the server may have set it)."""
+        value = self._config_store.get(key, ("false", False))[0]
+        return str(value).strip().lower() == "true"
+
+    @staticmethod
+    def _tag_status(response) -> Optional[str]:
+        """The idTagInfo status in a reply (Authorize, StartTransaction): "Accepted",
+        "Invalid", "Blocked", "Expired", "ConcurrentTx"; None if it has none."""
+        info = getattr(response, "id_tag_info", None)
+        status = info.get("status") if isinstance(info, dict) else None
+        status = getattr(status, "value", status)
+        return status if isinstance(status, str) and status else None
+
+    def _note_tag_refused(self, status: str, what: str) -> None:
+        self._shared_state.tag_refused = {"status": status, "at": _now_iso(), "what": what}
+
+    async def _check_start_tag(self, response) -> None:
+        """StartTransaction's reply says whether the ID tag is accepted. If not, as
+        StopTransactionOnInvalidId says: on, the session is stopped (DeAuthorized); off
+        (the default), it stays open but no energy is delivered (SuspendedEVSE)."""
+        status = self._tag_status(response)
+        if status is None or status == "Accepted" or self._transaction_id is None:
+            return
+        self._deauthorized = status
+        self._save_active_transaction()
+        if self._config_on("StopTransactionOnInvalidId"):
+            logger.warning("The server didn't accept the session's ID tag (%s): stopping the session", status)
+            self._note_tag_refused(status, "stopped")
+            await self._do_stop_transaction(reason=Reason.de_authorized, announce=True)
+        else:
+            logger.warning("The server didn't accept the session's ID tag (%s): the session stays open, "
+                           "but no energy is delivered until it's stopped", status)
+            self._note_tag_refused(status, "suspended")
+            await self._apply_profile_state()
+
+    async def _authorize_then_start(self, id_tag: str) -> None:
+        """A start the server asked for (RemoteStartTransaction). With
+        AuthorizeRemoteTxRequests on, the ID tag is checked with the server first
+        (Authorize) and the session only starts if it's accepted; offline, it starts
+        as it can't be checked (as a charger allowing offline authorisation does)."""
+        if self._config_on("AuthorizeRemoteTxRequests"):
+            if not self.is_online:
+                logger.info("Can't check the ID tag (offline): starting anyway")
+            else:
+                try:
+                    response = await self.call(call.AuthorizePayload(id_tag=id_tag))
+                except _CONNECTION_ERRORS:
+                    response = None
+                    logger.info("Can't check the ID tag (offline): starting anyway")
+                except Exception:
+                    response = None
+                    logger.warning("Authorize failed: starting anyway", exc_info=True)
+                status = self._tag_status(response)
+                if status is not None and status != "Accepted":
+                    logger.warning("The server didn't accept the ID tag (%s): not starting the session", status)
+                    self._note_tag_refused(status, "not started")
+                    self._pending_id_tag = None
+                    return
+                if status == "Accepted":
+                    logger.info("ID tag accepted (Authorize)")
+        await self._do_start_transaction()
+
     async def _do_start_transaction(self) -> None:
         """Start a charging transaction."""
         try:
@@ -1258,6 +1333,9 @@ class ChargePoint(BaseChargePoint):
             await self.send_status()
             if self.car_full:
                 await self._apply_profile_state()  # plugged in already full
+            self._shared_state.tag_refused = None
+            if response is not None:
+                await self._check_start_tag(response)
         except Exception:
             # Start failed: back to a consistent state
             logger.error("Failed to start transaction", exc_info=True)
@@ -1321,6 +1399,7 @@ class ChargePoint(BaseChargePoint):
             self._transaction_id = None
             self._transaction_id_tag = None
             self._pending_id_tag = None
+            self._deauthorized = None
             self._stop_txn_data = []
             self._tx_profile = None
             self._resumed = False
@@ -1368,7 +1447,7 @@ class ChargePoint(BaseChargePoint):
 
         self.set_plugged_in(True, "supplier")
         self._pending_id_tag = id_tag
-        asyncio.create_task(self._do_start_transaction())
+        asyncio.create_task(self._authorize_then_start(id_tag))
         return call_result.RemoteStartTransactionPayload(
             status=RemoteStartStopStatus.accepted
         )
@@ -1379,7 +1458,7 @@ class ChargePoint(BaseChargePoint):
             self._profile_scheduler.set_profile(charging_profile)
         self._tx_profile = normalise_profile(charging_profile) if charging_profile else None
         self._pending_id_tag = id_tag
-        await self._do_start_transaction()
+        await self._authorize_then_start(id_tag)
 
     @on(Action.RemoteStopTransaction)
     async def on_remote_stop_transaction(self, transaction_id: int, **kwargs):

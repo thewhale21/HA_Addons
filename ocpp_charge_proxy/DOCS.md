@@ -512,6 +512,15 @@ one file in `src/supplier_types/`, and a new kind is a new file there.
 4. When you "plug in" (the Plugged In helper or the web page), it reports
    `Preparing`
 5. Your supplier creates a charge schedule and sends `RemoteStartTransaction`
+   (with the ID tag the session is for: Octopus sends the same fixed tag to
+   everyone, and numbers every session 1). With `AuthorizeRemoteTxRequests`
+   on (the default) the add-on first checks the tag with your supplier
+   (`Authorize`) and only starts if it's accepted (offline, it starts anyway).
+   If the answer to `StartTransaction` says the tag isn't valid, then with
+   `StopTransactionOnInvalidId` off (the default) the session stays open but
+   no energy is delivered (`SuspendedEVSE`) until your supplier stops it; on,
+   it's stopped (reason `DeAuthorized`). Either shows as a red chip on the
+   Overview, and in the log
 6. The proxy sends `StartTransaction`, reports `Charging`, and sends meter
    values while the simulated car ramps up to full power
 7. When the supplier ends the session, it sends `RemoteStopTransaction`

@@ -36,6 +36,9 @@ class SharedState:
     soc_percent: Optional[float] = None
     # Transaction messages waiting to be sent (offline queue)
     held_messages: int = 0
+    # The supplier refused the session's ID tag: its status ("Invalid", "Blocked"...),
+    # with when and what was done, for the page; None when it was accepted
+    tag_refused: Optional[dict] = None
     # Simulated car start-up (Settings tab)
     start_delay_s: float = 3.0
     ramp_up_s: float = 5.0

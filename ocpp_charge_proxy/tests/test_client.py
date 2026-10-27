@@ -453,8 +453,7 @@ def test_id_tag_echoed_in_start_and_stop(mock_connection, mock_persistence):
 
     async def scenario():
         await cp.on_remote_start_transaction(id_tag=OCTOPUS_TAG, connector_id=1)
-        for _ in range(5):
-            await asyncio.sleep(0)
+        await _settle()
         await cp._do_stop_transaction()
 
     _run(scenario())
@@ -1520,7 +1519,7 @@ def test_server_starts_a_new_session_instead(mock_connection, tmp_path):
     res = _run(scenario())
     assert res.status == RemoteStartStopStatus.accepted
     kinds = [type(r).__name__ for r in sent if not isinstance(r, _call.StatusNotificationPayload)]
-    assert kinds == ["StopTransactionPayload", "StartTransactionPayload"]
+    assert [k for k in kinds if k != "AuthorizePayload"] == ["StopTransactionPayload", "StartTransactionPayload"]
     assert sent[[type(r).__name__ for r in sent].index("StopTransactionPayload")].reason == "Reboot"
     assert cp2._transaction_id == 4242 and not cp2._resumed and cp2.state == ChargePointStatus.charging
 
@@ -1578,3 +1577,98 @@ def test_restart_restores_a_decimal_profile(mock_connection, tmp_path):
     from src.charging_profile import normalise_profile
     old = {"limit": "32.0", "start_period": "0", "stack_level": "0"}
     assert normalise_profile(old) == {"limit": 32.0, "start_period": 0, "stack_level": 0}
+
+
+
+# --- the ID tag: checked first (Authorize), and the server's answer followed ---
+
+def _tag_recorder(authorize=None, start=None):
+    """cp.call fake answering Authorize and StartTransaction with these idTagInfo statuses."""
+    sent = []
+
+    async def fake_call(request):
+        sent.append(request)
+        if isinstance(request, _call.AuthorizePayload):
+            return MagicMock(id_tag_info={"status": authorize} if authorize else None)
+        if isinstance(request, _call.StartTransactionPayload):
+            return MagicMock(transaction_id=4242, id_tag_info={"status": start} if start else None)
+        return MagicMock()
+
+    return AsyncMock(side_effect=fake_call), sent
+
+
+def _remote_start(cp):
+    async def scenario():
+        await cp.on_remote_start_transaction(id_tag=OCTOPUS_TAG, connector_id=1)
+        await _settle(40)
+    _run(scenario())
+
+
+def _online(cp):
+    cp._registered = True
+    cp._connection = cp._connection or MagicMock()
+
+
+def test_tag_checked_before_a_remote_start(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _online(cp)
+    cp.call, sent = _tag_recorder(authorize="Accepted", start="Accepted")
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    kinds = [type(r).__name__ for r in sent if not isinstance(r, _call.StatusNotificationPayload)]
+    assert kinds[:2] == ["AuthorizePayload", "StartTransactionPayload"]
+    assert sent[0].id_tag == OCTOPUS_TAG and cp.state == ChargePointStatus.charging
+    assert cp._shared_state.tag_refused is None
+
+
+def test_tag_refused_by_authorize_doesnt_start(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _online(cp)
+    cp.call, sent = _tag_recorder(authorize="Invalid")
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert not any(isinstance(r, _call.StartTransactionPayload) for r in sent)
+    assert cp._transaction_id is None and cp.state == ChargePointStatus.preparing
+    assert cp._shared_state.tag_refused["status"] == "Invalid"
+    assert cp._shared_state.tag_refused["what"] == "not started"
+
+
+def test_no_check_with_authorize_remote_tx_requests_off(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _online(cp)
+    cp._config_store["AuthorizeRemoteTxRequests"] = ("false", False)
+    cp.call, sent = _tag_recorder(authorize="Invalid", start="Accepted")
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert not any(isinstance(r, _call.AuthorizePayload) for r in sent)
+    assert cp.state == ChargePointStatus.charging
+
+
+def test_tag_refused_at_start_suspends_by_default(mock_connection, mock_persistence):
+    """StopTransactionOnInvalidId off (the default): the session stays open,
+    no energy is delivered (SuspendedEVSE), until the server stops it."""
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.call, sent = _tag_recorder(start="Blocked")
+    cp.state = ChargePointStatus.preparing
+    cp._pending_id_tag = OCTOPUS_TAG
+    _run(cp._do_start_transaction())
+    assert cp._transaction_id == 4242 and cp.state == ChargePointStatus.suspended_evse
+    assert not cp._charger_sim.is_charging
+    assert not any(isinstance(r, _call.StopTransactionPayload) for r in sent)
+    assert cp._shared_state.tag_refused["what"] == "suspended"
+    _run(cp._apply_profile_state())  # (stays suspended)
+    assert cp.state == ChargePointStatus.suspended_evse
+    _run(cp._do_stop_transaction())
+    assert cp._deauthorized is None
+
+
+def test_tag_refused_at_start_stops_with_the_setting_on(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._config_store["StopTransactionOnInvalidId"] = ("true", False)
+    cp.call, sent = _tag_recorder(start="Expired")
+    cp.state = ChargePointStatus.preparing
+    cp._pending_id_tag = OCTOPUS_TAG
+    _run(cp._do_start_transaction())
+    stop = next(r for r in sent if isinstance(r, _call.StopTransactionPayload))
+    assert stop.reason == "DeAuthorized" and cp._transaction_id is None
+    assert cp._shared_state.tag_refused["what"] == "stopped"
