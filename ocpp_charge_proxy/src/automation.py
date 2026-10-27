@@ -984,14 +984,17 @@ class Automation:
     def one_off_runs(self) -> list:
         """The plugged-in stretches of the last 14 days that a one-off time
         started or ended, newest first: [{"start", "end", "source"}] ("auto_plug"
-        if an auto plug-in charge added it, else "one_off")."""
+        if an auto plug-in charge added it, "saving_move" if it's your slot moved
+        for a saving session (while the session is kept), else "one_off")."""
         now = self._now()
         days = ONE_OFF_KEEP.days + 1
+        moved = {i for r in self.saving_sessions for i in (r.get("changes") or {}).get("added") or []}
         out = []
         for s in self._stretches(now.date() - datetime.timedelta(days=days - 1), days, self._active_entries(), self.skips):
             ones = [e for e in (s["plug"], s["unplug"]) if e.get("date")]
             if ones and s["start"] <= now:
-                source = next((e["source"] for e in ones if e.get("source") in AUTO_SOURCES), "one_off")
+                source = next((e["source"] for e in ones if e.get("source") in AUTO_SOURCES),
+                              "saving_move" if any(e["id"] in moved for e in ones) else "one_off")
                 out.append({"start": _iso_local(s["start"]), "end": _iso_local(s["end"]), "source": source})
         return out[::-1]
 

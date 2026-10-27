@@ -252,7 +252,8 @@ Assistant starts) the sessions already found are kept, not cancelled.
 - **One-off slots:** a **Once** slot runs on its date only. Once it has
   run it's kept for 14 days: sessions on the **Sessions** tab that ran in
   a one-off slot are tagged **One-off** (or **Auto plug-in** / **Charge
-  now**). A skipped unplug isn't used for the ready time.
+  now**, or **Saving session adjusted** for your slot moved for a saving
+  session). A skipped unplug isn't used for the ready time.
 - **Random start delay** (**Automations** tab, under the schedule, off by
   default): each of your slots plugs in a random time after it starts, up
   to the minutes set (1 to 60, 10 by default) and at most half the slot, so

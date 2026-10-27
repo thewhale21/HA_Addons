@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.55.1 — Saving session adjusted
+
+- **Change:** on the Sessions tab, a charge from one of your slots that was
+  moved for a saving session is tagged **Saving session adjusted** (was
+  **One-off**), for as long as the saving session is kept (a week)
+
 ## 2.55.0 — Axle Energy events, and today's plan
 
 - **Feature:** saving sessions from Axle Energy: its export events

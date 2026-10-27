@@ -116,6 +116,16 @@ def test_slot_keeps_its_end_and_starts_earlier():
     assert _windows(a)[0] == ("05 15:30", "05 21:30") and a.saving_sessions == []
 
 
+def test_slots_moved_for_a_session_are_tagged_so_once_run():
+    a, clock = _automation()
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    a.sync_saving_sessions([_session(5, 18, 19)], block=True)
+    clock.dt = _at(5, 22)
+    runs = a.one_off_runs()
+    assert [(r["start"][11:16], r["end"][11:16], r["source"]) for r in runs] == \
+        [("19:00", "21:30", "saving_move"), ("14:30", "18:00", "saving_move")]
+
+
 def test_slot_moved_earlier_joins_the_slot_before():
     a, _ = _automation()
     a.set_schedule(enabled=True, entries=[{"time": "13:00", "action": "plug"}, {"time": "14:00", "action": "unplug"},

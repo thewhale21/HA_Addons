@@ -1786,7 +1786,7 @@ async function refreshSessions() {
   const tag = (startIso) => {
     const t = new Date(startIso);
     const r = runs.find((x) => new Date(x.start) <= t && t <= new Date(x.end));
-    return !r ? '' : ` <span class="chip info" title="What plugged it in">${{auto_plug: 'Auto plug-in', charge_now: 'Charge now', car_plugged: 'Car plugged in', saving_session: 'Before a saving session'}[r.source] || 'One-off'}</span>`;
+    return !r ? '' : ` <span class="chip info" title="What plugged it in">${{auto_plug: 'Auto plug-in', charge_now: 'Charge now', car_plugged: 'Car plugged in', saving_session: 'Before a saving session', saving_move: 'Saving session adjusted'}[r.source] || 'One-off'}</span>`;
   };
   // Was the session inside the supplier's dispatch slots? (5 minutes' leeway)
   const supTag = (s) => {
