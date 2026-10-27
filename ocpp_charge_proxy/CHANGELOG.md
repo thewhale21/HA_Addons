@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.62.0 — Like a wallbox
+
+- **Feature:** the add-on reports the rest of the settings a charger must
+  have (`LocalAuthorizeOffline`, `LocalPreAuthorize`, `ConnectionTimeOut`,
+  `ResetRetries`, `TransactionMessageAttempts`,
+  `TransactionMessageRetryInterval`), at the values a wallbox typically has.
+  Before, your supplier got "unknown key" for them
+- **Change:** a start, stop or meter reading your supplier fails to process
+  is sent again, as a wallbox does: up to `TransactionMessageAttempts` (3)
+  tries, waiting `TransactionMessageRetryInterval` (60 s) times the tries so
+  far, in order. Before, it was dropped straight away. With
+  `LocalAuthorizeOffline` turned off by your supplier, a start that can't be
+  checked (offline) doesn't go ahead
+
 ## 2.61.1 — Last week's saving sessions
 
 - **Fix:** the Sessions tab's last 7 days could miss a saving session the

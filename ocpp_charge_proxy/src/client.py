@@ -191,6 +191,13 @@ class ChargePoint(BaseChargePoint):
             "StopTxnAlignedData": ("", False),
             "ConnectorPhaseRotation": ("1.RST", True),
             "GetConfigurationMaxKeys": ("50", True),
+            # Required Core keys, at what a wallbox typically reports
+            "LocalAuthorizeOffline": ("true", False),  # offline, a start goes ahead (it can't be checked)
+            "LocalPreAuthorize": ("false", False),  # (for card taps: none here)
+            "ConnectionTimeOut": ("60", False),  # (for a tag before the cable: none here, so not acted on)
+            "ResetRetries": ("1", False),  # (a reset here can't fail)
+            "TransactionMessageAttempts": ("3", False),  # a start, stop or reading the server fails to process
+            "TransactionMessageRetryInterval": ("60", False),  # is sent again after this x the tries so far
         }
         # Start delay / ramp-up: set on the web page (saved), else the
         # values passed in (__main__'s defaults)
@@ -494,6 +501,24 @@ class ChargePoint(BaseChargePoint):
                 before - len(self._offline_queue),
             )
 
+    def _config_int(self, key: str, default: int, least: int = 0) -> int:
+        try:
+            return max(least, int(str(self._config_store.get(key, (str(default), False))[0]).strip()))
+        except ValueError:
+            return default
+
+    def _schedule_retry(self, wait_s: float) -> None:
+        """Send the queue again after `wait_s` (one retry waiting at a time)."""
+        task = getattr(self, "_retry_task", None)
+        if task is not None and not task.done() and task is not asyncio.current_task():
+            return
+
+        async def later():
+            await asyncio.sleep(wait_s)
+            if self._registered:
+                await self._drain_queue()
+        self._retry_task = asyncio.create_task(later())
+
     async def _drain_queue(self) -> None:
         """Send held messages in order while online. Safe to call concurrently."""
         async with self._drain_lock:
@@ -512,9 +537,22 @@ class ChargePoint(BaseChargePoint):
                         )
                         return
                     except Exception:
+                        # The server failed to process it: tried again (in order: nothing
+                        # after it goes first), TransactionMessageAttempts times in all,
+                        # waiting TransactionMessageRetryInterval x the tries so far
+                        tries = entry["_tries"] = entry.get("_tries", 0) + 1
+                        attempts = self._config_int("TransactionMessageAttempts", 3, 1)
+                        if tries < attempts:
+                            wait = self._config_int("TransactionMessageRetryInterval", 60, 0) * tries
+                            logger.warning("Server failed to process %s (try %d of %d): sending it again in %d s",
+                                           entry["action"].removesuffix("Payload"), tries, attempts, wait,
+                                           exc_info=True)
+                            entry["_held"] = True
+                            self._schedule_retry(wait)
+                            return
                         logger.warning(
-                            "Server rejected held %s; dropping it",
-                            entry["action"], exc_info=True,
+                            "Server rejected %s (%d tr%s); dropping it",
+                            entry["action"], tries, "y" if tries == 1 else "ies", exc_info=True,
                         )
                         self._offline_queue.pop(0)
                         if "local_tx_id" in entry:
@@ -1260,6 +1298,11 @@ class ChargePoint(BaseChargePoint):
         (Authorize) and the session only starts if it's accepted; offline, it starts
         as it can't be checked (as a charger allowing offline authorisation does)."""
         if self._config_on("AuthorizeRemoteTxRequests"):
+            if not self.is_online and not self._config_on("LocalAuthorizeOffline"):
+                logger.warning("Can't check the ID tag (offline) and LocalAuthorizeOffline is off: not starting")
+                self._note_tag_refused("unchecked (offline)", "not started")
+                self._pending_id_tag = None
+                return
             if not self.is_online:
                 logger.info("Can't check the ID tag (offline): starting anyway")
             else:

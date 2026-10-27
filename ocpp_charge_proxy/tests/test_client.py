@@ -1672,3 +1672,59 @@ def test_tag_refused_at_start_stops_with_the_setting_on(mock_connection, mock_pe
     stop = next(r for r in sent if isinstance(r, _call.StopTransactionPayload))
     assert stop.reason == "DeAuthorized" and cp._transaction_id is None
     assert cp._shared_state.tag_refused["what"] == "stopped"
+
+
+# --- the Core configuration keys a wallbox reports, and resending what the server fails to process ---
+
+def test_required_core_keys_reported(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    full = {k["key"]: k["value"] for k in _run(cp.on_get_configuration()).configuration_key}
+    for key, value in (("LocalAuthorizeOffline", "true"), ("LocalPreAuthorize", "false"), ("ConnectionTimeOut", "60"),
+                       ("ResetRetries", "1"), ("TransactionMessageAttempts", "3"),
+                       ("TransactionMessageRetryInterval", "60")):
+        assert full[key] == value
+
+
+def test_a_message_the_server_fails_to_process_is_sent_again(mock_connection, mock_persistence):
+    cp, sent = _started_cp(mock_connection, mock_persistence)
+    cp._config_store["TransactionMessageRetryInterval"] = ("0", False)
+    fails = {"n": 0}
+    real = cp.call
+
+    async def flaky(request):
+        if isinstance(request, _call.StopTransactionPayload) and fails["n"] < 2:
+            fails["n"] += 1
+            sent.append(request)
+            raise RuntimeError("InternalError")
+        return await real(request)
+
+    cp.call = AsyncMock(side_effect=flaky)
+
+    async def scenario():
+        await cp._do_stop_transaction()
+        await _settle(60)
+
+    _run(scenario())
+    stops = [r for r in sent if isinstance(r, _call.StopTransactionPayload)]
+    assert len(stops) == 3 and not cp._offline_queue  # 2 failures, then sent (3 tries)
+
+
+def test_given_up_after_transaction_message_attempts(mock_connection, mock_persistence):
+    cp, sent = _started_cp(mock_connection, mock_persistence)
+    cp._config_store["TransactionMessageRetryInterval"] = ("0", False)
+    cp._config_store["TransactionMessageAttempts"] = ("2", False)
+
+    async def always_fails(request):
+        sent.append(request)
+        if isinstance(request, _call.StopTransactionPayload):
+            raise RuntimeError("InternalError")
+        return MagicMock()
+
+    cp.call = AsyncMock(side_effect=always_fails)
+
+    async def scenario():
+        await cp._do_stop_transaction()
+        await _settle(60)
+
+    _run(scenario())
+    assert len([r for r in sent if isinstance(r, _call.StopTransactionPayload)]) == 2 and not cp._offline_queue

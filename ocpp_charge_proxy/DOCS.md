@@ -520,7 +520,12 @@ one file in `src/supplier_types/`, and a new kind is a new file there.
    `StopTransactionOnInvalidId` off (the default) the session stays open but
    no energy is delivered (`SuspendedEVSE`) until your supplier stops it; on,
    it's stopped (reason `DeAuthorized`). Either shows as a red chip on the
-   Overview, and in the log
+   Overview, and in the log. The other settings a charger must report are
+   there too, at the values a wallbox typically has (`LocalAuthorizeOffline`
+   true, `LocalPreAuthorize` false, `ConnectionTimeOut` 60, `ResetRetries` 1,
+   `TransactionMessageAttempts` 3, `TransactionMessageRetryInterval` 60): a
+   start, stop or reading your supplier fails to process is sent again, up to
+   3 tries, waiting 60 s, then 120 s (nothing after it goes first)
 6. The proxy sends `StartTransaction`, reports `Charging`, and sends meter
    values while the simulated car ramps up to full power
 7. When the supplier ends the session, it sends `RemoteStopTransaction`
