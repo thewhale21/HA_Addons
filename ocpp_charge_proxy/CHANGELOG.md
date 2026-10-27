@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.59.0 — Remove the hours over
+
+- **Feature:** a slot with hours over your supplier's daily limit (in red)
+  has a button in its editor that takes them off: **Remove the 30m over**
+  makes it end (or start) that much sooner, at a ready time your supplier
+  accepts (a weekly slot: every week). A slot that's all over has **Remove
+  it** instead, which deletes it (a weekly one asks: every week, or just
+  this one)
+
 ## 2.58.5 — Not past off-peak
 
 - **Fix:** a slot that ends later for a saving session (it had started, or

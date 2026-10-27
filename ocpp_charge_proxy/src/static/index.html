@@ -3175,7 +3175,7 @@ function drawWeek() {
     const one = (x) => `${dayLabel(Math.floor(x.start / DAY_MIN))} ${hhmm(((x.start % DAY_MIN) + DAY_MIN) % DAY_MIN)}`;
     $('w-warn').innerHTML = `<span class="chip err">Over ${capMin() / 60} hours</span> Plugged in for ${dur(w.total * 60)} in the ${limitReset() ? 'day' : `${limitHours()} hours`} from ${one(w)}${limitReset() ? ` (the limit resets at ${limitReset()})` : ''}`
       + (others > 0 ? `, and over on ${others === 1 ? 'one other day' : `${others} other days`} too (${days.filter((x) => x !== w && x.start !== w.start).map((x) => `${one(x).split(' ').slice(0, 2).join(' ')} ${dur(x.total * 60)}`).join(', ')})` : '') + '. '
-      + `${sup('Your supplier')} schedules at most ${capMin() / 60} hours of smart charging in ${limitHours() !== 24 ? `any ${limitHours()} hours` : 'a day'}, so it may not charge in the hours over, in red. Shorten a slot to fit.`;
+      + `${sup('Your supplier')} schedules at most ${capMin() / 60} hours of smart charging in ${limitHours() !== 24 ? `any ${limitHours()} hours` : 'a day'}, so it may not charge in the hours over, in red. Click a slot with red in it to remove the hours over, or shorten one to fit.`;
   }
 }
 
@@ -3239,12 +3239,36 @@ function drawEditor() {
   const nowMin = (Date.now() - today0().getTime()) / 60000;
   const canStop = !block && s && o && !o.skipped && s.enabled && o.a <= nowMin && nowMin < o.b;
   const noUnplug = !block && ed.mode !== 'orphan' && !f.end;
+  // Over the supplier's daily limit on this day: a button that shortens it by the hours over
+  ed.fit = null;
+  if (!block && s && o && !o.skipped && s.enabled && s.end) {
+    const red = weekPlan().overs.map(([x, y]) => [Math.max(x, o.a), Math.min(y, o.b)]).filter(([x, y]) => y > x)
+      .filter(([x, y], n, all) => all.findIndex(([x2, y2]) => x2 === x && y2 === y) === n);
+    const overMin = red.reduce((t, [x, y]) => t + y - x, 0);
+    if (overMin > 0) {
+      const fromStart = red.every(([x]) => x === o.a) && !red.some(([, y]) => y === o.b);
+      let a = o.a, b = o.b;
+      if (fromStart) a += overMin; else b -= overMin;
+      // an unplug time your supplier accepts as a ready time: the last one by then
+      if (!fromStart && rules) {
+        const ok = rules.times.map(tmin).map((m) => Math.floor(b / DAY_MIN) * DAY_MIN + m).filter((m) => m <= b && m > a);
+        b = ok.length ? Math.max(...ok) : null;
+      }
+      if (overMin >= o.b - o.a || b === null || b - a < 15) ed.fit = {remove: true};  // all of it's over: it goes
+      else {
+        const mod = (m) => hhmm(((m % DAY_MIN) + DAY_MIN) % DAY_MIN);
+        ed.fit = {start: mod(a), end: mod(b), min: (o.b - o.a) - (b - a)};
+      }
+    }
+  }
   pop.innerHTML = `<div class="ed">
     <b>${title}${ed.top ? (ed.row ? ' · tomorrow' : ' · today') : ''}</b>${kind}${times}${repeat}
     ${block ? '' : `<span class="ctl"><span class="muted">Active</span><label class="switch" title="Turn this slot off (every time) without deleting it"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="Slot active"><span></span></label></span>`}
     ${noUnplug ? '<div class="sub" style="width:100%;color:var(--warn)">No unplug: it stays plugged in until you unplug it or another unplug time comes.</div>' : ''}
     <span class="acts"><button class="btn small primary" id="w-save">Save</button>
       ${ed.mode !== 'new' ? '<button class="btn small" id="w-del">Delete</button>' : ''}
+      ${ed.fit && ed.fit.remove ? `<button class="btn small" id="w-fit" title="${esc(`All of it is over ${sup('your supplier')}'s daily limit`)}">Remove it (all over the limit)</button>` : ''}
+      ${ed.fit && !ed.fit.remove ? `<button class="btn small" id="w-fit" title="${esc(`Make it ${ed.fit.start}–${ed.fit.end}, inside ${sup('your supplier')}'s daily limit`)}">Remove the ${hmDur(ed.fit.min * 60)} over${s.kind === 'weekly' ? ' (every week)' : ''}</button>` : ''}
       ${canStop ? '<button class="btn small" id="w-stop" title="Unplug now; it runs again next time">Stop for today</button>' : ''}
       ${canSkip ? `<button class="btn small" id="w-skip">${o.skipped ? 'Undo skip' : 'Skip this one'}</button>` : ''}
       <button class="btn small" id="w-close">Cancel</button></span>
@@ -3358,6 +3382,8 @@ $('w-grid').addEventListener('click', async (ev) => {
   const t = ev.target, ed = week.edit;
   if (t.id === 'w-close') { week.edit = null; drawWeek(); return; }
   if (t.id === 'w-save') { saveEditor(false); return; }
+  if (t.id === 'w-fit' && ed && ed.fit && ed.fit.remove) { const d = $('w-del'); if (d) d.click(); return; }  // (a weekly one asks: every week, or this one)
+  if (t.id === 'w-fit' && ed && ed.fit) { ed.form.start = ed.fit.start; ed.form.end = ed.fit.end; t.disabled = true; saveEditor(false); return; }
   if (t.id === 'w-anyway') { t.disabled = true; saveEditor(!!(ed && ed.anywayDel), true); return; }
   if (t.id === 'w-del' || t.id === 'w-del-all') {
     // A weekly slot: every week, or just this one (skipped once, or stopped for today)?
