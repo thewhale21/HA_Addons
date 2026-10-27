@@ -136,3 +136,15 @@ def test_if_home_assistant_refuses_the_options_nothing_changes(tmp_path):
     with pytest.raises(ValueError, match="nothing was changed"):
         asyncio.run(migrate.Mover(str(new), "2.54.0", supervisor, restart).import_now(bundle))
     assert not os.path.exists(new / migrate.PENDING)
+
+
+def test_the_serial_from_the_configuration_tab_replaces_a_made_up_one(tmp_path):
+    old = _old_install(tmp_path / "old")
+    os.remove(os.path.join(old, "serial_number.json"))  # (entered on the Configuration tab only)
+    bundle = migrate.export(old, "2.54.0")
+    new = tmp_path / "new"
+    new.mkdir()
+    (new / "serial_number.json").write_text(json.dumps({"serial": "535252"}))  # made up on its first start
+    migrate.stage(str(new), bundle)
+    migrate.apply_pending(str(new))
+    assert json.load(open(new / "serial_number.json")) == {"serial": "654321"}

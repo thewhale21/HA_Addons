@@ -152,6 +152,11 @@ def apply_pending(data_dir: str, suppliers_path: Optional[str] = None) -> list[s
                     done.append(f"kept this install's energy register ({mine} Wh, more than the file's {theirs} Wh)")
                     continue
             jsonfile.save(target, data, name, default=str)
+        # The serial is in the Configuration tab too: if the old install had no serial file
+        # (it was entered there), this install's own (made up on its first start) goes
+        serial = (bundle.get("options") or {}).get("charger_serial")
+        if serial and "serial_number.json" not in bundle["files"]:
+            jsonfile.save(os.path.join(data_dir, "serial_number.json"), {"serial": str(serial)}, "serial_number.json")
         sc = bundle.get("supplier_changes")
         if sc and suppliers_path:
             if os.path.exists(suppliers_path):

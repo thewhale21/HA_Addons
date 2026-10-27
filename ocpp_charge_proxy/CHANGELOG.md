@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.54.1 — The serial number, moved
+
+- **Fix:** moving to another install where the old one had its serial number
+  only on the Configuration tab left the new install's own made-up serial in
+  its serial file (the Configuration tab's, moved, was still the one used):
+  the file now gets the moved serial too
+
 ## 2.54.0 — Move to another install
 
 - **Feature:** **Diagnostics › Move to another install**: **Export** downloads
