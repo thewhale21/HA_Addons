@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.58.1 — Delete anyway
+
+- **Fix:** deleting a slot that the add-on warned takes a day over your
+  supplier's daily limit: **Save anyway** saved the slot again instead of
+  deleting it, so nothing happened. The button is now **Delete anyway**, and
+  deletes it
+
 ## 2.58.0 — A week of sessions
 
 - **Change:** the Sessions tab keeps the last 7 days of sessions and

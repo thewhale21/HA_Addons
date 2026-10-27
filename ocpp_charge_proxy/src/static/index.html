@@ -3284,7 +3284,8 @@ async function saveEditor(del, anyway = false) {
   const ed = week.edit; if (!ed) return;
   const f = ed.form, rules = readyRules();
   const fail = (m) => { const e = $('w-err'); if (e) e.textContent = m; };
-  const askOver = (m) => overChoice($('w-err'), m, 'w-anyway', 'Save anyway');
+  // (the button carries on with what was asked: a delete stays a delete)
+  const askOver = (m) => { ed.anywayDel = !!del; overChoice($('w-err'), m, 'w-anyway', del ? 'Delete anyway' : 'Save anyway'); };
   if (f.kind === 'block') {
     if (!del && !f.days.length) return fail('Pick at least one day');
     if (!del && f.start === f.end) return fail('It must start and end at different times');
@@ -3339,7 +3340,7 @@ $('w-grid').addEventListener('click', async (ev) => {
   const t = ev.target, ed = week.edit;
   if (t.id === 'w-close') { week.edit = null; drawWeek(); return; }
   if (t.id === 'w-save') { saveEditor(false); return; }
-  if (t.id === 'w-anyway') { t.disabled = true; saveEditor(false, true); return; }
+  if (t.id === 'w-anyway') { t.disabled = true; saveEditor(!!(ed && ed.anywayDel), true); return; }
   if (t.id === 'w-del' || t.id === 'w-del-all') {
     // A weekly slot: every week, or just this one (skipped once, or stopped for today)?
     const o = ed && ed.mode === 'slot' ? week.occ[ed.k] : null, s = o ? week.model.slots[o.i] : null;
