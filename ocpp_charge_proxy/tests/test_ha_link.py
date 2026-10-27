@@ -255,6 +255,30 @@ def test_saving_session_settings_are_checked():
             validate_settings(bad)
 
 
+def test_notify_settings_are_checked_and_sent():
+    s = validate_settings({"notify_on": True, "notify_service": "notify.mobile_app_pixel"})
+    assert s["notify_on"] and s["notify_service"] == "notify.mobile_app_pixel"
+    for bad in ("light.kitchen", "notify.", "notify.Bad Name"):
+        with pytest.raises(ValueError):
+            validate_settings({"notify_service": bad})
+    link, _ = _link()
+    sent = []
+
+    async def query(payload, timeout=30):
+        sent.append(payload)
+        if payload["type"] == "get_services":
+            return {"notify": {"mobile_app_pixel": {}, "send_message": {}, "persistent_notification": {}}, "light": {}}
+        return {}
+
+    link.query = query
+    assert _run(link.notify_services()) == ["notify.mobile_app_pixel", "notify.persistent_notification"]
+    assert _run(link.notify("t", "m")) is None and len(sent) == 1  # off: nothing sent
+    link.settings.update(notify_on=True, notify_service="notify.mobile_app_pixel")
+    assert _run(link.notify("Charging schedule changed", "Today: …")) is None
+    assert sent[-1] == {"type": "call_service", "domain": "notify", "service": "mobile_app_pixel",
+                        "service_data": {"title": "Charging schedule changed", "message": "Today: …"}}
+
+
 def test_saving_sessions_read_from_the_found_calendar():
     link, _ = _link()
     cal = "calendar.octopus_energy_a_1_octoplus_power_down"

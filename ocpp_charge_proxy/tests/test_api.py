@@ -296,3 +296,32 @@ async def test_index_is_never_cached(client):
     assert "no-store" in resp.headers["Cache-Control"]
     assert "Last-Modified" not in resp.headers and "ETag" not in resp.headers
     assert "OCPP Charge Proxy" in await resp.text()
+
+
+@pytest.mark.asyncio
+async def test_the_page_and_the_api_say_the_version(client, monkeypatch):
+    monkeypatch.setenv("ADDON_VERSION", "9.9.9")
+    page = await (await client.get("/")).text()
+    assert '<meta name="addon-version" content="9.9.9">' in page
+    resp = await client.get("/api/version")
+    assert (await resp.json()) == {"version": "9.9.9"} and "no-store" in resp.headers["Cache-Control"]
+
+
+@pytest.mark.asyncio
+async def test_notify_services_and_test(aiohttp_client, shared_state, mock_commands):
+    sent = []
+
+    class Link:
+        async def notify_services(self):
+            return ["notify.mobile_app_phone"]
+
+        async def notify(self, title, message, force=False):
+            sent.append((title, message, force))
+            return None
+
+    app = create_api_app(shared_state, on_plug=mock_commands["plug"], on_unplug=mock_commands["unplug"],
+                         on_set_current=mock_commands["set_current"], ha_link=Link())
+    c = await aiohttp_client(app)
+    assert (await (await c.get("/api/notify/services")).json()) == {"services": ["notify.mobile_app_phone"]}
+    resp = await c.post("/api/notify/test")
+    assert resp.status == 200 and sent and sent[0][2] is True

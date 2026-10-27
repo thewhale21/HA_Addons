@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.31.0 — Drag to change
+
+- **Feature:** drag either end of an entry in the schedule's week view to
+  change when it starts or ends (in half hours), saved straight away. An
+  every-week entry changes every week; one that runs past midnight has its
+  end on the next day
+
 ## 0.30.1 — No car when it's unplugged
 
 - **Change:** the power flow (the Overview and the dashboard card) leaves the

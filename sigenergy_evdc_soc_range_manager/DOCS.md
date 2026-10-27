@@ -290,8 +290,10 @@ uses that instead. **Now** shows the limits in use and where each comes from.
 The schedule below changes the high and/or low limit for a while, every
 week or once. Each entry sets the high limit, the low limit or both. Its week view shows today and the next 6 days, with high
 limits in the top half of each day and low limits in the bottom half:
-click an entry to change, pause or delete it, or click or drag across a
-day (or **+ Add**) to add one.
+click an entry to change, pause or delete it, drag either end of it to
+change when it starts or ends (in half hours, saved straight away; an
+every-week entry changes every week), or click or drag across a day (or
+**+ Add**) to add one.
 
 - Every week: e.g. Tue and Thu 23:00–08:00, high 50% (an entry can run
   past midnight).

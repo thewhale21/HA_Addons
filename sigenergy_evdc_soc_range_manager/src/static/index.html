@@ -216,6 +216,15 @@
   .week .wbar.skipped { opacity: .45; text-decoration: line-through; background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.45) 4px 6px); }
   .week .wbar.picked { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); opacity: 1; z-index: 3; }
   .week .wbar:hover { filter: brightness(1.07); }
+  /* Drag an entry's ends to change its times */
+  .week .wbar .rh { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; z-index: 2; touch-action: none; }
+  .week .wbar .rh.l { left: 0; } .week .wbar .rh.r { right: 0; }
+  .week .wbar .rh::after { content: ''; position: absolute; top: 25%; bottom: 25%; left: 3px; width: 3px; border-radius: 2px;
+    background: rgba(255,255,255,.8); opacity: 0; transition: opacity .15s; }
+  .week .wbar.lo .rh::after { background: rgba(62,39,35,.55); }
+  .week .wbar:hover .rh::after, .week .wbar.resizing .rh::after { opacity: 1; }
+  .week .wbar.resizing { opacity: 1; z-index: 5; box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--primary); }
+  @media (hover: none) { .week .wbar .rh { width: 14px; } .week .wbar .rh::after { opacity: .8; } }
   .week .wbar.ghost { top: 3px; bottom: 3px; height: auto; background: var(--primary); opacity: .35; pointer-events: none; box-shadow: none; }
   .week .now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--err); z-index: 4; pointer-events: none; }
   .week .now::before { content: ''; position: absolute; top: -1px; left: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--err); }
@@ -1378,10 +1387,14 @@ function drawWeek() {
         const when = `${label(d)} ${hhmm(a)}–${b >= DAY_MIN ? '24:00' : hhmm(b)}`;
         const title = (lim) => `${when}: ${lim}${e.label ? ' · ' + e.label : ''}${e.enabled ? '' : ' (paused)'}${skipped ? ' (skipped this once)' : ''}${e.kind === 'once' ? ' · once' : ' · every week'} · click to change`;
         const cls = `${e.enabled ? '' : 'off'} ${skipped ? 'skipped' : ''} ${picked ? 'picked' : ''}`;
+        // its ends, to drag: its start on its own day; its end there, or the next day if it runs past midnight
+        const s0 = tmin(e.start), e0 = tmin(e.end), night = e0 <= s0, own = occ === isoAt(d);
+        const handles = skipped ? '' : (own ? '<i class="rh l" data-edge="l" title="Drag to change when it starts"></i>' : '')
+          + ((own ? !night || e0 === 0 : night && e0 > 0) ? '<i class="rh r" data-edge="r" title="Drag to change when it ends"></i>' : '');
         // as much of a label as fits: "High 50% · Cheap night", "50%", or nothing
         const text = (kind, v) => w > 20 && e.label ? `${kind} ${num(v, 0)}% · ${esc(e.label)}` : w > 9 ? `${kind} ${num(v, 0)}%` : w > 3.5 ? `${num(v, 0)}%` : '';
-        if (e.high != null) bars += `<div class="wbar hi ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`high ${num(e.high, 0)}%`))}">${text('↑ High', e.high)}</div>`;
-        if (e.low != null) bars += `<div class="wbar lo ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`low ${num(e.low, 0)}%`))}">${text('↓ Low', e.low)}</div>`;
+        if (e.high != null) bars += `<div class="wbar hi ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`high ${num(e.high, 0)}%`))}">${text('↑ High', e.high)}${handles}</div>`;
+        if (e.low != null) bars += `<div class="wbar lo ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`low ${num(e.low, 0)}%`))}">${text('↓ Low', e.low)}${handles}</div>`;
       }
     });
     const extra = d === 0 ? `<div class="past" style="width:${nowMin / 14.4}%"></div><div class="now" style="left:${nowMin / 14.4}%"></div>` : '';
@@ -1486,6 +1499,52 @@ $('w-add').addEventListener('click', () => {
   openEditor(m >= DAY_MIN ? 1 : 0, null, hhmm(m % DAY_MIN), hhmm((m + 120) % DAY_MIN));
   week.edit.top = true; drawWeek();
 });
+// Drag an entry's ends to change its times (in 30 minutes): saved straight away, as from the
+// editor (an every-week entry changes every week); if it can't be, the editor shows why
+const rdrag = {on: false};
+$('w-grid').addEventListener('pointerdown', (ev) => {
+  const h = ev.target.closest('.rh'); if (!h || ev.button !== 0) return;
+  const bar = h.closest('.wbar[data-entry]'), track = bar.closest('.track'), e = week.entries[Number(bar.dataset.entry)];
+  ev.stopPropagation(); ev.preventDefault();
+  const row = Number(track.dataset.row), s0 = tmin(e.start), e0 = tmin(e.end), night = e0 <= s0;
+  Object.assign(rdrag, {on: true, moved: false, edge: h.dataset.edge, bar, track, e, row, occ: bar.dataset.occ,
+    own: bar.dataset.occ === isoAt(row), rect: track.getBoundingClientRect(), s0, e0, night, start: s0, end: e0,
+    bars: [...track.querySelectorAll(`.wbar[data-entry="${bar.dataset.entry}"][data-occ="${bar.dataset.occ}"]`)]});
+  rdrag.bars.forEach((b) => b.classList.add('resizing'));
+  h.setPointerCapture(ev.pointerId);
+}, true);
+$('w-grid').addEventListener('pointermove', (ev) => {
+  if (!rdrag.on) return;
+  const m = Math.round(Math.max(0, Math.min(DAY_MIN, (ev.clientX - rdrag.rect.left) / rdrag.rect.width * DAY_MIN)) / 30) * 30;
+  const r = rdrag;
+  // where its ends are drawn on this day, and the new one (at least 30 minutes, under a day)
+  let x0 = Number.parseFloat(r.bar.style.left) * 14.4, x1 = x0 + Number.parseFloat(r.bar.style.width) * 14.4;
+  if (r.edge === 'l') {
+    const right = r.night ? DAY_MIN : r.e0;
+    r.start = Math.min(m, right - 30); x0 = r.start;
+  } else if (r.own) {
+    r.end = Math.max(m, r.s0 + 30); x1 = r.end; r.end %= DAY_MIN;
+  } else {
+    r.end = Math.min(Math.max(m, 30), r.s0 - 30); x1 = r.end;
+  }
+  r.moved = r.start !== r.s0 || r.end !== r.e0;
+  r.bars.forEach((b) => { b.style.left = `${x0 / 14.4}%`; b.style.width = `${(x1 - x0) / 14.4}%`; b.title = `${hhmm(r.start)}–${hhmm(r.end)}`; });
+});
+$('w-grid').addEventListener('pointerup', async () => {
+  if (!rdrag.on) return;
+  rdrag.on = false;
+  rdrag.bars.forEach((b) => b.classList.remove('resizing'));
+  if (!rdrag.moved) { drawWeek(); return; }
+  rdrag.justDragged = Date.now();
+  openEditor(rdrag.row, rdrag.e, null, null, rdrag.occ);
+  week.edit.form.start = hhmm(rdrag.start); week.edit.form.end = hhmm(rdrag.end);
+  drawEditor();
+  await saveEditor(false);
+}, true);
+// (the click that ends a drag doesn't open the entry)
+$('w-grid').addEventListener('click', (ev) => {
+  if (rdrag.justDragged && Date.now() - rdrag.justDragged < 400) { ev.stopPropagation(); ev.preventDefault(); }
+}, true);
 // Click (1 hour) or drag across a day to add an entry there
 const wdrag = {on: false};
 $('w-grid').addEventListener('pointerdown', (ev) => {

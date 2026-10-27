@@ -4,6 +4,7 @@
 <script>try { if (localStorage.getItem('ocpp-charge-proxy-theme') === 'basic') document.documentElement.classList.add('basic'); } catch (e) {}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="addon-version" content="">
 <title>OCPP Charge Proxy</title>
 <style>
   /* Colours follow the Home Assistant theme when the page is opened in the
@@ -252,6 +253,48 @@
   .week .blk { position: absolute; top: 0; bottom: 0; cursor: pointer;
     background: repeating-linear-gradient(45deg, rgba(84,110,122,.42) 0 4px, rgba(84,110,122,.14) 4px 8px); }
   .week .blk.picked { box-shadow: inset 0 0 0 2px var(--text); }
+  /* Overview: what happens next (steps, and a strip of the next 16 hours) */
+  .upnext h2 { display: flex; align-items: center; }
+  .un-steps { display: flex; flex-wrap: wrap; row-gap: 10px; }
+  .un-step { flex: 1 1 150px; position: relative; padding: 2px 14px 4px 18px; border-left: 2px solid var(--divider); min-width: 140px; }
+  .un-step .t { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.25; }
+  .un-step .t small { font-size: 12px; color: var(--text2); font-weight: 400; margin-left: 4px; }
+  .un-step .w { font-size: 13px; margin-top: 2px; }
+  .un-step .s { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .un-step .dot { position: absolute; left: -6px; top: 8px; width: 10px; height: 10px; border-radius: 50%; background: var(--card);
+    border: 2px solid var(--divider); box-sizing: border-box; }
+  .un-step.now { border-left-color: var(--ok); }
+  .un-step.now .dot { background: var(--ok); border-color: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 20%, transparent); }
+  .un-step.now.idle { border-left-color: var(--text2); } .un-step.now.idle .dot { background: var(--text2); border-color: var(--text2); box-shadow: none; }
+  .un-step.save .dot { border-color: var(--violet); background: repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 4px); }
+  .un-step.plug .dot { border-color: var(--primary); }
+  .un-bar { position: relative; height: 22px; border-radius: 7px; background: var(--hover); margin: 14px 0 4px; overflow: hidden; }
+  .un-bar div { position: absolute; top: 0; bottom: 0; }
+  .un-bar .plug { top: 3px; bottom: 3px; border-radius: 5px; background: var(--primary); opacity: .25; }
+  .un-bar .sup { top: 6px; bottom: 6px; border-radius: 4px; opacity: .9; }
+  .un-bar .sup.plan { opacity: 1; border: 1.5px dashed; box-sizing: border-box; }
+  .un-bar .save { background: repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 6px); opacity: .6; }
+  .un-bar .now { left: 0; width: 2px; background: var(--err); }
+  .un-axis { position: relative; height: 14px; font-size: 11px; color: var(--text2); }
+  .un-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  @media (max-width: 560px) { .un-step { flex-basis: 45%; } .un-axis span:nth-child(even) { display: none; } }
+  /* Drag a slot's ends to change its times */
+  .week .track .seg .rh { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; z-index: 2; touch-action: none; }
+  .week .track .seg .rh.l { left: 0; } .week .track .seg .rh.r { right: 0; }
+  .week .track .seg .rh::after { content: ''; position: absolute; top: 30%; bottom: 30%; left: 3px; width: 3px; border-radius: 2px;
+    background: rgba(255,255,255,.75); opacity: 0; transition: opacity .15s; }
+  .week .track .seg:hover .rh::after, .week .track .seg.resizing .rh::after { opacity: 1; }
+  .week .track .seg.resizing { opacity: 1; z-index: 5; box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--primary); }
+  @media (hover: none) { .week .track .seg .rh { width: 14px; } .week .track .seg .rh::after { opacity: .8; } }
+  /* Slots that meet: one charge (a link where they meet), or split at the daily limit's reset (a gap) */
+  .week .track .seg.jl { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .week .track .seg.jr { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .week .wjoin { position: absolute; top: 4px; bottom: 12px; width: 16px; margin-left: -8px; z-index: 3; display: flex;
+    align-items: center; justify-content: center; cursor: help; }
+  .week .wjoin::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #fff;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 35%, transparent); }
+  .week .wsplit { position: absolute; top: 2px; bottom: 10px; width: 10px; margin-left: -5px; z-index: 3; cursor: help;
+    background: linear-gradient(var(--card), var(--card)) center / 3px 100% no-repeat; }
   .week .tick { position: absolute; top: 3px; bottom: 3px; width: 12px; margin-left: -6px; cursor: pointer; z-index: 2;
     background: linear-gradient(var(--text2), var(--text2)) center / 3px 100% no-repeat; }
   .week .tick::after { content: ''; position: absolute; top: -1px; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--text2); }
@@ -405,6 +448,9 @@
   .badge.server { color: var(--primary); }
   .empty { color: var(--text2); padding: 12px 0; }
   .error-banner { background: var(--err); color: #fff; padding: 8px 16px; text-align: center; font-size: 13px; display: none; }
+  .update-banner { background: var(--primary); color: #fff; padding: 8px 16px; text-align: center; font-size: 13px; }
+  .update-banner button { margin-left: 10px; background: #fff; color: var(--primary); border: 0; border-radius: 999px;
+    padding: 3px 12px; font: inherit; font-weight: 500; cursor: pointer; }
   @media (max-width: 520px) {
     .msg > summary { grid-template-columns: 90px 18px 1fr; }
     .msg .s { grid-column: 1 / -1; }
@@ -477,6 +523,7 @@
 </head>
 <body>
 <div class="error-banner" id="error">Can't reach the add-on</div>
+<div class="update-banner" id="updated" hidden></div>
 <header>
   <div class="bar">
     <button class="status-btn" id="status-btn" title="Checking…" aria-label="Health: checking"><span class="dot" id="status-dot"></span></button>
@@ -521,6 +568,13 @@
           <div class="stat"><div class="label">Energy meter</div><div class="big" id="o-energy">—</div><div class="sub">Lifetime register</div></div>
         </div>
       </div>
+    </div>
+
+    <div class="card upnext" id="o-next-card" hidden>
+      <h2>What happens next<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400">Next 16 hours</span></h2>
+      <div class="un-steps" id="o-next"></div>
+      <div class="un-bar" id="o-next-bar"></div>
+      <div class="un-axis" id="o-next-axis"></div>
     </div>
 
     <div class="grid">
@@ -793,6 +847,16 @@
           <span class="ctl"><input type="number" id="sim-volt" min="100" max="300" step="1" placeholder="230" aria-label="Supply voltage"> V</span>
         </div>
         <dl class="kv" id="sim-voltage" style="margin-top:14px"></dl>
+      </div>
+      <div class="card">
+        <h2>Notifications</h2>
+        <div class="row">
+          <div class="grow">When the schedule changes<div class="note" style="margin:0">A notification through Home Assistant whenever the times it plugs in change. <details class="more"><summary>More</summary><div>Whatever changed it: you (on this page or in Home Assistant), a saving session, Charge now, auto plug-in, the car plugged in sensor or the daily limit. Each day that changed, before and after (e.g. <i>Today: 15:30–21:30 → 14:00–18:00, 20:00–22:00 (saving session 18:00–20:00)</i>), once it's settled for a minute, so a few changes together are one notification.</div></details></div></div>
+          <label class="switch"><input type="checkbox" id="n-on" aria-label="Notify when the schedule changes"><span></span></label>
+        </div>
+        <div class="row"><div class="grow">Send to<div class="note" style="margin:0">A notify service: your phone's is <code>notify.mobile_app_…</code> (the Home Assistant app)</div></div></div>
+        <div class="row" style="margin-top:6px"><span class="ctl" style="flex:1"><select id="n-service" style="width:100%" aria-label="Notify service"><option value="">Choose…</option></select></span>
+          <button class="btn small" id="n-test" type="button" style="margin-left:8px">Send a test</button></div>
       </div>
     </div>
     <div class="section-title">Your supplier</div>
@@ -1201,10 +1265,25 @@ function startPush() {
     // ingress hiccup): then it gives up, so open a new one shortly.
     if (es.readyState === EventSource.CLOSED) { es = null; setTimeout(() => { if (!es) startPush(); }, 10000); }
   };
+  es.onopen = () => checkVersion();  // (reconnected: maybe after an update)
 }
+// The add-on updated while the page was open: the page is the old one, so offer a reload
+const PAGE_VERSION = (document.querySelector('meta[name="addon-version"]') || {}).content || '';
+async function checkVersion() {
+  if (!PAGE_VERSION) return;  // (opened another way than through the add-on)
+  let v;
+  try { v = (await api('version')).version; } catch (e) { return; }
+  if (!v || v === PAGE_VERSION) return;
+  const el = $('updated');
+  el.innerHTML = `The add-on has been updated to ${esc(v)}. This page is still ${esc(PAGE_VERSION)}. <button type="button" id="updated-go">Reload</button>`;
+  el.hidden = false;
+  $('updated-go').onclick = () => location.reload();
+}
+setInterval(checkVersion, 5 * 60000);
 async function pollState() {
   try {
     renderState(await api('state'));
+    if ($('error').style.display === 'block') checkVersion();  // back after being offline (a restart?)
     $('error').style.display = 'none';
     if (Date.now() - lastEvent > 20000) setLive('warn', 'Polling');
   } catch (e) {
@@ -1223,6 +1302,89 @@ setInterval(() => {
     }
   }
 }, 5000);
+
+// ---------- Overview: what happens next ----------
+// From the schedule (its next times, joined where slots meet), your supplier's slots, the
+// saving sessions and the state now: a few steps, and a strip of the next 16 hours
+const NEXT_H = 16;
+const ovAuto = {data: null, at: 0};
+async function refreshNext() {
+  if (!ovAuto.data || Date.now() - ovAuto.at > 60000) {
+    try { ovAuto.data = await api('automation'); ovAuto.at = Date.now(); } catch (e) { /* drawn without it */ }
+  }
+  drawNext();
+}
+function drawNext() {
+  const card = $('o-next-card'); if (!card) return;
+  const a = ovAuto.data, sc = smart.data && smart.data.found ? smart.data : null, s = state;
+  if (!a && !sc) { card.hidden = true; return; }
+  card.hidden = false;
+  const now = Date.now(), end = now + NEXT_H * 3600e3;
+  const ms = (iso) => new Date(iso).getTime();
+  const day0 = today0().getTime(), dayOf = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return Math.round((d - day0) / 86400000); };
+  const when = (t) => { const d = dayOf(t); return (d === 0 ? '' : d === 1 ? 'Tomorrow ' : new Date(t).toLocaleDateString([], {weekday: 'short'}) + ' ') + hm(t); };
+  const sch = (a && a.schedule) || {};
+  const provider = sc ? sc.provider : null, pColour = provider ? providerColor(provider) : 'var(--ok)';
+  // The schedule's times, without the ones where slots meet and it just carries on
+  const reset = limitReset();
+  const ups = (sch.upcoming || []).filter((u) => !u.skipped && (u.action === 'plug' || u.action === 'unplug')).map((u) => ({...u, t: ms(u.time)}));
+  const plugT = new Set(ups.filter((u) => u.action === 'plug').map((u) => u.t)), unplugT = new Set(ups.filter((u) => u.action === 'unplug').map((u) => u.t));
+  const carry = (t) => plugT.has(t) && unplugT.has(t) && !(reset && hm(t) === reset);
+  const times = ups.filter((u) => !carry(u.t));
+  // plugged in by the schedule: each plug-in to the unplug after it (from now if it's plugged in)
+  const bands = [];
+  let open = s && s.plugged_in ? now : null;
+  for (const u of times) {
+    if (u.action === 'plug') { if (open === null) open = u.t; } else if (open !== null) { bands.push([open, u.t]); open = null; }
+  }
+  if (open !== null) bands.push([open, Math.max(open, end)]);
+  const unplugAfter = (t) => (times.find((u) => u.action === 'unplug' && u.t > t) || {}).t;
+  const slots = !sc ? [] : [...(sc.current ? [{...sc.current, now: true}] : []), ...(sc.planned || [])].map((x) => ({...x, a: ms(x.start), b: ms(x.end)})).filter((x) => x.b > now);
+  const saves = ((sch.saving_sessions) || []).map((x) => ({...x, a: ms(x.start), b: ms(x.end)})).filter((x) => x.b > now);
+  // Now
+  const cur = slots.find((x) => x.now);
+  let nowW, nowS, idle = false;
+  if (s && s.transaction_id != null) {
+    nowW = cur ? `Charging in ${esc(provider)}'s slot` : 'Charging';
+    nowS = cur ? `until ${hm(cur.end)}${cur.charge_kwh != null ? ` · ${num(Math.abs(cur.charge_kwh), 1)} kWh planned` : ''}` : (s.power_kw ? `${num(s.power_kw, 1)} kW` : '');
+  } else if (s && s.plugged_in) {
+    nowW = cur ? `Plugged in, waiting for ${esc(provider)}` : 'Plugged in, not charging';
+    const u = unplugAfter(now);
+    nowS = u ? `until ${when(u)}` : '';
+  } else { nowW = 'Unplugged'; nowS = ''; idle = true; }
+  const steps = [{t: now, cls: 'now' + (idle ? ' idle' : ''), head: 'Now', w: nowW, s: nowS}];
+  const ready = sch.ready_time;
+  if (sch.plug_pending) steps.push({t: ms(sch.plug_pending), cls: 'plug', head: hm(sch.plug_pending), w: 'Plugs in', s: 'after the random start delay'});
+  for (const u of times.filter((u) => u.t > now && u.t <= end)) {
+    if (u.action === 'plug') {
+      const until = unplugAfter(u.t);
+      steps.push({t: u.t, cls: 'plug', head: when(u.t), w: 'Plugs in', s: until ? `until ${when(until)}${ready ? ' · ready time then' : ''}` : 'no unplug planned'});
+    } else steps.push({t: u.t, cls: '', head: when(u.t), w: 'Unplugs', s: ready ? `ready by ${hm(u.t)}` : 'end of the slot'});
+  }
+  for (const x of slots.filter((x) => !x.now && x.a <= end))
+    steps.push({t: x.a, cls: 'sup', head: when(x.a), small: '–' + hm(x.b), w: `${esc(provider)} slot${x.charge_kwh != null ? ` · ${num(Math.abs(x.charge_kwh), 1)} kWh` : ''}`, s: 'planned', colour: pColour});
+  for (const x of saves.filter((x) => x.a <= end))
+    steps.push({t: x.a, cls: 'save', head: x.a <= now ? 'Now' : when(x.a), small: '–' + hm(x.b), w: `Saving session${x.summary ? ` (${esc(x.summary)})` : ''}`,
+      s: sch.saving_block ? `nothing plugged in until ${hm(x.b)}` : "charging isn't changed for it"});
+  steps.sort((p, q) => p.t - q.t);
+  const shown = [steps[0], ...steps.slice(1).filter((x) => x.t > now).slice(0, 4)];
+  $('o-next').innerHTML = shown.map((x) => `<div class="un-step ${x.cls}"><span class="dot"${x.colour ? ` style="border-color:${x.colour}"` : ''}></span>`
+    + `<div class="t">${x.head}${x.small ? `<small>${x.small}</small>` : ''}</div><div class="w">${x.w}</div>${x.s ? `<div class="s">${x.s}</div>` : ''}</div>`).join('')
+    + (shown.length === 1 ? '<div class="un-step"><span class="dot"></span><div class="w muted" style="margin-top:6px">Nothing planned in the next 16 hours</div></div>' : '');
+  // The strip
+  const pct = (t) => (Math.min(Math.max(t, now), end) - now) / (end - now) * 100;
+  const bar = (cls, x0, x1, style = '', title = '') => x1 > now && x0 < end
+    ? `<div class="${cls}" style="left:${pct(x0)}%;width:${pct(x1) - pct(x0)}%;${style}" title="${esc(title)}"></div>` : '';
+  $('o-next-bar').innerHTML = bands.map(([x, y]) => bar('plug', x, y, '', `Plugged in by the schedule ${hm(x)}–${hm(y)}`)).join('')
+    + slots.map((x) => bar('sup' + (x.now ? '' : ' plan'), x.a, x.b, x.now ? `background:${pColour}` : `border-color:${pColour};background:color-mix(in srgb, ${pColour} 15%, transparent)`,
+      `${provider} slot ${hm(x.a)}–${hm(x.b)}${x.charge_kwh != null ? ' · ' + num(Math.abs(x.charge_kwh), 1) + ' kWh' : ''}`)).join('')
+    + saves.map((x) => bar('save', x.a, x.b, '', `Saving session ${hm(x.a)}–${hm(x.b)}`)).join('')
+    + '<div class="now"></div>';
+  const first = new Date(now); first.setMinutes(0, 0, 0); first.setHours(first.getHours() + (first.getHours() % 2 ? 1 : 2));
+  const ticks = [];
+  for (let t = first.getTime(); t < end - 30 * 60000; t += 2 * 3600e3) ticks.push(t);
+  $('o-next-axis').innerHTML = ticks.map((t) => `<span style="left:${pct(t)}%">${hm(t)}</span>`).join('');
+}
 
 // ---------- Overview ----------
 function renderState(s) {
@@ -1252,8 +1414,13 @@ function renderState(s) {
   if (rp.status === 'replugging') chips.push('<span class="chip warn">Re-plugging…</span>');
   if (rp.status === 'gave_up') chips.push('<span class="chip err">No session — re-plug gave up</span>');
   if (activeTab === 'automation') drawReplugStatus(rp);
+  // Something wrong with your supplier's integration or the supplier defaults (Diagnostics › Health)
+  const warns = ((smart.data && smart.data.problems) || []).filter((p) => p.level === 'warn');
+  if (warns.length) chips.push(`<a class="chip warn" href="#health" style="text-decoration:none" title="${esc(warns.map((p) => p.text).join('\n'))}">`
+    + `${warns.length === 1 ? `Check ${sup('your supplier')}` : `${warns.length} things to check`}</a>`);
   const rank = (c) => c.includes('chip err') ? 0 : c.includes('chip warn') ? 1 : 2;
   $('o-chips').innerHTML = chips.map((c, i) => [rank(c), i, c]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]).join(' ');
+  if (activeTab === 'overview') drawNext();
 
   $('o-power').textContent = num(s.power_kw, 2) + ' kW';
   $('o-power-sub').textContent = [s.power_source === 'entity' ? 'From your power sensor' : 'Simulated',
@@ -1645,6 +1812,8 @@ async function refreshSmart(force) {
   Object.assign(SUPPLIER_COLOURS, smart.data.colours || {});  // (from the supplier defaults)
   applySupName();
   drawSmart(); drawStateSub(); drawChart();
+  if (state) renderState(state);  // (its chips: a problem with your supplier)
+  drawNext();
   if (auto.data) drawWeekSoon();
   applyDailyLimit();
 }
@@ -1783,10 +1952,22 @@ async function refreshSessions() {
   try { if (!auto.data || Date.now() - (refreshSessions.autoAt || 0) > 60000) { auto.data = await api('automation'); refreshSessions.autoAt = Date.now(); } } catch (e) { /* tags only */ }
   await refreshLong(false);  // older sessions' power curves
   const runs = (auto.data && auto.data.schedule.one_off_runs) || [];
+  // What started it: a one-off in the schedule (Charge now, a slot moved for a saving
+  // session...), else what had it plugged in then (the schedule, the page, Home Assistant...)
+  const plugged = sessionsData.plugged || [];
   const tag = (startIso) => {
     const t = new Date(startIso);
     const r = runs.find((x) => new Date(x.start) <= t && t <= new Date(x.end));
-    return !r ? '' : ` <span class="chip info" title="What plugged it in">${{auto_plug: 'Auto plug-in', charge_now: 'Charge now', car_plugged: 'Car plugged in', saving_session: 'Before a saving session', saving_move: 'Saving session adjusted'}[r.source] || 'One-off'}</span>`;
+    let label = r ? ({auto_plug: 'Auto plug-in', charge_now: 'Charge now', car_plugged: 'Car plugged in', saving_session: 'Before a saving session', saving_move: 'Saving session adjusted'}[r.source] || 'One-off') : null;
+    if (!label) {
+      // (newest first; an auto re-plug carries on what plugged it in before)
+      let n = plugged.findIndex((x) => new Date(x.start).getTime() <= t.getTime() + 60000 && (!x.end || t <= new Date(x.end)));
+      while (n >= 0 && n < plugged.length - 1 && plugged[n].by === 'auto re-plug') n++;
+      const by = n >= 0 ? plugged[n].by : null;
+      label = !by || by === 'auto re-plug' ? null : by === 'web page' ? 'By hand' : by === 'Home Assistant' ? 'Home Assistant'
+        : (PLUG_BY.find(([k]) => by === k || by.startsWith(k)) || [, , null])[2];
+    }
+    return !label ? '' : ` <span class="chip info" title="What plugged it in">${esc(label)}</span>`;
   };
   // Was the session inside the supplier's dispatch slots? (5 minutes' leeway)
   const supTag = (s) => {
@@ -2211,7 +2392,31 @@ function drawPickers() {
   $('save-plug').checked = !!sim.edit.saving_plug;
   if (document.activeElement !== $('save-hours')) $('save-hours').value = sim.edit.saving_plug_hours ?? 2;
   $('save-hours-row').hidden = !sim.edit.saving_plug;
+  $('n-on').checked = !!sim.edit.notify_on;
+  drawNotifyServices();
 }
+// Settings › Notifications: Home Assistant's notify services (listed once a page)
+let notifyServices = null;
+async function drawNotifyServices() {
+  if (notifyServices === null) {
+    notifyServices = [];
+    try { notifyServices = (await api('notify/services')).services || []; } catch (e) { notifyServices = null; return; }
+  }
+  const sel = $('n-service'), want = (sim.edit && sim.edit.notify_service) || '';
+  if (document.activeElement === sel) return;
+  const list = want && !notifyServices.includes(want) ? [want, ...notifyServices] : notifyServices;
+  sel.innerHTML = '<option value="">Choose…</option>' + list.map((n) => `<option value="${esc(n)}">${esc(n.replace(/^notify\./, ''))}</option>`).join('');
+  sel.value = want;
+}
+$('n-on').addEventListener('change', (e) => {
+  if (e.target.checked && !$('n-service').value) toast('Choose where to send them too');
+  saveSensors({notify_on: e.target.checked}, e.target.checked ? 'You\'ll be notified when the schedule changes' : 'No notifications');
+});
+$('n-service').addEventListener('change', (e) => saveSensors({notify_service: e.target.value},
+  e.target.value ? 'Notifications go to ' + e.target.value : 'No notify service chosen'));
+$('n-test').addEventListener('click', async () => {
+  try { await api('notify/test', {method: 'POST'}); toast('Test sent'); } catch (e) { toast('Not sent: ' + e.message); }
+});
 // Saving sessions card: the calendar used and the sessions coming up
 function drawSaving() {
   const d = sim.data, a = auto.data;
@@ -2822,6 +3027,18 @@ function drawWeek() {
   const typeOf = (s) => s.kind === 'once' && movedIds.has(s.plug.id) ? 'saving_move'
     : s.source && TYPE[s.source] ? s.source : s.kind === 'once' ? 'once' : null;
   const seen = new Set(model.slots.map(typeOf).filter(Boolean));
+  // Where slots meet it carries on plugged in, one charge (the ready time is the last one's
+  // end), except where the supplier's daily limit resets: it unplugs and plugs back in there
+  const live = occ.filter((o) => !o.skipped && !o.hidden && model.slots[o.i].enabled && (on || model.slots[o.i].source));
+  const startsAt = new Map(live.map((o) => [o.a, o])), endsAt = new Set(live.map((o) => o.b));
+  const resetMin = limitReset() ? tmin(limitReset()) : null;
+  const isSplit = (t) => resetMin !== null && ((t % DAY_MIN) + DAY_MIN) % DAY_MIN === resetMin;
+  const meetAt = [...startsAt.keys()].filter((t) => endsAt.has(t));
+  const joinAt = new Set(meetAt.filter((t) => !isSplit(t)));
+  const endFrom = (e) => { for (let n = 0; n < 20 && joinAt.has(e); n++) e = startsAt.get(e).b; return e; };  // the charge's end
+  const chainEnd = (t) => endFrom(startsAt.get(t).b);
+  const chainEnds = new Set([...joinAt].map(chainEnd));
+  const whenMin = (t) => { const d = Math.floor(t / DAY_MIN); return (d === 0 ? '' : d === 1 ? 'tomorrow ' : dayLabel(d) + ' ') + hhmm(((t % DAY_MIN) + DAY_MIN) % DAY_MIN); };
   // Past days' colours, by what plugged in
   const PAST = (by) => !by ? 'other' : by === 'schedule' ? 'schedule' : by.startsWith('auto plug-in') ? 'auto_plug' : by === 'charge now' ? 'charge_now' : by === 'car plugged in sensor' ? 'car_plugged' : 'other';
   const PAST_COLOUR = {schedule: 'var(--primary)', auto_plug: TYPE.auto_plug[0], charge_now: TYPE.charge_now[0], car_plugged: TYPE.car_plugged[0], other: '#9e9e9e'};
@@ -2871,20 +3088,26 @@ function drawWeek() {
         .filter(([x, y], n, all) => all.findIndex(([x2, y2]) => x2 === x && y2 === y) === n);
       const red = over.length > 0, overMin = over.reduce((t, [x, y]) => t + y - x, 0);
       const picked = ed && ed.mode === 'slot' && ed.k === k;
+      const jl = !o.skipped && joinAt.has(o.a) ? 'jl' : '', jr = !o.skipped && joinAt.has(o.b) ? 'jr' : '';
+      const readyHere = linked && !o.skipped && chainEnds.has(o.b) && o.b <= hi;
       const ty0 = typeOf(s), who = ty0 && ty0 !== 'once' ? ` (${TYPE[ty0][1]})` : s.kind === 'once' ? ' (One-off)' : '';
       const got = ses.filter((z) => z.a < o.b && z.b > o.a);
       const title = `${dayLabel(d)} ${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${who}`
         + (o.skipped ? ' (skipped)' : !s.enabled ? ' (off)' : red ? ` (${hmDur(overMin * 60)} over ${limitText()} a day, in red)` : '')
-        + (got.length ? '\n' + got.map((z) => sesText(z.x)).join('\n') : '');
+        + (got.length ? '\n' + got.map((z) => sesText(z.x)).join('\n') : '')
+        + (jl || jr ? `\nOne charge with the slot${jl && jr ? 's' : ''} it meets${linked ? `: ready time ${whenMin(endFrom(o.b))}` : ''}` : '');
       const ty = typeOf(s);
-      return `<div class="seg ${o.skipped ? 'skip' : ''} ${(!on && !s.source) || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''}"
-        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${(x1 - x0) * trackPx() / 100 > 76 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm((red && over[0][0] > Math.max(o.a, lo) ? over[0][0] : Math.min(o.b, hi)) - lo)}</span>` : ''}</div>`
+      return `<div class="seg ${o.skipped ? 'skip' : ''} ${(!on && !s.source) || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''} ${jl} ${jr}"
+        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${(x1 - x0) * trackPx() / 100 > 76 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm((red && over[0][0] > Math.max(o.a, lo) ? over[0][0] : Math.min(o.b, hi)) - lo)}${readyHere && !red && (x1 - x0) * trackPx() / 100 > 130 ? ' · ready' : ''}</span>` : ''}${resizable(o, s) ? `${o.a >= lo ? '<i class="rh l" title="Drag to change when it plugs in"></i>' : ''}${o.b <= hi && s.end ? '<i class="rh r" title="Drag to change when it unplugs"></i>' : ''}` : ''}</div>`
         + over.map(([x, y]) => {
           const p = span(x, y);
           return `<div class="seg overpart ${!on && !s.source ? 'off' : ''}" data-occ="${k}" data-row="${d}" style="left:${p.x0}%;width:${p.x1 - p.x0}%"
             title="${dayLabel(d)} ${hhmm(x - lo)}–${hhmm(y - lo)}: over ${limitText()} of smart charging a day. ${esc(sup('Your supplier'))} may not charge then · click to change the slot">${(p.x1 - p.x0) * trackPx() / 100 > 34 ? '<span class="sl">Over</span>' : ''}</div>`;
         }).join('');
     }).join('');
+    const joins = d < 0 ? '' : meetAt.filter((t) => t > lo && t < hi).map((t) => isSplit(t)
+      ? `<div class="wsplit" style="left:${(t - lo) / 14.4}%" title="${esc(`${hhmm(t - lo)}: unplugs and plugs straight back in, where ${supName() || 'your supplier'}'s daily limit resets, so it sees a charge either side`)}"></div>`
+      : `<div class="wjoin" style="left:${(t - lo) / 14.4}%" title="${esc(`${hhmm(t - lo)}: one slot ends as the next starts, so it carries on plugged in: one charge${linked ? `, ready time ${whenMin(chainEnd(t))}` : ''}`)}"></div>`).join('');
     const ticks = d < 0 ? '' : model.orphans.map((o, j) => [o, j]).filter(([o]) => o.date ? dayIndex(o.date) === d : o.days.includes(wdOf(isoAt(d))))
       // not one that ends a slot (its own unplug skipped), or one skipped for a saving session
       .filter(([o]) => { const k = o.u.id + '|' + (o.date || isoAt(d)); return !(week.extendedBy || new Set()).has(k) && !(week.savingSkips || new Set()).has(k); })
@@ -2903,7 +3126,7 @@ function drawWeek() {
     const dd = new Date(day0); dd.setDate(day0.getDate() + d);
     const dname = d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : d === -1 ? 'Yesterday' : dd.toLocaleDateString([], {weekday: 'short'});
     html += `<div class="dl ${d === 0 ? 'today' : d < 0 ? 'past' : ''}">${dname}<small>${dd.toLocaleDateString([], {day: 'numeric', month: 'short'})}</small></div>`
-      + `<div class="track ${d < 0 ? 'past' : ''} ${d === 0 ? 'today' : ''}" data-row="${d}"${before ? ' title="Not recorded: the add-on keeps when the car was plugged in from 2.27.0 on"' : ''}>${blk}${bars}${ticks}${planned}${charged}`
+      + `<div class="track ${d < 0 ? 'past' : ''} ${d === 0 ? 'today' : ''}" data-row="${d}"${before ? ' title="Not recorded: the add-on keeps when the car was plugged in from 2.27.0 on"' : ''}>${blk}${bars}${joins}${ticks}${planned}${charged}`
       + `${d === 0 ? waitPart(occ, nowMin) + `<div class="gone" style="width:${nowMin / 14.4}%"></div><div class="now" style="left:${nowMin / 14.4}%"></div>` : ''}</div>`;
     if (ed && !ed.top && ed.row === d) html += '<div class="slot-pop" id="w-pop"></div>';
   }
@@ -3197,6 +3420,53 @@ $('w-add').addEventListener('click', () => {
   drawWeek();
   $('w-pop') && $('w-pop').scrollIntoView({block: 'nearest', behavior: 'smooth'});
 });
+// Drag a slot's ends to change its times (in 30 minutes): saved straight away, as from the
+// editor (a weekly slot changes every week); if it can't be (a ready time your supplier
+// doesn't accept, over the daily limit...), the editor opens with why
+function resizable(o, s) { return !o.skipped && s.enabled && today0().getTime() + o.b * 60000 > Date.now(); }
+const rdrag = {on: false, moved: false};
+$('w-grid').addEventListener('pointerdown', (ev) => {
+  const h = ev.target.closest('.rh'); if (!h || ev.button !== 0) return;
+  const seg = h.closest('.seg[data-occ]'), track = seg.closest('.track');
+  const k = Number(seg.dataset.occ), o = week.occ[k];
+  ev.stopPropagation(); ev.preventDefault();
+  Object.assign(rdrag, {on: true, moved: false, edge: h.classList.contains('l') ? 'l' : 'r', seg, track, k, row: Number(track.dataset.row),
+    rect: track.getBoundingClientRect(), a: o.a, b: o.b, a0: o.a, b0: o.b});
+  seg.classList.add('resizing');
+  h.setPointerCapture(ev.pointerId);
+}, true);
+$('w-grid').addEventListener('pointermove', (ev) => {
+  if (!rdrag.on) return;
+  const lo = rdrag.row * DAY_MIN;
+  const m = lo + Math.round(Math.max(0, Math.min(DAY_MIN, (ev.clientX - rdrag.rect.left) / rdrag.rect.width * DAY_MIN)) / 30) * 30;
+  // not into the past (a slot going already keeps its start), at least 30 minutes, under a day
+  const soon = Math.ceil((Date.now() - today0().getTime()) / 60000 / 30) * 30;
+  if (rdrag.edge === 'l' && rdrag.a0 >= soon) rdrag.a = Math.max(Math.min(m, rdrag.b - 30), rdrag.b - DAY_MIN + 30, soon);
+  if (rdrag.edge === 'r') rdrag.b = Math.max(Math.min(m, rdrag.a + DAY_MIN - 30), rdrag.a + 30, soon);
+  rdrag.moved = rdrag.a !== rdrag.a0 || rdrag.b !== rdrag.b0;
+  const x0 = (Math.max(rdrag.a, lo) - lo) / 14.4, x1 = (Math.min(rdrag.b, lo + DAY_MIN) - lo) / 14.4;
+  rdrag.seg.style.left = `${x0}%`; rdrag.seg.style.width = `${x1 - x0}%`;
+  const sl = rdrag.seg.querySelector('.sl'), text = `${hhmm(((rdrag.a % DAY_MIN) + DAY_MIN) % DAY_MIN)}–${hhmm(((rdrag.b % DAY_MIN) + DAY_MIN) % DAY_MIN)}`;
+  if (sl) sl.textContent = text;
+  rdrag.seg.title = text;
+});
+$('w-grid').addEventListener('pointerup', async () => {
+  if (!rdrag.on) return;
+  rdrag.on = false;
+  rdrag.seg.classList.remove('resizing');
+  if (!rdrag.moved) { drawWeek(); return; }
+  rdrag.justDragged = Date.now();
+  openEditor('slot', rdrag.row, {k: rdrag.k});
+  const f = week.edit.form;
+  if (rdrag.a !== rdrag.a0) f.start = hhmm(((rdrag.a % DAY_MIN) + DAY_MIN) % DAY_MIN);
+  if (rdrag.b !== rdrag.b0) f.end = hhmm(((rdrag.b % DAY_MIN) + DAY_MIN) % DAY_MIN);
+  drawEditor();
+  await saveEditor(false);
+}, true);
+// (the click that ends a drag doesn't open the slot)
+$('w-grid').addEventListener('click', (ev) => {
+  if (rdrag.justDragged && Date.now() - rdrag.justDragged < 400) { ev.stopPropagation(); ev.preventDefault(); }
+}, true);
 // Click (1 hour) or drag across a day to add a slot there
 const wdrag = {on: false};
 $('w-grid').addEventListener('pointerdown', (ev) => {
@@ -3651,7 +3921,7 @@ $('sup-limit').addEventListener('change', (e) => {
 
 // ---------- refresh loop ----------
 function refreshTab(full) {
-  if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); refreshSmart(full); }
+  if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); refreshSmart(full); refreshNext(); }
   else if (activeTab === 'sessions') refreshSessions();
   else if (activeTab === 'debug') { refreshSmart(false); refreshDebug(); refreshMessages(); }  // the supplier's name; logs
   else if (activeTab === 'automation') { refreshAutomation(false); refreshSimulation(false); }

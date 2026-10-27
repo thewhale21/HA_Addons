@@ -23,6 +23,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import time
 from typing import Awaitable, Callable, Optional
 
@@ -90,6 +91,14 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if not 0.5 <= hours <= 12 or hours * 2 != int(hours * 2):
             raise ValueError("plug_hours must be 0.5 to 12, in half hours")
         out["plug_hours"] = hours
+    # Notifications (Settings tab): a Home Assistant notify service, e.g. notify.mobile_app_pixel
+    if "notify_on" in raw:
+        out["notify_on"] = bool(raw["notify_on"])
+    if "notify_service" in raw:
+        value = str(raw["notify_service"] or "").strip()
+        if value and not re.fullmatch(r"notify\.[a-z0-9_]+", value):
+            raise ValueError("notify_service must be a notify service, e.g. notify.mobile_app_phone")
+        out["notify_service"] = value
     # Saving sessions (Automations tab)
     for key in ("saving_on", "saving_block", "saving_plug"):
         if key in raw:
@@ -197,6 +206,8 @@ def default_settings() -> dict:
         # Saving sessions: off; the calendar is found automatically unless picked
         "saving_on": False, "saving_entity": "", "saving_block": True,
         "saving_plug": False, "saving_plug_hours": DEFAULT_SAVING_PLUG_HOURS,
+        # Notifications when the schedule changes: off, and where to (a notify service)
+        "notify_on": False, "notify_service": "",
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then
@@ -752,6 +763,28 @@ class HaLink:
         for entity_id, state, attrs in SensorPublisher.unavailable():
             await self._post_state(entity_id, state, attrs)
 
+
+    async def notify_services(self) -> list[str]:
+        """Home Assistant's notify services, for the picker: ["notify.mobile_app_phone", ...]."""
+        result = await self.query({"type": "get_services"})
+        names = sorted((result or {}).get("notify") or {})
+        return [f"notify.{n}" for n in names if n != "send_message"]
+
+    async def notify(self, title: str, message: str, force: bool = False) -> Optional[str]:
+        """Send a notification through the notify service picked (Settings ›
+        Notifications), if they're on (or `force`, for the test button). Returns
+        an error, or None."""
+        service = self.settings.get("notify_service") or ""
+        if not (force or self.settings.get("notify_on")) or not service:
+            return None if not force else "Pick where to send notifications first"
+        try:
+            await self.query({"type": "call_service", "domain": "notify", "service": service.split(".", 1)[1],
+                              "service_data": {"title": title, "message": message}})
+        except Exception as err:
+            logger.warning("Couldn't send a notification through %s: %s", service, err)
+            return str(err) or type(err).__name__
+        logger.info("Notification sent through %s: %s", service, message.replace("\n", "; "))
+        return None
 
     async def all_states(self) -> list[dict]:
         """Every entity's state in HA (cached briefly)."""

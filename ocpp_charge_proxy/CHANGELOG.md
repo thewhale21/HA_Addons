@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.57.0 — What happens next, and notifications
+
+- **Feature:** **What happens next** on the Overview: now, then the next few
+  things in the coming 16 hours (the schedule plugging in and unplugging
+  with the ready time, your supplier's planned slots, saving sessions), and
+  a strip of those hours
+- **Feature:** notifications when the schedule changes (Settings ›
+  Notifications): pick a Home Assistant notify service (e.g. your phone's)
+  and turn it on. Whatever changes it, each day that changed, before and
+  after, and why where the schedule says, once it's settled for a minute.
+  **Send a test** to check
+- **Feature:** drag either end of a slot on the Automations tab to change
+  its times (in half hours), saved straight away
+- **Feature:** slots that meet are drawn joined, with a link where they meet
+  (hover: the ready time for the whole charge), and a gap where they're split
+  at your supplier's daily limit reset
+- **Feature:** an open page says when the add-on has been updated, with a
+  **Reload** button
+- **Improvement:** every session on the Sessions tab says what started it
+  (**Schedule**, **Charge now**, **By hand**...), not only one-offs
+- **Improvement:** a **Check** chip on the Overview when something's wrong
+  with your supplier's integration (hover for what, click for
+  Diagnostics › Health)
+
 ## 2.56.0 — Slots that meet are one charge
 
 - **Change:** where one slot ends as the next starts (your slots, a slot

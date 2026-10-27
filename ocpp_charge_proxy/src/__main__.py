@@ -21,7 +21,7 @@ from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_fi
 from src.ha_history import ChartHistory
 from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, auto_plug_charge, automation_loop
 from src.ha_link import HaLink
-from src import log_filters, migrate, suppliers
+from src import log_filters, migrate, schedule_notify, suppliers
 from src.persistence import Persistence
 from src.shared_state import SharedState
 
@@ -423,7 +423,27 @@ async def run() -> None:
                        log_buffer=log_buffer, sessions=cp.sessions, messages=cp.message_log,
                        settings=app_settings)
 
+    async def schedule_notify_loop() -> None:
+        """Settings › Notifications: tell Home Assistant's notify service when the
+        schedule changes, whatever changed it (src/schedule_notify.py)."""
+        watcher = schedule_notify.Watcher()
+        while True:
+            try:
+                if not (ha_link.settings.get("notify_on") and ha_link.settings.get("notify_service")):
+                    watcher.reset()  # (turned on again: compared from then)
+                else:
+                    now = automation._now()
+                    current = schedule_notify.upcoming(automation.windows(), now)
+                    why = schedule_notify.causes(automation.entries, automation.saving_sessions, automation.saving_block)
+                    text = watcher.tick(now, time.monotonic(), current, why)
+                    if text:
+                        await ha_link.notify("Charging schedule changed", text)
+            except Exception:
+                logger.warning("Schedule notifications cycle failed", exc_info=True)
+            await asyncio.sleep(15)
+
     charger_tasks = [
+        asyncio.create_task(schedule_notify_loop()),
         asyncio.create_task(supplier_marks_loop()),
         asyncio.create_task(saving_sessions_loop()),
         asyncio.create_task(cp.meter_values_loop()),

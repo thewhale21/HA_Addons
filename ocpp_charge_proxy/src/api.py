@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Callable, Awaitable
@@ -84,6 +85,7 @@ def create_api_app(
     app.router.add_get("/api/energy/daily", handle_energy_daily)
     app.router.add_get("/api/provider", handle_provider)
     app.router.add_get("/api/health", handle_health)
+    app.router.add_get("/api/version", handle_version)
     # Schedule and auto re-plug
     app.router.add_get("/api/automation", handle_automation)
     app.router.add_post("/api/automation/schedule", handle_schedule)
@@ -93,6 +95,8 @@ def create_api_app(
     app.router.add_get("/api/sensors", handle_get_sensors)
     app.router.add_post("/api/sensors", handle_set_sensors)
     app.router.add_get("/api/sensors/entities", handle_sensor_entities)
+    app.router.add_get("/api/notify/services", handle_notify_services)
+    app.router.add_post("/api/notify/test", handle_notify_test)
     app.router.add_get("/api/smart_charging", handle_smart_charging)
     # Settings made on the web page (log level, continue session)
     app.router.add_get("/api/settings", handle_get_settings)
@@ -113,12 +117,24 @@ async def handle_index(request: web.Request) -> web.Response:
     index = static_dir / "index.html"
     # Never cached: after an update the browser (or HA's ingress) must not
     # keep showing the old page. It's small and only loaded when opened.
+    # The version it's from, so an open page can tell when the add-on's been updated
+    body = index.read_bytes().replace(b'<meta name="addon-version" content="">',
+                                      f'<meta name="addon-version" content="{_version()}">'.encode(), 1)
     return web.Response(
-        body=index.read_bytes(),
+        body=body,
         content_type="text/html",
         charset="utf-8",
         headers={"Cache-Control": "no-store, max-age=0"},
     )
+
+
+def _version() -> str:
+    return os.environ.get("ADDON_VERSION") or "dev"
+
+
+async def handle_version(request: web.Request) -> web.Response:
+    """The add-on's version, for an open page to notice an update (it then offers a reload)."""
+    return web.json_response({"version": _version()}, headers={"Cache-Control": "no-store"})
 
 
 async def handle_get_state(request: web.Request) -> web.Response:
@@ -580,6 +596,28 @@ async def handle_sensor_entities(request: web.Request) -> web.Response:
     except Exception as err:
         return _error(f"Couldn't list entities: {err}", 502)
     return web.json_response({"entities": entities, "available": link.available}, dumps=_dumps)
+
+
+async def handle_notify_services(request: web.Request) -> web.Response:
+    """Home Assistant's notify services, for Settings › Notifications."""
+    link = request.app["ha_link"]
+    if link is None:
+        return _gui_unavailable()
+    try:
+        services = await link.notify_services()
+    except Exception as err:
+        return _error(f"Couldn't list Home Assistant's notify services: {err}", 502)
+    return web.json_response({"services": services})
+
+
+async def handle_notify_test(request: web.Request) -> web.Response:
+    """Send a test notification through the service picked."""
+    link = request.app["ha_link"]
+    if link is None:
+        return _gui_unavailable()
+    error = await link.notify("OCPP Charge Proxy", "Test: notifications about your charging schedule come here.",
+                              force=True)
+    return _error(error, 502) if error else web.json_response({"status": "ok"})
 
 
 # --- Settings made on the web page (src/app_settings.py) ----------------------

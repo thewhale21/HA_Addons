@@ -233,7 +233,14 @@ Assistant starts) the sessions already found are kept, not cancelled.
   green line shows when it has charged today (hover for the session's
   energy, length and what ended it; click to open it on the Sessions tab),
   and your supplier's slots are outlined. Earlier days are on the Sessions
-  tab. Click or drag across a day to add a slot; click a slot to change its times, the days it repeats on
+  tab. Click or drag across a day to add a slot; drag either end of a slot
+  to change when it plugs in or unplugs (in half hours; saved straight away,
+  as from the editor: a weekly slot changes every week, and if the time can't
+  be used, e.g. over the daily limit, the editor opens with why). Slots that
+  meet (one charge, see Back-to-back slots) are drawn joined, with a small
+  link where they meet (hover: the ready time for the whole charge); at your
+  supplier's daily limit reset, where it unplugs and plugs back in, a gap.
+  Click a slot to change its times, the days it repeats on
   (**Every week**) or its date (**Once**), turn it off (**Active**), delete it
   (a weekly slot asks: every week, or just this one), or skip it once (its
   plug-in and unplug both don't run; it shows hatched, and **Undo skip** puts
@@ -363,6 +370,22 @@ Assistant starts) the sessions already found are kept, not cancelled.
 The schedule and auto re-plug are saved in `/data/automation.json` (and
 when the schedule was last checked in `/data/automation_runtime.json`), auto
 plug-in and your sensors in `/data/sensors.json`.
+
+### Notifications
+
+**Settings › Notifications** (off by default): a notification through a
+Home Assistant notify service (your phone's is `notify.mobile_app_…`, from
+the Home Assistant app) whenever the times the schedule plugs in change,
+whatever changed them: you (on the page or in Home Assistant), a saving
+session, Charge now, auto plug-in, the car plugged in sensor or the daily
+limit. Each day that changed is a line, before and after, with what changed
+it where the schedule says, e.g.
+
+> Today: 15:30–21:30 → 14:00–18:00, 20:00–22:00 (saving session 18:00–20:00)
+
+It's sent once the schedule has settled for a minute, so a few changes
+together (a slot moved and a charge added before a saving session) are one
+notification. **Send a test** checks it reaches you.
 
 ## Moving to another install
 
@@ -578,7 +601,14 @@ follows your Home Assistant theme. Settings save as soon as you change them.
 
 - **Header:** a health dot left of the title (green / amber / red) that
   opens Diagnostics › Health.
-- **Overview:** state, power, current, SoC and energy; the current session;
+- **Header:** after the add-on is updated, an open page says so with a
+  **Reload** button (the page itself is the old version until reloaded).
+- **Overview:** state, power, current, SoC and energy (with a **Check**
+  chip when something's wrong with your supplier's integration or the
+  supplier defaults: hover for what, click for Diagnostics › Health);
+  **What happens next**: now, then the next few things in the coming 16
+  hours (the schedule plugging in and unplugging, with the ready time; your
+  supplier's planned slots; saving sessions) and a strip of those hours; the current session;
   **smart charging** (the charge slots your supplier plans, found
   automatically from the Octopus Energy, EDF Energy or E.ON Next integration, also
   shown along the top of the chart);
@@ -598,7 +628,10 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   time charging; click a day to show only its sessions, or a charge to open
   it), and the last 20 charging
   sessions (energy, duration, peak power, what ended them; transaction ID
-  and ID tag in the details; tagged with your supplier's name, e.g.
+  and ID tag in the details; tagged with what started it: **Schedule**,
+  **Charge now**, **Auto plug-in**, **Car plugged in**, **Before a saving
+  session**, **Saving session adjusted**, **One-off**, **By hand** or
+  **Home Assistant**; and with your supplier's name, e.g.
   **Octopus Energy slot**, when the whole session was in its dispatch
   slots, or **Partly Octopus Energy slot** when only some was), kept across restarts,
   and the last 20 plug-ins that never got a session: when, for how long, who
