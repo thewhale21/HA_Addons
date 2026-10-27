@@ -14,7 +14,7 @@
     "daily_limit_h: the most hours of smart charging it schedules (Force schedule on supplier keeps within it); null: no limit.",
     "limit_reset: when that limit starts again: a time (HH:MM, every day), or \"rolling\" (any 24 hours).",
     "other: used for a supplier that isn't listed.",
-    "saving_sessions: words (in a calendar's ID or name) that mean saving sessions, not_words that mean the opposite (e.g. Power Up), and prefer: picked first when several are found."
+    "saving_sessions: words (in a calendar's ID or name) that mean saving sessions, not_words that mean the opposite (e.g. Power Up), and prefer: picked first when several are found. sensors: saving sessions read from sensors rather than a calendar (Axle Energy): name, the end of the start, end and type sensors' entity IDs, and types: the event types that are saving sessions (a list given in the override replaces the whole list)."
   ],
   "suppliers": [
     {
@@ -122,6 +122,17 @@
     ],
     "prefer": [
       "power_down"
+    ],
+    "sensors": [
+      {
+        "name": "Axle Energy",
+        "start": "axle_energy_event_start",
+        "end": "axle_energy_event_end",
+        "type": "axle_energy_event_type",
+        "types": [
+          "export"
+        ]
+      }
     ]
   }
 }

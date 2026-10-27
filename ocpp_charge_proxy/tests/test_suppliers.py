@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from src import suppliers
 
 
@@ -66,6 +68,19 @@ def test_your_changes_override_the_defaults(tmp_path):
     assert new["dispatch_suffix"] == "dispatching" and new["ready_entity_suffix"] == "target_time"  # the kind's names
     assert data["saving_sessions"]["words"] == ["flex_event"] and data["saving_sessions"]["prefer"] == ["power_down"]
     assert suppliers.INFO["override"] == over and suppliers.INFO["override_error"] is None
+
+
+def test_saving_session_sensor_sources(tmp_path):
+    assert suppliers.load()["saving_sessions"]["sensors"][0]["name"] == "Axle Energy"
+    over = _write(tmp_path / "over.json", {"suppliers": [], "saving_sessions": {"sensors": [
+        {"name": "Flex Co", "start": "flex_start", "end": "flex_end"}]}})
+    data = suppliers.load(override=over)
+    assert data["saving_sessions"]["sensors"] == [{"name": "Flex Co", "start": "flex_start", "end": "flex_end"}]
+    assert data["saving_sessions"]["words"][0] == "power_down"  # the rest kept
+    for bad in ([{"name": "X", "start": "a"}], [{"start": "a", "end": "b"}], {"name": "X"},
+                [{"name": "X", "start": "Bad Name", "end": "b"}], [{"name": "X", "start": "a", "end": "b", "types": "export"}]):
+        with pytest.raises(ValueError):
+            suppliers.parse({"suppliers": [], "saving_sessions": {"sensors": bad}})
 
 
 def test_broken_changes_are_left_out(tmp_path):

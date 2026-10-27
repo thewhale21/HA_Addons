@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 
 import pytest
 
@@ -279,3 +280,32 @@ def test_saving_sessions_read_from_the_found_calendar():
 
     link.all_states = no_calendar
     assert _run(link.read_saving_sessions()) is None and "No saving sessions calendar" in link.saving_info["error"]
+
+
+def test_saving_sessions_read_from_axle_energy_without_a_calendar():
+    link, _ = _link()
+    asked = []
+
+    start = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)).replace(
+        hour=19, minute=0, second=0, microsecond=0)
+
+    async def states():
+        return [{"entity_id": "sensor.axle_energy_event_start", "state": start.isoformat()},
+                {"entity_id": "sensor.axle_energy_event_end", "state": (start + datetime.timedelta(hours=1)).isoformat()},
+                {"entity_id": "sensor.axle_energy_event_type", "state": "export"}]
+
+    async def query(payload, timeout=30):
+        asked.append(payload)
+        return {}
+
+    link.all_states, link.query = states, query
+    sessions = _run(link.read_saving_sessions())
+    assert [(s["start"].hour, s["end"].hour) for s in sessions] == [(19, 20)] and not asked  # no calendar asked
+    assert link.saving_info["entity"] is None and link.saving_info["error"] is None
+    assert link.saving_info["sensors"] == [{"name": "Axle Energy", "entity": "sensor.axle_energy_event_start"}]
+
+    async def unavailable():
+        return [dict(st, state="unavailable") for st in await states()]
+
+    link.all_states = unavailable
+    assert _run(link.read_saving_sessions()) is None and "unavailable" in link.saving_info["error"]

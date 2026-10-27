@@ -47,6 +47,14 @@ SAVING_DEFAULTS = {
               "demand_flex", "flexibility", "turn_down", "peak_save", "beat_the_peak"],
     "not_words": ["power_up", "free_electricity", "free_power", "free_session", "boost"],
     "prefer": ["power_down"],  # picked first, when several are found
+    # Saving sessions from sensors rather than a calendar: each source's next event is
+    # three sensors (its start and end times, and its type). Found by the end of their
+    # entity IDs; only events of the given types are saving sessions (Axle Energy's
+    # "import" events are the opposite: use more)
+    "sensors": [
+        {"name": "Axle Energy", "start": "axle_energy_event_start", "end": "axle_energy_event_end",
+         "type": "axle_energy_event_type", "types": ["export"]},
+    ],
 }
 
 BUILT_IN = {
@@ -145,6 +153,30 @@ def _check(entry: dict, where: str) -> dict:
     return out
 
 
+def _saving_sensors(value) -> list:
+    """saving_sessions.sensors, checked (raises ValueError)."""
+    if not isinstance(value, list):
+        raise ValueError("saving_sessions: sensors must be a list")
+    out = []
+    for i, e in enumerate(value):
+        where = f"saving_sessions sensor source {i + 1}"
+        if not isinstance(e, dict) or not str(e.get("name") or "").strip():
+            raise ValueError(f"{where}: needs a name")
+        entry = {"name": str(e["name"]).strip()}
+        for key in ("start", "end", "type"):
+            v = e.get(key)
+            if v is None and key == "type":
+                continue
+            if not isinstance(v, str) or not re.fullmatch(r"[a-z0-9_]+", v):
+                raise ValueError(f"{where} ({entry['name']}): {key} must be the end of an entity ID (a-z, 0-9, _)")
+            entry[key] = v
+        types = _words(e, "types", where)
+        if types is not None:
+            entry["types"] = types
+        out.append(entry)
+    return out
+
+
 def parse(data: dict) -> dict:
     """The file's contents, checked (raises ValueError)."""
     if not isinstance(data, dict) or not isinstance(data.get("suppliers"), list):
@@ -156,10 +188,12 @@ def parse(data: dict) -> dict:
     raw = data.get("saving_sessions") or {}
     if not isinstance(raw, dict):
         raise ValueError("saving_sessions must be an object")
-    for key in SAVING_DEFAULTS:
+    for key in ("words", "not_words", "prefer"):
         words = _words(raw, key, "saving_sessions")
         if words is not None:
             saving[key] = words
+    if raw.get("sensors") is not None:
+        saving["sensors"] = _saving_sensors(raw["sensors"])
     return {"suppliers": suppliers, "other": other, "saving_sessions": saving}
 
 
@@ -274,7 +308,8 @@ def other() -> dict:
 
 
 def saving_words() -> dict:
-    """{"words", "not_words", "prefer"} for finding the saving sessions calendar."""
+    """{"words", "not_words", "prefer"} for finding the saving sessions calendar, and
+    "sensors": the sources whose saving sessions are read from sensors (Axle Energy)."""
     return DATA["saving_sessions"]
 
 

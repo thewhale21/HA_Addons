@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.55.0 — Axle Energy events, and today's plan
+
+- **Feature:** saving sessions from Axle Energy: its export events
+  (`sensor.axle_energy_event_start`, `_end` and `_type`, found automatically)
+  are saving sessions, as from a calendar, with or without one. Its import
+  events (use more) are left out. The sensors are listed on the Saving
+  sessions card, and the sources are in `suppliers.json`
+  (`saving_sessions.sensors`), so another one like it can be added there
+- **Feature:** the Sessions tab's Today row shows today's plan: your
+  supplier's planned charge slots (dashed, in its colour, with their kWh)
+  and when the schedule plugs in (a dashed band)
+
 ## 2.54.3 — The last week, by the clock
 
 - **Fix:** after the clocks went back, the Sessions tab's last 7 days drew the

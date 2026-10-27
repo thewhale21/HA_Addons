@@ -173,6 +173,15 @@ the car's charging out of your supplier's saving sessions, read from a Home
 Assistant calendar: every upcoming event in it is a session. The calendar
 is read every 5 minutes, up to 8 days ahead.
 
+**Axle Energy** events are read from its sensors instead,
+`sensor.axle_energy_event_start`, `sensor.axle_energy_event_end` and
+`sensor.axle_energy_event_type`, found automatically (the card lists them).
+Its **export** events are saving sessions; its **import** events (when it
+wants you to use more) aren't. With a calendar too, sessions from either
+count (overlapping ones are one session). Without a calendar, Axle's
+sensors are enough. While the sensors are unavailable (e.g. as Home
+Assistant starts) the sessions already found are kept, not cancelled.
+
 - **Calendar:** found automatically: Octopus Energy's
   `calendar.octopus_energy_<account>_octoplus_power_down` (or the older
   `..._octoplus_saving_sessions`), from the Octopus Energy integration; or
@@ -449,7 +458,11 @@ adds a supplier. The fields:
 | `daily_limit_h`, `limit_reset` | Its daily limit in hours (`null`: none) and when it resets (`"12:00"`, or `"rolling"`) |
 
 And `saving_sessions` (`words`, `not_words`, `prefer`) for finding the
-saving sessions calendar. Anything set on Settings › Your supplier still
+saving sessions calendar, and `sensors`: saving sessions read from sensors
+rather than a calendar (Axle Energy), each with a `name`, the end of its
+`start`, `end` and `type` sensors' entity IDs, and `types`, the event types
+that are saving sessions (a `sensors` list in your file replaces the whole
+list). Anything set on Settings › Your supplier still
 wins over all of these.
 
 If a supplier's integration changes in a way these fields can't follow (a
@@ -572,7 +585,9 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   and hourly beyond that.
 - **Sessions:** a timeline of the last 7 days (when the car was plugged in,
   coloured by what plugged it in, when it charged, the saving sessions
-  (hatched), and each day's energy and
+  (hatched), today's plan (your supplier's planned slots, dashed in its
+  colour with their kWh, and when the schedule plugs in, a dashed band),
+  and each day's energy and
   time charging; click a day to show only its sessions, or a charge to open
   it), and the last 20 charging
   sessions (energy, duration, peak power, what ended them; transaction ID

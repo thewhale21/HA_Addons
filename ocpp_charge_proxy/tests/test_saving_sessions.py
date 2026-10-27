@@ -1,7 +1,8 @@
 import datetime
 
 from src.automation import SAVING_SOURCE, Automation, ReplugOptions, validate_entry
-from src.saving_sessions import find_calendar, is_saving_calendar, parse_events, supplier_of
+from src.saving_sessions import (find_calendar, find_sensor_sources, is_saving_calendar, merge, parse_events,
+                                 sensor_events, supplier_of)
 
 TZ = datetime.timezone.utc
 
@@ -65,6 +66,38 @@ def test_events_parsed():
     out = parse_events(resp, "calendar.x", now)
     assert [(s["start"].hour, s["end"].hour, s["end"].minute) for s in out] == [(17, 18, 30)]
     assert parse_events(None, "calendar.x", now) == []
+
+
+def _axle(start, end, kind, prefix="sensor.axle_energy_event_"):
+    return [{"entity_id": prefix + "start", "state": start}, {"entity_id": prefix + "end", "state": end},
+            {"entity_id": prefix + "type", "state": kind}, {"entity_id": "sensor.other", "state": "1"}]
+
+
+def test_axle_energy_events_from_its_sensors():
+    now, ahead = _at(5, 12), datetime.timedelta(days=8)
+    states = _axle("2026-10-05T19:00:00+00:00", "2026-10-05T20:00:00+00:00", "export")
+    sources = find_sensor_sources(states)
+    assert sources == [{"name": "Axle Energy", "types": ["export"], "start": "sensor.axle_energy_event_start",
+                        "end": "sensor.axle_energy_event_end", "type": "sensor.axle_energy_event_type"}]
+    out = sensor_events(states, sources, now, ahead)
+    assert [(s["start"].hour, s["end"].hour, s["summary"]) for s in out] == [(19, 20, "Axle Energy event (export)")]
+    # an import event (use more) isn't a saving session; nor is no event, or one that's over
+    for start, end, kind in (("2026-10-05T19:00:00+00:00", "2026-10-05T20:00:00+00:00", "import"),
+                             ("unknown", "unknown", "unknown"),
+                             ("2026-10-05T09:00:00+00:00", "2026-10-05T10:00:00+00:00", "export"),
+                             ("2026-10-20T19:00:00+00:00", "2026-10-20T20:00:00+00:00", "export")):  # too far ahead
+        st = _axle(start, end, kind)
+        assert sensor_events(st, find_sensor_sources(st), now, ahead) == []
+    # unavailable (e.g. while the integration starts): not read, so nothing is taken as cancelled
+    st = _axle("unavailable", "unavailable", "unavailable")
+    assert sensor_events(st, find_sensor_sources(st), now, ahead) is None
+    # named with something in front (a second install of the integration)
+    st = _axle("2026-10-05T19:00:00+00:00", "2026-10-05T20:00:00+00:00", "export", "sensor.home_axle_energy_event_")
+    assert find_sensor_sources(st)[0]["end"] == "sensor.home_axle_energy_event_end"
+    assert find_sensor_sources([{"entity_id": "sensor.axle_energy_event_start"}]) == []  # no end sensor
+    # the same session from a calendar and from Axle: one
+    both = merge(out + [_session(5, 19, 20, m2=30)])
+    assert [(s["start"].hour, s["end"].hour, s["end"].minute) for s in both] == [(19, 20, 30)]
 
 
 # --- the schedule around a session --------------------------------------------------

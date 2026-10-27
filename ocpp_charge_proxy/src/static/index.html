@@ -292,8 +292,15 @@
     padding: 0 6px; white-space: nowrap; overflow: hidden; }
   .stl .chg:hover { filter: brightness(1.08); }
   .stl .chg.live { animation: pulse 1.6s ease-in-out infinite; }
+  /* Today's plan, over the dimmed rest of the day: your supplier's planned charge slots
+     (dashed, its colour) and when the schedule plugs in (a dashed band) */
+  .stl .plan { position: absolute; top: 9px; bottom: 9px; border-radius: 5px; border: 1.5px dashed var(--ok);
+    background: color-mix(in srgb, var(--ok) 14%, transparent); z-index: 3; color: var(--text); font-size: 11px;
+    font-weight: 500; line-height: 13px; padding: 0 5px; white-space: nowrap; overflow: hidden; box-sizing: border-box; }
+  .stl .plan-plug { position: absolute; top: 5px; bottom: 5px; border-radius: 7px; border: 1.5px dashed var(--primary);
+    z-index: 3; box-sizing: border-box; pointer-events: auto; }
   .stl .gone { position: absolute; top: 0; bottom: 0; right: 0; background: var(--card); opacity: .45; pointer-events: none; z-index: 2; }
-  .stl .now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--err); z-index: 3; }
+  .stl .now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--err); z-index: 4; }
   .stl .now::before { content: ''; position: absolute; top: -1px; left: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--err); }
   .stl .axis { grid-column: 2; position: relative; height: 14px; font-size: 11px; color: var(--text2); }
   .stl .axis span { position: absolute; transform: translateX(-50%); }
@@ -681,7 +688,7 @@
         <h2>Saving sessions<span class="spacer"></span>
           <label class="switch"><input type="checkbox" id="save-on" aria-label="Saving sessions"><span></span></label>
         </h2>
-        <div class="note" style="margin:0 0 10px">Keeps the car's charging out of your supplier's saving sessions, read from a Home Assistant calendar. <details class="more"><summary>More</summary><div>Octopus Energy's Saving Sessions (Power Down), E.ON Next's and EDF's sessions: any upcoming event in the calendar is a session. The calendar is read every 5 minutes, up to 8 days ahead. A session that's taken out of the calendar before it starts puts back anything it changed.</div></details></div>
+        <div class="note" style="margin:0 0 10px">Keeps the car's charging out of your supplier's saving sessions, read from a Home Assistant calendar (or Axle Energy's sensors). <details class="more"><summary>More</summary><div>Octopus Energy's Saving Sessions (Power Down), E.ON Next's and EDF's sessions: any upcoming event in the calendar is a session. Axle Energy's events are read from its sensors (<code>sensor.axle_energy_event_start</code>, <code>_end</code> and <code>_type</code>), found automatically: its export events are saving sessions (its import events, when it wants you to use more, aren't). With both, sessions from either count. The calendar is read every 5 minutes, up to 8 days ahead. A session that's taken out of the calendar before it starts puts back anything it changed.</div></details></div>
         <div class="row"><div class="grow">Calendar<div class="note" style="margin:0">Where your saving sessions show. <details class="more"><summary>More</summary><div>Found automatically: Octopus Energy's <code>calendar.octopus_energy_…_octoplus_power_down</code> (or the older <code>…_saving_sessions</code>), or another calendar whose name says saving or saver sessions, power down or demand flexibility (E.ON Next, EDF). Octopus's Power Up and free electricity calendars are left out. If yours isn't found, pick it (tick "Show all sensors in the lists" on the Settings tab to see every calendar).</div></details></div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="saving_entity" data-domain="calendar" data-fit="saving" data-none="Found automatically"></span></div>
         <div class="row" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--divider)">
@@ -1873,7 +1880,25 @@ function drawSessionTimeline(sd) {
     api('automation').then((d) => { sessSaving = d.schedule.saving_sessions || []; drawSessionTimeline(sd); }).catch(() => {});
   }
   const saves = (saving || []).map((x) => ({a: new Date(x.start).getTime(), b: new Date(x.end).getTime(), x}));
-  let anySave = false;
+  let anySave = false, anyPlan = false, anyPlanPlug = false;
+  // Today's plan: your supplier's planned slots (read at most once a minute) ...
+  if (Date.now() - smart.at > 60000) refreshSmart().then(() => drawSessionTimeline(sessionsData)).catch(() => {});
+  const sc = smart.data && smart.data.found ? smart.data : null;
+  const planned = !sc ? [] : [...(sc.current ? [sc.current] : []), ...(sc.planned || [])]
+    .map((x) => ({a: Math.max(new Date(x.start).getTime(), now), b: new Date(x.end).getTime(), x})).filter((z) => z.b > z.a);
+  const planColour = (sc && SUPPLIER_COLOURS[sc.provider]) || 'var(--ok)';
+  // ... and when the schedule plugs in and unplugs (each plug-in to the unplug after it;
+  // from now if it's plugged in now and the next is an unplug)
+  const planPlugs = [];
+  {
+    const ups = ((auto.data && auto.data.schedule.upcoming) || []).filter((u) => !u.skipped && (u.action === 'plug' || u.action === 'unplug'));
+    let open = (sd.plugged || []).some((p) => !p.end) ? now : null;
+    for (const u of ups) {
+      const at = new Date(u.time).getTime();
+      if (u.action === 'plug') { if (open === null) open = at; } else if (open !== null) { planPlugs.push({a: open, b: at}); open = null; }
+    }
+    if (open !== null && open > now) planPlugs.push({a: open, b: open + 3600000});  // (no unplug in sight)
+  }
   const t = (ms) => hm(ms);
   const byOf = (by) => PLUG_BY.find(([k]) => by && (by === k || by.startsWith(k))) || [by, '#9e9e9e', 'Another way'];
   const plugs = (sd.plugged || []).map((p) => ({a: new Date(p.start).getTime(), b: p.end ? new Date(p.end).getTime() : now, p, by: byOf(p.by)}));
@@ -1910,7 +1935,20 @@ function drawSessionTimeline(sd) {
       const sup = sessSupplier(z.x); usedSup.add(sup || '');
       inner += `<div class="chg ${z.x.live ? 'live' : ''}" data-key="${esc(z.x.start)}" style="left:${pct(z.a)}%;width:${Math.max(w, 0.4)}%;${sessFill(z.x, '135deg')}" title="${esc(title)}">${w * trackPx('s-tl') / 100 > 52 ? num(z.x.energy_kwh, 1) + ' kWh' : ''}</div>`;
     }
-    if (n === 0) inner += `<div class="gone" style="left:${pct(now)}%"></div><div class="now" style="left:${pct(now)}%"></div>`;
+    if (n === 0) {
+      inner += `<div class="gone" style="left:${pct(now)}%"></div>`;
+      for (const z of planPlugs.filter((z) => z.b > lo && z.a < hi)) {
+        anyPlanPlug = true;
+        inner += `<div class="plan-plug" style="left:${pct(z.a)}%;width:${pct(z.b) - pct(z.a)}%" title="${esc(`The schedule plugs in ${t(z.a)}–${z.b >= hi ? 'tomorrow' : t(z.b)}`)}"></div>`;
+      }
+      for (const z of planned.filter((z) => z.b > lo && z.a < hi)) {
+        anyPlan = true;
+        const w = pct(z.b) - pct(z.a), kwh = z.x.charge_kwh != null ? `${num(Math.abs(z.x.charge_kwh), 1)} kWh` : '';
+        inner += `<div class="plan" style="left:${pct(z.a)}%;width:${Math.max(w, 0.4)}%;border-color:${planColour};background:color-mix(in srgb, ${planColour} 14%, transparent)"`
+          + ` title="${esc(`Planned by ${sc.provider || 'your supplier'} ${t(new Date(z.x.start).getTime())}–${z.b >= hi ? 'tomorrow' : t(z.b)}${kwh ? ' · ' + kwh : ''}`)}">${kwh && w * trackPx('s-tl') / 100 > 52 ? kwh : ''}</div>`;
+      }
+      inner += `<div class="now" style="left:${pct(now)}%"></div>`;
+    }
     const d = d0, name = n === 0 ? 'Today' : n === -1 ? 'Yesterday' : d.toLocaleDateString([], {weekday: 'short'});
     const key = d.toLocaleDateString('en-CA'), st = sessDay === key ? 'sel' : sessDay ? 'dim' : '';
     html += `<div class="dl ${n === 0 ? 'today' : ''} ${st}" data-date="${key}" title="Show this day's sessions">${name}<small>${d.toLocaleDateString([], {day: 'numeric', month: 'short'})}</small></div>`
@@ -1923,6 +1961,8 @@ function drawSessionTimeline(sd) {
     + PLUG_BY.filter(([, , label]) => used.has(label)).map(([, c, label]) => `<span><b class="band" style="background:${c};opacity:.35"></b>Plugged in: ${label}</span>`).join('')
     + (used.has('Another way') ? '<span><b class="band" style="background:#9e9e9e;opacity:.35"></b>Plugged in another way</span>' : '')
     + (anySave ? '<span><b class="band" style="background:repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 5px);opacity:.8"></b>Saving session</span>' : '')
+    + (anyPlan ? `<span><b class="band" style="border:1.5px dashed ${planColour};box-sizing:border-box"></b>Planned by ${esc((sc && sc.provider) || 'your supplier')}</span>` : '')
+    + (anyPlanPlug ? '<span><b class="band" style="border:1.5px dashed var(--primary);box-sizing:border-box"></b>The schedule plugs in</span>' : '')
     + '<span><b class="band" style="background:var(--err);width:2px"></b>Now</span>';
 }
 $('s-tl').addEventListener('click', (ev) => {
@@ -2179,7 +2219,8 @@ function drawSaving() {
   const on = !!(d.settings && d.settings.saving_on), info = d.saving || {};
   $('save-info').innerHTML = !on ? kv([['Status', '<span class="chip">Off</span>']]) : kv([
     ['Calendar', info.entity ? `<code>${esc(info.entity)}</code>${info.auto ? ' <span class="chip ok">Found</span>' : ' <span class="chip">Picked</span>'}${info.supplier ? ' <span class="muted">' + esc(info.supplier) + '</span>' : ''}`
-      : '<span class="chip warn">None found</span>'],
+      : (info.sensors || []).length ? '<span class="chip">None</span>' : '<span class="chip warn">None found</span>'],
+    ...(info.sensors || []).map((x) => [esc(x.name), `<code>${esc(x.entity)}</code> <span class="chip ok">Found</span>`]),
     ['Status', info.error ? `<span class="chip warn">Not read</span> <span class="muted">${esc(info.error)}</span>`
       : info.read_at ? `<span class="chip ok">Read</span> <span class="muted">${ago(new Date(info.read_at * 1000).toISOString())}</span>` : '<span class="chip">Not read yet</span>'],
   ]);

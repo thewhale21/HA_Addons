@@ -11,6 +11,11 @@ The calendar is the one picked on the Automations tab, or found by its name:
 - E.ON Next, EDF and others: a calendar whose ID or name mentions saving
   or saver sessions, power down or demand flexibility.
 Calendars for the opposite (Octopus Power Up, free electricity) are left out.
+
+Or from sensors (sensor_events): Axle Energy's next event is three sensors,
+sensor.axle_energy_event_start, _end and _type; its "export" events are saving
+sessions (its "import" ones, use more, are left out). The sources are in
+src/suppliers.json (saving_sessions.sensors).
 """
 from __future__ import annotations
 
@@ -87,15 +92,67 @@ def parse_events(response, entity_id: str, now: datetime.datetime) -> list[dict]
         if start is None or end is None or end <= start or end - start > MAX_SESSION or end <= now:
             continue
         out.append({"start": start, "end": end, "summary": str(ev.get("summary") or "Saving session")[:80]})
-    out.sort(key=lambda s: s["start"])
-    # overlapping events (e.g. the same session twice) become one
+    return merge(out)
+
+
+def merge(sessions: list[dict]) -> list[dict]:
+    """In order, with overlapping ones (e.g. the same session twice, or from a
+    calendar and a sensor) made one."""
     merged: list[dict] = []
-    for s in out:
+    for s in sorted(sessions, key=lambda s: s["start"]):
         if merged and s["start"] <= merged[-1]["end"]:
             merged[-1]["end"] = max(merged[-1]["end"], s["end"])
         else:
             merged.append(dict(s))
     return merged
+
+
+NO_READING = ("", "unknown", "none")
+
+
+def find_sensor_sources(states: list) -> list[dict]:
+    """The sensor sources (src/suppliers.json saving_sessions.sensors) found in
+    HA's states: [{"name", "types", "start", "end", "type" (entity IDs; "type" may be None)}].
+    The end and type sensors are the ones named like the start one found."""
+    ids = {st.get("entity_id", "") for st in states or []}
+    found = []
+    for src in suppliers.saving_words().get("sensors") or []:
+        for start in sorted(e for e in ids if e.startswith("sensor.") and e.endswith(src["start"])):
+            stem = start[:-len(src["start"])]
+            end = stem + src["end"]
+            if end not in ids:
+                continue
+            kind = stem + src["type"] if src.get("type") else None
+            found.append({"name": src["name"], "types": src.get("types"), "start": start, "end": end,
+                          "type": kind if kind in ids else None})
+            break  # one of each
+    return found
+
+
+def sensor_events(states: list, sources: list[dict], now: datetime.datetime,
+                  look_ahead: datetime.timedelta) -> Optional[list[dict]]:
+    """The sources' events not yet over, as parse_events gives them. None if a
+    sensor is unavailable (e.g. while its integration starts up), so the sessions
+    already known aren't taken as cancelled."""
+    by_id = {st.get("entity_id", ""): st for st in states or []}
+    out = []
+    for src in sources:
+        readings = {k: str((by_id.get(src[k]) or {}).get("state") or "").strip()
+                    for k in ("start", "end", "type") if src.get(k)}
+        if any(v == "unavailable" for v in readings.values()):
+            return None
+        if src.get("type") and src.get("types") and readings.get("type", "").lower() not in src["types"]:
+            continue  # no event, or one of another type (Axle: "import", use more)
+        if readings["start"].lower() in NO_READING or readings["end"].lower() in NO_READING:
+            continue
+        start, end = _when(readings["start"]), _when(readings["end"])
+        if start is None or end is None or end <= start or end - start > MAX_SESSION or end <= now \
+                or start > now + look_ahead:
+            continue
+        kind = readings.get("type")
+        out.append({"start": start, "end": end,
+                    "summary": f"{src['name']} event" + (f" ({kind})" if kind else "")})
+    return out
 
 
 def session_id(start: datetime.datetime, end: datetime.datetime) -> str:

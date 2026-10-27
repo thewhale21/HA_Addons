@@ -30,7 +30,8 @@ from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
 from src import jsonfile, suppliers
 from src.ready_time import ALL_DAY_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity, target_time_ids
 from src.smart_charging import check_supplier, find_dispatch_sensors, provider_name, smart_charging
-from src.saving_sessions import find_calendar, is_saving_calendar, parse_events, supplier_of
+from src.saving_sessions import (find_calendar, find_sensor_sources, is_saving_calendar, merge as merge_sessions,
+                                 parse_events, sensor_events, supplier_of)
 from src.ha_entities import (
     ALL_SENSORS, CHARGE_NOW_HOURS, CHARGE_NOW_ICON, HELPER_ICON, HELPER_ID, HELPER_NAME,
     ButtonPresses, PluggedInSync, SensorPublisher, charge_now_entities, charge_now_helper_id,
@@ -286,7 +287,7 @@ class HaLink:
         self._call = None  # websocket request function while connected
         # Saving sessions: the calendar read and how it went, for the page
         self.saving_info: dict = {"entity": None, "auto": False, "supplier": None, "error": None,
-                                  "read_at": None, "count": 0}
+                                  "read_at": None, "count": 0, "sensors": []}
         self._reset_logic()
         self._load()
         self._load_versions()
@@ -971,8 +972,9 @@ class HaLink:
         return bool(info.get("current"))
 
     async def read_saving_sessions(self) -> Optional[list]:
-        """The saving sessions in the calendar (picked, or found by its name),
-        not yet over, the next 8 days: [{"start", "end", "summary"}]; None if it
+        """The saving sessions in the calendar (picked, or found by its name) and
+        from sensors (Axle Energy, src/suppliers.json saving_sessions.sensors), not
+        yet over, the next 8 days: [{"start", "end", "summary"}]; None if they
         couldn't be read (nothing found, HA not connected...: see saving_info)."""
         info = self.saving_info
         entity = self.settings.get("saving_entity") or ""
@@ -982,24 +984,35 @@ class HaLink:
             if not entity:
                 entity = find_calendar(states) or ""
             info["entity"] = entity or None
-            if not entity:
+            sources = find_sensor_sources(states)
+            info["sensors"] = [{"name": x["name"], "entity": x["start"]} for x in sources]
+            if not entity and not sources:
                 info["error"] = "No saving sessions calendar found: pick yours"
                 return None
-            name = next(((st.get("attributes") or {}).get("friendly_name") or "" for st in states
-                         if st.get("entity_id") == entity), "")
-            info["supplier"] = supplier_of(entity, name)
             now = datetime.datetime.now().astimezone()
-            result = await self.query({
-                "type": "call_service", "domain": "calendar", "service": "get_events",
-                "target": {"entity_id": entity},
-                "service_data": {"start_date_time": (now - datetime.timedelta(hours=12)).isoformat(timespec="seconds"),
-                                 "end_date_time": (now + SAVING_LOOK_AHEAD).isoformat(timespec="seconds")},
-                "return_response": True,
-            })
-            sessions = parse_events((result or {}).get("response"), entity, now)
+            sessions = []
+            if sources:
+                found = sensor_events(states, sources, now, SAVING_LOOK_AHEAD)
+                if found is None:
+                    raise RuntimeError(", ".join(x["name"] for x in sources) + "'s sensors are unavailable")
+                sessions += found
+            info["supplier"] = None
+            if entity:
+                name = next(((st.get("attributes") or {}).get("friendly_name") or "" for st in states
+                             if st.get("entity_id") == entity), "")
+                info["supplier"] = supplier_of(entity, name)
+                result = await self.query({
+                    "type": "call_service", "domain": "calendar", "service": "get_events",
+                    "target": {"entity_id": entity},
+                    "service_data": {"start_date_time": (now - datetime.timedelta(hours=12)).isoformat(timespec="seconds"),
+                                     "end_date_time": (now + SAVING_LOOK_AHEAD).isoformat(timespec="seconds")},
+                    "return_response": True,
+                })
+                sessions += parse_events((result or {}).get("response"), entity, now)
+            sessions = merge_sessions(sessions)
         except Exception as err:
             if info.get("error") != str(err):
-                logger.warning("Couldn't read the saving sessions calendar %s: %s", entity or "-", err)
+                logger.warning("Couldn't read the saving sessions (%s): %s", entity or "sensors", err)
             info["error"] = str(err) or type(err).__name__
             return None
         info.update(error=None, read_at=time.time(), count=len(sessions))
