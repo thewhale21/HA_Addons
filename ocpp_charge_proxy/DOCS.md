@@ -571,7 +571,8 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   5-minute points while HA keeps them (10 days by default, `purge_keep_days`)
   and hourly beyond that.
 - **Sessions:** a timeline of the last 7 days (when the car was plugged in,
-  coloured by what plugged it in, when it charged, and each day's energy and
+  coloured by what plugged it in, when it charged, the saving sessions
+  (hatched), and each day's energy and
   time charging; click a day to show only its sessions, or a charge to open
   it), and the last 20 charging
   sessions (energy, duration, peak power, what ended them; transaction ID

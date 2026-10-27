@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.54.3 — The last week, by the clock
+
+- **Fix:** after the clocks went back, the Sessions tab's last 7 days drew the
+  days before the change an hour early (a 15:31 charge showed from about
+  14:30; its times on hover were right). Each day is now drawn by the clock,
+  so 15:30 is under 15:00 on either side of a change. The Automations tab's
+  past days, charges and your supplier's planned slots had the same problem
+  across a change, and are fixed too
+- **Feature:** the Sessions tab's last 7 days show the saving sessions
+  (hatched; hover for the time and name). Saving sessions are now kept for
+  a week after they end (was a day), so the week has them all
+
 ## 2.54.2 — Not during a session
 
 - **Change:** **Move to another install**'s Export and Import wait while a

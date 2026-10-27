@@ -284,6 +284,9 @@
   .stl .track { position: relative; height: 34px; border-radius: 10px; overflow: hidden;
     background: var(--hover) repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), var(--divider) calc(12.5% - 1px) 12.5%); }
   .stl .plug { position: absolute; top: 5px; bottom: 5px; border-radius: 7px; opacity: .28; }
+  .stl .save { position: absolute; top: 0; bottom: 0; opacity: .55;
+    background: repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 6px);
+    border-left: 1px solid var(--violet); border-right: 1px solid var(--violet); }
   .stl .chg { position: absolute; top: 9px; bottom: 9px; border-radius: 5px; background: linear-gradient(135deg, #66bb6a, var(--ok));
     box-shadow: 0 1px 2px rgba(0,0,0,.18); cursor: pointer; z-index: 1; color: #fff; font-size: 11px; font-weight: 500; line-height: 16px;
     padding: 0 6px; white-space: nowrap; overflow: hidden; }
@@ -1858,10 +1861,19 @@ async function refreshSessions() {
 // day's total. Click a block to open that session in Recent sessions.
 const PLUG_BY = [['schedule', 'var(--primary)', 'Schedule'], ['auto plug-in', '#f57c00', 'Auto plug-in'], ['charge now', 'var(--c-charge-now)', 'Charge now'],
   ['car plugged in sensor', 'var(--c-car-plugged)', 'Car plugged in'], ['saving session', '#5e35b1', 'Before a saving session']];
+// The saving sessions of the last week, for the Sessions tab's days (from the schedule)
+let sessSaving = null;
 function drawSessionTimeline(sd) {
   const el = $('s-tl'); if (!el) return;
   const day0 = new Date(); day0.setHours(0, 0, 0, 0);
   const DAY = 86400000, now = Date.now();
+  const saving = (auto.data && auto.data.schedule.saving_sessions) || sessSaving;
+  if (!saving && !drawSessionTimeline.asked) {  // (the Automations tab not opened yet)
+    drawSessionTimeline.asked = true;
+    api('automation').then((d) => { sessSaving = d.schedule.saving_sessions || []; drawSessionTimeline(sd); }).catch(() => {});
+  }
+  const saves = (saving || []).map((x) => ({a: new Date(x.start).getTime(), b: new Date(x.end).getTime(), x}));
+  let anySave = false;
   const t = (ms) => hm(ms);
   const byOf = (by) => PLUG_BY.find(([k]) => by && (by === k || by.startsWith(k))) || [by, '#9e9e9e', 'Another way'];
   const plugs = (sd.plugged || []).map((p) => ({a: new Date(p.start).getTime(), b: p.end ? new Date(p.end).getTime() : now, p, by: byOf(p.by)}));
@@ -1870,8 +1882,22 @@ function drawSessionTimeline(sd) {
   const used = new Set(), usedSup = new Set();
   let html = '';
   for (let n = 0; n > -7; n--) {
-    const lo = day0.getTime() + n * DAY, hi = lo + DAY, pct = (ms) => (Math.min(Math.max(ms, lo), hi) - lo) / DAY * 100;
+    // The day from its 00:00 to the next by the calendar (23 or 25 hours the days the clocks
+    // change), placed by the clock so 15:30 is under 15:00 whichever side of a change it's on
+    const d0 = new Date(day0); d0.setDate(day0.getDate() + n);
+    const d1 = new Date(d0); d1.setDate(d0.getDate() + 1);
+    const lo = d0.getTime(), hi = d1.getTime();
+    const pct = (ms) => {
+      if (ms <= lo) return 0;
+      if (ms >= hi) return 100;
+      const t = new Date(ms);
+      return Math.min(100, (t.getHours() * 3600 + t.getMinutes() * 60 + t.getSeconds()) / 864);
+    };
     let inner = '', kwh = 0, secs = 0;
+    for (const z of saves.filter((z) => z.b > lo && z.a < hi)) {
+      anySave = true;
+      inner += `<div class="save" style="left:${pct(z.a)}%;width:${pct(z.b) - pct(z.a)}%" title="${esc(`Saving session ${t(z.a)}–${t(z.b)}${z.x.summary ? ' (' + z.x.summary + ')' : ''}`)}"></div>`;
+    }
     for (const z of plugs.filter((z) => z.b > lo && z.a < hi)) {
       used.add(z.by[2]);
       inner += `<div class="plug" style="left:${pct(z.a)}%;width:${pct(z.b) - pct(z.a)}%;background:${z.by[1]}" title="${esc(`Plugged in ${t(z.a)}–${z.p.end ? t(z.b) : 'now'} by ${z.p.by || 'unknown'}${z.p.unplugged_by ? ', unplugged by ' + z.p.unplugged_by : ''}`)}"></div>`;
@@ -1885,7 +1911,7 @@ function drawSessionTimeline(sd) {
       inner += `<div class="chg ${z.x.live ? 'live' : ''}" data-key="${esc(z.x.start)}" style="left:${pct(z.a)}%;width:${Math.max(w, 0.4)}%;${sessFill(z.x, '135deg')}" title="${esc(title)}">${w * trackPx('s-tl') / 100 > 52 ? num(z.x.energy_kwh, 1) + ' kWh' : ''}</div>`;
     }
     if (n === 0) inner += `<div class="gone" style="left:${pct(now)}%"></div><div class="now" style="left:${pct(now)}%"></div>`;
-    const d = new Date(lo), name = n === 0 ? 'Today' : n === -1 ? 'Yesterday' : d.toLocaleDateString([], {weekday: 'short'});
+    const d = d0, name = n === 0 ? 'Today' : n === -1 ? 'Yesterday' : d.toLocaleDateString([], {weekday: 'short'});
     const key = d.toLocaleDateString('en-CA'), st = sessDay === key ? 'sel' : sessDay ? 'dim' : '';
     html += `<div class="dl ${n === 0 ? 'today' : ''} ${st}" data-date="${key}" title="Show this day's sessions">${name}<small>${d.toLocaleDateString([], {day: 'numeric', month: 'short'})}</small></div>`
       + `<div class="track ${st}" data-date="${key}">${inner}</div><div class="tot ${st}" data-date="${key}">${kwh ? `<b>${num(kwh, 1)} kWh</b>${hmDur(secs)}` : '—'}</div>`;
@@ -1896,6 +1922,7 @@ function drawSessionTimeline(sd) {
     + [...usedSup].filter(Boolean).map((n) => `<span><b class="band" style="background:${SUPPLIER_COLOURS[n]}"></b>Charged in ${esc(n)}'s slots</span>`).join('')
     + PLUG_BY.filter(([, , label]) => used.has(label)).map(([, c, label]) => `<span><b class="band" style="background:${c};opacity:.35"></b>Plugged in: ${label}</span>`).join('')
     + (used.has('Another way') ? '<span><b class="band" style="background:#9e9e9e;opacity:.35"></b>Plugged in another way</span>' : '')
+    + (anySave ? '<span><b class="band" style="background:repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 5px);opacity:.8"></b>Saving session</span>' : '')
     + '<span><b class="band" style="background:var(--err);width:2px"></b>Now</span>';
 }
 $('s-tl').addEventListener('click', (ev) => {
@@ -2156,7 +2183,7 @@ function drawSaving() {
     ['Status', info.error ? `<span class="chip warn">Not read</span> <span class="muted">${esc(info.error)}</span>`
       : info.read_at ? `<span class="chip ok">Read</span> <span class="muted">${ago(new Date(info.read_at * 1000).toISOString())}</span>` : '<span class="chip">Not read yet</span>'],
   ]);
-  const list = on && a && a.schedule ? a.schedule.saving_sessions || [] : [];
+  const list = (on && a && a.schedule ? a.schedule.saving_sessions || [] : []).filter((x) => new Date(x.end) > Date.now() - 86400000);
   $('save-list').innerHTML = !on ? '' : !list.length ? 'No saving sessions coming up.'
     : list.map((x) => `<div style="margin-top:4px"><span class="chip info">${esc(dateTime(x.start))}–${esc(hm(x.end))}</span> ${esc(x.summary || '')}`
       + (x.notes.length ? `<div class="muted">${x.notes.map(esc).join('; ')}</div>` : '') + '</div>').join('');
@@ -2503,6 +2530,14 @@ const addDays = (iso, n) => { const t = new Date(iso + 'T12:00:00'); t.setDate(t
 function today0() { const t = new Date(); t.setHours(0, 0, 0, 0); return t; }
 const isoAt = (n) => addDays(today0().toLocaleDateString('en-CA'), n);  // n days from today
 const dayIndex = (iso) => Math.round((new Date(iso + 'T00:00:00') - today0()) / 86400000);
+// A time as minutes from today's 00:00 by the clock (the day's index × 1440 + its time of
+// day), as the slots are: not the real minutes since then, which are an hour out for a day
+// on the other side of the clocks changing
+function wallMin(t) {
+  const d = new Date(t);
+  const day = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - today0()) / 86400000);
+  return day * DAY_MIN + d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+}
 
 // While the schedule sets your supplier's ready time, unplug times are limited
 // to the ready times it accepts (30-minute steps; EDF 04:00-11:00)
@@ -2704,7 +2739,7 @@ function trackPx(id = 'w-grid') {
 function waitPart(occ, nowMin) {
   const pp = auto.data && auto.data.schedule.plug_pending;
   if (!pp) return '';
-  const at = (new Date(pp) - today0()) / 60000, o = occ.find((x) => x.a <= nowMin && nowMin < x.b && !x.skipped);
+  const at = wallMin(pp), o = occ.find((x) => x.a <= nowMin && nowMin < x.b && !x.skipped);
   if (!o || at <= o.a) return '';
   return `<div class="wait" style="left:${o.a / 14.4}%;width:${(Math.min(at, o.b) - o.a) / 14.4}%" title="Waiting: plugs in at ${esc(hm(pp))} (random start delay)"></div>`;
 }
@@ -2754,15 +2789,15 @@ function drawWeek() {
     .map(([, [c, label]]) => `<span><b class="band" style="background:${c};opacity:.8"></b>${label}</span>`).join('');
   // What actually charged (sessions), for the last 3 days and today
   // Sessions: hover for the details, click to open it on the Sessions tab
-  const ses = (week.sessions || []).map((x, n) => ({a: (new Date(x.start) - day0) / 60000, b: ((x.stop ? new Date(x.stop) : new Date()) - day0) / 60000, n, x}));
+  const ses = (week.sessions || []).map((x, n) => ({a: wallMin(x.start), b: wallMin(x.stop || Date.now()), n, x}));
   const sesText = (x) => `Charged ${dateTime(x.start)}–${x.stop ? hm(x.stop) : 'now'} · ${num(x.energy_kwh, 2)} kWh · ${dur(x.duration_s)}`
     + (x.peak_power_kw != null ? ` · peak ${num(x.peak_power_kw, 1)} kW` : '') + (x.stop ? ` · ended by ${reasonText(x.reason)}` : ' (charging now)');
   for (let d = 0; d < 7; d++) {  // (the past: the Sessions tab)
     const lo = d * DAY_MIN, hi = lo + DAY_MIN;
     const span = (a, b) => ({x0: (Math.max(a, lo) - lo) / 14.4, x1: (Math.min(b, hi) - lo) / 14.4});
     // Past days: when the car was actually plugged in (and by what), not the schedule as it is now
-    const pastBars = d >= 0 ? '' : (week.plugged || []).map((p) => ({a: (new Date(p.start) - day0) / 60000,
-      b: ((p.end ? new Date(p.end) : now) - day0) / 60000, p})).filter((z) => z.b > lo && z.a < hi).map((z) => {
+    const pastBars = d >= 0 ? '' : (week.plugged || []).map((p) => ({a: wallMin(p.start),
+      b: wallMin(p.end || now), p})).filter((z) => z.b > lo && z.a < hi).map((z) => {
       const {x0, x1} = span(z.a, z.b), ty = PAST(z.p.by);
       const got = ses.filter((y) => y.a < z.b && y.b > z.a);
       const title = `${dayLabel(d)} ${hhmm(Math.max(z.a, lo) - lo)}–${hhmm(Math.min(z.b, hi) - lo)}: plugged in by ${z.p.by || 'unknown'}`
@@ -2781,7 +2816,7 @@ function drawWeek() {
       });
       return out;
     }).join('') + (d < 0 || !(auto.data && auto.data.schedule.saving_block) ? '' : (auto.data.schedule.saving_sessions || []).map((x) => {
-      const a = (new Date(x.start) - day0) / 60000, e = (new Date(x.end) - day0) / 60000;
+      const a = wallMin(x.start), e = wallMin(x.end);
       if (!(e > lo && a < hi)) return '';
       const {x0, x1} = span(a, e);
       return `<div class="blk" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="Saving session ${esc(hm(x.start))}–${esc(hm(x.end))}: nothing is plugged in then"></div>`;
@@ -2814,7 +2849,7 @@ function drawWeek() {
       .filter(([o]) => { const k = o.u.id + '|' + (o.date || isoAt(d)); return !(week.extendedBy || new Set()).has(k) && !(week.savingSkips || new Set()).has(k); })
       .map(([o, j]) => `<div class="tick ${(!on && !o.u.source) || !o.u.enabled ? 'off' : ''}" data-orphan="${j}" data-row="${d}" style="left:${tmin(o.u.time) / 14.4}%"
         title="${dayLabel(d)} ${o.u.time}: unplug${o.date ? ' (One-off)' : ''}"></div>`).join('');
-    const planned = (sc ? sc.periods || [] : []).map((p) => [(new Date(p.start) - day0) / 60000, (new Date(p.end) - day0) / 60000])
+    const planned = (sc ? sc.periods || [] : []).map((p) => [wallMin(p.start), wallMin(p.end)])
       .filter(([a, b]) => b > lo && a < hi).map(([a, b]) => {
         const {x0, x1} = span(a, b);
         return `<div class="sup" style="border-color:${supColor};left:${x0}%;width:${x1 - x0}%" title="Planned by ${esc(sc.provider)}: ${hhmm(Math.max(a, lo) - lo)}–${hhmm(Math.min(b, hi) - lo)}"></div>`;

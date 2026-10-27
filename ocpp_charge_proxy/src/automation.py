@@ -109,7 +109,8 @@ SAVING_SOURCE = "saving_session"  # ... or before a saving session
 AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
                 CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
-SAVING_KEEP = datetime.timedelta(days=1)  # a saving session is remembered this long after it ends
+SAVING_KEEP = datetime.timedelta(days=8)  # a saving session is remembered this long after it ends (the
+# Sessions tab shows the last week's)
 SAVING_MOVE_VERSION = 3  # how slots are moved (2.43.1: earlier, keeping their end; 2.43.7: no unplug at
 # the session's start); older moves are redone
 MIN_PRECHARGE_MIN = 15  # less than this left before a session: no charge before it
