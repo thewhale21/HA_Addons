@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.54.0 — Move to another install
+
+- **Feature:** **Diagnostics › Move to another install**: **Export** downloads
+  one file with this install's settings (the Configuration tab, with or
+  without the password; the schedule and the Automations tab; your sensors,
+  supplier settings and supplier changes; the page's settings, max current
+  and simulated car; the charger's serial and lifetime energy register) and,
+  if you like, its history (sessions and OCPP messages). **Import** on the
+  other install shows what's in the file, warns if the old add-on is still
+  running, then sets the Configuration tab, puts the rest in place and
+  restarts. For moving from the ocpp_charge_proxy repository's add-on to the
+  HA_Addons one without entering anything again. The energy register never
+  goes backwards
+
 ## 2.53.2 — Slots can be changed again
 
 - **Fix:** changing, turning off or deleting a slot could fail with "At most

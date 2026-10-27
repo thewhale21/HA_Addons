@@ -348,6 +348,42 @@ The schedule and auto re-plug are saved in `/data/automation.json` (and
 when the schedule was last checked in `/data/automation_runtime.json`), auto
 plug-in and your sensors in `/data/sensors.json`.
 
+## Moving to another install
+
+To move the add-on to another install of it without entering anything again,
+e.g. from the `ocpp_charge_proxy` repository's add-on to the `HA_Addons` one
+(or to a new Home Assistant):
+
+1. On the old add-on (2.54.0 or later: update it first), **Diagnostics ›
+   Move to another install › Export**. It downloads one file with:
+   - the Configuration tab (server, chargepoint ID, the password unless you
+     untick **With the password**, and the charger's details);
+   - the schedule and everything else on the Automations tab, your sensors
+     and supplier settings, the page's settings, the max current and the
+     simulated car;
+   - the charger's serial number and its lifetime energy register (your
+     supplier knows the charger by these);
+   - your supplier changes (`suppliers.json`), if you have any;
+   - with **With the history** (on by default), the session history and the
+     OCPP message log.
+
+   The file has your password in it unless you leave it out: keep it
+   somewhere private.
+2. **Stop the old add-on.** Both would connect to your supplier as the same
+   chargepoint, and make the same Home Assistant entities.
+3. Install and start the new one, open its page, and on **Diagnostics › Move
+   to another install › Import** choose the file. It shows what's in it (and
+   warns if the old add-on is still running) before anything changes.
+4. **Import and restart.** Its Configuration tab is set from the file, the
+   rest is put in place as it starts again, and the page reconnects.
+5. Uninstall the old add-on.
+
+The Overview's charts and the energy dashboard are Home Assistant's own
+history of the add-on's sensors: with the same entity IDs they carry on by
+themselves. Not moved: what's only for the moment (a session in progress,
+messages held while offline, Plugged In). The energy register never goes
+backwards: if the new install's is already higher, it's kept.
+
 ## When your supplier changes something
 
 Everything the add-on knows about a supplier is in its **supplier defaults**,

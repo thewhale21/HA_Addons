@@ -143,6 +143,13 @@ actions:
 mode: queued
 ```
 
+## Moving to another install
+
+**Diagnostics › Move to another install**: Export on the old add-on, stop it,
+then Import on the new one, and everything (the Configuration tab, the
+schedule, your settings and, if you like, the history) comes across without
+entering it again. See the Documentation tab.
+
 ## If your supplier changes something
 
 The add-on says so on the Overview and Diagnostics › Health (e.g. its smart

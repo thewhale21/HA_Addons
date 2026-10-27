@@ -36,8 +36,9 @@ def create_api_app(
     debug=None,
     app_settings=None,
     on_cancel_charge: Callable[[], Awaitable[dict]] | None = None,
+    mover=None,
 ) -> web.Application:
-    app = web.Application()
+    app = web.Application(client_max_size=50 * 1024 * 1024)  # (an imported settings file, with its history)
     app["shared_state"] = shared_state
     app["on_plug"] = on_plug
     app["on_unplug"] = on_unplug
@@ -52,6 +53,7 @@ def create_api_app(
     app["on_set_ramp"] = on_set_ramp
     app["on_charge_now"] = on_charge_now
     app["on_cancel_charge"] = on_cancel_charge
+    app["mover"] = mover  # src.migrate.Mover: Diagnostics › Move to another install
     app["debug"] = debug  # src.debug_tools.DebugTools, or None
     app["app_settings"] = app_settings  # src.app_settings.AppSettings, or None
     # Open /api/events streams (web pages)
@@ -67,6 +69,9 @@ def create_api_app(
     app.router.add_post("/api/unplug", handle_unplug)
     app.router.add_post("/api/charge_now", handle_charge_now)
     app.router.add_post("/api/charge_now/cancel", handle_cancel_charge)
+    app.router.add_get("/api/migrate/export", handle_migrate_export)
+    app.router.add_post("/api/migrate/check", handle_migrate_check)
+    app.router.add_post("/api/migrate/import", handle_migrate_import)
     app.router.add_post("/api/current", handle_current)
     app.router.add_post("/api/power", handle_power)
     app.router.add_post("/api/soc", handle_soc)
@@ -171,6 +176,46 @@ async def handle_cancel_charge(request: web.Request) -> web.Response:
     except ValueError as err:
         return _error(str(err), 400)
     return web.json_response({"status": "ok", **out}, dumps=_dumps)
+
+
+async def handle_migrate_export(request: web.Request) -> web.Response:
+    """The settings to move to another install (src/migrate.py), as a download:
+    ?history=0 leaves out the sessions and message log, ?password=0 the password."""
+    mover = request.app["mover"]
+    if mover is None:
+        return _error("Not available", 503)
+    out = mover.export(history=request.query.get("history") != "0", password=request.query.get("password") != "0")
+    name = f"ocpp_charge_proxy_settings_{out['exported_at'][:16].replace(':', '-').replace('T', '_')}.json"
+    return web.json_response(out, dumps=_dumps, headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+async def _migrate_body(request: web.Request):
+    try:
+        return await request.json()
+    except (ValueError, json.JSONDecodeError):
+        raise ValueError("That file isn't JSON: pick the file Export made") from None
+
+
+async def handle_migrate_check(request: web.Request) -> web.Response:
+    """What a settings file holds, before importing it (nothing changes)."""
+    mover = request.app["mover"]
+    if mover is None:
+        return _error("Not available", 503)
+    try:
+        return web.json_response({"status": "ok", **await mover.check(await _migrate_body(request))}, dumps=_dumps)
+    except ValueError as err:
+        return _error(str(err), 400)
+
+
+async def handle_migrate_import(request: web.Request) -> web.Response:
+    """Import a settings file: kept for the next start, the options set, and the add-on restarts."""
+    mover = request.app["mover"]
+    if mover is None:
+        return _error("Not available", 503)
+    try:
+        return web.json_response({"status": "ok", **await mover.import_now(await _migrate_body(request))})
+    except ValueError as err:
+        return _error(str(err), 400)
 
 
 async def handle_current(request: web.Request) -> web.Response:

@@ -891,6 +891,25 @@
       <div class="sub" id="d-guards-err" hidden style="margin-top:8px;color:var(--err)"></div>
     </div>
     <div class="card">
+      <h2>Move to another install</h2>
+      <div class="note" style="margin:0 0 10px">Your settings, and the history if you like, in one file to import into another install of the add-on, so nothing needs entering again: e.g. moving from the ocpp_charge_proxy repository's add-on to the HA_Addons one. <details class="more"><summary>More</summary><div>The file has the Configuration tab (server, chargepoint ID, the password unless you leave it out, the charger's details), the schedule and everything on the Automations tab, your sensors and supplier settings, the page's settings, the max current, the simulated car, the charger's serial number and its lifetime energy register, your supplier changes (suppliers.json), and with the history the sessions and the OCPP message log. The Overview's charts are Home Assistant's own history of the add-on's sensors, so they carry on by themselves. On the other install, stop the old one first: both would connect to your supplier as the same chargepoint. Importing restarts the add-on; the energy register never goes backwards (the higher is kept).</div></details></div>
+      <div class="row" style="margin-top:0">
+        <div class="grow">Export<div class="note" style="margin:0">Download this install's settings</div></div>
+        <button class="btn small primary" id="m-export">Export</button>
+      </div>
+      <div class="row" style="margin-top:6px;gap:16px;flex-wrap:wrap">
+        <label class="ctl" style="font-size:13px"><input type="checkbox" id="m-history" checked> With the history (sessions and OCPP messages)</label>
+        <label class="ctl" style="font-size:13px"><input type="checkbox" id="m-password" checked> With the password</label>
+      </div>
+      <div class="sub" id="m-export-note" style="margin-top:4px"></div>
+      <div class="row">
+        <div class="grow">Import<div class="note" style="margin:0">A file Export made on the other install: you'll see what's in it before anything changes</div></div>
+        <input type="file" id="m-file" accept=".json,application/json" hidden>
+        <button class="btn small" id="m-pick">Choose file…</button>
+      </div>
+      <div id="m-check" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
       <h2>Diagnostics bundle</h2>
       <div class="row" style="margin-top:0">
         <div class="grow"><div class="note" style="margin:0">One file to attach to a bug report. <details class="more"><summary>More</summary><div>The add-on's state, schedule, sessions, your supplier's plan and settings, health, recent OCPP messages and log lines, and the add-on's options with the password and most of the chargepoint ID hidden.</div></details></div></div>
@@ -3339,6 +3358,56 @@ $('d-bundle').addEventListener('click', async () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   btn.disabled = false;
   toast('Diagnostics bundle downloaded');
+});
+
+// ---------- Diagnostics › Move to another install (src/migrate.py) ----------
+const mig = {bundle: null};
+$('m-password').addEventListener('change', () => {
+  $('m-export-note').innerHTML = $('m-password').checked ? '<span class="muted">The file has your password in it: keep it somewhere private.</span>'
+    : '<span class="muted">Without the password, enter it on the other install\'s Configuration tab after importing.</span>';
+});
+$('m-password').dispatchEvent(new Event('change'));
+$('m-export').addEventListener('click', async () => {
+  const btn = $('m-export'); btn.disabled = true;
+  try {
+    const out = await api(`migrate/export?history=${$('m-history').checked ? 1 : 0}&password=${$('m-password').checked ? 1 : 0}`);
+    const blob = new Blob([JSON.stringify(out, null, 1)], {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ocpp_charge_proxy_settings_${(out.exported_at || new Date().toISOString()).slice(0, 16).replace(/[:T]/g, '-')}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    toast('Settings exported: import the file on the other install');
+  } catch (e) { toast('Export failed: ' + e.message); }
+  btn.disabled = false;
+});
+$('m-pick').addEventListener('click', () => { $('m-file').value = ''; $('m-file').click(); });
+$('m-file').addEventListener('change', async () => {
+  const file = $('m-file').files[0]; if (!file) return;
+  const box = $('m-check');
+  let bundle;
+  try { bundle = JSON.parse(await file.text()); } catch (e) { box.innerHTML = '<div class="sub" style="color:var(--err)">That file isn\'t JSON: pick the file Export made.</div>'; return; }
+  try {
+    const c = await api('migrate/check', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(bundle)});
+    mig.bundle = bundle;
+    const when = c.exported_at ? new Date(c.exported_at).toLocaleString([], {dateStyle: 'medium', timeStyle: 'short'}) : '—';
+    box.innerHTML = `<div class="sub" style="color:var(--text)"><b>${esc(file.name)}</b>: exported from version ${esc(c.addon_version || '?')} on ${esc(when)}`
+      + (c.chargepoint_id ? `, chargepoint <code>${esc(c.chargepoint_id)}</code>` : '') + '.</div>'
+      + `<div class="sub">It has ${esc(c.items.join('; '))}.</div>`
+      + (c.warnings || []).map((w) => `<div class="sub" style="margin-top:6px"><span class="chip warn">Check</span> ${esc(w)}</div>`).join('')
+      + '<div class="sub" style="margin-top:6px">Importing replaces this install\'s settings with these, and restarts the add-on.</div>'
+      + '<div class="row" style="margin-top:8px;gap:6px"><button class="btn small primary" id="m-import">Import and restart</button><button class="btn small" id="m-cancel">Cancel</button></div>';
+  } catch (e) { mig.bundle = null; box.innerHTML = `<div class="sub" style="color:var(--err)">${esc(e.message)}</div>`; }
+});
+$('m-check').addEventListener('click', async (e) => {
+  if (e.target.id === 'm-cancel') { mig.bundle = null; $('m-check').innerHTML = ''; return; }
+  if (e.target.id !== 'm-import' || !mig.bundle) return;
+  e.target.disabled = true;
+  try {
+    await api('migrate/import', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(mig.bundle)});
+    $('m-check').innerHTML = '<div class="sub"><span class="chip ok">Importing</span> The add-on is restarting with the imported settings: the page reconnects when it\'s back. Then uninstall the old add-on.</div>';
+    toast('Importing: the add-on restarts');
+  } catch (err) { toast('Import failed: ' + err.message); e.target.disabled = false; }
 });
 
 function applyDailyLimit() {

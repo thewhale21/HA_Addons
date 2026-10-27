@@ -6,6 +6,7 @@ import os
 import signal
 import sys
 import time
+from typing import Optional
 
 import websockets
 import websockets.exceptions
@@ -20,7 +21,7 @@ from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_fi
 from src.ha_history import ChartHistory
 from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, auto_plug_charge, automation_loop
 from src.ha_link import HaLink
-from src import log_filters, suppliers
+from src import log_filters, migrate, suppliers
 from src.persistence import Persistence
 from src.shared_state import SharedState
 
@@ -84,6 +85,11 @@ async def run() -> None:
 
     data_dir = os.environ.get("IO_DATA_DIR", "/data")
     os.makedirs(data_dir, exist_ok=True)
+    # Settings imported from another install (Diagnostics › Move to another install), used
+    # before anything reads /data (src/migrate.py); logged once logging is set up, below
+    imported = migrate.apply_pending(data_dir, suppliers.OVERRIDE_PATH)
+    if imported:
+        suppliers.refresh(force=True)
     persistence = Persistence(data_dir=data_dir)
     # Log level and continue session: set on the web page, no longer add-on options
     app_settings = AppSettings(persistence)
@@ -97,6 +103,8 @@ async def run() -> None:
         stream=sys.stdout,
     )
     log_filters.install()  # Heartbeat and periodic MeterValues lines at DEBUG, not INFO
+    for line in imported:
+        logger.info("Settings from another install: %s", line)
     log_buffer = install_log_buffer(log_format)  # recent lines for Diagnostics › Debug
 
     logger.info("Starting OCPP Charge Proxy, connecting to %s", config.redacted_url)
@@ -385,6 +393,23 @@ async def run() -> None:
         task.add_done_callback(debug_tasks.discard)
         return {"restarting": True}
 
+    async def supervisor_call(method: str, path: str, body: Optional[dict] = None):
+        """A Supervisor API call (src/migrate.py): its reply's data; raises if it fails."""
+        token = os.environ.get("SUPERVISOR_TOKEN")
+        if not token:
+            raise RuntimeError("the Supervisor can't be reached")
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.request(method.upper(), f"http://supervisor{path}", json=body,
+                                       headers={"Authorization": f"Bearer {token}"},
+                                       timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                reply = await resp.json(content_type=None) if resp.content_length != 0 else {}
+                if resp.status >= 400 or (reply or {}).get("result") == "error":
+                    raise RuntimeError((reply or {}).get("message") or f"HTTP {resp.status}")
+                return (reply or {}).get("data") or {}
+
+    mover = migrate.Mover(data_dir, health.version, supervisor_call, debug_restart, suppliers.OVERRIDE_PATH)
+
     def on_settings_change(changes: dict) -> None:
         if "log_level" in changes:
             app_settings.apply_log_level()
@@ -427,6 +452,7 @@ async def run() -> None:
         on_charge_now=charge_now,
         debug=debug,
         on_cancel_charge=cancel_charge_now,
+        mover=mover,
         app_settings=app_settings,
     )
     runner = web.AppRunner(api_app)
