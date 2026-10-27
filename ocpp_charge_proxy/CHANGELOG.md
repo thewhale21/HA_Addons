@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.63.1 — Ready time, again
+
+- **Fix:** when setting your supplier's ready time failed at a plug-in (e.g.
+  Octopus's integration: "Device status could not be fetched"), it wasn't
+  tried again, so the app kept the old time. It's now tried again after 1,
+  2, 5, 10... minutes (8 times, about 1½ hours) while it's still plugged in
+  for the same unplug; the Automations tab says when
+
 ## 2.63.0 — Which saving session
 
 - **Improvement:** saving sessions that overlap (e.g. Octopus's 18:00–19:00

@@ -88,6 +88,7 @@ logger = logging.getLogger(__name__)
 
 REPLUG_WAIT_S = 30
 STARTUP_READY_S = 180  # keep trying to set the ready time this long after start-up
+READY_RETRY_MIN = (1, 2, 5, 10, 10, 15, 15, 30)  # setting the ready time failed: tried again after these
 GRACEFUL_UNPLUG_S = 60  # with Force schedule on supplier: wait this long for it to stop a session (default)
 MAX_UNPLUG_WAIT_S = 600
 PENDING_TICK_S = 2  # check this often while waiting
@@ -430,6 +431,7 @@ class Automation:
         self.skips: list[dict] = []  # [{"entry_id", "date"}]: times skipped once
         self.ready_time = False  # set the supplier's ready time at scheduled plug-ins
         self.ready_status: Optional[dict] = None  # the last time it was set (or why not)
+        self.ready_retry: Optional[dict] = None  # setting it failed: {"tries", "at" (clock), "unplug"}
         self.auto_plug_last: Optional[dict] = None  # the last auto plug-in charge planned
         self.unplug_wait_s = GRACEFUL_UNPLUG_S
         self.start_delay = dict(DEFAULT_START_DELAY)  # a random wait before your slots' plug-ins
@@ -2139,10 +2141,14 @@ class Automation:
 
 async def apply_ready_time(automation: "Automation",
                            set_ready_time: Callable[[datetime.datetime], Awaitable[dict]],
-                           log_errors: bool = True) -> dict:
-    """At a scheduled plug-in: ready time = the schedule's next unplug."""
+                           log_errors: bool = True, retry: bool = False) -> dict:
+    """At a scheduled plug-in: ready time = the schedule's next unplug. If your
+    supplier (or its integration) fails to take it, it's tried again a few times
+    while it's still plugged in for that unplug (READY_RETRY_MIN; `retry`: one of those)."""
     now = automation._now()
     unplug = automation.next_unplug(now)
+    tries = (automation.ready_retry or {}).get("tries", 0) if retry else 0
+    automation.ready_retry = None
     if unplug is None:
         result = {"error": "There's no unplug in the schedule after this plug-in"}
     else:
@@ -2150,8 +2156,16 @@ async def apply_ready_time(automation: "Automation",
             result = await set_ready_time(unplug)
         except Exception as err:
             result = {"unplug": unplug.isoformat(timespec="minutes"), "error": str(err)}
-    if result.get("error") and log_errors:
+    if result.get("error") and unplug is not None and tries < len(READY_RETRY_MIN):
+        wait = READY_RETRY_MIN[tries]
+        automation.ready_retry = {"tries": tries + 1, "at": automation._clock() + wait * 60, "unplug": unplug.isoformat()}
+        result = {**result, "retry_at": _iso_from_epoch(automation.ready_retry["at"])}
+        if log_errors:
+            logger.warning("Ready time not set: %s (trying again in %d min)", result["error"], wait)
+    elif result.get("error") and log_errors:
         logger.warning("Ready time not set: %s", result["error"])
+    elif retry:
+        logger.info("Ready time set on try %d: %s", tries + 1, result.get("ready") or unplug)
     automation.ready_status = {**result, "at": _iso_from_epoch(automation._clock())}
     return result
 
@@ -2221,6 +2235,15 @@ async def automation_loop(
                 last_try = automation._clock() - started >= STARTUP_READY_S
                 result = await apply_ready_time(automation, set_ready_time, log_errors=last_try)
                 ready_pending = bool(result.get("error")) and not last_try
+            # The ready time failed to set: again, while it's plugged in for the same unplug
+            rr = automation.ready_retry
+            if rr and automation._clock() >= rr["at"]:
+                nxt = automation.next_unplug(automation._now())
+                if (automation.ready_time and set_ready_time is not None and shared_state.plugged_in
+                        and nxt is not None and nxt.isoformat() == rr["unplug"]):
+                    await apply_ready_time(automation, set_ready_time, retry=True)
+                else:
+                    automation.ready_retry = None
             if automation.turned_on:
                 # The schedule was just turned on: inside a slot (or a charge joined with one),
                 # plugged in to its end, as at start-up; the ready time set to that end

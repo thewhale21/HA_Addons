@@ -2179,3 +2179,41 @@ def test_slots_can_be_changed_with_lots_of_past_one_offs_and_charges():
     # your own are still limited
     with pytest.raises(ValueError, match="of your own"):
         a.set_schedule(entries=[{"time": f"{h:02d}:{m:02d}", "action": "plug"} for h in range(24) for m in (0, 10, 20, 30, 40)])
+
+
+def test_ready_time_tried_again_when_it_fails():
+    """Octopus's integration failing ("Device status could not be fetched"): the
+    ready time is tried again a minute later, while it's still plugged in."""
+    from src.shared_state import SharedState
+    thu = "2026-10-08"
+    a, clock = _automation(start=datetime.datetime(2026, 10, 8, 19, 59, 50, tzinfo=TZ))
+    a.set_schedule(enabled=True, ready_time=True, entries=[
+        {"time": "20:00", "action": "plug", "date": thu}, {"time": "23:30", "action": "unplug", "date": thu}])
+    state = SharedState(plugged_in=False)
+    asked = []
+
+    async def plug(source=None):
+        state.plugged_in = True
+
+    async def unplug(source=None):
+        state.plugged_in = False
+
+    async def set_ready(unplug_at):
+        asked.append(unplug_at.strftime("%H:%M"))
+        if len(asked) == 1:
+            raise RuntimeError("Failed - Device status could not be fetched")
+        return {"ready": unplug_at.strftime("%H:%M"), "unplug": unplug_at.isoformat()}
+
+    async def ticks():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01, set_ready_time=set_ready))
+        await asyncio.sleep(0.03)
+        clock.dt = datetime.datetime(2026, 10, 8, 20, 0, 10, tzinfo=TZ)
+        await asyncio.sleep(0.05)
+        assert a.ready_status["error"] and a.ready_status["retry_at"] and len(asked) == 1
+        clock.dt = datetime.datetime(2026, 10, 8, 20, 1, 20, tzinfo=TZ)
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(ticks())
+    assert asked == ["23:30", "23:30"] and not a.ready_status.get("error") and a.ready_retry is None

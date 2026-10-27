@@ -2727,7 +2727,7 @@ function drawReadyStatus(d) {
   if (on && smart.data && !smart.data.found) html = `<span class="chip warn">Supplier integration not found</span> <span class="muted">Needs your supplier's integration (${esc(knownSuppliers())})</span>`;
   else if (on && smart.data && smart.data.has_ready_time === false) html = `<span class="chip warn">Not supported</span> <span class="muted">The ${esc(smart.data.provider)} integration has no ready time setting</span>`;
   if (r) html += `<div class="sub">${r.error
-    ? `<span class="chip warn">Not set</span> ${esc(r.error)}`
+    ? `<span class="chip warn">Not set</span> ${esc(r.error)}${r.retry_at ? ` <span class="muted">· trying again at ${t(r.retry_at)}</span>` : ''}`
     : `<span class="chip ok">Set to ${esc(r.ready)}</span> for the unplug at ${t(r.unplug)}`} <span class="muted">· ${ago(r.at)}</span></div>`;
   else if (on) html += '<div class="sub">Not set yet: happens at the next scheduled plug-in.</div>';
   $('a-ready-status').innerHTML = html;
