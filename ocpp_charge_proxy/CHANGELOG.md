@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.58.2 — What saving sessions do
+
+- **Improvement:** the Saving sessions card says what it reads the sessions
+  from, that the two switches decide what's done about them, and, under it,
+  what it does now: e.g. "1h of charging is added before each session, but
+  charging during a session isn't changed (turn on No charging during a
+  session to move it out)"
+
 ## 2.58.1 — Delete anyway
 
 - **Fix:** deleting a slot that the add-on warned takes a day over your
