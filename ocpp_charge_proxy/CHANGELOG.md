@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.63.2 — Ready time after a restart
+
+- **Fix:** restarted while plugged in for a slot (e.g. an update), the ready
+  time wasn't set again, so one that had failed before the restart (and its
+  retries, which aren't kept) stayed unset. It's now set again at start-up
+  whenever it's plugged in for a slot with Force schedule on
+
 ## 2.63.1 — Ready time, again
 
 - **Fix:** when setting your supplier's ready time failed at a plug-in (e.g.

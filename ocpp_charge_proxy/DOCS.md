@@ -279,9 +279,10 @@ Assistant starts) the sessions already found are kept, not cancelled.
   as it is. The ready time (Force schedule on supplier) is set when it plugs
   in (or is plugged in). The minutes can be set with the delay off.
 - **Restarts:** a plug-in waiting out its random start delay still waits
-  after a restart. Restarted where two slots meet (e.g. stopped from 11:59
-  to 12:02 with 06:00–12:00 and 12:00–18:00), it stays plugged in, and the
-  ready time is set for the new slot. A charge from auto plug-in, the car
+  after a restart. Restarted while plugged in for a slot, it stays plugged in
+  and sets the ready time again (in case it failed before the restart, or
+  it was restarted where two slots meet, e.g. stopped from 11:59 to 12:02
+  with 06:00–12:00 and 12:00–18:00). A charge from auto plug-in, the car
   plugged in sensor or Charge now that started while the add-on was stopped
   is plugged in at start-up too, with the schedule off as well.
 - **Clocks going forward:** a time that doesn't exist that night (01:00–01:59

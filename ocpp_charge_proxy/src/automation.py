@@ -2226,10 +2226,10 @@ async def automation_loop(
                     ready_pending = automation.ready_time and set_ready_time is not None
                 elif shared_state.plugged_in:
                     automation.plug_at = None
-                    if automation._missed_since is not None and since.timestamp() > automation._missed_since:
-                        # Restarted across the start of this slot (e.g. where two slots meet): still
-                        # plugged in, but the ready time is this slot's now
-                        ready_pending = automation.ready_time and set_ready_time is not None
+                    # Still plugged in for it: the ready time is set again, as it may not have been
+                    # (it failed before the restart, e.g. at its plug-in; the retries aren't kept), or
+                    # it was restarted across the start of this slot (where two slots meet)
+                    ready_pending = automation.ready_time and set_ready_time is not None
             if ready_pending:
                 # HA (or the supplier's sensor) may not be there yet just after start-up
                 last_try = automation._clock() - started >= STARTUP_READY_S

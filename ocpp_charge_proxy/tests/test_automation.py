@@ -382,8 +382,8 @@ def test_startup_plugs_in_inside_a_scheduled_stretch():
     assert calls == [("plug", "schedule")]
     assert len(asked) == 2 and a.ready_status["ready"] == "07:00"  # tried again once HA was there
     assert a.last_run["startup"] is True
-    _, calls, asked = run(True, [])  # already plugged in: nothing to do
-    assert calls == [] and asked == []
+    _, calls, asked = run(True, [])  # already plugged in: not plugged in again, but the ready time set
+    assert calls == [] and len(asked) == 1  # (it may have failed before the restart)
 
 
 # --- 2.9.0: one-off times and skips ---------------------------------------------
@@ -1022,7 +1022,8 @@ def test_turning_the_schedule_off_unplugs_unless_its_a_car_slot():
     a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
     a.set_schedule(ready_time=True)
     clock.advance(minutes=30)
-    assert turn_off(a) == ([], ["19:00"])
+    calls, asked = turn_off(a)
+    assert calls == [] and asked[-1] == "19:00"  # (after the one at start-up)
     # 20:00, the joined charge's own end passed: the slot's part: unplugged
     a, clock = _sched_18_22(_at(17))
     a.plan_auto_plug(120, source=CHARGE_NOW_SOURCE)
