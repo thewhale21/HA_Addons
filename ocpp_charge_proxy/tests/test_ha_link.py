@@ -291,11 +291,15 @@ def test_saving_sessions_read_from_the_found_calendar():
     async def query(payload, timeout=30):
         asked.append(payload)
         return {"response": {cal: {"events": [
-            {"start": "2099-01-05T17:00:00+00:00", "end": "2099-01-05T18:00:00+00:00", "summary": "Power Down"}]}}}
+            {"start": "2099-01-05T17:00:00+00:00", "end": "2099-01-05T18:00:00+00:00", "summary": "Power Down"},
+            {"start": "2020-01-05T17:00:00+00:00", "end": "2020-01-05T18:00:00+00:00", "summary": "Saving Session"}]}}}
 
     link.all_states, link.query = states, query
     sessions = _run(link.read_saving_sessions())
     assert len(sessions) == 1 and sessions[0]["start"].hour == 17
+    # the ones that are over, for the Sessions tab
+    assert link.saving_past == [{"start": "2020-01-05T17:00:00+00:00", "end": "2020-01-05T18:00:00+00:00",
+                                 "summary": "Saving Session"}]
     assert asked[0]["service"] == "get_events" and asked[0]["target"] == {"entity_id": cal} and asked[0]["return_response"]
     assert link.saving_info["entity"] == cal and link.saving_info["auto"] and link.saving_info["supplier"] == "Octopus Energy"
     # Axle Energy's sensors weren't there: looked for, not found (the page says so)

@@ -79,17 +79,18 @@ def _when(value) -> Optional[datetime.datetime]:
     return dt if dt.tzinfo else dt.astimezone()
 
 
-def parse_events(response, entity_id: str, now: datetime.datetime) -> list[dict]:
+def parse_events(response, entity_id: str, now: datetime.datetime, past: bool = False) -> list[dict]:
     """calendar.get_events' response -> the sessions not yet over, in order:
-    [{"start", "end" (aware datetimes), "summary"}]. All-day events, events
-    that end before they start and ones longer than MAX_SESSION are left out."""
+    [{"start", "end" (aware datetimes), "summary"}] (with `past`, the ones that
+    are over instead, for the Sessions tab). All-day events, events that end
+    before they start and ones longer than MAX_SESSION are left out."""
     events = ((response or {}).get(entity_id) or {}).get("events") or []
     out = []
     for ev in events:
         if not isinstance(ev, dict):
             continue
         start, end = _when(ev.get("start")), _when(ev.get("end"))
-        if start is None or end is None or end <= start or end - start > MAX_SESSION or end <= now:
+        if start is None or end is None or end <= start or end - start > MAX_SESSION or (end > now if past else end <= now):
             continue
         out.append({"start": start, "end": end, "summary": str(ev.get("summary") or "Saving session")[:80]})
     return merge(out)

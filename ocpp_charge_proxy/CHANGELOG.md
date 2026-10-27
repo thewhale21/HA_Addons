@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.61.1 — Last week's saving sessions
+
+- **Fix:** the Sessions tab's last 7 days could miss a saving session the
+  add-on hadn't kept (e.g. one found before an update, when they were kept
+  for a day). The ones that are over are now read from the calendar too, a
+  week back, and shown alongside the ones the add-on kept
+
 ## 2.61.0 — The ID tag, checked
 
 - **Feature:** with `AuthorizeRemoteTxRequests` on (the default, as the

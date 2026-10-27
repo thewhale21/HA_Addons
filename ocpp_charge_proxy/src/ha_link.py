@@ -51,6 +51,7 @@ _UNKNOWN_STATES = ("unavailable", "unknown", "none", "")
 DEFAULT_AUTO_PLUG_HOURS = 3.0
 DEFAULT_SAVING_PLUG_HOURS = 2.0
 SAVING_LOOK_AHEAD = datetime.timedelta(days=8)
+SAVING_LOOK_BACK = datetime.timedelta(days=8)  # (the past ones are for the Sessions tab's week)
 
 
 def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
@@ -297,6 +298,7 @@ class HaLink:
         self.dispatch_searched_at: Optional[float] = None  # wall clock, for Diagnostics › Health
         self._call = None  # websocket request function while connected
         # Saving sessions: the calendar read and how it went, for the page
+        self.saving_past: list = []  # the calendar's sessions of the last week that are over
         self.saving_info: dict = {"entity": None, "auto": False, "supplier": None, "error": None,
                                   "read_at": None, "count": 0, "sensors": []}
         self._reset_logic()
@@ -1040,11 +1042,14 @@ class HaLink:
                 result = await self.query({
                     "type": "call_service", "domain": "calendar", "service": "get_events",
                     "target": {"entity_id": entity},
-                    "service_data": {"start_date_time": (now - datetime.timedelta(hours=12)).isoformat(timespec="seconds"),
+                    "service_data": {"start_date_time": (now - SAVING_LOOK_BACK).isoformat(timespec="seconds"),
                                      "end_date_time": (now + SAVING_LOOK_AHEAD).isoformat(timespec="seconds")},
                     "return_response": True,
                 })
                 sessions += parse_events((result or {}).get("response"), entity, now)
+                # the last week's that are over, for the Sessions tab (kept in the calendar)
+                self.saving_past = [{"start": x["start"].isoformat(), "end": x["end"].isoformat(), "summary": x["summary"]}
+                                    for x in merge_sessions(parse_events((result or {}).get("response"), entity, now, past=True))]
             sessions = merge_sessions(sessions)
         except Exception as err:
             if info.get("error") != str(err):

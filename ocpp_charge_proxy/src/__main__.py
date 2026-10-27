@@ -315,6 +315,7 @@ async def run() -> None:
             try:
                 s = ha_link.settings
                 if not s.get("saving_on"):
+                    automation.saving_past = []
                     if automation.clear_saving_sessions():
                         automation.publish(shared_state)
                     sessions, last_settings = None, None
@@ -325,6 +326,7 @@ async def run() -> None:
                         last_read, last_settings = time.monotonic(), wanted
                         if found is not None:
                             sessions = found
+                            automation.saving_past = ha_link.saving_past
                     sc = ha_link.smart_charging()
                     automation.limit_reset = sc.get("limit_reset")
                     cap = sc.get("limit_min") if automation.ready_time and not automation.override_guards else None

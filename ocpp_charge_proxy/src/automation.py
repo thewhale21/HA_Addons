@@ -439,6 +439,7 @@ class Automation:
         # "changes": {"skips", "added"}, "precharged", "notes"}]; with saving_block
         # on they're off-peak times too (see sync_saving_sessions)
         self.saving_sessions: list[dict] = []
+        self.saving_past: list[dict] = []  # set from the calendar (src/__main__.py), for the page
         self.saving_block = False
         self.override_guards = False  # Diagnostics › Debug: no daily limit (Octopus: 6 hours)
         # When the daily limit resets: None = any 24 hours (rolling), "Nh" =
@@ -2108,6 +2109,7 @@ class Automation:
                 "override_guards": self.override_guards,
                 "blocks": self.blocks,
                 "saving_sessions": self.saving_snapshot(),
+                "saving_past": self.saving_past,  # (from the calendar: the Sessions tab's week)
                 "saving_block": self.saving_block,
                 "plan_check": self.plan_check,
                 "skips": self.skips,

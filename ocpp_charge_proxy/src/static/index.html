@@ -2068,7 +2068,7 @@ async function refreshSessions() {
 const PLUG_BY = [['schedule', 'var(--primary)', 'Schedule'], ['auto plug-in', '#f57c00', 'Auto plug-in'], ['charge now', 'var(--c-charge-now)', 'Charge now'],
   ['car plugged in sensor', 'var(--c-car-plugged)', 'Car plugged in'], ['saving session', '#5e35b1', 'Before a saving session']];
 // The saving sessions of the last week, for the Sessions tab's days (from the schedule)
-let sessSaving = null;
+let sessSaving = null, sessSavingPast = null;
 function drawSessionTimeline(sd) {
   const el = $('s-tl'); if (!el) return;
   const day0 = new Date(); day0.setHours(0, 0, 0, 0);
@@ -2076,9 +2076,12 @@ function drawSessionTimeline(sd) {
   const saving = (auto.data && auto.data.schedule.saving_sessions) || sessSaving;
   if (!saving && !drawSessionTimeline.asked) {  // (the Automations tab not opened yet)
     drawSessionTimeline.asked = true;
-    api('automation').then((d) => { sessSaving = d.schedule.saving_sessions || []; drawSessionTimeline(sd); }).catch(() => {});
+    api('automation').then((d) => { sessSaving = d.schedule.saving_sessions || []; sessSavingPast = d.schedule.saving_past || []; drawSessionTimeline(sd); }).catch(() => {});
   }
-  const saves = (saving || []).map((x) => ({a: new Date(x.start).getTime(), b: new Date(x.end).getTime(), x}));
+  // ... and the calendar's past ones, which the add-on may not have kept (e.g. found before an update)
+  const past = (auto.data && auto.data.schedule.saving_past) || sessSavingPast || [];
+  const saves = [...(saving || []), ...past].map((x) => ({a: new Date(x.start).getTime(), b: new Date(x.end).getTime(), x}))
+    .filter((z, n, all) => all.findIndex((y) => y.a < z.b && y.b > z.a) === n);  // (the same one twice: once)
   let anySave = false, anyPlan = false, anyPlanPlug = false;
   // Today's plan: your supplier's planned slots (read at most once a minute) ...
   if (Date.now() - smart.at > 60000) refreshSmart().then(() => drawSessionTimeline(sessionsData)).catch(() => {});
