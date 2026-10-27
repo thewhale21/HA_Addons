@@ -327,6 +327,11 @@
   .stl .track { position: relative; height: 34px; border-radius: 10px; overflow: hidden;
     background: var(--hover) repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), var(--divider) calc(12.5% - 1px) 12.5%); }
   .stl .plug { position: absolute; top: 5px; bottom: 5px; border-radius: 7px; opacity: .28; }
+  /* Saving sessions that overlap (e.g. Octopus's and Axle's): each in its own lane; the one going now stronger */
+  .stl .save.l0, .week .blk.l0, .un-bar .save.l0 { bottom: 50% !important; }
+  .stl .save.l1, .week .blk.l1, .un-bar .save.l1 { top: 50% !important; }
+  .stl .save.on, .un-bar .save.on { opacity: .95 !important; }
+  .week .blk.on { box-shadow: inset 0 0 0 2px var(--violet); }
   .stl .save { position: absolute; top: 0; bottom: 0; opacity: .55;
     background: repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 6px);
     border-left: 1px solid var(--violet); border-right: 1px solid var(--violet); }
@@ -1304,6 +1309,21 @@ setInterval(() => {
   }
 }, 5000);
 
+// Saving sessions as they each run: one merged for the schedule (overlapping ones, e.g. Octopus's
+// and Axle's) is drawn as its parts, in two lanes where they overlap; `on` is the one going now
+function savingParts(list) {
+  const out = [], now = Date.now();
+  (list || []).forEach((x) => {
+    const parts = x.parts && x.parts.length > 1 ? x.parts : [x];
+    parts.forEach((p, n) => {
+      const a = new Date(p.start).getTime(), b = new Date(p.end).getTime();
+      out.push({a, b, x: {...x, ...p}, lane: parts.length > 1 ? Math.min(n, 1) : null, on: a <= now && now < b, of: x});
+    });
+  });
+  return out;
+}
+const laneCls = (z) => (z.lane === null ? '' : ' l' + z.lane) + (z.on ? ' on' : '');
+
 // ---------- Overview: what happens next ----------
 // From the schedule (its next times, joined where slots meet), your supplier's slots, the
 // saving sessions and the state now: a few steps, and a strip of the next 16 hours
@@ -1341,7 +1361,8 @@ function drawNext() {
   if (open !== null) bands.push([open, Math.max(open, end)]);
   const unplugAfter = (t) => (times.find((u) => u.action === 'unplug' && u.t > t) || {}).t;
   const slots = !sc ? [] : [...(sc.current ? [{...sc.current, now: true}] : []), ...(sc.planned || [])].map((x) => ({...x, a: ms(x.start), b: ms(x.end)})).filter((x) => x.b > now);
-  const saves = ((sch.saving_sessions) || []).map((x) => ({...x, a: ms(x.start), b: ms(x.end)})).filter((x) => x.b > now);
+  const saveParts = savingParts(sch.saving_sessions).filter((z) => z.b > now);  // (each as it runs)
+  const saves = saveParts.map((z) => ({...z.x, a: z.a, b: z.b, z}));
   // Now
   const cur = slots.find((x) => x.now);
   let nowW, nowS, idle = false;
@@ -1366,8 +1387,12 @@ function drawNext() {
     steps.push({t: x.a, cls: 'sup', head: when(x.a), small: '–' + hm(x.b), w: `${esc(provider)} slot${x.charge_kwh != null ? ` · ${num(Math.abs(x.charge_kwh), 1)} kWh` : ''}`, s: 'planned', colour: pColour});
   for (const x of saves.filter((x) => x.a <= end))
     steps.push({t: x.a, cls: 'save', head: x.a <= now ? 'Now' : when(x.a), small: '–' + hm(x.b), w: `Saving session${x.summary ? ` (${esc(x.summary)})` : ''}`,
-      s: sch.saving_block ? `nothing plugged in until ${hm(x.b)}` : "charging isn't changed for it"});
-  steps.sort((p, q) => p.t - q.t);
+      s: (() => {
+        const all = x.z.of ? new Date(x.z.of.end).getTime() : x.b;  // (with the ones it overlaps)
+        const own = all > x.b ? `${hm(x.a)}–${hm(x.b)}; ` : '';
+        return sch.saving_block ? `${own}nothing plugged in until ${hm(all)}` : `${own}charging isn't changed for it`;
+      })()});
+  steps.sort((p, q) => (p.cls.startsWith('now') ? -Infinity : p.t) - (q.cls.startsWith('now') ? -Infinity : q.t) || p.t - q.t);
   // Things at the same time share a box (and anything going already joins Now's)
   const groups = [[steps[0]]];
   for (const x of steps.slice(1)) {
@@ -1393,7 +1418,7 @@ function drawNext() {
   $('o-next-bar').innerHTML = bands.map(([x, y]) => bar('plug', x, y, '', `Plugged in by the schedule ${hm(x)}–${hm(y)}`)).join('')
     + slots.map((x) => bar('sup' + (x.now ? '' : ' plan'), x.a, x.b, x.now ? `background:${pColour}` : `border-color:${pColour};background:color-mix(in srgb, ${pColour} 15%, transparent)`,
       `${provider} slot ${hm(x.a)}–${hm(x.b)}${x.charge_kwh != null ? ' · ' + num(Math.abs(x.charge_kwh), 1) + ' kWh' : ''}`)).join('')
-    + saves.map((x) => bar('save', x.a, x.b, '', `Saving session ${hm(x.a)}–${hm(x.b)}`)).join('')
+    + saves.map((x) => bar('save' + laneCls(x.z), x.a, x.b, '', `${x.z.on ? 'Now: ' : ''}Saving session ${hm(x.a)}–${hm(x.b)}${x.summary ? ' (' + x.summary + ')' : ''}`)).join('')
     + '<div class="now"></div>';
   const first = new Date(now); first.setMinutes(0, 0, 0); first.setHours(first.getHours() + (first.getHours() % 2 ? 1 : 2));
   const ticks = [];
@@ -2080,8 +2105,13 @@ function drawSessionTimeline(sd) {
   }
   // ... and the calendar's past ones, which the add-on may not have kept (e.g. found before an update)
   const past = (auto.data && auto.data.schedule.saving_past) || sessSavingPast || [];
-  const saves = [...(saving || []), ...past].map((x) => ({a: new Date(x.start).getTime(), b: new Date(x.end).getTime(), x}))
-    .filter((z, n, all) => all.findIndex((y) => y.a < z.b && y.b > z.a) === n);  // (the same one twice: once)
+  const kept = savingParts(saving || []);
+  // (a past one the add-on kept too: once; and lanes where the calendar's overlap)
+  const pastOnly = past.filter((p) => !kept.some((z) => z.a === new Date(p.start).getTime() && z.b === new Date(p.end).getTime()));
+  const saves = [...kept, ...savingParts(pastOnly).map((z, n, all) => {
+    const other = all.findIndex((y, m) => m !== n && y.a < z.b && y.b > z.a);
+    return other < 0 ? z : {...z, lane: other < n ? 1 : 0};
+  })];
   let anySave = false, anyPlan = false, anyPlanPlug = false;
   // Today's plan: your supplier's planned slots (read at most once a minute) ...
   if (Date.now() - smart.at > 60000) refreshSmart().then(() => drawSessionTimeline(sessionsData)).catch(() => {});
@@ -2123,7 +2153,7 @@ function drawSessionTimeline(sd) {
     let inner = '', kwh = 0, secs = 0;
     for (const z of saves.filter((z) => z.b > lo && z.a < hi)) {
       anySave = true;
-      inner += `<div class="save" style="left:${pct(z.a)}%;width:${pct(z.b) - pct(z.a)}%" title="${esc(`Saving session ${t(z.a)}–${t(z.b)}${z.x.summary ? ' (' + z.x.summary + ')' : ''}`)}"></div>`;
+      inner += `<div class="save${laneCls(z)}" style="left:${pct(z.a)}%;width:${pct(z.b) - pct(z.a)}%" title="${esc(`${z.on ? 'Now: ' : ''}Saving session ${t(z.a)}–${t(z.b)}${z.x.summary ? ' (' + z.x.summary + ')' : ''}`)}"></div>`;
     }
     for (const z of plugs.filter((z) => z.b > lo && z.a < hi)) {
       used.add(z.by[2]);
@@ -2462,7 +2492,9 @@ function drawSaving() {
   ]);
   const list = (on && a && a.schedule ? a.schedule.saving_sessions || [] : []).filter((x) => new Date(x.end) > Date.now() - 86400000);
   $('save-list').innerHTML = !on ? '' : !list.length ? 'No saving sessions coming up.'
-    : list.map((x) => `<div style="margin-top:4px"><span class="chip info">${esc(dateTime(x.start))}–${esc(hm(x.end))}</span> ${esc(x.summary || '')}`
+    : list.map((x) => `<div style="margin-top:4px"><span class="chip info">${esc(dateTime(x.start))}–${esc(hm(x.end))}</span> ${esc(x.parts && x.parts.length > 1 ? 'Saving sessions together' : x.summary || '')}`
+      + (x.parts && x.parts.length > 1 ? x.parts.map((p) => { const on = new Date(p.start) <= Date.now() && Date.now() < new Date(p.end);
+          return `<div class="muted" style="margin-left:8px">${on ? '<span class="chip ok" style="font-size:11px">Now</span> ' : ''}${esc(hm(p.start))}–${esc(hm(p.end))} ${esc(p.summary || '')}</div>`; }).join('') : '')
       + (x.notes.length ? `<div class="muted">${x.notes.map(esc).join('; ')}</div>` : '') + '</div>').join('');
 }
 function drawAutoPlugLast(d) {
@@ -3107,11 +3139,11 @@ function drawWeek() {
         if (e > lo && a < hi) { const {x0, x1} = span(a, e); out.push(`<div class="blk ${picked ? 'picked' : ''}" data-blk="${bi}" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="Off-peak time ${b.start}–${b.end}: unplugs at its start, nothing is scheduled then · click to change"></div>`); }
       });
       return out;
-    }).join('') + (d < 0 || !(auto.data && auto.data.schedule.saving_block) ? '' : (auto.data.schedule.saving_sessions || []).map((x) => {
-      const a = wallMin(x.start), e = wallMin(x.end);
+    }).join('') + (d < 0 || !(auto.data && auto.data.schedule.saving_block) ? '' : savingParts(auto.data.schedule.saving_sessions).map((z) => {
+      const a = wallMin(z.x.start), e = wallMin(z.x.end);
       if (!(e > lo && a < hi)) return '';
       const {x0, x1} = span(a, e);
-      return `<div class="blk" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="Saving session ${esc(hm(x.start))}–${esc(hm(x.end))}: nothing is plugged in then"></div>`;
+      return `<div class="blk${laneCls(z)}" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="${esc(`${z.on ? 'Now: ' : ''}Saving session ${hm(z.x.start)}–${hm(z.x.end)}${z.x.summary ? ' (' + z.x.summary + ')' : ''}: nothing is plugged in then`)}"></div>`;
     }).join(''));
     const before = d < 0 && week.pluggedSince && new Date(week.pluggedSince) > new Date(day0.getTime() + hi * 60000);
     const bars = d < 0 ? pastBars : occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi && !o.hidden).map(([o, k]) => {

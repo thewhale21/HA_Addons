@@ -1398,6 +1398,15 @@ class Automation:
                 continue
             keep.append(r)
         known = {r["id"] for r in keep}
+        iso = lambda t: _iso_local(t.astimezone(now.tzinfo))
+        parts_of = lambda x: [{"start": iso(p["start"]), "end": iso(p["end"]), "summary": p["summary"]}
+                              for p in x.get("parts") or []]
+        for r in keep:  # (what it's made of can change while it's the same, e.g. a second source adds one)
+            if new is not None and r["id"] in new and parts_of(new[r["id"]]) != (r.get("parts") or []):
+                r["parts"] = parts_of(new[r["id"]])
+                if not r["parts"]:
+                    r.pop("parts")
+                changed = True
         for sid, x in (new or {}).items():
             if sid in known:
                 continue
@@ -1406,7 +1415,7 @@ class Automation:
                          "end": _iso_local(x["end"].astimezone(now.tzinfo)),
                          "summary": x.get("summary") or "Saving session",
                          "changes": {"skips": [], "added": []}, "precharged": False, "notes": [],
-                         "v": SAVING_MOVE_VERSION})
+                         "v": SAVING_MOVE_VERSION, **({"parts": parts_of(x)} if x.get("parts") else {})})
             logger.info("Saving session found: %s–%s", x["start"].astimezone().strftime("%a %d %b %H:%M"),
                         x["end"].astimezone().strftime("%H:%M"))
             changed = True
@@ -1749,6 +1758,7 @@ class Automation:
         for r in self.saving_sessions:
             pre = (r.get("pre") or {}).get("changes") or {}
             out.append({"id": r["id"], "start": r["start"], "end": r["end"], "summary": r.get("summary"),
+                        "parts": r.get("parts") or [],  # the overlapping ones it's made of, each as it runs
                         "notes": r.get("notes") or [],
                         "skips": (r["changes"].get("skips") or []) + (pre.get("skips") or []),
                         "moved": r["changes"].get("added") or [], "before": pre.get("added") or []})

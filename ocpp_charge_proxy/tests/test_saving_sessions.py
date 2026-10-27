@@ -353,3 +353,20 @@ def test_ending_later_stops_at_an_off_peak_time():
     clock.dt = _at(5, 16, 20)
     a.sync_saving_sessions([_session(5, 18, 20)], block=True)
     assert [w for w in _windows(a) if w[0].startswith(("05", "06 0"))] == [("05 15:30", "05 18:00"), ("05 20:00", "05 23:30")]
+
+
+def test_overlapping_sessions_are_one_for_the_schedule_but_keep_their_parts():
+    """Octopus's 18:00-19:00 and Axle's 18:30-20:00: one 18:00-20:00 for the
+    schedule, with each kept (parts) so the page shows which is running."""
+    octo = {"start": _at(5, 18), "end": _at(5, 19), "summary": "Octopus Energy Saving Session"}
+    axle = {"start": _at(5, 18, 30), "end": _at(5, 20), "summary": "Axle Energy event (export)"}
+    one = merge([axle, octo, dict(octo)])  # (the same one twice: once)
+    assert len(one) == 1 and (one[0]["start"].hour, one[0]["end"].hour) == (18, 20)
+    assert [(p["start"].strftime("%H:%M"), p["summary"]) for p in one[0]["parts"]] == [
+        ("18:00", "Octopus Energy Saving Session"), ("18:30", "Axle Energy event (export)")]
+    assert "parts" not in merge([octo])[0]
+    a, _ = _automation()
+    a.sync_saving_sessions(one, block=True)
+    snap = a.saving_snapshot()[0]
+    assert [p["summary"] for p in snap["parts"]] == ["Octopus Energy Saving Session", "Axle Energy event (export)"]
+    assert snap["parts"][1]["start"].startswith("2026-10-05T18:30")

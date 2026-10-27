@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.63.0 — Which saving session
+
+- **Improvement:** saving sessions that overlap (e.g. Octopus's 18:00–19:00
+  and Axle Energy's 18:30–20:00) are still one for the schedule, but the
+  timelines (Sessions, Automations, What happens next) show each as it runs,
+  in two lanes where they overlap, with the one going now stronger ("Now:"
+  on hover). The Saving sessions list shows each under the time they cover
+  together, with **Now** by the one running
+
 ## 2.62.0 — Like a wallbox
 
 - **Feature:** the add-on reports the rest of the settings a charger must

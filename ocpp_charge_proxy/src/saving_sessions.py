@@ -98,13 +98,25 @@ def parse_events(response, entity_id: str, now: datetime.datetime, past: bool = 
 
 def merge(sessions: list[dict]) -> list[dict]:
     """In order, with overlapping ones (e.g. the same session twice, or from a
-    calendar and a sensor) made one."""
+    calendar and a sensor) made one, for the schedule. Each keeps the ones it was
+    made of in "parts" ([{"start", "end", "summary"}], two or more; not the same
+    one twice), so the page can show each when it runs."""
     merged: list[dict] = []
     for s in sorted(sessions, key=lambda s: s["start"]):
+        part = {"start": s["start"], "end": s["end"], "summary": s.get("summary") or "Saving session"}
         if merged and s["start"] <= merged[-1]["end"]:
-            merged[-1]["end"] = max(merged[-1]["end"], s["end"])
+            m = merged[-1]
+            m["end"] = max(m["end"], s["end"])
+            if not any(p["start"] == part["start"] and p["end"] == part["end"] for p in m["_parts"]):
+                m["_parts"].append(part)
         else:
-            merged.append(dict(s))
+            merged.append({**s, "_parts": [part]})
+    for m in merged:
+        parts = m.pop("_parts")
+        if len(parts) > 1:
+            m["parts"] = sorted(parts, key=lambda p: p["start"])
+        else:
+            m.pop("parts", None)
     return merged
 
 
