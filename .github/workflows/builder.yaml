@@ -24,11 +24,18 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0  # the whole history: a push can hold several commits
 
       - name: Get changed files
         id: changed_files
+        env:
+          # every commit in the push (or the pull request), not just the last
+          BEFORE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
-          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+          if [[ -n "$BEFORE" && ! "$BEFORE" =~ ^0+$ ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            changed=$(git diff --name-only "$BEFORE" HEAD)
+          elif git rev-parse HEAD~1 >/dev/null 2>&1; then
             changed=$(git diff --name-only HEAD~1 HEAD)
           else
             changed=$(git ls-tree -r --name-only HEAD)

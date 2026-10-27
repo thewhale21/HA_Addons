@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.6 — Built
+
+- **Fix:** 0.10.5 wasn't built (it was pushed with other add-ons' changes on
+  top, and only the last commit's add-ons were built), so it couldn't be
+  installed. This is 0.10.5, built
+
 ## 0.10.5 — Today and tomorrow across a clock change
 
 - **Fix:** on the days the clocks change (and the day before), the Today and
