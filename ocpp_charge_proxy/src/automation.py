@@ -1832,6 +1832,7 @@ class Automation:
         due = []
         timeline = self.timeline(start, span)
         plugs_at = {occ for occ, e, skipped in timeline if e["action"] == "plug" and not skipped}
+        through = self.carry_ons(timeline)
         latest = max(((occ, n) for n, (occ, e, skipped) in enumerate(timeline) if occ <= now and not skipped),
                      default=None)
         for n, (occ, entry, skipped) in enumerate(timeline):
@@ -1847,11 +1848,14 @@ class Automation:
                 if skipped:
                     logger.info("Schedule: %s at %s skipped",
                                 "plug-in" if entry["action"] == "plug" else "unplug", entry["time"])
+                elif occ in through:
+                    # One slot ends as the next starts: it carries on plugged in, one charge
+                    due.append(dict(entry, carry_on=True))
                 elif entry["action"] == "unplug" and occ in plugs_at:
-                    # One slot ends as the next starts: unplug straight away (no
-                    # waiting for the supplier) and plug back in for the next, so
-                    # it's two charges, each with its own ready time (e.g. Octopus:
-                    # 6 hours before a 12:00 reset and 6 after)
+                    # One slot ends as the next starts where the daily limit resets:
+                    # unplug straight away (no waiting for the supplier) and plug back
+                    # in for the next, so it's two charges, each with its own ready
+                    # time (e.g. Octopus: 6 hours before a 12:00 reset and 6 after)
                     due.append(dict(entry, back_to_back=True))
                 else:
                     due.append(entry)
@@ -1897,11 +1901,24 @@ class Automation:
                 best = (occ, entry)
         return best[0] if best and best[1]["action"] == "plug" else None
 
+    def carry_ons(self, timeline: list) -> set:
+        """The times in `timeline` where one slot ends as the next starts and it
+        just carries on plugged in, as one charge (the ready time is the last
+        one's end): all of them, but where your supplier's daily limit resets
+        (e.g. Octopus's 12:00), where it unplugs and plugs back in so the
+        supplier sees a charge either side (see _reset_splits)."""
+        plugs = {occ for occ, e, skipped in timeline if e["action"] == "plug" and not skipped}
+        unplugs = {occ for occ, e, skipped in timeline if e["action"] == "unplug" and not skipped}
+        split_at = _fixed(self.limit_reset)
+        return {t for t in plugs & unplugs if t.strftime("%H:%M") != split_at}
+
     def next_unplug(self, after: datetime.datetime) -> Optional[datetime.datetime]:
-        """The schedule's next unplug after `after` (within a week). Back-to-back
-        slots each have their own: they unplug and plug back in where they meet."""
-        for occ, entry, skipped in self.timeline(after.date(), 8):
-            if occ > after and entry["action"] == "unplug" and not skipped:
+        """The schedule's next unplug after `after` (within a week). Slots that
+        meet are one charge, ending at the last one's end (see carry_ons)."""
+        timeline = self.timeline(after.date(), 8)
+        through = self.carry_ons(timeline)
+        for occ, entry, skipped in timeline:
+            if occ > after and entry["action"] == "unplug" and not skipped and occ not in through:
                 return occ
         return None
 
@@ -1914,8 +1931,10 @@ class Automation:
             # A plug-in waiting out its random start delay comes first
             at = datetime.datetime.fromtimestamp(self.plug_at, tz=now.tzinfo)
             return {"time": _iso_local(at), "action": "plug", "entry_id": None, "car_slot": False, "delayed": True}
-        for occ, entry, skipped in self.timeline(now.date(), self._horizon_days()):
-            if occ > now and not skipped:
+        timeline = self.timeline(now.date(), self._horizon_days())
+        through = self.carry_ons(timeline)
+        for occ, entry, skipped in timeline:
+            if occ > now and not skipped and occ not in through:
                 return {"time": _iso_local(occ), "action": entry["action"], "entry_id": entry["id"],
                         "car_slot": entry.get("source") in AUTO_SOURCES}
         return None
@@ -2207,8 +2226,25 @@ async def automation_loop(
                             await apply_ready_time(automation, set_ready_time)  # the charge's own end
             due = automation.due()
             # Where two slots meet it carries on: no random delay for the plug-in there
-            meets = {e["time"] for e in due if e.get("back_to_back")}
+            meets = {e["time"] for e in due if e.get("back_to_back") or e.get("carry_on")}
             for entry in due:
+                if entry.get("carry_on"):
+                    # Where two slots meet: it carries on plugged in (the plug-in only
+                    # if it isn't, e.g. unplugged by hand), the ready time the last one's end
+                    automation.plug_at = None
+                    if entry["action"] == "unplug":
+                        logger.info("Schedule: one slot ends and the next starts at %s: carrying on plugged in",
+                                    entry["time"])
+                        continue
+                    automation.unplug_at = None
+                    automation.last_run = {"entry_id": entry["id"], "action": "plug",
+                                           "timestamp": _iso_from_epoch(automation._clock())}
+                    if not shared_state.plugged_in:
+                        logger.info("Schedule: plugging in at %s", entry["time"])
+                        await plug(source="schedule")
+                    if automation.ready_time and set_ready_time is not None:
+                        await apply_ready_time(automation, set_ready_time)
+                    continue
                 if entry["action"] == "unplug" or entry.get("back_to_back"):
                     automation.plug_at = None  # a plug-in still waiting out its delay is overtaken
                 elif entry["time"] not in meets and not shared_state.plugged_in:

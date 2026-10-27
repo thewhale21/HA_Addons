@@ -321,11 +321,15 @@ Assistant starts) the sessions already found are kept, not cancelled.
   Automations tab; a mismatch also as a red chip on the Overview, and in the
   log. The supplier's planned slots are outlined in its colour on the
   Automations tab (whether or not this is on).
-- **Back-to-back slots** (one ends as the next starts, e.g. 06:00–12:00 and
-  12:00–18:00): at 12:00 it unplugs straight away (without waiting for your
-  supplier) and plugs back in after the re-plug **Unplugged for** time, so
-  each slot is its own charge with its own ready time (12:00, then 18:00).
-  With Octopus resetting its limit at 12:00, that's 6 hours each side.
+- **Back-to-back slots** (one ends as the next starts, e.g. 14:00–15:30 and
+  15:30–18:00, or Charge now running into a slot): it carries on plugged
+  in where they meet, as one charge, with the ready time set to the last
+  one's end (18:00) when it plugs in. They're still shown (and can be
+  changed) separately. The exception is where your supplier's daily limit
+  resets (Octopus: 12:00): slots meeting there (06:00–12:00 and
+  12:00–18:00) unplug straight away (without waiting for your supplier) and
+  plug back in after the re-plug **Unplugged for** time, so each is its own
+  charge with its own ready time (12:00, then 18:00): 6 hours each side.
   With Force schedule on supplier on and a reset time, a slot longer than
   the daily limit across the reset time (e.g. 08:00–18:00) is split there
   when it's saved, into two slots that work this way; so is a charge from

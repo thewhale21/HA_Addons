@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.56.0 — Slots that meet are one charge
+
+- **Change:** where one slot ends as the next starts (your slots, a slot
+  moved for a saving session, Charge now, auto plug-in or the car plugged in
+  sensor running into a slot), it now carries on plugged in, as one charge:
+  no unplug and plug back in, and the ready time is set to the last one's
+  end when it plugs in. They're still shown and changed separately. Where
+  your supplier's daily limit resets (Octopus: 12:00) it still unplugs and
+  plugs back in, so the supplier sees a charge either side
+
 ## 2.55.2 — As soon as it can
 
 - **Change:** when a saving session is found too late for a slot to start
