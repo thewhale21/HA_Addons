@@ -296,7 +296,10 @@ Assistant starts) the sessions already found are kept, not cancelled.
   when the schedule plugs in, the add-on sets your supplier's smart
   charging ready-by time to the schedule's next unplug, for example plug in
   02:00 and unplug 04:00 sets 04:00; plug in 06:00 and unplug 08:00 sets
-  08:00. Only at scheduled plug-ins. Ready times are in 30-minute steps:
+  08:00. At scheduled plug-ins, and again whenever that unplug moves while
+  it's plugged in for it (you change or drag the slot, a saving session
+  moves it, the hours over are removed...), after a restart, and (if your
+  supplier fails to take it) a few times more. Ready times are in 30-minute steps:
   Octopus Energy accepts any time of day, EDF Energy 04:00 to 11:00. While
   it's on, unplug times in the schedule are limited to those (the slot
   editor only offers those). E.ON Next's integration

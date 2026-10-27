@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.63.3 — The ready time follows the schedule
+
+- **Fix:** changing the schedule while plugged in for a slot (editing or
+  dragging its end, a saving session moving it, removing the hours over...)
+  didn't change your supplier's ready time: it stayed at the old unplug until
+  the next plug-in. It's now set again as soon as the unplug it's plugged in
+  for moves
+
 ## 2.63.2 — Ready time after a restart
 
 - **Fix:** restarted while plugged in for a slot (e.g. an update), the ready

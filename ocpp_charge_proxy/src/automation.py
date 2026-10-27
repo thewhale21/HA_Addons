@@ -2244,6 +2244,18 @@ async def automation_loop(
                     await apply_ready_time(automation, set_ready_time, retry=True)
                 else:
                     automation.ready_retry = None
+            # The schedule changed while plugged in for it (its unplug moved: a slot edited or
+            # dragged, a saving session, the hours over removed...): the ready time follows
+            rs = automation.ready_status
+            if (automation.ready_time and set_ready_time is not None and shared_state.plugged_in
+                    and not ready_pending and automation.ready_retry is None and rs and rs.get("unplug")
+                    and (automation.in_plug_window() or automation.in_charge_window()) is not None):
+                nxt = automation.next_unplug(automation._now())
+                was = _parse_iso(rs["unplug"])
+                if nxt is not None and was is not None and nxt.replace(second=0, microsecond=0) != was.replace(second=0, microsecond=0):
+                    logger.info("Schedule: the unplug is now %s (was %s): setting the ready time again",
+                                nxt.strftime("%a %H:%M"), was.strftime("%a %H:%M"))
+                    await apply_ready_time(automation, set_ready_time)
             if automation.turned_on:
                 # The schedule was just turned on: inside a slot (or a charge joined with one),
                 # plugged in to its end, as at start-up; the ready time set to that end

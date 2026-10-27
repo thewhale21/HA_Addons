@@ -2218,3 +2218,40 @@ def test_ready_time_tried_again_when_it_fails():
 
     _run(ticks())
     assert asked == ["23:30", "23:30"] and not a.ready_status.get("error") and a.ready_retry is None
+
+
+def test_ready_time_follows_a_schedule_change_while_plugged_in():
+    """Plugged in for 20:00-23:30 (ready time 23:30), then the slot's end is
+    changed to 22:00: the ready time is set again, to 22:00."""
+    from src.shared_state import SharedState
+    thu = "2026-10-08"
+    a, clock = _automation(start=datetime.datetime(2026, 10, 8, 19, 59, 50, tzinfo=TZ))
+    a.set_schedule(enabled=True, ready_time=True, entries=[
+        {"id": "p1", "time": "20:00", "action": "plug", "date": thu}, {"id": "u1", "time": "23:30", "action": "unplug", "date": thu}])
+    state = SharedState(plugged_in=False)
+    asked = []
+
+    async def plug(source=None):
+        state.plugged_in = True
+
+    async def unplug(source=None):
+        state.plugged_in = False
+
+    async def set_ready(unplug_at):
+        asked.append(unplug_at.strftime("%H:%M"))
+        return {"ready": unplug_at.strftime("%H:%M"), "unplug": unplug_at.isoformat(timespec="minutes")}
+
+    async def ticks():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01, set_ready_time=set_ready))
+        await asyncio.sleep(0.03)
+        clock.dt = datetime.datetime(2026, 10, 8, 20, 0, 10, tzinfo=TZ)
+        await asyncio.sleep(0.05)
+        clock.dt = datetime.datetime(2026, 10, 8, 20, 30, tzinfo=TZ)
+        a.set_schedule(entries=[{"id": "p1", "time": "20:00", "action": "plug", "date": thu},
+                                {"id": "u1", "time": "22:00", "action": "unplug", "date": thu}])
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(ticks())
+    assert asked == ["23:30", "22:00"]
