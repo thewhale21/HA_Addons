@@ -1019,6 +1019,9 @@ class HaLink:
             info["entity"] = entity or None
             sources = find_sensor_sources(states)
             info["sensors"] = [{"name": x["name"], "entity": x["start"]} for x in sources]
+            # (and the ones looked for, so the page can say which weren't found)
+            info["sensors_known"] = [{"name": x["name"], "entity": "sensor.…" + x["start"]}
+                                     for x in suppliers.saving_words().get("sensors") or []]
             if not entity and not sources:
                 info["error"] = "No saving sessions calendar found: pick yours"
                 return None

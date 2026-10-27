@@ -298,6 +298,9 @@ def test_saving_sessions_read_from_the_found_calendar():
     assert len(sessions) == 1 and sessions[0]["start"].hour == 17
     assert asked[0]["service"] == "get_events" and asked[0]["target"] == {"entity_id": cal} and asked[0]["return_response"]
     assert link.saving_info["entity"] == cal and link.saving_info["auto"] and link.saving_info["supplier"] == "Octopus Energy"
+    # Axle Energy's sensors weren't there: looked for, not found (the page says so)
+    assert link.saving_info["sensors"] == []
+    assert link.saving_info["sensors_known"] == [{"name": "Axle Energy", "entity": "sensor.…axle_energy_event_start"}]
 
     async def no_calendar():
         return [{"entity_id": "calendar.home", "state": "off", "attributes": {}}]

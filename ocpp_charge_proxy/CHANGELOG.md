@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.58.3 — Over which days
+
+- **Fix:** on the Automations tab, a slot over your supplier's daily limit
+  was labelled only up to where the limit ran out (a 15:30–22:00 slot read
+  15:30–21:30, with the last half hour in red), so it looked as if the red
+  had nothing to do with the slot. Slots now show their whole time, and the
+  warning lists every day that's over, not just the worst
+- **Improvement:** the Saving sessions card says when Axle Energy's sensors
+  aren't found (and what it looked for), as well as when they are
+
 ## 2.58.2 — What saving sessions do
 
 - **Improvement:** the Saving sessions card says what it reads the sessions

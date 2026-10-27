@@ -2448,6 +2448,9 @@ function drawSaving() {
     ['Calendar', info.entity ? `<code>${esc(info.entity)}</code>${info.auto ? ' <span class="chip ok">Found</span>' : ' <span class="chip">Picked</span>'}${info.supplier ? ' <span class="muted">' + esc(info.supplier) + '</span>' : ''}`
       : (info.sensors || []).length ? '<span class="chip">None</span>' : '<span class="chip warn">None found</span>'],
     ...(info.sensors || []).map((x) => [esc(x.name), `<code>${esc(x.entity)}</code> <span class="chip ok">Found</span>`]),
+    // the sensor sources (Axle Energy) not found: their integration isn't installed, or named differently
+    ...(info.sensors_known || []).filter((k) => !(info.sensors || []).some((x) => x.name === k.name))
+      .map((k) => [esc(k.name), `<span class="chip">Not found</span> <span class="muted">looked for <code>${esc(k.entity)}</code></span>`]),
     ['Status', info.error ? `<span class="chip warn">Not read</span> <span class="muted">${esc(info.error)}</span>`
       : info.read_at ? `<span class="chip ok">Read</span> <span class="muted">${ago(new Date(info.read_at * 1000).toISOString())}</span>` : '<span class="chip">Not read yet</span>'],
   ]);
@@ -2880,12 +2883,14 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
     }
   }
   const overs = [];  // [from, to] by the clock: the minutes past the limit, each day in turn
+  const overDays = [];  // each limit day (or period) over it: {start, total}
   periods.forEach(({w, a, b}) => {
     let total = 0;
     const hit = [];
     rsegs.forEach(([rx, ry, x, y]) => { const o = Math.max(0, Math.min(ry, b) - Math.max(rx, a)); if (o) { total += o; hit.push([x, y]); } });
     if (!worst || total > worst.total) worst = {start: w, total};
     if (capped && total > capMin()) {
+      overDays.push({start: w, total});
       bad.push(...hit);
       let used = 0;
       rsegs.forEach(([rx, ry, x]) => {
@@ -2897,7 +2902,7 @@ function weekPlan(entries = auto.entries, skipList = null, forceCap = false) {
       });
     }
   });
-  return {segs, worst, bad, over: bad.length > 0, overs, strict};
+  return {segs, worst, bad, over: bad.length > 0, overs, overDays, strict};
 }
 
 // Slots: a plug-in time and the unplug that ends it, with the days (or the
@@ -3120,7 +3125,7 @@ function drawWeek() {
         + (jl || jr ? `\nOne charge with the slot${jl && jr ? 's' : ''} it meets${linked ? `: ready time ${whenMin(endFrom(o.b))}` : ''}` : '');
       const ty = typeOf(s);
       return `<div class="seg ${o.skipped ? 'skip' : ''} ${(!on && !s.source) || !s.enabled ? 'off' : ''} ${linked ? 'linked' : ''} ${picked ? 'picked' : ''} ${jl} ${jr}"
-        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${(x1 - x0) * trackPx() / 100 > 76 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm((red && over[0][0] > Math.max(o.a, lo) ? over[0][0] : Math.min(o.b, hi)) - lo)}${readyHere && !red && (x1 - x0) * trackPx() / 100 > 130 ? ' · ready' : ''}</span>` : ''}${resizable(o, s) ? `${o.a >= lo ? '<i class="rh l" title="Drag to change when it plugs in"></i>' : ''}${o.b <= hi && s.end ? '<i class="rh r" title="Drag to change when it unplugs"></i>' : ''}` : ''}</div>`
+        data-occ="${k}" data-row="${d}" ${got.length ? `data-ses="${got[0].n}"` : ''} style="${ty ? `background:${TYPE[ty][0]};` : ''}left:${x0}%;width:${x1 - x0}%" title="${title}">${(x1 - x0) * trackPx() / 100 > 76 ? `<span class="sl">${hhmm(Math.max(o.a, lo) - lo)}–${hhmm(Math.min(o.b, hi) - lo)}${readyHere && !red && (x1 - x0) * trackPx() / 100 > 130 ? ' · ready' : ''}</span>` : ''}${resizable(o, s) ? `${o.a >= lo ? '<i class="rh l" title="Drag to change when it plugs in"></i>' : ''}${o.b <= hi && s.end ? '<i class="rh r" title="Drag to change when it unplugs"></i>' : ''}` : ''}</div>`
         + over.map(([x, y]) => {
           const p = span(x, y);
           return `<div class="seg overpart ${!on && !s.source ? 'off' : ''}" data-occ="${k}" data-row="${d}" style="left:${p.x0}%;width:${p.x1 - p.x0}%"
@@ -3164,7 +3169,11 @@ function drawWeek() {
   $('w-warn').hidden = !plan.over;
   if (plan.over) {
     const w = plan.worst;
-    $('w-warn').innerHTML = `<span class="chip err">Over ${capMin() / 60} hours</span> Plugged in for ${dur(w.total * 60)} in the ${limitReset() ? 'day' : `${limitHours()} hours`} from ${dayLabel(Math.floor(w.start / DAY_MIN))} ${hhmm(((w.start % DAY_MIN) + DAY_MIN) % DAY_MIN)}${limitReset() ? ` (the limit resets at ${limitReset()})` : ''}. `
+    // Which days: the worst, and how many others (each is red on its own row)
+    const days = plan.overDays || [], others = days.length - 1;
+    const one = (x) => `${dayLabel(Math.floor(x.start / DAY_MIN))} ${hhmm(((x.start % DAY_MIN) + DAY_MIN) % DAY_MIN)}`;
+    $('w-warn').innerHTML = `<span class="chip err">Over ${capMin() / 60} hours</span> Plugged in for ${dur(w.total * 60)} in the ${limitReset() ? 'day' : `${limitHours()} hours`} from ${one(w)}${limitReset() ? ` (the limit resets at ${limitReset()})` : ''}`
+      + (others > 0 ? `, and over on ${others === 1 ? 'one other day' : `${others} other days`} too (${days.filter((x) => x !== w && x.start !== w.start).map((x) => `${one(x).split(' ').slice(0, 2).join(' ')} ${dur(x.total * 60)}`).join(', ')})` : '') + '. '
       + `${sup('Your supplier')} schedules at most ${capMin() / 60} hours of smart charging in ${limitHours() !== 24 ? `any ${limitHours()} hours` : 'a day'}, so it may not charge in the hours over, in red. Shorten a slot to fit.`;
   }
 }
