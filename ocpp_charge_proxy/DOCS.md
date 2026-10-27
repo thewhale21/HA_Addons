@@ -505,7 +505,10 @@ one file in `src/supplier_types/`, and a new kind is a new file there.
 
 1. The add-on connects to your supplier's OCPP server via WebSocket
 2. It registers as a chargepoint (BootNotification)
-3. It sends periodic heartbeats and meter values
+3. It sends periodic heartbeats and meter values: whichever your supplier
+   asks for of energy, power, the current the car draws (`Current.Import`),
+   the supply voltage (`Voltage`, from Settings › Voltage), the current and
+   power offered, frequency and SoC
 4. When you "plug in" (the Plugged In helper or the web page), it reports
    `Preparing`
 5. Your supplier creates a charge schedule and sends `RemoteStartTransaction`

@@ -166,3 +166,22 @@ def test_soc_skipped_without_value():
         measurands=["Energy.Active.Import.Register", "SoC"],
     )
     assert [sv["measurand"] for sv in mv[0]["sampledValue"]] == ["Energy.Active.Import.Register"]
+
+
+def test_current_and_voltage_reported():
+    """Current.Import (what the car draws) and Voltage, when asked for."""
+    wanted = ["Current.Import", "Voltage", "Current.Offered"]
+    svs = build_meter_values(reading=_make_reading(), energy_register_wh=0, context="Sample.Periodic",
+                             measurands=wanted)[0]["sampledValue"]
+    got = {sv["measurand"]: (sv["value"], sv.get("unit"), sv["location"]) for sv in svs}
+    assert list(got) == wanted
+    assert got["Current.Import"][1] == "A" and float(got["Current.Import"][0]) > 0
+    assert got["Voltage"][1] == "V" and 200 < float(got["Voltage"][0]) < 260
+    assert all(loc == "Outlet" for _, _, loc in got.values())
+    # idle: no current, and the supply voltage if known
+    idle = build_meter_values(reading=None, energy_register_wh=0, context="Sample.Periodic",
+                              measurands=["Current.Import", "Voltage"], voltage=231.4)[0]["sampledValue"]
+    assert [(sv["measurand"], sv["value"], sv["unit"]) for sv in idle] == [("Current.Import", "0.0", "A"), ("Voltage", "231.4", "V")]
+    idle = build_meter_values(reading=None, energy_register_wh=0, context="Sample.Periodic",
+                              measurands=["Current.Import", "Voltage"])[0]["sampledValue"]
+    assert [sv["measurand"] for sv in idle] == ["Current.Import"]

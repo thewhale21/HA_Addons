@@ -668,6 +668,7 @@ class ChargePoint(BaseChargePoint):
             measurands=measurands,
             timestamp=timestamp,
             soc=self._soc_for_report(),
+            voltage=self._charger_sim.nominal_voltage,
         )[0]
         if not mv["sampledValue"]:
             return
@@ -1114,6 +1115,7 @@ class ChargePoint(BaseChargePoint):
             context="Sample.Periodic",
             measurands=self._sampled_measurands,
             soc=self._soc_for_report(),
+            voltage=self._charger_sim.nominal_voltage,
         )
         self._record_stop_txn_reading(
             reading, self._stop_txn_sampled, "Sample.Periodic",
@@ -1145,6 +1147,7 @@ class ChargePoint(BaseChargePoint):
             measurands=self._aligned_measurands,
             timestamp=timestamp,
             soc=self._soc_for_report(),
+            voltage=self._charger_sim.nominal_voltage,
         )
         self._record_stop_txn_reading(
             reading, self._stop_txn_aligned, "Sample.Clock",

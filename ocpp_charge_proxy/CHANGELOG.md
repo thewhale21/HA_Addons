@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.60.0 — Amps and volts
+
+- **Feature:** meter values include the current the car draws
+  (`Current.Import`, 0 A when it isn't charging) and the supply voltage
+  (`Voltage`: your voltage sensor or set value, as on Settings › Voltage)
+  when your supplier asks for them, as a real charger does. Before, they were
+  left out
+
 ## 2.59.0 — Remove the hours over
 
 - **Feature:** a slot with hours over your supplier's daily limit (in red)

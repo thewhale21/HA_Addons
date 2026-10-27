@@ -32,12 +32,14 @@ DEFAULT_MEASURAND = "Energy.Active.Import.Register"
 
 def _available_values(
     reading: ChargerReading | None, energy_register_wh: int,
-    soc: float | None = None,
+    soc: float | None = None, voltage: float | None = None,
 ) -> dict[str, tuple[str, str | None]]:
     """Every measurand we can report right now -> (value, unit).
 
-    reading=None means idle (not delivering power). soc is the car's state of
-    charge in %, or None when there's no SoC entity / the car isn't connected.
+    reading=None means idle (not delivering power): no current, and the
+    supply `voltage` if given (a real charger measures it plugged in or not).
+    soc is the car's state of charge in %, or None when there's no SoC entity /
+    the car isn't connected.
     """
     values: dict[str, tuple[str, str | None]] = {
         "Energy.Active.Import.Register": (str(float(energy_register_wh)), "Wh"),
@@ -46,8 +48,14 @@ def _available_values(
     }
     if reading is None:
         values["Power.Active.Import"] = ("0.0", "W")
+        values["Current.Import"] = ("0.0", "A")
+        if voltage:
+            values["Voltage"] = (str(round(voltage, 1)), "V")
     else:
         values["Power.Active.Import"] = (str(round(reading.power_kw * 1000, 1)), "W")
+        # what the car draws, and the supply voltage (single phase)
+        values["Current.Import"] = (str(round(reading.current_a, 1)), "A")
+        values["Voltage"] = (str(round(reading.voltage, 1)), "V")
         values["Frequency"] = (str(reading.frequency_hz), None)
         values["Power.Offered"] = (str(round(reading.power_offered_kw * 1000)), "W")
         values["Current.Offered"] = (str(reading.current_offered_a), "A")
@@ -63,6 +71,7 @@ def build_meter_values(
     measurands: list[str] | None = None,
     timestamp: str | None = None,
     soc: float | None = None,
+    voltage: float | None = None,
 ) -> list[dict]:
     """Meter values containing only the requested measurands, in request order.
 
@@ -70,7 +79,7 @@ def build_meter_values(
     while idle) are skipped. An empty/None list falls back to
     Energy.Active.Import.Register.
     """
-    available = _available_values(reading, energy_register_wh, soc)
+    available = _available_values(reading, energy_register_wh, soc, voltage)
     wanted = measurands or [DEFAULT_MEASURAND]
     sampled = []
     seen = set()
