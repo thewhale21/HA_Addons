@@ -14,3 +14,6 @@ top). The owner only runs them inside Home Assistant.
 - Tests: `cd <addon> && python -m pytest tests/`.
 - New add-ons start from `addon_template/` with
   `python scripts/new_addon.py <folder> "<Name>" "<description>"`.
+- **OCPP Charge Proxy:** changes go to this repo only. The separate
+  `ocpp_charge_proxy` repository (its old home) isn't updated any more
+  unless the owner says so.
