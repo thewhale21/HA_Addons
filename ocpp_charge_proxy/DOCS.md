@@ -631,8 +631,9 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   supplier defaults: hover for what, click for Diagnostics › Health);
   **What happens next**: now, then each thing coming in the next 16 hours
   (the schedule plugging in, with the ready time, and unplugging; your
-  supplier's slots; saving sessions) at its time on a strip of those hours
-  (plugged in by the schedule, your supplier's slots, saving sessions);
+  supplier's slots; saving sessions; your off-peak times) at its time on a
+  strip of those hours (plugged in by the schedule, your supplier's slots,
+  saving sessions, off-peak times hatched grey);
   things go above the strip, or below it where they'd overlap the one
   before, and on a phone it scrolls sideways;
   the current session;

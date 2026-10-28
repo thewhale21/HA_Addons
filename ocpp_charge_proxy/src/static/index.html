@@ -284,6 +284,8 @@
   .un-bar .sup.plan { opacity: 1; border: 1.5px dashed; box-sizing: border-box; }
   .un-bar .save { background: repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 6px); opacity: .6; }
   .un-bar .now { left: 0; width: 2px; background: var(--err); }
+  .un-bar .off { background: repeating-linear-gradient(45deg, rgba(84,110,122,.42) 0 4px, rgba(84,110,122,.14) 4px 8px); }
+  .un-step.off .dot { border-color: rgb(84,110,122); background: repeating-linear-gradient(45deg, rgba(84,110,122,.6) 0 2px, transparent 2px 4px); }
   .un-axis { position: relative; z-index: 1; height: 14px; font-size: 11px; color: var(--text2); }
   .un-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; background: var(--card); padding: 0 3px; }
 
@@ -1376,6 +1378,22 @@ function drawNext() {
   const slots = !sc ? [] : [...(sc.current ? [{...sc.current, now: true}] : []), ...(sc.planned || [])].map((x) => ({...x, a: ms(x.start), b: ms(x.end)})).filter((x) => x.b > now);
   const saveParts = savingParts(sch.saving_sessions).filter((z) => z.b > now);  // (each as it runs)
   const saves = saveParts.map((z) => ({...z.x, a: z.a, b: z.b, z}));
+  // Your off-peak times (Automations › Schedule), each day they're on: from yesterday's
+  // (one running past midnight) to tomorrow's. Wall-clock times, so right across a clock change
+  const offs = [];
+  const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
+  for (const b of sch.blocks || []) {
+    const [ah, am] = String(b.start).split(':').map(Number), [bh, bm] = String(b.end).split(':').map(Number);
+    for (const k of [-1, 0, 1]) {
+      const day = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + k);
+      if (!(b.days || []).includes((day.getDay() + 6) % 7)) continue;
+      const night = bh * 60 + bm <= ah * 60 + am;
+      const x0 = new Date(day.getFullYear(), day.getMonth(), day.getDate(), ah, am).getTime();
+      const x1 = new Date(day.getFullYear(), day.getMonth(), day.getDate() + (night ? 1 : 0), bh, bm).getTime();
+      if (x1 > now && x0 < end) offs.push({a: x0, b: x1});
+    }
+  }
+  offs.sort((p, q) => p.a - q.a);
   // Now
   const cur = slots.find((x) => x.now);
   let nowW, nowS, idle = false;
@@ -1407,6 +1425,9 @@ function drawNext() {
         const own = all > x.b ? `${hm(x.a)}–${hm(x.b)}; ` : '';
         return sch.saving_block ? `${own}nothing plugged in until ${hm(all)}` : `${own}charging isn't changed for it`;
       })(), c: `Saving session → ${hm(x.b)}`});
+  for (const x of offs)
+    steps.push({t: x.a, cls: 'off', head: x.a <= now ? 'Now' : when(x.a), small: '–' + hm(x.b), w: 'Off-peak',
+      s: 'nothing scheduled', c: `Off-peak → ${hm(x.b)}`});
   steps.sort((p, q) => (p.cls.startsWith('now') ? -Infinity : p.t) - (q.cls.startsWith('now') ? -Infinity : q.t) || p.t - q.t);
   // Things at the same time share a box (and anything going already joins Now's)
   const groups = [[steps[0]]];
@@ -1443,7 +1464,7 @@ function drawNext() {
   const els = [...up$.children], rows = {up: [], down: []}, stems = [];
   [0, ...els.map((_, n) => n).slice(1).reverse()].forEach((n) => {
     const e = els[n];
-    const w = e.offsetWidth;
+    const w = Math.ceil(e.getBoundingClientRect().width) + 1;  // (not rounded down: that would wrap its text)
     const x = n === 0 || n >= shown.length ? (n === 0 ? 0 : BW + 12) : xOf(shown[n][0].t), flip = x + w > W;
     const l = flip ? x - w : x, r = flip ? x : x + w;
     const free = (side, k) => (rows[side][k] || []).every(([p, q]) => r + 8 <= p || l >= q + 8);
@@ -1487,7 +1508,8 @@ function drawNext() {
   const pct = (t) => (Math.min(Math.max(t, now), end) - now) / (end - now) * 100;
   const bar = (cls, x0, x1, style = '', title = '') => x1 > now && x0 < end
     ? `<div class="${cls}" style="left:${pct(x0)}%;width:${pct(x1) - pct(x0)}%;${style}" title="${esc(title)}"></div>` : '';
-  $('o-next-bar').innerHTML = bands.map(([x, y]) => bar('plug', x, y, '', `Plugged in by the schedule ${hm(x)}–${hm(y)}`)).join('')
+  $('o-next-bar').innerHTML = offs.map((x) => bar('off', x.a, x.b, '', `Off-peak ${hm(x.a)}–${hm(x.b)}: nothing scheduled, the car may charge anyway`)).join('')
+    + bands.map(([x, y]) => bar('plug', x, y, '', `Plugged in by the schedule ${hm(x)}–${hm(y)}`)).join('')
     + slots.map((x) => bar('sup' + (x.now ? '' : ' plan'), x.a, x.b, x.now ? `background:${pColour}` : `border-color:${pColour};background:color-mix(in srgb, ${pColour} 15%, transparent)`,
       `${provider} slot ${hm(x.a)}–${hm(x.b)}${x.charge_kwh != null ? ' · ' + num(Math.abs(x.charge_kwh), 1) + ' kWh' : ''}`)).join('')
     + saves.map((x) => bar('save' + laneCls(x.z), x.a, x.b, '', `${x.z.on ? 'Now: ' : ''}Saving session ${hm(x.a)}–${hm(x.b)}${x.summary ? ' (' + x.summary + ')' : ''}`)).join('')

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.63.9 — Off-peak in What happens next
+
+- **Feature:** **What happens next** shows your off-peak times (Automations ›
+  Schedule): hatched grey on the strip, a box when one starts (with when it
+  ends), and in Now's box while you're in one
+- **Fix:** a box's text could wrap a word early (its width was rounded down)
+
 ## 2.63.8 — What happens next, earlier further out
 
 - **Fix:** in **What happens next**, when things are close together the
