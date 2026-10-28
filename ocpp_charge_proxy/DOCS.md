@@ -631,7 +631,9 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   supplier defaults: hover for what, click for Diagnostics › Health);
   **What happens next**: now, then the next few things in the coming 16
   hours (the schedule plugging in and unplugging, with the ready time; your
-  supplier's planned slots; saving sessions) and a strip of those hours; the current session;
+  supplier's planned slots; saving sessions), each at its time on a strip of those hours
+  (its line meets the strip there; things close together go on another row;
+  on a phone it scrolls sideways); the current session;
   **smart charging** (the charge slots your supplier plans, found
   automatically from the Octopus Energy, EDF Energy or E.ON Next integration, also
   shown along the top of the chart);

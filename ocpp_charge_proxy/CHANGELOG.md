@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.63.4 — What happens next, on the timeline
+
+- **Improvement:** **What happens next** puts each thing at its time on the
+  strip below it: its line meets the strip at that time (14:30 at 14:30),
+  with things close together on another row instead of overlapping. On a
+  phone it's at least an hour to 60 px and scrolls sideways, rather than
+  the boxes stacking on top of each other
+
 ## 2.63.3 — The ready time follows the schedule
 
 - **Fix:** changing the schedule while plugged in for a slot (editing or
