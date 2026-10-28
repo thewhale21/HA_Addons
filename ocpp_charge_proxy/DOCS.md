@@ -629,12 +629,12 @@ follows your Home Assistant theme. Settings save as soon as you change them.
 - **Overview:** state, power, current, SoC and energy (with a **Check**
   chip when something's wrong with your supplier's integration or the
   supplier defaults: hover for what, click for Diagnostics › Health);
-  **What happens next**: a line for now (what it's doing, and what's next
-  and how long until), then the coming 16 hours as a strip (plugged in by
-  the schedule, your supplier's slots, saving sessions) with a small label at
-  each time on it (the schedule plugging in, with the ready time, and
-  unplugging; your supplier's slots; saving sessions; hover for more);
-  labels that would overlap go up a row, and on a phone it scrolls sideways;
+  **What happens next**: now, then each thing coming in the next 16 hours
+  (the schedule plugging in, with the ready time, and unplugging; your
+  supplier's slots; saving sessions) at its time on a strip of those hours
+  (plugged in by the schedule, your supplier's slots, saving sessions);
+  things go above the strip, or below it where they'd overlap the one
+  before, and on a phone it scrolls sideways;
   the current session;
   **smart charging** (the charge slots your supplier plans, found
   automatically from the Octopus Energy, EDF Energy or E.ON Next integration, also

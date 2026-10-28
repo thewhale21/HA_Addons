@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.63.7 — What happens next, above and below
+
+- **Change:** **What happens next** is back to the clearer boxes (big time,
+  what happens, details), each at its time on the strip: above it, or below
+  it where it would overlap the one before (then a row further out), so
+  lines never run through a box. Replaces the one-line labels from 2.63.5
+
 ## 2.63.6 — What happens next, soonest at the top
 
 - **Fix:** in **What happens next**, the soonest label now sits on the top row

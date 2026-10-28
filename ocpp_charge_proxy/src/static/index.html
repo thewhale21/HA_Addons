@@ -255,11 +255,12 @@
   .week .blk.picked { box-shadow: inset 0 0 0 2px var(--text); }
   /* Overview: what happens next (steps, and a strip of the next 16 hours) */
   .upnext h2 { display: flex; align-items: center; }
-  /* Each thing at its time on the strip below (its line meets the strip there); boxes that would
-     overlap go on another row; wider than the card (a phone): it scrolls sideways */
-  .un-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: thin; padding-bottom: 2px; }
+  /* Each thing at its time on the strip (its line meets the strip there): above it, or below it
+     where it would overlap the one before; wider than the card (a phone): it scrolls sideways */
+  .un-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: thin; padding: 0 0 2px 5px; }
   .un-canvas { position: relative; min-width: 100%; }
   .un-steps { position: relative; }
+  .un-steps.below { margin-top: 6px; }
   .un-step { position: absolute; top: 0; padding: 2px 8px 4px 14px; box-sizing: border-box; }
   .un-step .stem { position: absolute; left: 0; top: 0; width: 2px; background: var(--divider); }
   .un-step.flip { text-align: right; padding: 2px 14px 4px 8px; }
@@ -276,18 +277,6 @@
   .un-step.now.idle .stem { background: var(--text2); } .un-step.now.idle .dot { background: var(--text2); border-color: var(--text2); box-shadow: none; }
   .un-step.save .dot { border-color: var(--violet); background: repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 4px); }
   .un-step.plug .dot { border-color: var(--primary); }
-  .un-now { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; margin: 0 0 10px; position: relative; padding-left: 16px; }
-  .un-now .dot { position: absolute; left: 0; top: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--ok);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
-  .un-now.idle .dot { background: var(--text2); box-shadow: none; }
-  .un-now .un-also::before { content: '+ '; color: var(--text2); }
-  .un-chips { position: relative; }
-  .un-chip { position: absolute; white-space: nowrap; font-size: 12px; line-height: 18px; padding: 0 7px; border-radius: 0 9px 9px 0;
-    background: color-mix(in srgb, var(--c) 12%, var(--card)); border-left: 2px solid var(--c); cursor: default; }
-  .un-chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
-  .un-chip.flip { border-left: 0; border-right: 2px solid var(--c); border-radius: 9px 0 0 9px; }
-  .un-chip .stem { position: absolute; left: -2px; top: 100%; width: 2px; background: var(--c); }
-  .un-chip.flip .stem { left: auto; right: -2px; }
   .un-bar { position: relative; height: 22px; border-radius: 7px; background: var(--hover); margin: 6px 0 4px; overflow: hidden; }
   .un-bar div { position: absolute; top: 0; bottom: 0; }
   .un-bar .plug { top: 3px; bottom: 3px; border-radius: 5px; background: var(--primary); opacity: .25; }
@@ -295,8 +284,8 @@
   .un-bar .sup.plan { opacity: 1; border: 1.5px dashed; box-sizing: border-box; }
   .un-bar .save { background: repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 6px); opacity: .6; }
   .un-bar .now { left: 0; width: 2px; background: var(--err); }
-  .un-axis { position: relative; height: 14px; font-size: 11px; color: var(--text2); }
-  .un-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .un-axis { position: relative; z-index: 1; height: 14px; font-size: 11px; color: var(--text2); }
+  .un-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; background: var(--card); padding: 0 3px; }
 
   /* Drag a slot's ends to change its times */
   .week .track .seg .rh { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; z-index: 2; touch-action: none; }
@@ -597,11 +586,11 @@
 
     <div class="card upnext" id="o-next-card" hidden>
       <h2>What happens next<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400">Next 16 hours</span></h2>
-      <div class="un-now" id="o-next-now"></div>
       <div class="un-scroll" id="o-next-scroll"><div class="un-canvas" id="o-next-canvas">
-        <div class="un-chips" id="o-next"></div>
+        <div class="un-steps" id="o-next"></div>
         <div class="un-bar" id="o-next-bar"></div>
         <div class="un-axis" id="o-next-axis"></div>
+        <div class="un-steps below" id="o-next-below"></div>
       </div></div>
     </div>
 
@@ -1425,56 +1414,70 @@ function drawNext() {
     const g = x.t <= now ? groups[0] : groups.length > 1 && Math.floor(groups[groups.length - 1][0].t / 60000) === Math.floor(x.t / 60000) ? groups[groups.length - 1] : null;
     if (g) g.push(x); else groups.push([x]);
   }
-  // Now, in one line: what it's doing, and what's next and how long until
-  const plain = (h) => String(h || '').replace(/<[^>]*>/g, '');
-  const g0 = groups[0], nowStep = g0[0], also = g0.slice(1);
-  const nextG = groups[1];
-  const inTxt = (t) => { const m = Math.round((t - now) / 60000); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ' ' + (m % 60) + 'm' : ''}`; };
-  $('o-next-now').className = 'un-now ' + nowStep.cls;
-  $('o-next-now').innerHTML = `<span class="dot"></span><b>Now</b><span>${nowStep.w}${nowStep.s ? ` <span class="muted">· ${nowStep.s}</span>` : ''}</span>`
-    + also.map((y) => `<span class="un-also">${y.w}${y.s ? ` <span class="muted">· ${y.s}</span>` : ''}</span>`).join('')
-    + (nextG ? `<span class="muted">Next, ${hm(nextG[0].t)} (in ${inTxt(nextG[0].t)}): ${esc(plain(nextG.map((y) => y.c || y.w).join(' · ')))}</span>`
-      : '<span class="muted">Nothing planned in the next 16 hours</span>');
-  // The rest as small labels at their times on the strip; ones that would overlap go up a row
-  const scroll = $('o-next-scroll'), cw = scroll.clientWidth;
-  if (!cw) return;  // (the Overview isn't showing: drawn when it is)
-  const W = Math.max(cw, NEXT_H * 50);  // (a phone: an hour is 50 px, scrolling sideways)
+  const shown = groups.slice(0, 14);
+  const RANK = ['now', 'save', 'sup', 'plug'];
+  // The canvas: the card's width, or wider (scrolling sideways) so an hour is at least 60 px
+  const scroll = $('o-next-scroll'), cw = scroll.clientWidth - 5;  // (5 px: room for Now's dot)
+  if (cw <= 0) return;  // (the Overview isn't showing: drawn when it is)
+  const W = Math.max(cw, NEXT_H * 60), BW = Math.min(180, Math.max(140, cw / 2.4));
   $('o-next-canvas').style.width = W + 'px';
   const xOf = (t) => (Math.min(Math.max(t, now), end) - now) / (end - now) * W;
-  const RANK = ['save', 'sup', 'plug'];
-  const colourOf = (y) => y.colour || ({save: 'var(--violet)', plug: 'var(--primary)'}[y.cls] || 'var(--text2)');
-  const chips$ = $('o-next');
-  chips$.innerHTML = groups.slice(1, 15).map((g) => {
-    const lead = g.slice().sort((p, q) => (RANK.indexOf(p.cls) + 1 || 9) - (RANK.indexOf(q.cls) + 1 || 9))[0];  // (its colour)
-    const title = g.map((y) => `${plain(y.head)}${y.small || ''} ${plain(y.w)}${y.s ? ' · ' + plain(y.s) : ''}`).join('\n');
-    return `<div class="un-chip" data-x="${xOf(g[0].t)}" style="--c:${colourOf(lead)}" title="${esc(title)}"><span class="stem"></span>`
-      + `<b>${esc(plain(g[0].head))}</b> ${esc(g.map((y) => plain(y.c || y.w)).join(' · '))}</div>`;
-  }).join('');
-  // Rows: the soonest event sits highest, so each later label's line drops down past
-  // the earlier ones instead of through them. A label never covers another's line.
-  const chips = [...chips$.children], lanes = [], stems = [], ROW = 24;
-  chips.forEach((e) => {
-    const x = +e.dataset.x, w = e.offsetWidth, flip = x + w > W;
+  const box = (g) => {
+    const lead = g.slice().sort((p, q) => RANK.findIndex((r) => p.cls.startsWith(r)) - RANK.findIndex((r) => q.cls.startsWith(r)))
+      .find((y) => RANK.some((r) => y.cls.startsWith(r))) || g[0];
+    const one = g.length === 1, head = g[0].head;
+    const lines = g.map((y, n) => `<div class="w"${n ? ' style="margin-top:6px"' : ''}>${y.w}${!one && y.small && !y.cls.startsWith('save') ? ` <span class="muted">${y.small.replace('–', 'until ')}</span>` : ''}</div>${y.s ? `<div class="s">${y.s}</div>` : ''}`).join('');
+    return `<div class="un-step ${lead.cls}" style="max-width:${BW}px"><span class="stem"></span>`
+      + `<span class="dot"${lead.colour ? ` style="border-color:${lead.colour}"` : ''}></span>`
+      + `<div class="t">${head}${one && g[0].small ? `<small>${g[0].small}</small>` : ''}</div>${lines}</div>`;
+  };
+  const up$ = $('o-next'), down$ = $('o-next-below');
+  up$.innerHTML = shown.map(box).join('')
+    + (shown.length === 1 ? '<div class="un-step"><div class="w muted" style="margin-top:6px">Nothing planned in the next 16 hours</div></div>' : '');
+  down$.innerHTML = '';
+  // Each box at its time, above the strip; one that would overlap goes below it instead, then
+  // a row further out above, then below... A box never sits across another's line.
+  const els = [...up$.children], rows = {up: [], down: []}, stems = [];
+  els.forEach((e, n) => {
+    const w = e.offsetWidth;
+    const x = n === 0 || n >= shown.length ? (n === 0 ? 0 : BW + 12) : xOf(shown[n][0].t), flip = x + w > W;
     const l = flip ? x - w : x, r = flip ? x : x + w;
-    const fits = (n) => (lanes[n] || []).every(([a, b]) => r + 4 <= a || l >= b + 4)
-      && stems.every(([sx, sn]) => sn >= n || sx < l - 4 || sx > r + 4)
-      && lanes.every((spans, m) => m <= n || spans.every(([a, b]) => x < a - 4 || x > b + 4));
-    const free = (n) => (lanes[n] || []).every(([a, b]) => r + 4 <= a || l >= b + 4);
-    let n = 0;
-    while (n <= lanes.length && !fits(n)) n++;
-    if (n > lanes.length) { n = 0; while (!free(n)) n++; }  // (no clean spot: just don't overlap)
-    while (lanes.length <= n) lanes.push([]);
-    lanes[n].push([l, r]);
-    stems.push([x, n]);
+    const free = (side, k) => (rows[side][k] || []).every(([p, q]) => r + 8 <= p || l >= q + 8);
+    const clean = (side, k) => free(side, k)
+      && stems.every(([sx, sd, sk]) => sd !== side || sk >= k || sx < l - 4 || sx > r + 4)
+      && rows[side].every((spans, j) => j >= k || spans.every(([p, q]) => x < p - 4 || x > q + 4));
+    const tries = [];
+    for (let k = 0; k <= els.length; k++) tries.push(['up', k], ['down', k]);
+    const [side, k] = tries.find(([d, j]) => clean(d, j)) || tries.find(([d, j]) => free(d, j));
+    while (rows[side].length <= k) rows[side].push([]);
+    rows[side][k].push([l, r]);
+    stems.push([x, side, k]);
     e.classList.toggle('flip', flip);
     e.style.left = l + 'px';
-    e.dataset.lane = n;
+    e.style.width = w + 'px';  // (as measured: it keeps its shape where it lands)
+    e.dataset.side = side; e.dataset.row = k;
+    if (side === 'down') down$.appendChild(e);
   });
-  chips$.style.height = (lanes.length * ROW) + 'px';
-  chips.forEach((e) => {
-    const n = +e.dataset.lane;
-    e.style.top = (n * ROW) + 'px';
-    e.querySelector('.stem').style.height = ((lanes.length - 1 - n) * ROW + ROW - e.offsetHeight + 6) + 'px';  // (down to the strip)
+  // Rows as tall as their tallest box: above, the first row sits on the strip; below, under the times
+  const GAP = 8, heights = (side) => rows[side].map((_, k) => Math.max(0, ...els.filter((e) => e.dataset.side === side && +e.dataset.row === k).map((e) => e.offsetHeight)));
+  const hUp = heights('up'), hDown = heights('down');
+  const totUp = hUp.reduce((p, q) => p + q + GAP, 0) - (hUp.length ? GAP : 0);
+  const totDown = hDown.reduce((p, q) => p + q + GAP, 0) - (hDown.length ? GAP : 0);
+  up$.style.height = totUp + 'px';
+  down$.style.height = totDown + 'px';
+  down$.style.display = totDown ? '' : 'none';
+  els.forEach((e) => {
+    const k = +e.dataset.row, stem = e.querySelector('.stem');
+    if (e.dataset.side === 'up') {
+      const top = totUp - hUp.slice(0, k + 1).reduce((p, q) => p + q + GAP, 0) + GAP;
+      e.style.top = top + 'px';
+      if (stem) { stem.style.top = '0'; stem.style.height = (totUp - top + 6) + 'px'; }  // (down to the strip)
+    } else {
+      const top = hDown.slice(0, k).reduce((p, q) => p + q + GAP, 0);
+      e.style.top = top + 'px';
+      const D = top + 6 + 14 + 4;  // (up past the times to the strip)
+      if (stem) { stem.style.top = -D + 'px'; stem.style.height = (D + 8) + 'px'; }
+    }
   });
   // The strip
   const pct = (t) => (Math.min(Math.max(t, now), end) - now) / (end - now) * 100;
