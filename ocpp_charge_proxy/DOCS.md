@@ -519,7 +519,12 @@ one file in `src/supplier_types/`, and a new kind is a new file there.
    (with the ID tag the session is for: Octopus sends the same fixed tag to
    everyone, and numbers every session 1). With `AuthorizeRemoteTxRequests`
    on (the default) the add-on first checks the tag with your supplier
-   (`Authorize`) and only starts if it's accepted (offline, it starts anyway).
+   (`Authorize`) and only starts if it's accepted. Offline (or if the
+   connection drops while checking), it can't be checked: it starts anyway
+   only if `LocalAuthorizeOffline` is on and Wallbox's own
+   `AuthEnabledOffline` isn't set off. Octopus sets `AuthEnabledOffline` to
+   False after each connect, so with Octopus it doesn't start (shown as a red
+   chip on the Overview, and in the log).
    If the answer to `StartTransaction` says the tag isn't valid, then with
    `StopTransactionOnInvalidId` off (the default) the session stays open but
    no energy is delivered (`SuspendedEVSE`) until your supplier stops it; on,

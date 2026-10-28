@@ -1644,6 +1644,57 @@ def test_no_check_with_authorize_remote_tx_requests_off(mock_connection, mock_pe
     assert cp.state == ChargePointStatus.charging
 
 
+def test_offline_remote_start_goes_ahead_by_default(mock_connection, mock_persistence):
+    """Offline, the tag can't be checked: with LocalAuthorizeOffline on (and no
+    AuthEnabledOffline set) the start goes ahead, held until reconnected."""
+    cp = make_cp(mock_connection, mock_persistence)
+    cp.detach()
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert cp.state == ChargePointStatus.charging
+    assert cp._shared_state.tag_refused is None
+
+
+def test_offline_remote_start_refused_with_auth_enabled_offline_off(mock_connection, mock_persistence):
+    """Octopus sets Wallbox's AuthEnabledOffline to False: offline, no start."""
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._config_store["AuthEnabledOffline"] = ("False", False)
+    cp.detach()
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert cp._transaction_id is None and cp.state == ChargePointStatus.preparing
+    assert cp._shared_state.tag_refused["status"] == "unchecked (offline)"
+    assert cp._shared_state.tag_refused["what"] == "not started"
+
+
+def test_auth_enabled_offline_true_still_starts_offline(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._config_store["AuthEnabledOffline"] = ("True", False)
+    cp.detach()
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert cp.state == ChargePointStatus.charging
+
+
+def test_connection_lost_during_authorize_respects_auth_enabled_offline(mock_connection, mock_persistence):
+    """The connection drops while checking the tag: AuthEnabledOffline off, no start."""
+    from src.client import ChargePointOffline
+    cp = make_cp(mock_connection, mock_persistence)
+    _online(cp)
+    cp._config_store["AuthEnabledOffline"] = ("False", False)
+    sent = []
+
+    async def drop(payload, *a, **k):
+        sent.append(payload)
+        raise ChargePointOffline("connection lost")
+    cp.call = drop
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert not any(isinstance(r, _call.StartTransactionPayload) for r in sent)
+    assert cp._transaction_id is None and cp.state == ChargePointStatus.preparing
+    assert cp._shared_state.tag_refused["what"] == "not started"
+
+
 def test_tag_refused_at_start_suspends_by_default(mock_connection, mock_persistence):
     """StopTransactionOnInvalidId off (the default): the session stays open,
     no energy is delivered (SuspendedEVSE), until the server stops it."""

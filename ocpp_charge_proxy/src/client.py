@@ -1292,16 +1292,32 @@ class ChargePoint(BaseChargePoint):
             self._note_tag_refused(status, "suspended")
             await self._apply_profile_state()
 
+    def _offline_start_allowed(self) -> bool:
+        """Offline, the ID tag can't be checked: may a start go ahead anyway?
+        Not if LocalAuthorizeOffline is off, or if the server has set Wallbox's
+        own AuthEnabledOffline off (Octopus does, after every BootNotification).
+        When it isn't, the session isn't started and it's noted (Overview chip, log)."""
+        off = None
+        if not self._config_on("LocalAuthorizeOffline"):
+            off = "LocalAuthorizeOffline"
+        elif key_set := self._config_store.get("AuthEnabledOffline"):
+            if str(key_set[0]).strip().lower() == "false":
+                off = "AuthEnabledOffline"
+        if off is None:
+            return True
+        logger.warning("Can't check the ID tag (offline) and %s is off: not starting", off)
+        self._note_tag_refused("unchecked (offline)", "not started")
+        self._pending_id_tag = None
+        return False
+
     async def _authorize_then_start(self, id_tag: str) -> None:
         """A start the server asked for (RemoteStartTransaction). With
         AuthorizeRemoteTxRequests on, the ID tag is checked with the server first
         (Authorize) and the session only starts if it's accepted; offline, it starts
-        as it can't be checked (as a charger allowing offline authorisation does)."""
+        as it can't be checked only if offline authorisation is allowed
+        (LocalAuthorizeOffline on, and Wallbox's AuthEnabledOffline not set off)."""
         if self._config_on("AuthorizeRemoteTxRequests"):
-            if not self.is_online and not self._config_on("LocalAuthorizeOffline"):
-                logger.warning("Can't check the ID tag (offline) and LocalAuthorizeOffline is off: not starting")
-                self._note_tag_refused("unchecked (offline)", "not started")
-                self._pending_id_tag = None
+            if not self.is_online and not self._offline_start_allowed():
                 return
             if not self.is_online:
                 logger.info("Can't check the ID tag (offline): starting anyway")
@@ -1310,6 +1326,8 @@ class ChargePoint(BaseChargePoint):
                     response = await self.call(call.AuthorizePayload(id_tag=id_tag))
                 except _CONNECTION_ERRORS:
                     response = None
+                    if not self._offline_start_allowed():
+                        return
                     logger.info("Can't check the ID tag (offline): starting anyway")
                 except Exception:
                     response = None

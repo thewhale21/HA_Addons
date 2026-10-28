@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.63.10 — AuthEnabledOffline honoured
+
+- **Change:** Wallbox's `AuthEnabledOffline` setting now does what it does on
+  a real Wallbox: set to False (as Octopus does after every connect), a
+  remote start whose ID tag can't be checked because the connection is down
+  (or drops while checking) isn't started, and shows as a red chip on the
+  Overview. Online starts aren't affected
+
 ## 2.63.9 — Off-peak in What happens next
 
 - **Feature:** **What happens next** shows your off-peak times (Automations ›
