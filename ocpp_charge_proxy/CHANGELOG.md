@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.64.1 — Looks more like a real charger
+
+- **Change:** the connection to your supplier no longer sends a User-Agent
+  header (it was the library's own, "Python/3.x websockets/x"); a charger
+  usually sends none
+- **Improvement:** simulated power is to the watt (0.001 kW) rather than whole
+  tens of watts, as a real meter reads (e.g. 1447 W, not 1450 W)
+
 ## 2.64.0 — ID tags and settings, as a real charger
 
 - **Feature:** an authorisation cache, as chargers have

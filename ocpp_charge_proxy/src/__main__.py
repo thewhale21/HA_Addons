@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import os
 import signal
@@ -29,6 +30,15 @@ logger = logging.getLogger("ocpp_charge_proxy")
 
 SAVING_READ_S = 300  # the saving sessions calendar is read this often
 SAVING_TICK_S = 30  # and the schedule checked against it this often
+# No User-Agent on the connection: the library's own ("Python/3.x websockets/x")
+# isn't what a charger sends, and chargers usually send none. Only passed if this
+# websockets version has the option (otherwise it couldn't connect at all).
+_NO_USER_AGENT: dict = {}
+try:
+    if "user_agent_header" in inspect.signature(websockets.connect).parameters:
+        _NO_USER_AGENT["user_agent_header"] = None
+except (TypeError, ValueError):
+    pass
 BACKOFF_STEPS = [5, 10, 30, 60]  # then every 60 s: back soon after an outage
 # The simulated car: wait after StartTransaction, then ramp up (Settings tab)
 DEFAULT_START_DELAY_S = 3.0
@@ -491,6 +501,7 @@ async def run() -> None:
             async with websockets.connect(
                 config.websocket_url,
                 subprotocols=["ocpp1.6"],
+                **_NO_USER_AGENT,
             ) as ws:
                 attempt = 0
                 logger.info("Connected to OCPP server")

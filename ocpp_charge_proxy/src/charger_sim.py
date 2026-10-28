@@ -155,7 +155,7 @@ class ChargerSimulator:
         """Return a copy of a reading with power/current scaled by factor."""
         if factor >= 1.0:
             return reading
-        power_kw = round(reading.power_kw * factor, 2)
+        power_kw = round(reading.power_kw * factor, 3)  # (to the watt, as a meter reads)
         return ChargerReading(
             power_kw=power_kw,
             voltage=reading.voltage,
@@ -197,9 +197,9 @@ class ChargerSimulator:
 
         if random.random() < 0.1:
             # Occasional wider swing
-            power_kw = round(random.uniform(mean_power - spread * 2, mean_power + spread * 2), 2)
+            power_kw = round(random.uniform(mean_power - spread * 2, mean_power + spread * 2), 3)
         else:
-            power_kw = round(random.gauss(mean_power, spread), 2)
+            power_kw = round(random.gauss(mean_power, spread), 3)  # (to the watt, as a meter reads)
 
         power_kw = max(0.1, min(self.rated_power_kw, power_kw))
         current_a = round((power_kw * 1000) / voltage, 2)
