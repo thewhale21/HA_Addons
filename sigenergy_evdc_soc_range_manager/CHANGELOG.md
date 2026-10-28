@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.32.0 — SoC chart on a phone
+
+- **Feature:** the Overview's car SoC chart works by touch: move a finger across it
+  to go back or forward in time, pinch to zoom in and out, double tap to go
+  back to the whole period, and tap for the reading at that time. A finger
+  moving up or down still scrolls the page
+
 ## 0.31.0 — Drag to change
 
 - **Feature:** drag either end of an entry in the schedule's week view to

@@ -200,6 +200,7 @@
   .week .dl { font-size: 13px; font-weight: 500; line-height: 1.2; }
   .week .dl small { display: block; font-weight: 400; font-size: 11px; color: var(--text2); }
   .week .dl.today { color: var(--primary); }
+  .socchart { touch-action: pan-y; }  /* (across and pinch: the chart's own, see chartTouch) */
   .week .track { position: relative; height: 48px; border-radius: 10px; background: var(--hover); overflow: hidden; touch-action: pan-y; cursor: copy; }
   .week .track.today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 45%, transparent); }
   .week .lane { position: absolute; left: 0; right: 0; height: 50%; pointer-events: none; }
@@ -1633,6 +1634,7 @@ function drawSocChart() {
   if (socc.zoom && (socc.zoom[0] < tStart || socc.zoom[1] > tNow + 60)) socc.zoom = null;
   const [t0, t1] = socc.zoom || [tStart, tNow];
   $('sc-reset').hidden = !socc.zoom;
+  socc.geom = {W, l: P.l, pw, t0, t1, tStart, tNow};  // (for touch: chartTouch below)
   const X = (t) => P.l + (t - t0) / (t1 - t0) * pw;  // (drawn clipped to the chart)
   const Y = (v) => P.t + (1 - v / 100) * ph;
   let svg = '';
@@ -1760,6 +1762,73 @@ function drawSocChart() {
   hit.addEventListener('dblclick', () => { socc.zoom = null; drawSocChart(); });
 }
 $('sc-reset').addEventListener('click', () => { socc.zoom = null; drawSocChart(); });
+
+// ---------- touch: one finger across moves along (pans), two fingers pinch to zoom,
+// a double tap resets; a finger moving up or down still scrolls the page ----------
+function chartTouch(el, h) {
+  // h.view(): {t0, t1, left, width} (the plot area, in screen px) or null; h.set(t0, t1); h.reset();
+  // h.tap(x, y): a single tap there (optional)
+  let g = null, lastTap = 0, frame = 0, next = null;
+  const draw = (a, b) => { next = [a, b]; if (!frame) frame = requestAnimationFrame(() => { frame = 0; h.set(...next); }); };
+  const begin = (e) => {
+    const v = h.view(); if (!v || !v.width) { g = null; return; }
+    const xs = [...e.touches].map((t) => t.clientX);
+    g = {v, x0: xs[0], y0: e.touches[0].clientY, mode: xs.length > 1 ? 'pinch' : null};
+    if (xs.length > 1) { g.d0 = Math.max(20, Math.abs(xs[1] - xs[0])); g.m0 = (xs[0] + xs[1]) / 2; }
+  };
+  el.addEventListener('touchstart', begin, {passive: true});
+  el.addEventListener('touchmove', (e) => {
+    if (!g) return;
+    const xs = [...e.touches].map((t) => t.clientX), {t0, t1, left, width} = g.v, span = t1 - t0;
+    if (!g.mode) {
+      const dx = xs[0] - g.x0, dy = e.touches[0].clientY - g.y0;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+      g.mode = Math.abs(dx) > Math.abs(dy) ? 'pan' : 'scroll';
+    }
+    if (g.mode === 'scroll') return;  // (the page scrolls)
+    e.preventDefault();
+    if (g.mode === 'pan') {
+      const shift = -(xs[0] - g.x0) / width * span;
+      draw(t0 + shift, t1 + shift);
+    } else if (xs.length > 1) {
+      // The time under the fingers' midpoint stays under it as they spread or close
+      const d = Math.max(20, Math.abs(xs[1] - xs[0])), m = (xs[0] + xs[1]) / 2, ns = span * g.d0 / d;
+      const tm = t0 + (g.m0 - left) / width * span, k = (m - left) / width;
+      draw(tm - k * ns, tm - k * ns + ns);
+    }
+  }, {passive: false});
+  el.addEventListener('touchend', (e) => {
+    if (!g) return;
+    if (e.touches.length) { if (frame) { cancelAnimationFrame(frame); frame = 0; h.set(...next); } begin(e); g.mode = g.mode || 'pan'; return; }  // (a finger lifted from a pinch: carry on panning)
+    if (!g.mode) {  // a tap: a second one soon after resets
+      const now = performance.now();
+      if (now - lastTap < 350) { lastTap = 0; e.preventDefault(); h.reset(); } else {
+        lastTap = now;
+        e.preventDefault();  // (no pretend mouse clicks after it: they'd start a drag-zoom)
+        const t = e.changedTouches[0];
+        if (t && h.tap) h.tap(t.clientX, t.clientY);  // (the reading there, as hovering shows it)
+      }
+    } else if (g.mode !== 'scroll') e.preventDefault();  // (no mouse clicks after a pan or pinch)
+    g = null;
+  }, {passive: false});
+  el.addEventListener('touchcancel', () => { g = null; });
+}
+chartTouch($('o-socchart'), {
+  view: () => {
+    const g = socc.geom, svg = $('o-socchart').querySelector('svg'); if (!g || !svg) return null;
+    const r = svg.getBoundingClientRect(), k = r.width / g.W;
+    return {t0: g.t0, t1: g.t1, left: r.left + g.l * k, width: g.pw * k};
+  },
+  set: (a, b) => {
+    // Within the period, at least 10 minutes; all of it is no zoom
+    const g = socc.geom, whole = g.tNow - g.tStart, span = Math.min(whole, Math.max(600, b - a));
+    a = Math.max(g.tStart, Math.min(a, g.tNow - span));
+    socc.zoom = span >= whole - 1 ? null : [a, a + span];
+    drawSocChart();
+  },
+  reset: () => { socc.zoom = null; drawSocChart(); },
+  tap: (x, y) => { const hit = $('o-socchart').querySelector('#sc-hit'); if (hit) hit.dispatchEvent(new MouseEvent('mousemove', {clientX: x, clientY: y, bubbles: true})); },
+});
 window.addEventListener('resize', () => { clearTimeout(drawSocChart._t); drawSocChart._t = setTimeout(drawSocChart, 250); });
 
 // ---------- Quick holds (src/holds.py): a one-off schedule entry from now ----------

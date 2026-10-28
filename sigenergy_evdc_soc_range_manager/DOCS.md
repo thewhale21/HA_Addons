@@ -108,7 +108,8 @@ The **Overview** opens with **Right now**: what it's doing and why, the
 car's SoC against the limits (set on the Schedule tab) and Start/Stop.
 Below are the power readings it decides from, the virtual battery, the
 car's SoC over time (drag across it or scroll over it to zoom in; double-click
-to go back) and the recent starts and stops (the latest 6;
+to go back; on a phone, tap for the reading, move a finger across it to go
+back or forward, pinch to zoom, double tap to go back) and the recent starts and stops (the latest 6;
 **Show all** for the rest). Each tab has a banner like this at the top;
 Settings › **Appearance** switches them to plain cards (**Basic**).
 
