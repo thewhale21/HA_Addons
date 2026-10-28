@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.64.2 — Auto plug-in wording
+
+- **Docs:** Automations › Auto plug-in now reads "Plugs in when the monitored
+  device's charge drops below a level" (it needn't be a car)
+
 ## 2.64.1 — Looks more like a real charger
 
 - **Change:** the connection to your supplier no longer sends a User-Agent
