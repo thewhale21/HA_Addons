@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.32.1 — SoC chart: pinch properly, and further back
+
+- **Fix:** pinching the car SoC chart only zoomed a little (the chart redrew
+  under the fingers and lost the gesture after the first step); it now
+  follows the fingers all the way
+- **Change:** zoomed in (by touch, dragging or scrolling) the chart can go
+  anywhere in the last 48 hours, not only the period picked: moving or
+  zooming out past it fetches the rest. Double tap or **Reset zoom** goes
+  back to the period picked
+- **Fix:** **Reset zoom** now sits over the chart's top right corner instead
+  of in its heading, where (on a phone) showing it pushed the chart down
+
 ## 0.32.0 — SoC chart on a phone
 
 - **Feature:** the Overview's car SoC chart works by touch: move a finger across it
