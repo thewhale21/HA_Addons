@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.63.6 — What happens next, soonest at the top
+
+- **Fix:** in **What happens next**, the soonest label now sits on the top row
+  and later ones step down towards the strip, so a later event's line no
+  longer runs through an earlier label
+
 ## 2.63.5 — What happens next, compact
 
 - **Improvement:** **What happens next** is about half the height: what's

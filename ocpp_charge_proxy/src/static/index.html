@@ -1450,13 +1450,22 @@ function drawNext() {
     return `<div class="un-chip" data-x="${xOf(g[0].t)}" style="--c:${colourOf(lead)}" title="${esc(title)}"><span class="stem"></span>`
       + `<b>${esc(plain(g[0].head))}</b> ${esc(g.map((y) => plain(y.c || y.w)).join(' · '))}</div>`;
   }).join('');
-  const chips = [...chips$.children], lanes = [], ROW = 24;
+  // Rows: the soonest event sits highest, so each later label's line drops down past
+  // the earlier ones instead of through them. A label never covers another's line.
+  const chips = [...chips$.children], lanes = [], stems = [], ROW = 24;
   chips.forEach((e) => {
     const x = +e.dataset.x, w = e.offsetWidth, flip = x + w > W;
     const l = flip ? x - w : x, r = flip ? x : x + w;
-    let n = lanes.findIndex((spans) => spans.every(([a, b]) => r + 4 <= a || l >= b + 4));
-    if (n < 0) { lanes.push([]); n = lanes.length - 1; }
+    const fits = (n) => (lanes[n] || []).every(([a, b]) => r + 4 <= a || l >= b + 4)
+      && stems.every(([sx, sn]) => sn >= n || sx < l - 4 || sx > r + 4)
+      && lanes.every((spans, m) => m <= n || spans.every(([a, b]) => x < a - 4 || x > b + 4));
+    const free = (n) => (lanes[n] || []).every(([a, b]) => r + 4 <= a || l >= b + 4);
+    let n = 0;
+    while (n <= lanes.length && !fits(n)) n++;
+    if (n > lanes.length) { n = 0; while (!free(n)) n++; }  // (no clean spot: just don't overlap)
+    while (lanes.length <= n) lanes.push([]);
     lanes[n].push([l, r]);
+    stems.push([x, n]);
     e.classList.toggle('flip', flip);
     e.style.left = l + 'px';
     e.dataset.lane = n;
@@ -1464,8 +1473,8 @@ function drawNext() {
   chips$.style.height = (lanes.length * ROW) + 'px';
   chips.forEach((e) => {
     const n = +e.dataset.lane;
-    e.style.top = ((lanes.length - 1 - n) * ROW) + 'px';
-    e.querySelector('.stem').style.height = (n * ROW + ROW - e.offsetHeight + 6) + 'px';  // (down to the strip)
+    e.style.top = (n * ROW) + 'px';
+    e.querySelector('.stem').style.height = ((lanes.length - 1 - n) * ROW + ROW - e.offsetHeight + 6) + 'px';  // (down to the strip)
   });
   // The strip
   const pct = (t) => (Math.min(Math.max(t, now), end) - now) / (end - now) * 100;
