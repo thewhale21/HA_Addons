@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.63.5 — What happens next, compact
+
+- **Improvement:** **What happens next** is about half the height: what's
+  happening now (and what's next, and how long until) is one line, and each
+  thing to come is a one-line label at its time just above the strip (e.g.
+  "14:30 Plug in → 19:00", "19:00 Unplug · Saving session → 20:00"; hover for
+  more), in its colour, going up a row only where labels would overlap
+
 ## 2.63.4 — What happens next, on the timeline
 
 - **Improvement:** **What happens next** puts each thing at its time on the

@@ -276,7 +276,19 @@
   .un-step.now.idle .stem { background: var(--text2); } .un-step.now.idle .dot { background: var(--text2); border-color: var(--text2); box-shadow: none; }
   .un-step.save .dot { border-color: var(--violet); background: repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 4px); }
   .un-step.plug .dot { border-color: var(--primary); }
-  .un-bar { position: relative; height: 22px; border-radius: 7px; background: var(--hover); margin: 14px 0 4px; overflow: hidden; }
+  .un-now { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; margin: 0 0 10px; position: relative; padding-left: 16px; }
+  .un-now .dot { position: absolute; left: 0; top: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--ok);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+  .un-now.idle .dot { background: var(--text2); box-shadow: none; }
+  .un-now .un-also::before { content: '+ '; color: var(--text2); }
+  .un-chips { position: relative; }
+  .un-chip { position: absolute; white-space: nowrap; font-size: 12px; line-height: 18px; padding: 0 7px; border-radius: 0 9px 9px 0;
+    background: color-mix(in srgb, var(--c) 12%, var(--card)); border-left: 2px solid var(--c); cursor: default; }
+  .un-chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .un-chip.flip { border-left: 0; border-right: 2px solid var(--c); border-radius: 9px 0 0 9px; }
+  .un-chip .stem { position: absolute; left: -2px; top: 100%; width: 2px; background: var(--c); }
+  .un-chip.flip .stem { left: auto; right: -2px; }
+  .un-bar { position: relative; height: 22px; border-radius: 7px; background: var(--hover); margin: 6px 0 4px; overflow: hidden; }
   .un-bar div { position: absolute; top: 0; bottom: 0; }
   .un-bar .plug { top: 3px; bottom: 3px; border-radius: 5px; background: var(--primary); opacity: .25; }
   .un-bar .sup { top: 6px; bottom: 6px; border-radius: 4px; opacity: .9; }
@@ -585,8 +597,9 @@
 
     <div class="card upnext" id="o-next-card" hidden>
       <h2>What happens next<span class="spacer"></span><span class="muted" style="font-size:12px;font-weight:400">Next 16 hours</span></h2>
+      <div class="un-now" id="o-next-now"></div>
       <div class="un-scroll" id="o-next-scroll"><div class="un-canvas" id="o-next-canvas">
-        <div class="un-steps" id="o-next"></div>
+        <div class="un-chips" id="o-next"></div>
         <div class="un-bar" id="o-next-bar"></div>
         <div class="un-axis" id="o-next-axis"></div>
       </div></div>
@@ -1387,22 +1400,24 @@ function drawNext() {
   } else { nowW = 'Unplugged'; nowS = ''; idle = true; }
   const steps = [{t: now, cls: 'now' + (idle ? ' idle' : ''), head: 'Now', w: nowW, s: nowS}];
   const ready = sch.ready_time;
-  if (sch.plug_pending) steps.push({t: ms(sch.plug_pending), cls: 'plug', head: hm(sch.plug_pending), w: 'Plugs in', s: 'after the random start delay'});
+  if (sch.plug_pending) steps.push({t: ms(sch.plug_pending), cls: 'plug', head: hm(sch.plug_pending), w: 'Plugs in', s: 'after the random start delay', c: 'Plug in (random delay)'});
   for (const u of times.filter((u) => u.t > now && u.t <= end)) {
     if (u.action === 'plug') {
       const until = unplugAfter(u.t);
-      steps.push({t: u.t, cls: 'plug', head: when(u.t), w: 'Plugs in', s: until ? `until ${when(until)}${ready ? ' · ready time then' : ''}` : 'no unplug planned'});
-    } else steps.push({t: u.t, cls: '', head: when(u.t), w: 'Unplugs', s: ready ? `ready by ${hm(u.t)}` : 'end of the slot'});
+      steps.push({t: u.t, cls: 'plug', head: when(u.t), w: 'Plugs in', s: until ? `until ${when(until)}${ready ? ' · ready time then' : ''}` : 'no unplug planned',
+        c: until ? `Plug in → ${hm(until)}` : 'Plug in'});
+    } else steps.push({t: u.t, cls: '', head: when(u.t), w: 'Unplugs', s: ready ? `ready by ${hm(u.t)}` : 'end of the slot', c: 'Unplug'});
   }
   for (const x of slots.filter((x) => !x.now && x.a <= end))
-    steps.push({t: x.a, cls: 'sup', head: when(x.a), small: '–' + hm(x.b), w: `${esc(provider)} slot${x.charge_kwh != null ? ` · ${num(Math.abs(x.charge_kwh), 1)} kWh` : ''}`, s: 'planned', colour: pColour});
+    steps.push({t: x.a, cls: 'sup', head: when(x.a), small: '–' + hm(x.b), w: `${esc(provider)} slot${x.charge_kwh != null ? ` · ${num(Math.abs(x.charge_kwh), 1)} kWh` : ''}`, s: 'planned', colour: pColour,
+      c: `${provider} slot → ${hm(x.b)}${x.charge_kwh != null ? ` · ${num(Math.abs(x.charge_kwh), 1)} kWh` : ''}`});
   for (const x of saves.filter((x) => x.a <= end))
     steps.push({t: x.a, cls: 'save', head: x.a <= now ? 'Now' : when(x.a), small: '–' + hm(x.b), w: `Saving session${x.summary ? ` (${esc(x.summary)})` : ''}`,
       s: (() => {
         const all = x.z.of ? new Date(x.z.of.end).getTime() : x.b;  // (with the ones it overlaps)
         const own = all > x.b ? `${hm(x.a)}–${hm(x.b)}; ` : '';
         return sch.saving_block ? `${own}nothing plugged in until ${hm(all)}` : `${own}charging isn't changed for it`;
-      })()});
+      })(), c: `Saving session → ${hm(x.b)}`});
   steps.sort((p, q) => (p.cls.startsWith('now') ? -Infinity : p.t) - (q.cls.startsWith('now') ? -Infinity : q.t) || p.t - q.t);
   // Things at the same time share a box (and anything going already joins Now's)
   const groups = [[steps[0]]];
@@ -1410,48 +1425,47 @@ function drawNext() {
     const g = x.t <= now ? groups[0] : groups.length > 1 && Math.floor(groups[groups.length - 1][0].t / 60000) === Math.floor(x.t / 60000) ? groups[groups.length - 1] : null;
     if (g) g.push(x); else groups.push([x]);
   }
-  const shown = groups.slice(0, 14);
-  const RANK = ['now', 'save', 'sup', 'plug'];
-  // The canvas: the card's width, or wider (scrolling sideways) so an hour is at least 60 px
+  // Now, in one line: what it's doing, and what's next and how long until
+  const plain = (h) => String(h || '').replace(/<[^>]*>/g, '');
+  const g0 = groups[0], nowStep = g0[0], also = g0.slice(1);
+  const nextG = groups[1];
+  const inTxt = (t) => { const m = Math.round((t - now) / 60000); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ' ' + (m % 60) + 'm' : ''}`; };
+  $('o-next-now').className = 'un-now ' + nowStep.cls;
+  $('o-next-now').innerHTML = `<span class="dot"></span><b>Now</b><span>${nowStep.w}${nowStep.s ? ` <span class="muted">· ${nowStep.s}</span>` : ''}</span>`
+    + also.map((y) => `<span class="un-also">${y.w}${y.s ? ` <span class="muted">· ${y.s}</span>` : ''}</span>`).join('')
+    + (nextG ? `<span class="muted">Next, ${hm(nextG[0].t)} (in ${inTxt(nextG[0].t)}): ${esc(plain(nextG.map((y) => y.c || y.w).join(' · ')))}</span>`
+      : '<span class="muted">Nothing planned in the next 16 hours</span>');
+  // The rest as small labels at their times on the strip; ones that would overlap go up a row
   const scroll = $('o-next-scroll'), cw = scroll.clientWidth;
   if (!cw) return;  // (the Overview isn't showing: drawn when it is)
-  const W = Math.max(cw, NEXT_H * 60), BW = Math.min(175, Math.max(150, cw / 2.2));
+  const W = Math.max(cw, NEXT_H * 50);  // (a phone: an hour is 50 px, scrolling sideways)
   $('o-next-canvas').style.width = W + 'px';
   const xOf = (t) => (Math.min(Math.max(t, now), end) - now) / (end - now) * W;
-  const lanes = [];  // each row's [left, right] spans, so boxes don't overlap
-  const place = (l, r) => {
-    let n = lanes.findIndex((spans) => spans.every(([a, b]) => r + 6 <= a || l >= b + 6));
+  const RANK = ['save', 'sup', 'plug'];
+  const colourOf = (y) => y.colour || ({save: 'var(--violet)', plug: 'var(--primary)'}[y.cls] || 'var(--text2)');
+  const chips$ = $('o-next');
+  chips$.innerHTML = groups.slice(1, 15).map((g) => {
+    const lead = g.slice().sort((p, q) => (RANK.indexOf(p.cls) + 1 || 9) - (RANK.indexOf(q.cls) + 1 || 9))[0];  // (its colour)
+    const title = g.map((y) => `${plain(y.head)}${y.small || ''} ${plain(y.w)}${y.s ? ' · ' + plain(y.s) : ''}`).join('\n');
+    return `<div class="un-chip" data-x="${xOf(g[0].t)}" style="--c:${colourOf(lead)}" title="${esc(title)}"><span class="stem"></span>`
+      + `<b>${esc(plain(g[0].head))}</b> ${esc(g.map((y) => plain(y.c || y.w)).join(' · '))}</div>`;
+  }).join('');
+  const chips = [...chips$.children], lanes = [], ROW = 24;
+  chips.forEach((e) => {
+    const x = +e.dataset.x, w = e.offsetWidth, flip = x + w > W;
+    const l = flip ? x - w : x, r = flip ? x : x + w;
+    let n = lanes.findIndex((spans) => spans.every(([a, b]) => r + 4 <= a || l >= b + 4));
     if (n < 0) { lanes.push([]); n = lanes.length - 1; }
     lanes[n].push([l, r]);
-    return n;
-  };
-  const box = (g, x, lane, flip) => {
-    const lead = g.slice().sort((p, q) => RANK.findIndex((r) => p.cls.startsWith(r)) - RANK.findIndex((r) => q.cls.startsWith(r)))
-      .find((y) => RANK.some((r) => y.cls.startsWith(r))) || g[0];
-    const one = g.length === 1, head = g[0].head;
-    const lines = g.map((y, n) => `<div class="w"${n ? ' style="margin-top:6px"' : ''}>${y.w}${!one && y.small && !y.cls.startsWith('save') ? ` <span class="muted">${y.small.replace('–', 'until ')}</span>` : ''}</div>${y.s ? `<div class="s">${y.s}</div>` : ''}`).join('');
-    return `<div class="un-step ${lead.cls}${flip ? ' flip' : ''}" data-lane="${lane}" style="left:${flip ? x - BW : x}px;width:${BW}px"><span class="stem"></span>`
-      + `<span class="dot"${lead.colour ? ` style="border-color:${lead.colour}"` : ''}></span>`
-      + `<div class="t">${head}${one && g[0].small ? `<small>${g[0].small}</small>` : ''}</div>${lines}</div>`;
-  };
-  let html = shown.map((g, n) => {
-    const x = n === 0 ? 0 : xOf(g[0].t), flip = x + BW > W;
-    return box(g, x, place(flip ? x - BW : x, flip ? x : x + BW), flip);
-  }).join('');
-  if (shown.length === 1) html += `<div class="un-step" data-lane="${place(BW + 10, 2 * BW + 10)}" style="left:${BW + 10}px;width:${BW}px"><div class="w muted" style="margin-top:6px">Nothing planned in the next 16 hours</div></div>`;
-  const steps$ = $('o-next');
-  steps$.innerHTML = html;
-  // Rows one under another, as tall as their tallest box; each line runs down to the strip
-  const els = [...steps$.children], tops = [];
-  let y = 0;
-  lanes.forEach((_, n) => { tops[n] = y; y += Math.max(0, ...els.filter((e) => +e.dataset.lane === n).map((e) => e.offsetHeight)) + 8; });
-  const total = Math.max(0, y - 8);
-  steps$.style.height = total + 'px';
-  els.forEach((e) => {
-    const top = tops[+e.dataset.lane] || 0;
-    e.style.top = top + 'px';
-    const stem = e.querySelector('.stem');
-    if (stem) stem.style.height = (total - top + 14) + 'px';  // (to the strip, 14 px below)
+    e.classList.toggle('flip', flip);
+    e.style.left = l + 'px';
+    e.dataset.lane = n;
+  });
+  chips$.style.height = (lanes.length * ROW) + 'px';
+  chips.forEach((e) => {
+    const n = +e.dataset.lane;
+    e.style.top = ((lanes.length - 1 - n) * ROW) + 'px';
+    e.querySelector('.stem').style.height = (n * ROW + ROW - e.offsetHeight + 6) + 'px';  // (down to the strip)
   });
   // The strip
   const pct = (t) => (Math.min(Math.max(t, now), end) - now) / (end - now) * 100;
