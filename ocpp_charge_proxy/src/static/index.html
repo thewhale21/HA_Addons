@@ -172,6 +172,9 @@
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .table-wrap { overflow-x: auto; }
   .chart-wrap { position: relative; height: 240px; cursor: crosshair; user-select: none; touch-action: pan-y; }
+  /* Reset zoom floats over the chart's top right corner (in the heading it moved the chart) */
+  .zoom-reset { position: absolute; top: 4px; right: 10px; z-index: 3; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+  .zoom-reset[hidden] { display: none; }
   .chart-sel { position: absolute; top: 10px; bottom: 24px; display: none; pointer-events: none;
     background: color-mix(in srgb, var(--primary) 14%, transparent); border: 1px solid var(--primary); border-width: 0 1px; }
   .legend .hint { margin-left: auto; }
@@ -611,7 +614,6 @@
 
     <div class="card">
       <h2>History<span class="spacer"></span>
-        <button class="btn small" id="ch-reset" hidden title="Back to the selected range">Reset zoom</button>
         <div class="seg" id="ch-series" role="group" aria-label="Chart series">
           <button data-series="power" aria-pressed="true">Power</button><button data-series="current">Current</button><button data-series="soc">SoC</button>
         </div>
@@ -619,7 +621,7 @@
           <button data-range="1800">30m</button><button data-range="3600" aria-pressed="true">1h</button><button data-range="21600">6h</button><button data-range="43200">12h</button><button data-range="86400">24h</button><button data-range="1209600">14d</button>
         </div>
       </h2>
-      <div class="chart-wrap" id="chart-wrap"><canvas id="chart"></canvas><div class="chart-sel" id="chart-sel"></div><div class="tip" id="chart-tip"></div></div>
+      <div class="chart-wrap" id="chart-wrap"><canvas id="chart"></canvas><button class="btn small zoom-reset" id="ch-reset" hidden title="Back to the selected range">Reset zoom</button><div class="chart-sel" id="chart-sel"></div><div class="tip" id="chart-tip"></div></div>
       <div class="legend" id="chart-legend"></div>
     </div>
 
@@ -2054,7 +2056,7 @@ function setView(t0, t1) {
   drawChart();
 }
 $('chart-wrap').addEventListener('mousedown', (e) => {
-  if (e.button !== 0 || !chart.geom) return;
+  if (e.button !== 0 || !chart.geom || e.target.closest('button')) return;
   zoom.dragging = true; zoom.x0 = chartTimeAt(e.clientX).mx;
   e.preventDefault();
 });
@@ -2096,8 +2098,21 @@ function chartTouch(el, h) {
     g = {v, x0: xs[0], y0: e.touches[0].clientY, mode: xs.length > 1 ? 'pinch' : null};
     if (xs.length > 1) { g.d0 = Math.max(20, Math.abs(xs[1] - xs[0])); g.m0 = (xs[0] + xs[1]) / 2; }
   };
-  el.addEventListener('touchstart', begin, {passive: true});
-  el.addEventListener('touchmove', (e) => {
+  // Moves and lifts are listened for on the element touched: a chart that redraws its insides
+  // (an SVG) takes that element out of the page mid-gesture, and then they no longer reach el
+  const bound = new WeakSet();
+  el.addEventListener('touchstart', (e) => {
+    if (e.target.closest && e.target.closest('button')) { g = null; return; }  // (Reset zoom)
+    begin(e);
+    const t = e.target;
+    if (!bound.has(t)) {
+      bound.add(t);
+      t.addEventListener('touchmove', move, {passive: false});
+      t.addEventListener('touchend', end, {passive: false});
+      t.addEventListener('touchcancel', () => { g = null; });
+    }
+  }, {passive: true});
+  function move(e) {
     if (!g) return;
     const xs = [...e.touches].map((t) => t.clientX), {t0, t1, left, width} = g.v, span = t1 - t0;
     if (!g.mode) {
@@ -2116,8 +2131,8 @@ function chartTouch(el, h) {
       const tm = t0 + (g.m0 - left) / width * span, k = (m - left) / width;
       draw(tm - k * ns, tm - k * ns + ns);
     }
-  }, {passive: false});
-  el.addEventListener('touchend', (e) => {
+  }
+  function end(e) {
     if (!g) return;
     if (e.touches.length) { if (frame) { cancelAnimationFrame(frame); frame = 0; h.set(...next); } begin(e); g.mode = g.mode || 'pan'; return; }  // (a finger lifted from a pinch: carry on panning)
     if (!g.mode) {  // a tap: a second one soon after resets
@@ -2130,8 +2145,7 @@ function chartTouch(el, h) {
       }
     } else if (g.mode !== 'scroll') e.preventDefault();  // (no mouse clicks after a pan or pinch)
     g = null;
-  }, {passive: false});
-  el.addEventListener('touchcancel', () => { g = null; });
+  }
 }
 chartTouch($('chart-wrap'), {
   view: () => {

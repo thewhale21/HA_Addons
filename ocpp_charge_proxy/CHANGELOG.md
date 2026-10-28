@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.65.1 — Reset zoom over the chart
+
+- **Fix:** **Reset zoom** now sits over the History chart's top right corner
+  instead of in its heading, where (on a phone) showing it pushed the chart
+  down
+- **Improvement:** touch gestures follow the finger even when the chart
+  redraws under it
+
 ## 2.65.0 — Charts on a phone
 
 - **Feature:** the Overview's history chart (power, current, SoC) works by touch: move a finger across it
