@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.64.0 — ID tags and settings, as a real charger
+
+- **Feature:** an authorisation cache, as chargers have
+  (`AuthorizationCacheEnabled`, on): your supplier's answer for each ID tag is
+  remembered, `ClearCache` now empties it, and it's kept across restarts with
+  the local list (both shown in Diagnostics › Health › Supplier)
+- **Feature:** `LocalPreAuthorize` now works: on, a tag already accepted in
+  the local list or cache starts without waiting for `Authorize`
+- **Feature:** Wallbox's `AuthEnabled`: off, a remote start goes ahead without
+  checking the tag at all
+- **Change:** offline, a start now needs the tag to be accepted in the local
+  list or cache (or `AllowOfflineTxForUnknownId` on, new, off by default), as
+  well as `LocalAuthorizeOffline` on and `AuthEnabledOffline` not off. With
+  Octopus nothing changes: it sets `AuthEnabledOffline` off, so an offline
+  start doesn't happen, and online starts work as before
+- **Feature:** more of the settings a charger reports: `MinimumStatusDuration`,
+  the `…MaxLength` limits for the measurand lists, and `AuthEnabledOffline`
+  (true until your supplier sets it)
+- **Improvement:** setting values are checked as a charger does (true/false,
+  whole numbers, measurand lists within their limit) and refused otherwise
+- **Fix:** `SendLocalList` follows the rules: a differential update must be a
+  newer version, an entry without `idTagInfo` removes that tag, and a list
+  over 20 tags is refused
+
 ## 2.63.10 — AuthEnabledOffline honoured
 
 - **Change:** Wallbox's `AuthEnabledOffline` setting now does what it does on

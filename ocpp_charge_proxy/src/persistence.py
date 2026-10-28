@@ -15,6 +15,7 @@ _TRANSACTION_FILE = "active_transaction.json"
 _CURRENT_FILE = "current_setting.json"
 _PLUG_FILE = "plugged_in.json"
 _RAMP_FILE = "ramp_setting.json"
+_AUTH_FILE = "auth.json"
 
 
 class Persistence:
@@ -55,6 +56,15 @@ class Persistence:
             return False
         self.save_energy_register_wh(value)
         return True
+
+    def load_auth(self) -> dict | None:
+        """The local authorisation list (SendLocalList), its version, and the
+        authorisation cache, as last saved (None if never)."""
+        auth = self._read(_AUTH_FILE, "auth", None)
+        return auth if isinstance(auth, dict) else None
+
+    def save_auth(self, auth: dict) -> None:
+        self._write(_AUTH_FILE, "auth", auth)
 
     def load_offline_queue(self) -> list:
         """Transaction messages held while offline (see ChargePoint._send_tx)."""

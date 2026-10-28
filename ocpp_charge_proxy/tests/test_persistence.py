@@ -113,3 +113,12 @@ def test_plugged_in_round_trip(tmp_path):
     assert Persistence(data_dir=str(tmp_path)).load_plugged_in() is True
     p.save_plugged_in(False)
     assert p.load_plugged_in() is False
+
+
+def test_auth_saved_and_loaded(tmp_path):
+    p = Persistence(data_dir=str(tmp_path))
+    assert p.load_auth() is None
+    auth = {"local_list": {"ffffffffffffff7f": {"id_tag": "ffffffffffffff7f"}}, "version": 1,
+            "cache": {"ffffffffffffff7f": {"status": "Accepted"}}}
+    p.save_auth(auth)
+    assert Persistence(data_dir=str(tmp_path)).load_auth() == auth

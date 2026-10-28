@@ -56,6 +56,19 @@ OFFLINE_QUEUE_MAX = 1000  # oldest MeterValues dropped beyond this; Start/Stop n
 STOP_TXN_MAX_READINGS = 100
 
 
+# Configuration keys a charger checks before taking a value (ChangeConfiguration)
+_BOOL_KEYS = {
+    "AuthorizeRemoteTxRequests", "LocalAuthListEnabled", "StopTransactionOnInvalidId",
+    "LocalAuthorizeOffline", "LocalPreAuthorize", "AuthorizationCacheEnabled",
+    "AllowOfflineTxForUnknownId", "AuthEnabled", "AuthEnabledOffline",
+}
+_INT_KEYS = {
+    "ConnectionTimeOut", "ResetRetries", "TransactionMessageAttempts",
+    "TransactionMessageRetryInterval", "MinimumStatusDuration",
+}
+_LIST_KEYS = {"MeterValuesSampledData", "MeterValuesAlignedData", "StopTxnSampledData", "StopTxnAlignedData"}
+
+
 class ChargePointOffline(Exception):
     """Raised by ChargePoint.call when there is no live server connection."""
 
@@ -198,7 +211,29 @@ class ChargePoint(BaseChargePoint):
             "ResetRetries": ("1", False),  # (a reset here can't fail)
             "TransactionMessageAttempts": ("3", False),  # a start, stop or reading the server fails to process
             "TransactionMessageRetryInterval": ("60", False),  # is sent again after this x the tries so far
+            # Optional keys, as a wallbox reports them
+            "AuthorizationCacheEnabled": ("true", False),  # tags the server has answered for are remembered
+            "AllowOfflineTxForUnknownId": ("false", False),  # offline, a tag not in the list or cache: no start
+            "MinimumStatusDuration": ("0", False),  # (reported only)
+            "MeterValuesSampledDataMaxLength": ("20", True),
+            "MeterValuesAlignedDataMaxLength": ("20", True),
+            "StopTxnSampledDataMaxLength": ("20", True),
+            "StopTxnAlignedDataMaxLength": ("20", True),
+            # Wallbox's own keys
+            "AuthEnabled": ("true", False),  # off: starts without checking the ID tag at all
+            "AuthEnabledOffline": ("true", False),  # off: offline, no start (Octopus sets it off)
         }
+        # The local authorisation list (SendLocalList) and the authorisation cache
+        # (each tag's last answer from the server), kept across restarts as a charger does
+        self._auth_cache: dict[str, dict] = {}
+        saved_auth = persistence.load_auth()
+        if isinstance(saved_auth, dict):
+            if isinstance(saved_auth.get("local_list"), dict):
+                self._local_auth_list = dict(saved_auth["local_list"])
+            if isinstance(saved_auth.get("version"), int):
+                self._local_list_version = saved_auth["version"]
+            if isinstance(saved_auth.get("cache"), dict):
+                self._auth_cache = dict(saved_auth["cache"])
         # Start delay / ramp-up: set on the web page (saved), else the
         # values passed in (__main__'s defaults)
         saved_ramp = persistence.load_ramp_setting()
@@ -305,6 +340,7 @@ class ChargePoint(BaseChargePoint):
             ],
             "local_list_version": self._local_list_version,
             "local_auth_list": list(self._local_auth_list.values()),
+            "auth_cache": [{"id_tag": k, **v} for k, v in self._auth_cache.items()],
             "charging_profiles": self._profile_scheduler.profiles_info(),
             "profile_limit_kw": self._profile_scheduler.get_current_limit_kw(),
             "provider_limit_amps": self._server_limit_amps,
@@ -1277,6 +1313,7 @@ class ChargePoint(BaseChargePoint):
         """StartTransaction's reply says whether the ID tag is accepted. If not, as
         StopTransactionOnInvalidId says: on, the session is stopped (DeAuthorized); off
         (the default), it stays open but no energy is delivered (SuspendedEVSE)."""
+        self._cache_tag(self._transaction_id_tag, response)
         status = self._tag_status(response)
         if status is None or status == "Accepted" or self._transaction_id is None:
             return
@@ -1292,46 +1329,116 @@ class ChargePoint(BaseChargePoint):
             self._note_tag_refused(status, "suspended")
             await self._apply_profile_state()
 
-    def _offline_start_allowed(self) -> bool:
-        """Offline, the ID tag can't be checked: may a start go ahead anyway?
-        Not if LocalAuthorizeOffline is off, or if the server has set Wallbox's
-        own AuthEnabledOffline off (Octopus does, after every BootNotification).
-        When it isn't, the session isn't started and it's noted (Overview chip, log)."""
-        off = None
+    # --- ID tags: the local list, the authorisation cache, offline -------
+
+    @staticmethod
+    def _info_status(info) -> Optional[str]:
+        """An idTagInfo's status, "Expired" if its expiryDate has passed; None if none."""
+        if not isinstance(info, dict):
+            return None
+        status = info.get("status")
+        status = getattr(status, "value", status)
+        if not isinstance(status, str) or not status:
+            return None
+        expiry = info.get("expiry_date") or info.get("expiryDate")
+        if status == "Accepted" and expiry:
+            try:
+                when = datetime.datetime.fromisoformat(str(expiry).replace("Z", "+00:00"))
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=datetime.timezone.utc)
+                if when <= datetime.datetime.now(datetime.timezone.utc):
+                    return "Expired"
+            except ValueError:
+                pass
+        return status
+
+    def _local_tag_status(self, id_tag: Optional[str]) -> Optional[str]:
+        """What the charger itself knows about a tag: the local list first (an entry
+        without idTagInfo, as Octopus sends, counts as Accepted), then the cache.
+        None: not known locally."""
+        if not id_tag:
+            return None
+        if self._config_on("LocalAuthListEnabled") and id_tag in self._local_auth_list:
+            entry = self._local_auth_list[id_tag]
+            return self._info_status(entry.get("id_tag_info") or entry.get("idTagInfo")) or "Accepted"
+        if self._config_on("AuthorizationCacheEnabled") and id_tag in self._auth_cache:
+            return self._info_status(self._auth_cache[id_tag])
+        return None
+
+    def _cache_tag(self, id_tag: Optional[str], response) -> None:
+        """Remember the server's answer for a tag (Authorize, Start/StopTransaction)."""
+        info = getattr(response, "id_tag_info", None)
+        if not id_tag or not isinstance(info, dict) or not self._config_on("AuthorizationCacheEnabled"):
+            return
+        info = {k: getattr(v, "value", v) for k, v in info.items()}
+        if self._auth_cache.get(id_tag) != info:
+            self._auth_cache[id_tag] = info
+            self._save_auth()
+
+    def _save_auth(self) -> None:
+        try:
+            self._persistence.save_auth({
+                "local_list": self._local_auth_list, "version": self._local_list_version,
+                "cache": self._auth_cache,
+            })
+        except Exception:
+            logger.warning("Couldn't save the local list and authorisation cache", exc_info=True)
+
+    def _offline_start_allowed(self, id_tag: Optional[str] = None) -> bool:
+        """Offline, the server can't check the ID tag: may a start go ahead anyway?
+        As a charger does: only with LocalAuthorizeOffline on, and Wallbox's own
+        AuthEnabledOffline not off (Octopus sets it off, after every BootNotification);
+        then if the tag is Accepted in the local list or cache, or isn't known there
+        and AllowOfflineTxForUnknownId is on. When it can't, the session isn't
+        started and it's noted (Overview chip, log)."""
         if not self._config_on("LocalAuthorizeOffline"):
-            off = "LocalAuthorizeOffline"
-        elif key_set := self._config_store.get("AuthEnabledOffline"):
-            if str(key_set[0]).strip().lower() == "false":
-                off = "AuthEnabledOffline"
-        if off is None:
-            return True
-        logger.warning("Can't check the ID tag (offline) and %s is off: not starting", off)
+            why = "LocalAuthorizeOffline is off"
+        elif str(self._config_store.get("AuthEnabledOffline", ("true", False))[0]).strip().lower() == "false":
+            why = "AuthEnabledOffline is off"
+        else:
+            local = self._local_tag_status(id_tag)
+            if local == "Accepted":
+                logger.info("Can't check the ID tag (offline): it's accepted in the local list or cache, starting")
+                return True
+            if local is not None:
+                why = f"the local list or cache says {local}"
+            elif self._config_on("AllowOfflineTxForUnknownId"):
+                logger.info("Can't check the ID tag (offline): unknown, but AllowOfflineTxForUnknownId is on, starting")
+                return True
+            else:
+                why = "it isn't in the local list or cache (AllowOfflineTxForUnknownId is off)"
+        logger.warning("Can't check the ID tag (offline) and %s: not starting", why)
         self._note_tag_refused("unchecked (offline)", "not started")
         self._pending_id_tag = None
         return False
 
     async def _authorize_then_start(self, id_tag: str) -> None:
-        """A start the server asked for (RemoteStartTransaction). With
-        AuthorizeRemoteTxRequests on, the ID tag is checked with the server first
-        (Authorize) and the session only starts if it's accepted; offline, it starts
-        as it can't be checked only if offline authorisation is allowed
-        (LocalAuthorizeOffline on, and Wallbox's AuthEnabledOffline not set off)."""
-        if self._config_on("AuthorizeRemoteTxRequests"):
-            if not self.is_online and not self._offline_start_allowed():
-                return
+        """A start the server asked for (RemoteStartTransaction), as a charger does it:
+        - Wallbox's AuthEnabled off, or AuthorizeRemoteTxRequests off: no check, it starts
+        - LocalPreAuthorize on and the tag Accepted in the local list or cache: it
+          starts without waiting for Authorize (StartTransaction's reply still checks it)
+        - otherwise the tag is checked with the server (Authorize) and it only starts
+          if accepted; the answer is remembered (the authorisation cache)
+        - offline (or the connection drops while checking): see _offline_start_allowed"""
+        if not self._config_on("AuthEnabled"):
+            logger.info("AuthEnabled is off: starting without checking the ID tag")
+        elif self._config_on("AuthorizeRemoteTxRequests"):
             if not self.is_online:
-                logger.info("Can't check the ID tag (offline): starting anyway")
+                if not self._offline_start_allowed(id_tag):
+                    return
+            elif self._config_on("LocalPreAuthorize") and self._local_tag_status(id_tag) == "Accepted":
+                logger.info("ID tag accepted locally (LocalPreAuthorize): starting without waiting for Authorize")
             else:
                 try:
                     response = await self.call(call.AuthorizePayload(id_tag=id_tag))
                 except _CONNECTION_ERRORS:
-                    response = None
-                    if not self._offline_start_allowed():
+                    if not self._offline_start_allowed(id_tag):
                         return
-                    logger.info("Can't check the ID tag (offline): starting anyway")
+                    response = None
                 except Exception:
                     response = None
                     logger.warning("Authorize failed: starting anyway", exc_info=True)
+                self._cache_tag(id_tag, response)
                 status = self._tag_status(response)
                 if status is not None and status != "Accepted":
                     logger.warning("The server didn't accept the ID tag (%s): not starting the session", status)
@@ -1454,6 +1561,7 @@ class ChargePoint(BaseChargePoint):
                 logger.info("Transaction %s stopped offline; StopTransaction held", transaction_id)
             else:
                 logger.info("Transaction %s stopped, response: %s", transaction_id, response)
+                self._cache_tag(request.id_tag, response)
         except Exception:
             logger.error("Failed to stop transaction", exc_info=True)
         finally:
@@ -1596,6 +1704,24 @@ class ChargePoint(BaseChargePoint):
                     status=ConfigurationStatus.rejected
                 )
 
+        # Values a charger checks before taking them
+        if key in _BOOL_KEYS and str(value).strip().lower() not in ("true", "false"):
+            logger.warning("Invalid %s: %s (true or false), rejecting", key, value)
+            return call_result.ChangeConfigurationPayload(status=ConfigurationStatus.rejected)
+        if key in _INT_KEYS:
+            try:
+                if int(str(value).strip()) < 0:
+                    raise ValueError
+            except ValueError:
+                logger.warning("Invalid %s: %s (a whole number, 0 or more), rejecting", key, value)
+                return call_result.ChangeConfigurationPayload(status=ConfigurationStatus.rejected)
+        if key in _LIST_KEYS:
+            items = [m for m in str(value).split(",") if m.strip()]
+            limit = self._config_int(key + "MaxLength", 20)
+            if len(items) > limit:
+                logger.warning("%s has %d items, more than %sMaxLength (%d), rejecting", key, len(items), key, limit)
+                return call_result.ChangeConfigurationPayload(status=ConfigurationStatus.rejected)
+
         if key in self._config_store:
             _, readonly = self._config_store[key]
             if readonly:
@@ -1685,16 +1811,30 @@ class ChargePoint(BaseChargePoint):
             len(local_authorization_list) if local_authorization_list else 0,
         )
 
-        if update_type == "Full":
-            self._local_auth_list.clear()
-
-        if local_authorization_list:
-            for entry in local_authorization_list:
-                id_tag = entry.get("id_tag", entry.get("idTag", ""))
-                if id_tag:
-                    self._local_auth_list[id_tag] = entry
-
+        entries = local_authorization_list or []
+        full = str(getattr(update_type, "value", update_type)) == "Full"
+        if len(entries) > self._config_int("SendLocalListMaxLength", 20):
+            logger.warning("SendLocalList: %d entries is more than SendLocalListMaxLength", len(entries))
+            return call_result.SendLocalListPayload(status=UpdateStatus.failed)
+        if not full and list_version <= self._local_list_version:
+            logger.warning("SendLocalList: differential version %d isn't newer than %d",
+                           list_version, self._local_list_version)
+            return call_result.SendLocalListPayload(status=UpdateStatus.version_mismatch)
+        new_list = {} if full else dict(self._local_auth_list)
+        for entry in entries:
+            id_tag = entry.get("id_tag", entry.get("idTag", ""))
+            if not id_tag:
+                continue
+            if not full and not (entry.get("id_tag_info") or entry.get("idTagInfo")):
+                new_list.pop(id_tag, None)  # (differential, no idTagInfo: removed)
+            else:
+                new_list[id_tag] = entry
+        if len(new_list) > self._config_int("LocalAuthListMaxLength", 20):
+            logger.warning("SendLocalList: the list would have %d tags, more than LocalAuthListMaxLength", len(new_list))
+            return call_result.SendLocalListPayload(status=UpdateStatus.failed)
+        self._local_auth_list = new_list
         self._local_list_version = list_version
+        self._save_auth()
         return call_result.SendLocalListPayload(status=UpdateStatus.accepted)
 
     @on(Action.SetChargingProfile)
@@ -1848,7 +1988,9 @@ class ChargePoint(BaseChargePoint):
     @on(Action.ClearCache)
     async def on_clear_cache(self, **kwargs):
         """Handle ClearCache: server requests clearing the authorization cache."""
-        logger.info("ClearCache requested")
+        logger.info("ClearCache requested: %d tag(s) forgotten", len(self._auth_cache))
+        self._auth_cache.clear()
+        self._save_auth()
         return call_result.ClearCachePayload(
             status=ClearCacheStatus.accepted
         )

@@ -519,21 +519,35 @@ one file in `src/supplier_types/`, and a new kind is a new file there.
    (with the ID tag the session is for: Octopus sends the same fixed tag to
    everyone, and numbers every session 1). With `AuthorizeRemoteTxRequests`
    on (the default) the add-on first checks the tag with your supplier
-   (`Authorize`) and only starts if it's accepted. Offline (or if the
-   connection drops while checking), it can't be checked: it starts anyway
-   only if `LocalAuthorizeOffline` is on and Wallbox's own
-   `AuthEnabledOffline` isn't set off. Octopus sets `AuthEnabledOffline` to
-   False after each connect, so with Octopus it doesn't start (shown as a red
-   chip on the Overview, and in the log).
+   (`Authorize`) and only starts if it's accepted, as a charger does:
+   - each answer is remembered (the authorisation cache,
+     `AuthorizationCacheEnabled`; `ClearCache` empties it), and with the
+     local list (`SendLocalList`) is kept across restarts. Diagnostics ›
+     Health › Supplier shows both
+   - with `LocalPreAuthorize` on, a tag already accepted in the local list
+     or cache starts without waiting for `Authorize`
+   - with Wallbox's `AuthEnabled` off, it starts without checking at all
+   - offline (or if the connection drops while checking), it starts only if
+     `LocalAuthorizeOffline` is on, Wallbox's `AuthEnabledOffline` isn't off,
+     and the tag is accepted in the local list or cache (or isn't known there
+     and `AllowOfflineTxForUnknownId` is on). Octopus sets `AuthEnabledOffline`
+     to False after each connect, so with Octopus an offline start doesn't
+     happen (shown as a red chip on the Overview, and in the log)
+
    If the answer to `StartTransaction` says the tag isn't valid, then with
    `StopTransactionOnInvalidId` off (the default) the session stays open but
    no energy is delivered (`SuspendedEVSE`) until your supplier stops it; on,
    it's stopped (reason `DeAuthorized`). Either shows as a red chip on the
-   Overview, and in the log. The other settings a charger must report are
-   there too, at the values a wallbox typically has (`LocalAuthorizeOffline`
+   Overview, and in the log. The other settings a charger reports are there
+   too, at the values a wallbox typically has (`LocalAuthorizeOffline`
    true, `LocalPreAuthorize` false, `ConnectionTimeOut` 60, `ResetRetries` 1,
-   `TransactionMessageAttempts` 3, `TransactionMessageRetryInterval` 60): a
-   start, stop or reading your supplier fails to process is sent again, up to
+   `TransactionMessageAttempts` 3, `TransactionMessageRetryInterval` 60,
+   `MinimumStatusDuration` 0, and the `…MaxLength` limits of 20). Values are
+   checked as a charger does (true/false, whole numbers, measurand lists no
+   longer than their limit; read-only keys can't be changed), and
+   `SendLocalList` follows the rules (a differential update must be a newer
+   version, an entry without `idTagInfo` removes that tag, at most 20 tags).
+   A start, stop or reading your supplier fails to process is sent again, up to
    3 tries, waiting 60 s, then 120 s (nothing after it goes first)
 6. The proxy sends `StartTransaction`, reports `Charging`, and sends meter
    values while the simulated car ramps up to full power

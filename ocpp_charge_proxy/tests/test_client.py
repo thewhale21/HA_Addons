@@ -1644,10 +1644,17 @@ def test_no_check_with_authorize_remote_tx_requests_off(mock_connection, mock_pe
     assert cp.state == ChargePointStatus.charging
 
 
-def test_offline_remote_start_goes_ahead_by_default(mock_connection, mock_persistence):
-    """Offline, the tag can't be checked: with LocalAuthorizeOffline on (and no
-    AuthEnabledOffline set) the start goes ahead, held until reconnected."""
+def _octopus_list(cp):
+    """The local list as Octopus sends it after each boot: its tag, no idTagInfo."""
+    _run(cp.on_send_local_list(list_version=1, update_type="Full",
+                               local_authorization_list=[{"id_tag": OCTOPUS_TAG}]))
+
+
+def test_offline_remote_start_goes_ahead_for_a_tag_in_the_local_list(mock_connection, mock_persistence):
+    """Offline, the tag can't be checked: with LocalAuthorizeOffline on (and
+    AuthEnabledOffline not off) a tag in the local list starts, held until reconnected."""
     cp = make_cp(mock_connection, mock_persistence)
+    _octopus_list(cp)
     cp.detach()
     cp.state = ChargePointStatus.preparing
     _remote_start(cp)
@@ -1655,9 +1662,36 @@ def test_offline_remote_start_goes_ahead_by_default(mock_connection, mock_persis
     assert cp._shared_state.tag_refused is None
 
 
-def test_offline_remote_start_refused_with_auth_enabled_offline_off(mock_connection, mock_persistence):
-    """Octopus sets Wallbox's AuthEnabledOffline to False: offline, no start."""
+def test_offline_unknown_tag_needs_allow_offline_tx_for_unknown_id(mock_connection, mock_persistence):
     cp = make_cp(mock_connection, mock_persistence)
+    cp.detach()
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert cp._transaction_id is None and cp._shared_state.tag_refused["what"] == "not started"
+    cp2 = make_cp(mock_connection, mock_persistence)
+    cp2._config_store["AllowOfflineTxForUnknownId"] = ("true", False)
+    cp2.detach()
+    cp2.state = ChargePointStatus.preparing
+    _remote_start(cp2)
+    assert cp2.state == ChargePointStatus.charging
+
+
+def test_offline_blocked_in_the_local_list_doesnt_start(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _run(cp.on_send_local_list(list_version=1, update_type="Full", local_authorization_list=[
+        {"id_tag": OCTOPUS_TAG, "id_tag_info": {"status": "Blocked"}}]))
+    cp._config_store["AllowOfflineTxForUnknownId"] = ("true", False)
+    cp.detach()
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert cp._transaction_id is None
+
+
+def test_offline_remote_start_refused_with_auth_enabled_offline_off(mock_connection, mock_persistence):
+    """Octopus sets Wallbox's AuthEnabledOffline to False: offline, no start
+    (even with its tag in the local list)."""
+    cp = make_cp(mock_connection, mock_persistence)
+    _octopus_list(cp)
     cp._config_store["AuthEnabledOffline"] = ("False", False)
     cp.detach()
     cp.state = ChargePointStatus.preparing
@@ -1669,6 +1703,7 @@ def test_offline_remote_start_refused_with_auth_enabled_offline_off(mock_connect
 
 def test_auth_enabled_offline_true_still_starts_offline(mock_connection, mock_persistence):
     cp = make_cp(mock_connection, mock_persistence)
+    _octopus_list(cp)
     cp._config_store["AuthEnabledOffline"] = ("True", False)
     cp.detach()
     cp.state = ChargePointStatus.preparing
@@ -1693,6 +1728,122 @@ def test_connection_lost_during_authorize_respects_auth_enabled_offline(mock_con
     assert not any(isinstance(r, _call.StartTransactionPayload) for r in sent)
     assert cp._transaction_id is None and cp.state == ChargePointStatus.preparing
     assert cp._shared_state.tag_refused["what"] == "not started"
+
+
+def test_auth_enabled_off_starts_without_authorize(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _online(cp)
+    _run(cp.on_change_configuration(key="AuthEnabled", value="false"))
+    cp.call, sent = _tag_recorder(authorize="Invalid", start="Accepted")
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert not any(isinstance(r, _call.AuthorizePayload) for r in sent)
+    assert cp.state == ChargePointStatus.charging
+
+
+def test_local_pre_authorize_skips_authorize_for_a_known_tag(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _online(cp)
+    _octopus_list(cp)
+    _run(cp.on_change_configuration(key="LocalPreAuthorize", value="true"))
+    cp.call, sent = _tag_recorder(authorize="Invalid", start="Accepted")
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert not any(isinstance(r, _call.AuthorizePayload) for r in sent)
+    assert cp.state == ChargePointStatus.charging
+
+
+def test_local_pre_authorize_still_asks_for_an_unknown_tag(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _online(cp)
+    _run(cp.on_change_configuration(key="LocalPreAuthorize", value="true"))
+    cp.call, sent = _tag_recorder(authorize="Accepted", start="Accepted")
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert isinstance(sent[0], _call.AuthorizePayload) and cp.state == ChargePointStatus.charging
+
+
+def test_authorize_answer_is_cached_and_clear_cache_forgets(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _online(cp)
+    cp.call, sent = _tag_recorder(authorize="Accepted", start="Accepted")
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert cp._auth_cache[OCTOPUS_TAG]["status"] == "Accepted"
+    assert cp._local_tag_status(OCTOPUS_TAG) == "Accepted"
+    assert mock_persistence.save_auth.called
+    _run(cp.on_clear_cache())
+    assert cp._auth_cache == {} and cp._local_tag_status(OCTOPUS_TAG) is None
+
+
+def test_cache_off_remembers_nothing(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _online(cp)
+    _run(cp.on_change_configuration(key="AuthorizationCacheEnabled", value="false"))
+    cp.call, sent = _tag_recorder(authorize="Accepted", start="Accepted")
+    cp.state = ChargePointStatus.preparing
+    _remote_start(cp)
+    assert cp._auth_cache == {}
+
+
+def test_expired_tag_in_the_cache_isnt_accepted(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._auth_cache[OCTOPUS_TAG] = {"status": "Accepted", "expiry_date": "2020-01-01T00:00:00Z"}
+    assert cp._local_tag_status(OCTOPUS_TAG) == "Expired"
+    cp._auth_cache[OCTOPUS_TAG] = {"status": "Accepted", "expiry_date": "2099-01-01T00:00:00Z"}
+    assert cp._local_tag_status(OCTOPUS_TAG) == "Accepted"
+
+
+def test_local_list_and_cache_restored_after_a_restart(mock_connection, mock_persistence):
+    mock_persistence.load_auth.return_value = {
+        "local_list": {OCTOPUS_TAG: {"id_tag": OCTOPUS_TAG}}, "version": 3,
+        "cache": {"abc": {"status": "Blocked"}},
+    }
+    cp = make_cp(mock_connection, mock_persistence)
+    assert cp._local_list_version == 3
+    assert cp._local_tag_status(OCTOPUS_TAG) == "Accepted"
+    assert cp._local_tag_status("abc") == "Blocked"
+
+
+def test_send_local_list_differential_and_limits(mock_connection, mock_persistence):
+    from ocpp.v16.enums import UpdateStatus
+    cp = make_cp(mock_connection, mock_persistence)
+    _octopus_list(cp)
+    r = _run(cp.on_send_local_list(list_version=1, update_type="Differential", local_authorization_list=[
+        {"id_tag": "x", "id_tag_info": {"status": "Accepted"}}]))
+    assert r.status == UpdateStatus.version_mismatch
+    r = _run(cp.on_send_local_list(list_version=2, update_type="Differential", local_authorization_list=[
+        {"id_tag": "x", "id_tag_info": {"status": "Accepted"}}, {"id_tag": OCTOPUS_TAG}]))
+    assert r.status == UpdateStatus.accepted
+    assert set(cp._local_auth_list) == {"x"} and cp._local_list_version == 2  # (no idTagInfo: removed)
+    r = _run(cp.on_send_local_list(list_version=3, update_type="Full", local_authorization_list=[
+        {"id_tag": f"t{n}", "id_tag_info": {"status": "Accepted"}} for n in range(21)]))
+    assert r.status == UpdateStatus.failed and set(cp._local_auth_list) == {"x"}
+
+
+def test_change_configuration_checks_values(mock_connection, mock_persistence):
+    from ocpp.v16.enums import ConfigurationStatus
+    cp = make_cp(mock_connection, mock_persistence)
+    ok = lambda k, v: _run(cp.on_change_configuration(key=k, value=v)).status == ConfigurationStatus.accepted
+    assert ok("AuthEnabledOffline", "False") and ok("LocalPreAuthorize", "TRUE")
+    assert not ok("LocalPreAuthorize", "yes")
+    assert ok("ConnectionTimeOut", "90") and not ok("ConnectionTimeOut", "-1") and not ok("ResetRetries", "x")
+    eight = "Energy.Active.Import.Register,Power.Active.Import,Frequency,Power.Offered,Current.Offered,SoC,Energy.Active.Export.Register,Power.Active.Export"
+    assert ok("MeterValuesSampledData", eight)  # (what Octopus sends)
+    assert not ok("MeterValuesSampledData", ",".join(["Power.Active.Import"] * 21))
+    assert not ok("MeterValuesSampledDataMaxLength", "50")  # read-only
+    assert ok("minSoC", "25")  # vendor keys are taken as they are
+
+
+def test_new_keys_reported(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    r = _run(cp.on_get_configuration())
+    keys = {k["key"]: k for k in r.configuration_key}
+    for k in ("AuthorizationCacheEnabled", "AllowOfflineTxForUnknownId", "MinimumStatusDuration",
+              "AuthEnabled", "AuthEnabledOffline", "MeterValuesSampledDataMaxLength",
+              "StopTxnAlignedDataMaxLength"):
+        assert k in keys
+    assert len(keys) <= int(keys["GetConfigurationMaxKeys"]["value"])
 
 
 def test_tag_refused_at_start_suspends_by_default(mock_connection, mock_persistence):

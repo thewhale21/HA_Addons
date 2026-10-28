@@ -2438,7 +2438,9 @@ async function refreshProvider() {
   const tags = p.local_auth_list || [];
   $('p-local').innerHTML = `<div class="sub" style="margin-bottom:8px">Version ${esc(p.local_list_version)}</div>` + (tags.length
     ? tags.map((t) => `<div class="row" style="gap:8px;margin-top:4px"><code>${esc(t.id_tag || t.idTag)}</code><span class="chip ${((t.id_tag_info || t.idTagInfo || {}).status || '') === 'Accepted' ? 'ok' : ''}">${esc((t.id_tag_info || t.idTagInfo || {}).status || 'listed')}</span></div>`).join('')
-    : '<div class="empty">Empty</div>');
+    : '<div class="empty">Empty</div>')
+    + ((p.auth_cache || []).length ? `<div class="sub" style="margin:12px 0 4px">Remembered answers (authorisation cache)</div>`
+      + p.auth_cache.map((t) => `<div class="row" style="gap:8px;margin-top:4px"><code>${esc(t.id_tag)}</code><span class="chip ${t.status === 'Accepted' ? 'ok' : ''}">${esc(t.status || '?')}</span></div>`).join('') : '');
   $('p-profiles').innerHTML = (p.charging_profiles || []).length ? p.charging_profiles.map(profileHtml).join('<hr style="border:0;border-top:1px solid var(--divider);margin:16px 0">')
     : `<div class="empty">No charging profile. ${sup('Your supplier')} usually sends one with each RemoteStart (Octopus: TxProfile 32 A), and it's cleared when the session ends.</div>`;
   drawConfig();
