@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.63.8 — What happens next, earlier further out
+
+- **Fix:** in **What happens next**, when things are close together the
+  earlier ones go further out (higher above the strip, lower below it) and
+  the later ones nearer it, so a line no longer runs through another box
+- **Fix:** a box placed below the strip could stay hidden after the card
+  redrew (e.g. 20:00 missing until the page was reloaded)
+
 ## 2.63.7 — What happens next, above and below
 
 - **Change:** **What happens next** is back to the clearer boxes (big time,

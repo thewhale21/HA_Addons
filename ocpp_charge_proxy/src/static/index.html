@@ -1435,10 +1435,14 @@ function drawNext() {
   up$.innerHTML = shown.map(box).join('')
     + (shown.length === 1 ? '<div class="un-step"><div class="w muted" style="margin-top:6px">Nothing planned in the next 16 hours</div></div>' : '');
   down$.innerHTML = '';
+  down$.style.display = '';  // (shown while measuring: hidden again below if nothing's in it)
   // Each box at its time, above the strip; one that would overlap goes below it instead, then
-  // a row further out above, then below... A box never sits across another's line.
+  // a row further out above, then below... A box never sits across another's line: placed
+  // latest first (after Now), so an earlier box that has to go further out has its line pass
+  // to the left of the later ones nearer the strip, not through them.
   const els = [...up$.children], rows = {up: [], down: []}, stems = [];
-  els.forEach((e, n) => {
+  [0, ...els.map((_, n) => n).slice(1).reverse()].forEach((n) => {
+    const e = els[n];
     const w = e.offsetWidth;
     const x = n === 0 || n >= shown.length ? (n === 0 ? 0 : BW + 12) : xOf(shown[n][0].t), flip = x + w > W;
     const l = flip ? x - w : x, r = flip ? x : x + w;
