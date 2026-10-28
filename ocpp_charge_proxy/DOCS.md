@@ -662,7 +662,9 @@ follows your Home Assistant theme. Settings save as soon as you change them.
   and a chart of power, current (with your max and the supplier limit) or
   SoC over the last 30 minutes to 24 hours, or 14 days. Drag across the
   chart or scroll over it to zoom (double-click or **Reset zoom** to go
-  back). The charts and the
+  back). On a phone: tap for the reading, move a finger across it to go
+  back or forward in time, pinch to zoom, double tap to go back (up and
+  down still scrolls the page). The charts and the
   energy for the last 7 days are read from Home Assistant's history of the add-on's
   sensors (keep them recorded): 10-second detail for 24 hours, then
   5-minute points while HA keeps them (10 days by default, `purge_keep_days`)

@@ -2083,6 +2083,67 @@ $('chart-wrap').addEventListener('wheel', (e) => {
 $('chart-wrap').addEventListener('dblclick', () => { chart.view = null; drawChart(); });
 $('ch-reset').addEventListener('click', () => { chart.view = null; drawChart(); });
 
+// ---------- touch: one finger across moves along (pans), two fingers pinch to zoom,
+// a double tap resets; a finger moving up or down still scrolls the page ----------
+function chartTouch(el, h) {
+  // h.view(): {t0, t1, left, width} (the plot area, in screen px) or null; h.set(t0, t1); h.reset();
+  // h.tap(x, y): a single tap there (optional)
+  let g = null, lastTap = 0, frame = 0, next = null;
+  const draw = (a, b) => { next = [a, b]; if (!frame) frame = requestAnimationFrame(() => { frame = 0; h.set(...next); }); };
+  const begin = (e) => {
+    const v = h.view(); if (!v || !v.width) { g = null; return; }
+    const xs = [...e.touches].map((t) => t.clientX);
+    g = {v, x0: xs[0], y0: e.touches[0].clientY, mode: xs.length > 1 ? 'pinch' : null};
+    if (xs.length > 1) { g.d0 = Math.max(20, Math.abs(xs[1] - xs[0])); g.m0 = (xs[0] + xs[1]) / 2; }
+  };
+  el.addEventListener('touchstart', begin, {passive: true});
+  el.addEventListener('touchmove', (e) => {
+    if (!g) return;
+    const xs = [...e.touches].map((t) => t.clientX), {t0, t1, left, width} = g.v, span = t1 - t0;
+    if (!g.mode) {
+      const dx = xs[0] - g.x0, dy = e.touches[0].clientY - g.y0;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+      g.mode = Math.abs(dx) > Math.abs(dy) ? 'pan' : 'scroll';
+    }
+    if (g.mode === 'scroll') return;  // (the page scrolls)
+    e.preventDefault();
+    if (g.mode === 'pan') {
+      const shift = -(xs[0] - g.x0) / width * span;
+      draw(t0 + shift, t1 + shift);
+    } else if (xs.length > 1) {
+      // The time under the fingers' midpoint stays under it as they spread or close
+      const d = Math.max(20, Math.abs(xs[1] - xs[0])), m = (xs[0] + xs[1]) / 2, ns = span * g.d0 / d;
+      const tm = t0 + (g.m0 - left) / width * span, k = (m - left) / width;
+      draw(tm - k * ns, tm - k * ns + ns);
+    }
+  }, {passive: false});
+  el.addEventListener('touchend', (e) => {
+    if (!g) return;
+    if (e.touches.length) { if (frame) { cancelAnimationFrame(frame); frame = 0; h.set(...next); } begin(e); g.mode = g.mode || 'pan'; return; }  // (a finger lifted from a pinch: carry on panning)
+    if (!g.mode) {  // a tap: a second one soon after resets
+      const now = performance.now();
+      if (now - lastTap < 350) { lastTap = 0; e.preventDefault(); h.reset(); } else {
+        lastTap = now;
+        e.preventDefault();  // (no pretend mouse clicks after it: they'd start a drag-zoom)
+        const t = e.changedTouches[0];
+        if (t && h.tap) h.tap(t.clientX, t.clientY);  // (the reading there, as hovering shows it)
+      }
+    } else if (g.mode !== 'scroll') e.preventDefault();  // (no mouse clicks after a pan or pinch)
+    g = null;
+  }, {passive: false});
+  el.addEventListener('touchcancel', () => { g = null; });
+}
+chartTouch($('chart-wrap'), {
+  view: () => {
+    const g = chart.geom; if (!g) return null;
+    const r = $('chart-wrap').getBoundingClientRect();
+    return {t0: g.t0, t1: g.t0 + g.span, left: r.left + g.L, width: g.pw};
+  },
+  set: (a, b) => { $('chart-tip').style.display = 'none'; setView(a, b); },
+  reset: () => { $('chart-tip').style.display = 'none'; chart.view = null; drawChart(); },
+  tap: (x, y) => $('chart-wrap').dispatchEvent(new MouseEvent('mousemove', {clientX: x, clientY: y, bubbles: true})),
+});
+
 // ---------- Sessions ----------
 async function refreshSessions() {
   try { sessionsData = await api('sessions'); } catch (e) { return; }

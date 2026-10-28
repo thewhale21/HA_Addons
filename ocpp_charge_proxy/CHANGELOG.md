@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.65.0 — Charts on a phone
+
+- **Feature:** the Overview's history chart (power, current, SoC) works by touch: move a finger across it
+  to go back or forward in time, pinch to zoom in and out, double tap to go
+  back to the whole period, and tap for the reading at that time. A finger
+  moving up or down still scrolls the page
+
 ## 2.64.2 — Auto plug-in wording
 
 - **Docs:** Automations › Auto plug-in now reads "Plugs in when the monitored
