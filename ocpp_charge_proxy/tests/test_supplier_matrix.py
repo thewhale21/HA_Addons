@@ -258,13 +258,23 @@ def test_an_8_hour_charge(name):
         assert end == _at(8, 16, 30)
 
 
-def test_an_8_hour_charge_after_12_00_is_shortened_for_octopus():
-    link, _ = _link("octopus")
+@pytest.mark.parametrize("name,want", [
+    ("octopus", _at(8, 19)),  # shortened to 6 hours: all of it after its 12:00 reset
+    ("edf", _at(9, 4)),  # 21:00 isn't a ready time it accepts: the next is 04:00
+    ("other", _at(9, 4)),
+    ("eon", _at(8, 21)),  # no ready time, no limit: 8 hours
+    ("none", _at(8, 21)),
+])
+def test_an_8_hour_charge_from_13_00(name, want):
+    link, _ = _link(name)
     sc = link.smart_charging()
     a, _ = _automation(_at(8, 13))
-    a.limit_reset = sc["limit_reset"]
-    out = a.plan_auto_plug(480, sc["ready_times"], sc["limit_min"], sc["provider"])
-    assert out["ready_for"].startswith("2026-10-08T19:00") and "6 hours" in " ".join(out["notes"])
+    a.set_schedule(ready_time=True)
+    a.limit_reset = sc.get("limit_reset")
+    out = a.plan_auto_plug(480, sc.get("ready_times"), sc.get("limit_min"), sc.get("provider") or "your supplier")
+    assert datetime.datetime.fromisoformat(out["ready_for"]) == want
+    if name == "octopus":
+        assert "shortened to 6 hours" in " ".join(out["notes"])
 
 
 # --- setting the ready time -------------------------------------------------------
