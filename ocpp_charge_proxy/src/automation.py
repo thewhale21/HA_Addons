@@ -112,8 +112,6 @@ SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge n
                 CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
 SAVING_KEEP = datetime.timedelta(days=8)  # a saving session is remembered this long after it ends (the
 # Sessions tab shows the last week's)
-SAVING_MOVE_VERSION = 3  # how slots are moved (2.43.1: earlier, keeping their end; 2.43.7: no unplug at
-# the session's start); older moves are redone
 MIN_PRECHARGE_MIN = 15  # less than this left before a session: no charge before it
 ONE_OFF_KEEP = datetime.timedelta(days=14)  # one-off times (and skips) are kept this long after they ran
 MAX_START_DELAY_MIN = 60  # the random start delay is at most this
@@ -1417,7 +1415,7 @@ class Automation:
                          "end": _iso_local(x["end"].astimezone(now.tzinfo)),
                          "summary": x.get("summary") or "Saving session",
                          "changes": {"skips": [], "added": []}, "precharged": False, "notes": [],
-                         "v": SAVING_MOVE_VERSION, **({"parts": parts_of(x)} if x.get("parts") else {})})
+                         **({"parts": parts_of(x)} if x.get("parts") else {})})
             logger.info("Saving session found: %s–%s", x["start"].astimezone().strftime("%a %d %b %H:%M"),
                         x["end"].astimezone().strftime("%H:%M"))
             changed = True
@@ -1429,11 +1427,6 @@ class Automation:
         moved = False
         movers = []  # the sessions that moved a slot this time
         for r in keep:
-            if r.get("v") != SAVING_MOVE_VERSION:
-                self._undo_session(r)  # moved the old way: put back, and moved again below
-                self._undo_pre(r)
-                r["v"] = SAVING_MOVE_VERSION
-                changed = True
             if not block:
                 if r["changes"]["skips"] or r["changes"]["added"]:
                     self._undo_session(r)

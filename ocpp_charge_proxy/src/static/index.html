@@ -1243,7 +1243,6 @@ function currentIssues() {
   const ha = statusInfo.health && statusInfo.health.home_assistant;
   if (ha && ha.available && !ha.connected) out.push(['warn', 'Home Assistant link down: your sensors and entities aren\'t updating' + (ha.error ? ` (${ha.error})` : '')]);
   const ent = statusInfo.sensors && statusInfo.sensors.ha_entities;
-  if (ent && ent.integration_conflict && ent.integration_conflict.length) out.push(['warn', 'The old OCPP Charge Proxy integration is still installed: remove it so the add-on can update its sensors']);
   if (ent && ent.error) out.push(['warn', ent.error]);
   const rp = state && state.replug;
   if (rp && rp.status === 'gave_up') out.push(['warn', `Auto re-plug gave up: no session from ${sup('your supplier')}`]);
@@ -2772,8 +2771,7 @@ function drawSimulation() {
   drawSaving();
   const e = d.ha_entities || {};
   const sensorList = (e.sensors || []).map((id) => `<code>${esc(id)}</code>`).join('<br>');
-  $('sim-entities').innerHTML = (e.integration_conflict && e.integration_conflict.length
-    ? `<dt>Old integration</dt><dd><span class="chip err">Still installed</span><div class="sub">Remove the OCPP Charge Proxy integration in Settings › Devices &amp; services, then restart this add-on. Until then the sensors below aren't updated by the add-on.</div></dd>` : '') + kv([
+  $('sim-entities').innerHTML = kv([
     ['Plugged In (virtual)', e.plugged_in ? `<code>${esc(e.plugged_in)}</code> <span class="muted">(helper, toggle it to plug in / unplug)</span>`
       : `<span class="chip warn">Not set up</span>${e.error ? '<div class="sub">' + esc(e.error) + '</div>' : ''}`],
     ['Charge now', (e.charge_now || []).length ? e.charge_now.map((b) => `<code>${esc(b.entity_id)}</code>`).join('<br>')

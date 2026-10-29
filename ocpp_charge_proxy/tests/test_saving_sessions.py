@@ -184,23 +184,6 @@ def test_turning_it_off_clears_everything():
     assert not a.clear_saving_sessions()
 
 
-def test_slots_moved_by_2_43_0_are_moved_again():
-    a, _ = _automation()
-    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
-    a.sync_saving_sessions([_session(5, 18, 19)], block=True)
-    r = a.saving_sessions[0]
-    # as 2.43.0 left it: no version, its own one-offs (19:00-22:30)
-    a._undo_session(r)
-    extra = [validate_entry({"time": t, "date": "2026-10-05", "action": act}) for t, act in
-             (("18:00", "unplug"), ("19:00", "plug"), ("22:30", "unplug"))]
-    a.entries += extra
-    a.skips.append({"entry_id": a.entries[1]["id"], "date": "2026-10-05"})
-    r["changes"] = {"skips": [{"entry_id": a.entries[1]["id"], "date": "2026-10-05"}], "added": [e["id"] for e in extra]}
-    del r["v"]
-    assert a.sync_saving_sessions([_session(5, 18, 19)], block=True)
-    assert _windows(a)[:2] == [("05 14:30", "05 18:00"), ("05 19:00", "05 21:30")]
-
-
 def test_start_in_the_past_ends_later_instead():
     a, clock = _automation(start=_at(5, 12, 0))
     a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])

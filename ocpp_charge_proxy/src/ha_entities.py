@@ -36,7 +36,6 @@ from src.shared_state import display_status
 HELPER_ID = "ocpp_charge_proxy_plugged_in"
 HELPER_NAME = "OCPP Charge Proxy Plugged In"
 HELPER_ICON = "mdi:ev-plug-type2"
-INTEGRATION_DOMAIN = "ocpp_charge_proxy"  # the old companion integration
 
 LIVE_INTERVAL_S = 10  # power / current posted at most this often
 REFRESH_S = 300  # everything re-posted at least this often
@@ -194,11 +193,6 @@ class SensorPublisher:
     def unavailable() -> list[tuple[str, str, dict]]:
         return [(entity_id, "unavailable", attrs) for entity_id, attrs, _ in SENSORS.values()] + [
             (STATUS_SENSOR, "unavailable", STATUS_ATTRS), (LIMIT_SENSOR, "unavailable", LIMIT_ATTRS)]
-
-
-def integration_entities(registry: list[dict]) -> list[str]:
-    """Entities still owned by the old companion integration."""
-    return sorted(e.get("entity_id", "") for e in registry if e.get("platform") == INTEGRATION_DOMAIN)
 
 
 def helper_entity_id(registry: list[dict], helper_id: str = HELPER_ID) -> str:

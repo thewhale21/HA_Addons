@@ -6,7 +6,7 @@ import types
 
 from src.ha_entities import (
     CHARGE_NOW_HOURS, HELPER_ID, LIVE_INTERVAL_S, REFRESH_S, ButtonPresses, PluggedInSync, SensorPublisher,
-    charge_now_entities, charge_now_helper_id, helper_entity_id, integration_entities,
+    charge_now_entities, charge_now_helper_id, helper_entity_id,
 )
 from src.shared_state import SharedState
 
@@ -94,7 +94,6 @@ def test_registry_helpers():
         {"entity_id": "sensor.ocpp_charge_proxy_energy", "platform": "ocpp_charge_proxy"},
         {"entity_id": "input_boolean.car", "platform": "input_boolean", "unique_id": HELPER_ID},
     ]
-    assert integration_entities(reg) == ["sensor.ocpp_charge_proxy_energy"]
     assert helper_entity_id(reg) == "input_boolean.car"
     assert helper_entity_id([]) == f"input_boolean.{HELPER_ID}"
 
@@ -251,16 +250,6 @@ def test_helper_created_and_kept_in_step():
     assert fake.helper_state == "off"
     assert {"ocpp_charge_proxy_power", "ocpp_charge_proxy_energy", "ocpp_charge_proxy_current"} <= {
         e.split(".", 1)[1] for e, _ in fake.posted}
-
-
-def test_old_integration_blocks_sensor_publishing():
-    fake = FakeHA(helper_exists=True, registry=[
-        {"entity_id": "sensor.ocpp_charge_proxy_energy", "platform": "ocpp_charge_proxy"}])
-    link, _, _ = _scenario(fake, [])
-    assert "input_boolean/create" not in [m.get("type") for m in fake.sent]
-    assert link.integration_conflict == ["sensor.ocpp_charge_proxy_energy"]
-    assert fake.posted == []
-    assert link.snapshot()["ha_entities"]["publishing"] is False
 
 
 def test_addon_value_wins_on_connect():

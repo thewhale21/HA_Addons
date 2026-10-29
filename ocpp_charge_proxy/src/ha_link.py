@@ -36,7 +36,7 @@ from src.saving_sessions import (find_calendar, find_sensor_sources, is_saving_c
 from src.ha_entities import (
     ALL_SENSORS, CHARGE_NOW_HOURS, CHARGE_NOW_ICON, HELPER_ICON, HELPER_ID, HELPER_NAME,
     ButtonPresses, PluggedInSync, SensorPublisher, charge_now_entities, charge_now_helper_id,
-    charge_now_helper_name, helper_entity_id, integration_entities,
+    charge_now_helper_name, helper_entity_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -282,7 +282,6 @@ class HaLink:
         # The add-on's own HA entities (src/ha_entities.py)
         self.plug_sync = PluggedInSync()
         self.publisher = SensorPublisher()
-        self.integration_conflict: list[str] = []
         self.entities_error: Optional[str] = None
         self._token = token if token is not None else os.environ.get("SUPERVISOR_TOKEN", "")
         self.settings = default_settings()
@@ -673,20 +672,13 @@ class HaLink:
     # --- the add-on's own entities ----------------------------------------------
 
     async def _setup_entities(self, call) -> None:
-        """Make sure the Plugged In helper exists; check for the old integration."""
+        """Make sure the Plugged In helper exists."""
         self.entities_error = None
         try:
             registry = await call({"type": "config/entity_registry/list"}, timeout=30) or []
         except Exception as err:
             registry = []
             logger.debug("Entity registry not readable: %s", err)
-        self.integration_conflict = integration_entities(registry)
-        if self.integration_conflict:
-            logger.warning(
-                "The OCPP Charge Proxy integration is still installed: remove it in Settings > "
-                "Devices & services so the add-on can provide its entities (%s)",
-                ", ".join(self.integration_conflict),
-            )
         try:
             helpers = await call({"type": "input_boolean/list"}) or []
             if not any(h.get("id") == HELPER_ID for h in helpers):
@@ -729,9 +721,8 @@ class HaLink:
                 except Exception as err:
                     logger.warning("Couldn't update %s: %s", entity_id, err)
         # Sensors
-        if not self.integration_conflict:
-            for sensor_id, value, attrs in self.publisher.due(self._shared, time.time()):
-                await self._post_state(sensor_id, value, attrs)
+        for sensor_id, value, attrs in self.publisher.due(self._shared, time.time()):
+            await self._post_state(sensor_id, value, attrs)
 
     async def _post_state(self, entity_id: str, state: str, attrs: dict) -> None:
         if self._session is None:
@@ -759,11 +750,11 @@ class HaLink:
     @property
     def publishing(self) -> bool:
         """The add-on's sensors are being posted (so HA is recording them)."""
-        return self.connected and not self.integration_conflict
+        return self.connected
 
     async def shutdown(self) -> None:
         """Mark the sensors unavailable while the add-on is stopped."""
-        if not self.connected or self.integration_conflict:
+        if not self.connected:
             return
         for entity_id, state, attrs in SensorPublisher.unavailable():
             await self._post_state(entity_id, state, attrs)
@@ -1116,7 +1107,6 @@ class HaLink:
                 "charge_now": [{"entity_id": e, "hours": h} for e, h in self.charge_buttons.items()],
                 "sensors": list(ALL_SENSORS),
                 "publishing": self.publishing,
-                "integration_conflict": self.integration_conflict,
                 "error": self.entities_error,
             },
             "available": self.available,

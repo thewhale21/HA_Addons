@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.66.2 — Old upgrade handling removed
+
+- **Change:** removed handling for versions long gone (every install is past
+  them, including the ocpp_charge_proxy repository's 2.54.3):
+  - saving sessions moved by versions before 2.43.7 are no longer moved again
+  - chart files left by versions before 2.3.0 are no longer looked for and
+    deleted
+  - the old companion integration (0.x / 1.x) is no longer checked for
+- Kept: a daily-limit reset saved as "48h" by 2.31.0 still reads as rolling,
+  and a car plugged in with no plugged-in record still gets one
+
 ## 2.66.1 — Tidy up
 
 - **Improvement:** the code is compiled when the image is built, so the first

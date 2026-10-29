@@ -31,8 +31,6 @@ SESSION_HISTORY_SIZE = 500  # at most this many of each kind (the last week's ar
 SESSION_KEEP_DAYS = 7  # sessions are kept for the Sessions tab's 7 days (today and the 6 before)
 HISTORY_SAMPLE_S = 10
 RECENT_MINUTES = 60  # kept in memory; older chart data comes from HA (src/ha_history.py)
-# Files from before 2.3.0, when the add-on kept its own chart history
-OLD_HISTORY_FILES = ("history.json", "history_long.json", "daily_energy.json")
 
 
 def _now_iso() -> str:
@@ -460,21 +458,6 @@ def daily_from_sessions(days: int, sessions: Optional[list], today: datetime.dat
             "charging_estimated": not known and day in session_time,
         })
     return out
-
-
-def remove_old_history_files(data_dir: Optional[str]) -> None:
-    """Delete the chart files older versions kept (now read from HA)."""
-    if not data_dir:
-        return
-    for name in OLD_HISTORY_FILES:
-        for path in (os.path.join(data_dir, name), os.path.join(data_dir, name + ".bak")):
-            try:
-                os.remove(path)
-                logger.info("Removed %s: charts now come from Home Assistant's history", os.path.basename(path))
-            except FileNotFoundError:
-                pass
-            except OSError as err:
-                logger.debug("Couldn't remove %s: %s", path, err)
 
 
 @dataclass

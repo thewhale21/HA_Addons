@@ -19,7 +19,7 @@ from src.client import ChargePoint
 from src.debug_tools import DebugTools, install_log_buffer
 from src.app_settings import AppSettings
 from src.config import load_config, starting_current_amps
-from src.gui_data import GuiSources, Health, PowerHistory, remove_old_history_files, sample_loop
+from src.gui_data import GuiSources, Health, PowerHistory, sample_loop
 from src.ha_history import ChartHistory
 from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, auto_plug_charge, automation_loop
 from src.ha_link import HaLink
@@ -240,7 +240,6 @@ async def run() -> None:
     cp.news.on_new = announce_news
     health = Health()
     history = PowerHistory()  # the chart's last hour; older comes from HA's history
-    remove_old_history_files(data_dir)
     automation = Automation(data_dir)  # the schedule and auto re-plug: Automations tab
     automation.publish(shared_state)
     # Your HA sensors (power, SoC, car plugged in: Settings tab; auto

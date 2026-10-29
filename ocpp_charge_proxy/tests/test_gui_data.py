@@ -1,7 +1,7 @@
 import datetime as _dt
 import json
 
-from src.gui_data import Health, MessageLog, PowerHistory, SessionLog, daily_from_sessions, remove_old_history_files
+from src.gui_data import Health, MessageLog, PowerHistory, SessionLog, daily_from_sessions
 from src.shared_state import SharedState
 
 DAY = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=1)).date().isoformat()  # (sessions are kept a week)
@@ -189,14 +189,6 @@ def test_daily_from_sessions_and_metered():
     yesterday = (today - datetime.timedelta(days=1)).isoformat()
     days = daily_from_sessions(3, sessions, today, {yesterday: 7.5, today.isoformat(): 0.3})
     assert [d["kwh"] for d in days] == [0.0, 7.5, 0.52]  # the larger figure for today
-
-
-def test_old_history_files_removed(tmp_path):
-    for name in ("history.json", "history_long.json.bak", "daily_energy.json", "sessions.json"):
-        (tmp_path / name).write_text("[]")
-    remove_old_history_files(str(tmp_path))
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["sessions.json"]
-    remove_old_history_files(None)  # no data dir: nothing to do
 
 
 def test_session_marked_against_supplier_slots(tmp_path):
