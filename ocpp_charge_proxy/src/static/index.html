@@ -94,8 +94,6 @@
   .muted { color: var(--text2); }
   .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--text2); flex: none; }
   .dot.ok { background: var(--ok); } .dot.err { background: var(--err); } .dot.warn { background: var(--warn); }
-  .hero { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
-  .hero .state { font-size: 30px; font-weight: 400; }
   .chip {
     display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
     font-size: 12px; font-weight: 500; background: var(--hover); color: var(--text2); white-space: nowrap;
@@ -316,14 +314,10 @@
   .week .gone { position: absolute; top: 0; bottom: 0; left: 0; background: var(--card); opacity: .45; pointer-events: none; z-index: 2; }
   .week .now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--err); z-index: 4; pointer-events: none; }
   .week .now::before { content: ''; position: absolute; top: -1px; left: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--err); }
-  .week .sep { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: 6px 0 0; font-size: 11px; font-weight: 500;
-    text-transform: uppercase; letter-spacing: .5px; color: var(--text2); }
-  .week .sep::after { content: ''; flex: 1; border-top: 1px solid var(--divider); }
-  .week .sep.past { margin-top: 0; }
   .week .axis { grid-column: 2; position: relative; height: 14px; font-size: 11px; color: var(--text2); }
   .week .axis span { position: absolute; transform: translateX(-50%); }
   .week .axis span:first-child { transform: none; } .week .axis span:last-child { transform: translateX(-100%); }
-  tr.srow.flash > td, .sess.flash { animation: flash 2s ease-out; }
+  .sess.flash { animation: flash 2s ease-out; }
   @keyframes flash { from { background: color-mix(in srgb, var(--ok) 25%, transparent); } to { background: transparent; } }
   #w-types { display: contents; }
   /* Sessions › The last 7 days: when it was plugged in (by what) and when it charged */
@@ -435,8 +429,6 @@
   .bnr.ov .hero { position: relative; }
   .bnr .dot { box-shadow: 0 0 0 2px rgba(255,255,255,.7); }
   :root:not(.basic) .bnr .chip { background: rgba(255,255,255,.94); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
-  .nextline { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--hover); font-size: 13px; margin: 0; }
-  .nextline:empty { display: none; }
   .wlegend { display: flex; gap: 8px 16px; flex-wrap: wrap; font-size: 12px; color: var(--text2); margin-top: 14px; }
   .wlegend b.band { display: inline-block; width: 14px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; opacity: .9; }
   /* Sessions › Per day: a bar a day, the average dashed across, today in a stronger colour */
@@ -527,12 +519,12 @@
   #c-amps button { padding: 6px 7px; white-space: nowrap; font-size: 13px; flex: 1 0 auto; }
   .setbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 10px 14px; border-radius: 10px; background: var(--hover); font-size: 13px; }
   .setbar label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
-  .kv dd code, .kv dd .mono { overflow-wrap: anywhere; font-size: 12px; }
+  .kv dd code { overflow-wrap: anywhere; font-size: 12px; }
   /* Debug: replies sit quietly under their call; destructive buttons in red */
   .msg.result > summary { padding-top: 2px; padding-bottom: 5px; font-size: 12px; opacity: .8; }
   .msg.result .a { padding-left: 12px; }
-  .btn.danger, #d-drop, #d-restart, #d-clear-sessions, #d-clear-messages { color: var(--err); }
-  .btn.danger:hover, #d-drop:hover, #d-restart:hover, #d-clear-sessions:hover, #d-clear-messages:hover { background: color-mix(in srgb, var(--err) 10%, transparent); border-color: var(--err); }
+  #d-drop, #d-restart, #d-clear-sessions, #d-clear-messages { color: var(--err); }
+  #d-drop:hover, #d-restart:hover, #d-clear-sessions:hover, #d-clear-messages:hover { background: color-mix(in srgb, var(--err) 10%, transparent); border-color: var(--err); }
   /* Diagnostics: the long configuration table folds away */
   details.fold > summary { cursor: pointer; color: var(--primary); font-size: 13px; list-style: none; padding: 4px 0; }
   details.fold > summary::-webkit-details-marker { display: none; }

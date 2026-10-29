@@ -1,0 +1,6 @@
+# Not needed to build the image (the Dockerfile copies requirements.txt, rootfs and src)
+tests/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+CHANGELOG*.md

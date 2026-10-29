@@ -115,14 +115,25 @@ def create_api_app(
     return app
 
 
+_index_cache: dict = {}  # the page, as sent: read once (again only if the file changes)
+
+
+def _index_body(index: Path) -> bytes:
+    mtime = index.stat().st_mtime
+    if _index_cache.get("mtime") != mtime:
+        # The version it's from, so an open page can tell when the add-on's been updated
+        _index_cache["body"] = index.read_bytes().replace(
+            b'<meta name="addon-version" content="">',
+            f'<meta name="addon-version" content="{_version()}">'.encode(), 1)
+        _index_cache["mtime"] = mtime
+    return _index_cache["body"]
+
+
 async def handle_index(request: web.Request) -> web.Response:
     static_dir: Path = request.app["static_dir"]
-    index = static_dir / "index.html"
-    # Never cached: after an update the browser (or HA's ingress) must not
-    # keep showing the old page. It's small and only loaded when opened.
-    # The version it's from, so an open page can tell when the add-on's been updated
-    body = index.read_bytes().replace(b'<meta name="addon-version" content="">',
-                                      f'<meta name="addon-version" content="{_version()}">'.encode(), 1)
+    # Never cached by the browser: after an update it (or HA's ingress) must
+    # not keep showing the old page
+    body = _index_body(static_dir / "index.html")
     return web.Response(
         body=body,
         content_type="text/html",

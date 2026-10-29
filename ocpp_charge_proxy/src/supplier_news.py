@@ -79,9 +79,6 @@ class SupplierNews:
     def snapshot(self) -> list[dict]:
         return sorted((dict(it) for it in self.items.values()), key=lambda x: x["last"], reverse=True)
 
-    def unseen(self) -> int:
-        return sum(1 for it in self.items.values() if not it.get("seen"))
-
     def _save(self) -> None:
         if self._persistence is None:
             return

@@ -426,24 +426,30 @@ class ChargePoint(BaseChargePoint):
         return await super().route_message(raw_msg)
 
     @classmethod
-    def handled_actions(cls) -> set:
-        """The server's messages this charger answers (the @on handlers)."""
-        out = set()
-        for name in dir(cls):
-            action = getattr(getattr(cls, name, None), "_on_action", None)
-            if action is not None:
-                out.add(str(getattr(action, "value", action)))
-        return out
+    def handled_actions(cls) -> frozenset:
+        """The server's messages this charger answers (the @on handlers), worked out once."""
+        cached = cls.__dict__.get("_handled_actions")
+        if cached is None:
+            out = set()
+            for name in dir(cls):
+                action = getattr(getattr(cls, name, None), "_on_action", None)
+                if action is not None:
+                    out.add(str(getattr(action, "value", action)))
+            cached = frozenset(out)
+            setattr(cls, "_handled_actions", cached)
+        return cached
 
     def _note_unknown(self, raw) -> None:
         """A message the add-on has no answer for, or an error your supplier sent back: news."""
+        if not isinstance(raw, (str, bytes)) or raw.lstrip()[:2] not in ("[2", "[4", b"[2", b"[4"):
+            return  # (a reply to one of ours: nothing new in it, and not worth reading)
         try:
-            msg = json.loads(raw) if isinstance(raw, (str, bytes)) else None
+            msg = json.loads(raw)
         except ValueError:
             return
         if not isinstance(msg, list) or not msg:
             return
-        if msg[0] == 2 and len(msg) > 2 and str(msg[2]) not in self.handled_actions():
+        if msg[0] == 2 and len(msg) > 2 and str(msg[2]) not in type(self).handled_actions():
             self.news.note("message", str(msg[2]), "answered NotImplemented")
         elif msg[0] == 4 and len(msg) > 2:
             self.news.note("error", str(msg[2]), str(msg[3]) if len(msg) > 3 else "")

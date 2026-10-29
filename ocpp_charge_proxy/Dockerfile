@@ -10,8 +10,9 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # Copy root filesystem
 COPY rootfs /
 
-# Copy application code
+# Copy application code, compiled now so the first start after an update is quicker
 COPY src/ /app/src/
+RUN python3 -m compileall -q /app/src
 
 # Build arguments
 ARG BUILD_ARCH
