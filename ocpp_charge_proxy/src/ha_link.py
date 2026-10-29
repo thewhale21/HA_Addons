@@ -298,6 +298,7 @@ class HaLink:
         self.ready_times: Optional[list[str]] = None  # the times that accepts
         self._dispatch_searched = 0.0
         self.dispatch_searched_at: Optional[float] = None  # wall clock, for Diagnostics › Health
+        self._states_read = False  # HA's states have been looked through for a supplier at least once
         self._call = None  # websocket request function while connected
         # Saving sessions: the calendar read and how it went, for the page
         self.saving_past: list = []  # the calendar's sessions of the last week that are over
@@ -811,6 +812,7 @@ class HaLink:
         except Exception as err:
             logger.debug("Couldn't list states for smart charging: %s", err)
             return False
+        self._states_read = True
         by_id = {st.get("entity_id"): st for st in states}
         ids = [st["entity_id"] for st in find_dispatch_sensors(states)]
         chosen = self.settings.get("supplier_entity")  # picked on the Settings tab
@@ -929,8 +931,10 @@ class HaLink:
         if self._call is None:
             return {**out, "error": "Not connected to Home Assistant"}
         dispatch = self.dispatch_entities[0] if self.dispatch_entities else None
+        # "permanent": trying again in a few minutes won't help (src/automation.py: apply_ready_time)
         if not dispatch:
-            return {**out, "error": "Your supplier's smart charging integration wasn't found"}
+            return {**out, "error": "Your supplier's smart charging integration wasn't found",
+                    "permanent": self._states_read}  # (not looked for yet: it may be found)
         try:
             states = await self._call({"type": "get_states"}, timeout=30) or []
         except Exception as err:
@@ -939,13 +943,14 @@ class HaLink:
         entity = next((st for st in states if st.get("entity_id") == ready_id), None) if ready_id else None
         if entity is None:
             return {**out, "error": f"{provider_name(dispatch)}'s integration has no ready time (target time) setting"
-                                    + (f" ({ready_id} wasn't found)" if ready_id else "")}
+                                    + (f" ({ready_id} wasn't found)" if ready_id else ""),
+                    "permanent": not ready_id}  # (none at all, as E.ON Next; one not there yet may come)
         out["entity_id"] = entity["entity_id"]
         allowed = self._allowed_times(entity)
         ready = pick_ready_time(_dt.datetime.now(unplug.tzinfo), unplug, allowed)
         if ready is None:
             return {**out, "error": f"{provider_name(dispatch)} only accepts ready times from {allowed[0]} to {allowed[-1]}, "
-                                    f"and there's none before the unplug at {unplug.strftime('%H:%M')}"}
+                                    f"and there's none before the unplug at {unplug.strftime('%H:%M')}", "permanent": True}
         try:
             await self._call(service_call(entity, ready))
         except Exception as err:

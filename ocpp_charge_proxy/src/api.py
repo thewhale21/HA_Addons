@@ -119,13 +119,13 @@ _index_cache: dict = {}  # the page, as sent: read once (again only if the file 
 
 
 def _index_body(index: Path) -> bytes:
-    mtime = index.stat().st_mtime
-    if _index_cache.get("mtime") != mtime:
+    key = (str(index), index.stat().st_mtime, _version())  # (a changed file or version: read again)
+    if _index_cache.get("key") != key:
         # The version it's from, so an open page can tell when the add-on's been updated
         _index_cache["body"] = index.read_bytes().replace(
             b'<meta name="addon-version" content="">',
             f'<meta name="addon-version" content="{_version()}">'.encode(), 1)
-        _index_cache["mtime"] = mtime
+        _index_cache["key"] = key
     return _index_cache["body"]
 
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.66.3 — Every supplier checked
+
+- **Fix:** with E.ON Next (it has no ready time), with no supplier found, or
+  when your supplier accepts no ready time before the unplug, setting the
+  ready time is no longer tried again 8 times (with a warning each time) at
+  every plug-in: that can't help. A failure that may pass (Home Assistant
+  busy, an entity not there yet, no supplier looked for yet) is still tried
+  again
+- **Fix:** the page said the add-on's version from when it was first opened
+  (2.66.1's page caching): it follows the version again (the build's
+  test_the_page_and_the_api_say_the_version)
+- **Improvement:** new tests run the same scenarios with Octopus Energy, EDF
+  Energy, E.ON Next, an unlisted supplier and none: how each is found, its
+  daily limit and reset (and one set on the Settings tab), the ready times it
+  accepts, the schedule's checks, slots that meet, an 8 hour charge and
+  setting the ready time
+
 ## 2.66.2 — Old upgrade handling removed
 
 - **Change:** removed handling for versions long gone (every install is past

@@ -2137,7 +2137,9 @@ async def apply_ready_time(automation: "Automation",
                            log_errors: bool = True, retry: bool = False) -> dict:
     """At a scheduled plug-in: ready time = the schedule's next unplug. If your
     supplier (or its integration) fails to take it, it's tried again a few times
-    while it's still plugged in for that unplug (READY_RETRY_MIN; `retry`: one of those)."""
+    while it's still plugged in for that unplug (READY_RETRY_MIN; `retry`: one of those),
+    unless that can't help ("permanent": no supplier found, one with no ready time
+    such as E.ON Next, or no ready time it accepts before the unplug)."""
     now = automation._now()
     unplug = automation.next_unplug(now)
     tries = (automation.ready_retry or {}).get("tries", 0) if retry else 0
@@ -2149,7 +2151,7 @@ async def apply_ready_time(automation: "Automation",
             result = await set_ready_time(unplug)
         except Exception as err:
             result = {"unplug": unplug.isoformat(timespec="minutes"), "error": str(err)}
-    if result.get("error") and unplug is not None and tries < len(READY_RETRY_MIN):
+    if result.get("error") and not result.get("permanent") and unplug is not None and tries < len(READY_RETRY_MIN):
         wait = READY_RETRY_MIN[tries]
         automation.ready_retry = {"tries": tries + 1, "at": automation._clock() + wait * 60, "unplug": unplug.isoformat()}
         result = {**result, "retry_at": _iso_from_epoch(automation.ready_retry["at"])}
