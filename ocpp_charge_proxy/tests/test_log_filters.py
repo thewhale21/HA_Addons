@@ -109,3 +109,14 @@ def test_web_page_gets_shown_at_debug():
         assert f.filter(rec) and rec.levelno == logging.DEBUG
     finally:
         root.setLevel(old)
+
+
+def test_the_connection_password_is_never_logged():
+    import logging
+    from src.log_filters import RedactSecrets, redact_secrets
+    raw = '[2,"x","ChangeConfiguration",{"key":"AuthorizationKey","value":"S3cret"}]'
+    assert "S3cret" not in redact_secrets(raw) and '"***"' in redact_secrets(raw)
+    assert redact_secrets('{"key":"minSoC","value":"25"}') == '{"key":"minSoC","value":"25"}'
+    rec = logging.LogRecord("ocpp", logging.INFO, "f", 1, "%s: receive message %s", ("CP", raw), None)
+    RedactSecrets().filter(rec)
+    assert "S3cret" not in rec.getMessage()

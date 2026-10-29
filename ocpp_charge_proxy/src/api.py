@@ -38,6 +38,7 @@ def create_api_app(
     app_settings=None,
     on_cancel_charge: Callable[[], Awaitable[dict]] | None = None,
     mover=None,
+    news=None,
 ) -> web.Application:
     app = web.Application(client_max_size=50 * 1024 * 1024)  # (an imported settings file, with its history)
     app["shared_state"] = shared_state
@@ -57,6 +58,7 @@ def create_api_app(
     app["mover"] = mover  # src.migrate.Mover: Diagnostics › Move to another install
     app["debug"] = debug  # src.debug_tools.DebugTools, or None
     app["app_settings"] = app_settings  # src.app_settings.AppSettings, or None
+    app["news"] = news  # src.supplier_news.SupplierNews, or None
     # Open /api/events streams (web pages)
     app["event_clients"] = {"gui": 0}
     app.on_shutdown.append(_close_event_streams)
@@ -84,6 +86,7 @@ def create_api_app(
     app.router.add_get("/api/history", handle_history)
     app.router.add_get("/api/energy/daily", handle_energy_daily)
     app.router.add_get("/api/provider", handle_provider)
+    app.router.add_post("/api/supplier_news/seen", handle_news_seen)
     app.router.add_get("/api/health", handle_health)
     app.router.add_get("/api/version", handle_version)
     # Schedule and auto re-plug
@@ -438,6 +441,22 @@ async def handle_provider(request: web.Request) -> web.Response:
     if gui is None:
         return _gui_unavailable()
     return web.json_response(gui.provider(), dumps=_dumps)
+
+
+async def handle_news_seen(request: web.Request) -> web.Response:
+    """Diagnostics › Health › Supplier: mark everything new as seen ({"clear": true}: forget it all)."""
+    news = request.app["news"]
+    if news is None:
+        return _gui_unavailable()
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if isinstance(body, dict) and body.get("clear"):
+        news.clear()
+    else:
+        news.mark_seen()
+    return web.json_response({"items": news.snapshot()}, dumps=_dumps)
 
 
 async def handle_health(request: web.Request) -> web.Response:

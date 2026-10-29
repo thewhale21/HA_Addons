@@ -38,6 +38,8 @@ from src.gui_data import MessageLog, SessionLog
 from src.meter_values import build_meter_values
 from src.persistence import Persistence
 from src.shared_state import SharedState
+from src.supplier_news import SupplierNews
+from src.log_filters import redact_secrets
 from src.traffic import TrafficRecorder
 
 logger = logging.getLogger(__name__)
@@ -66,6 +68,9 @@ _INT_KEYS = {
     "ConnectionTimeOut", "ResetRetries", "TransactionMessageAttempts",
     "TransactionMessageRetryInterval", "MinimumStatusDuration",
 }
+# Keys your supplier has always set or asked about (not news): Wallbox's own and Octopus's
+_KNOWN_VENDOR_KEYS = {"minSoC", "maxSoC", "chargingALimitConn1", "AuthEnabledOffline", "AuthEnabled"}
+_KNOWN_ASKED_KEYS = {"V2GCapabilities"}
 _LIST_KEYS = {"MeterValuesSampledData", "MeterValuesAlignedData", "StopTxnSampledData", "StopTxnAlignedData"}
 
 
@@ -222,7 +227,16 @@ class ChargePoint(BaseChargePoint):
             # Wallbox's own keys
             "AuthEnabled": ("true", False),  # off: starts without checking the ID tag at all
             "AuthEnabledOffline": ("true", False),  # off: offline, no start (Octopus sets it off)
+            # Security (OCPP 1.6 security extension): 2 = TLS with a password; the
+            # password itself (AuthorizationKey) is write-only, never reported
+            "SecurityProfile": ("2", False),
         }
+        # Anything new from your supplier (src/supplier_news.py); on_auth_key: a new
+        # connection password from it (set by __main__: src/auth_key.py)
+        self.news = SupplierNews(persistence)
+        self.on_auth_key = None
+        self.auth_status = lambda: None
+        self._config_keys_at_start = set(self._config_store)
         # The local authorisation list (SendLocalList) and the authorisation cache
         # (each tag's last answer from the server), kept across restarts as a charger does
         self._auth_cache: dict[str, dict] = {}
@@ -310,8 +324,17 @@ class ChargePoint(BaseChargePoint):
             logger.info("Car was plugged in when the add-on stopped: starting as Preparing")
 
         self._profile_scheduler = ChargingProfileScheduler(
-            rated_power_w=self._charger_sim.rated_power_kw * 1000
+            rated_power_w=self._charger_sim.rated_power_kw * 1000,
+            on_change=self._save_profiles,
         )
+        # The standing profiles (the default for every session, the overall cap)
+        # stay across restarts, as on a charger
+        try:
+            saved_profiles = persistence.load_charging_profiles()
+        except Exception:
+            saved_profiles = None
+        if isinstance(saved_profiles, list):
+            self._profile_scheduler.load(saved_profiles)
         # A transaction still saved as open means the last run never stopped
         # it (power cut, crash, SIGKILL): close it the way a real charger does.
         # Or the add-on restarted mid-session on purpose: continue it.
@@ -341,6 +364,8 @@ class ChargePoint(BaseChargePoint):
             "local_list_version": self._local_list_version,
             "local_auth_list": list(self._local_auth_list.values()),
             "auth_cache": [{"id_tag": k, **v} for k, v in self._auth_cache.items()],
+            "news": self.news.snapshot(),
+            "password": self.auth_status(),
             "charging_profiles": self._profile_scheduler.profiles_info(),
             "profile_limit_kw": self._profile_scheduler.get_current_limit_kw(),
             "provider_limit_amps": self._server_limit_amps,
@@ -397,7 +422,31 @@ class ChargePoint(BaseChargePoint):
     async def route_message(self, raw_msg):
         """Every message from the server passes through here."""
         self._record_traffic(raw_msg, incoming=True)
+        self._note_unknown(raw_msg)
         return await super().route_message(raw_msg)
+
+    @classmethod
+    def handled_actions(cls) -> set:
+        """The server's messages this charger answers (the @on handlers)."""
+        out = set()
+        for name in dir(cls):
+            action = getattr(getattr(cls, name, None), "_on_action", None)
+            if action is not None:
+                out.add(str(getattr(action, "value", action)))
+        return out
+
+    def _note_unknown(self, raw) -> None:
+        """A message the add-on has no answer for, or an error your supplier sent back: news."""
+        try:
+            msg = json.loads(raw) if isinstance(raw, (str, bytes)) else None
+        except ValueError:
+            return
+        if not isinstance(msg, list) or not msg:
+            return
+        if msg[0] == 2 and len(msg) > 2 and str(msg[2]) not in self.handled_actions():
+            self.news.note("message", str(msg[2]), "answered NotImplemented")
+        elif msg[0] == 4 and len(msg) > 2:
+            self.news.note("error", str(msg[2]), str(msg[3]) if len(msg) > 3 else "")
 
     async def _send(self, message):
         """Every message to the server (calls and our replies) passes through here."""
@@ -405,7 +454,9 @@ class ChargePoint(BaseChargePoint):
         return await super()._send(message)
 
     def _record_traffic(self, raw, incoming: bool) -> None:
-        """Feed every frame to the diagnostics recorder (src/traffic.py)."""
+        """Feed every frame to the diagnostics recorder (src/traffic.py), never
+        with the connection password in it."""
+        raw = redact_secrets(raw)
         self._traffic.record(raw, incoming)
         self.message_log.record(raw, incoming)
 
@@ -651,6 +702,12 @@ class ChargePoint(BaseChargePoint):
         self._transaction_start_energy_wh = int(saved.get("start_energy_wh", self._energy_register_wh))
         self._stop_txn_sampled = list(saved.get("stop_txn_sampled") or [])
         self._stop_txn_data = list(saved.get("stop_txn_data") or [])
+        started = saved.get("timestamp")
+        try:
+            started_ts = datetime.datetime.fromisoformat(str(started).replace("Z", "+00:00")).timestamp() if started else None
+        except ValueError:
+            started_ts = None
+        self._profile_scheduler.transaction_started(started_ts)
         if isinstance(saved.get("profile"), dict):
             self._tx_profile = normalise_profile(saved["profile"])
             try:
@@ -763,11 +820,26 @@ class ChargePoint(BaseChargePoint):
 
     # --- Charging current -------------------------------------------------
 
+    def _save_profiles(self) -> None:
+        self._persistence.save_charging_profiles(self._profile_scheduler.to_store())
+
+    def _profile_amps(self) -> Optional[float]:
+        """The charging profiles' limit now, in amps (None: none applies)."""
+        sched = getattr(self, "_profile_scheduler", None)  # (none yet while starting up)
+        if sched is None or not sched.has_profile:
+            return None
+        kw = sched.get_current_limit_kw()
+        return None if kw is None else kw * 1000 / sched.volts
+
     def _effective_amps(self) -> int:
-        """Lower of the max current and the supplier's limit, as a supported setting."""
+        """Lowest of the max current, the supplier's limit and the charging profiles'
+        (a pause, 0, is SuspendedEVSE instead), as a supported setting."""
         limit = float(self._max_current_amps)
         if self._server_limit_amps is not None:
             limit = min(limit, self._server_limit_amps)
+        prof = self._profile_amps()
+        if prof is not None and prof > 0:
+            limit = min(limit, prof)
         allowed = [a for a in VALID_CURRENT_SETTINGS if a <= limit + 1e-9]
         return max(allowed) if allowed else VALID_CURRENT_SETTINGS[0]  # 6A minimum
 
@@ -1036,6 +1108,7 @@ class ChargePoint(BaseChargePoint):
                        like a real car; charging resumes if SoC drops below 100%.
         The charger pause wins if both apply, as on a real charger.
         """
+        self._apply_current()  # (a profile's limit can change with time)
         if self._transaction_id is None:
             return
         if self.state not in (
@@ -1462,6 +1535,7 @@ class ChargePoint(BaseChargePoint):
             # before the start isn't counted at charging power.
             self._checkpoint_energy()
             self._charger_sim.start_charging()
+            self._profile_scheduler.transaction_started()  # (Relative schedules run from now)
             self._transaction_start_energy_wh = self._energy_register_wh
             start_ts = _now_iso()
             request = call.StartTransactionPayload(
@@ -1540,7 +1614,7 @@ class ChargePoint(BaseChargePoint):
             )
             transaction_data = self._stop_txn_data or None  # never an empty list
             self._charger_sim.stop_charging()
-            self._profile_scheduler.clear_profile()
+            self._profile_scheduler.transaction_ended()  # (its TxProfile goes; the default and cap stay)
 
             # Send Finishing status before StopTransaction
             self.state = ChargePointStatus.finishing
@@ -1611,7 +1685,7 @@ class ChargePoint(BaseChargePoint):
             )
 
         if charging_profile:
-            self._profile_scheduler.set_profile(charging_profile)
+            self._profile_scheduler.set_profile(charging_profile, kwargs.get("connector_id") or self.connector_id)
         self._tx_profile = normalise_profile(charging_profile) if charging_profile else None
 
         self.set_plugged_in(True, "supplier")
@@ -1662,6 +1736,8 @@ class ChargePoint(BaseChargePoint):
         keys_to_return = key if key else list(self._config_store.keys())
 
         for k in keys_to_return:
+            if k not in self._config_store and k not in _KNOWN_ASKED_KEYS and k != "AuthorizationKey":
+                self.news.note("asked", k, "reported as unknown")
             if k in self._config_store:
                 value, readonly = self._config_store[k]
                 configuration_key.append({
@@ -1680,7 +1756,41 @@ class ChargePoint(BaseChargePoint):
     @on(Action.ChangeConfiguration)
     async def on_change_configuration(self, key: str, value: str, **kwargs):
         """Handle configuration changes from the server."""
+        if key == "AuthorizationKey":
+            return self._set_authorization_key(value)
         logger.info("Server set config: %s = %s", key, value)
+        result = self._change_configuration(key, value)
+        if str(getattr(result.status, "value", result.status)) != "Accepted":
+            self.news.note("refused", f"{key} = {value}", "ChangeConfiguration")
+        elif key not in _KNOWN_VENDOR_KEYS and key not in self._config_keys_at_start:
+            self.news.note("setting", key, f"set to {value}")
+        return result
+
+    def _set_authorization_key(self, value: str):
+        """A new connection password (OCPP 1.6 security extension): kept, used from
+        the next connection (src/auth_key.py); never logged, stored or reported."""
+        if not isinstance(value, str) or not value.strip() or any(c.isspace() for c in value):
+            logger.warning("Server set config: AuthorizationKey = (hidden): not a usable password, rejecting")
+            self.news.note("refused", "AuthorizationKey", "not a usable password")
+            return call_result.ChangeConfigurationPayload(status=ConfigurationStatus.rejected)
+        if self.on_auth_key is None:
+            logger.warning("Server set config: AuthorizationKey = (hidden): can't be kept here, rejecting")
+            return call_result.ChangeConfigurationPayload(status=ConfigurationStatus.rejected)
+        logger.info("Server set config: AuthorizationKey = (hidden)")
+        self.on_auth_key(value)
+        self.news.note("password", "AuthorizationKey", "used from the next connection")
+        return call_result.ChangeConfigurationPayload(status=ConfigurationStatus.accepted)
+
+    def _change_configuration(self, key: str, value: str):
+        if key == "SecurityProfile":
+            # Only up, and only to what this charger does: 2 (TLS with a password)
+            try:
+                level = int(str(value).strip())
+            except ValueError:
+                level = -1
+            if level != int(self._config_store["SecurityProfile"][0]):
+                logger.warning("SecurityProfile %s isn't supported (only 2: TLS with a password), rejecting", value)
+                return call_result.ChangeConfigurationPayload(status=ConfigurationStatus.rejected)
 
         if key == "ClockAlignedDataInterval":
             try:
@@ -1839,28 +1949,89 @@ class ChargePoint(BaseChargePoint):
 
     @on(Action.SetChargingProfile)
     async def on_set_charging_profile(self, connector_id: int, cs_charging_profiles: dict, **kwargs):
+        """A charging profile, checked as a charger does (OCPP 1.6 § 5.16): the
+        session's own (TxProfile) only during a session, the overall cap
+        (ChargePointMaxProfile) only on connector 0, within the stack levels,
+        periods and number of profiles it reports."""
         logger.info("SetChargingProfile received for connector %s", connector_id)
-        self._profile_scheduler.set_profile(cs_charging_profiles)
-        purpose = (cs_charging_profiles or {}).get("charging_profile_purpose",
-                                                    (cs_charging_profiles or {}).get("chargingProfilePurpose"))
-        if str(getattr(purpose, "value", purpose)) == "TxProfile" and self._transaction_id is not None:
-            self._tx_profile = normalise_profile(cs_charging_profiles)
-        return call_result.SetChargingProfilePayload(
-            status="Accepted"
-        )
+        profile = normalise_profile(cs_charging_profiles or {})
+        sched = self._profile_scheduler
+        purpose, level = sched.purpose(profile), sched.stack(profile)
+        schedule = profile.get("charging_schedule", profile.get("chargingSchedule")) or {}
+        periods = schedule.get("charging_schedule_period", schedule.get("chargingSchedulePeriod")) or []
+        why = None
+        if connector_id not in (0, self.connector_id):
+            why = f"there's no connector {connector_id}"
+        elif purpose == "TxProfile" and (self._transaction_id is None or connector_id == 0):
+            why = "a TxProfile needs a session on the connector"
+        elif purpose == "ChargePointMaxProfile" and connector_id != 0:
+            why = "a ChargePointMaxProfile goes on connector 0"
+        elif level > self._config_int("ChargeProfileMaxStackLevel", 3):
+            why = f"stack level {level} is over ChargeProfileMaxStackLevel"
+        elif len(periods) > self._config_int("ChargingScheduleMaxPeriods", 24):
+            why = f"{len(periods)} periods is over ChargingScheduleMaxPeriods"
+        elif sched.count() >= self._config_int("MaxChargingProfilesInstalled", 5) and not sched.replaces(profile):
+            why = "MaxChargingProfilesInstalled reached"
+        if why:
+            logger.warning("SetChargingProfile rejected: %s", why)
+            self.news.note("refused", f"SetChargingProfile {purpose}", why)
+            return call_result.SetChargingProfilePayload(status="Rejected")
+        sched.set_profile(profile, connector_id)
+        if purpose == "TxProfile":
+            self._tx_profile = profile
+            self._save_active_transaction()
+        self._apply_current()
+        await self._apply_profile_state()
+        return call_result.SetChargingProfilePayload(status="Accepted")
 
     @on(Action.ClearChargingProfile)
     async def on_clear_charging_profile(self, **kwargs):
         logger.info("ClearChargingProfile received: %s", kwargs)
-        self._profile_scheduler.clear_profile(
+        cleared = self._profile_scheduler.clear_profile(
             profile_id=kwargs.get("id"),
             connector_id=kwargs.get("connector_id"),
             purpose=kwargs.get("charging_profile_purpose"),
             stack_level=kwargs.get("stack_level"),
         )
-        return call_result.ClearChargingProfilePayload(
-            status="Accepted"
+        if self._tx_profile is not None and not self._profile_scheduler.has_purpose("TxProfile"):
+            self._tx_profile = None
+            self._save_active_transaction()
+        self._apply_current()
+        await self._apply_profile_state()
+        return call_result.ClearChargingProfilePayload(status="Accepted" if cleared else "Unknown")
+
+    @on(Action.GetCompositeSchedule)
+    async def on_get_composite_schedule(self, connector_id: int, duration: int, charging_rate_unit=None, **kwargs):
+        """What the charger will allow from now for `duration` seconds, all its
+        profiles combined (and never over what it can do)."""
+        if connector_id not in (0, self.connector_id):
+            return call_result.GetCompositeSchedulePayload(status="Rejected")
+        unit = str(getattr(charging_rate_unit, "value", charging_rate_unit) or "A")
+        volts = self._profile_scheduler.volts
+        hw_w = self._effective_amps_without_profiles() * volts
+        now = float(int(time.time()))  # (whole seconds, as the schedule's start is sent)
+        steps = self._profile_scheduler.composite(now, int(duration)) or [(0, None)]
+        periods = []
+        for offset, w in steps:
+            w = hw_w if w is None else min(w, hw_w)
+            limit = w / volts if unit == "A" else w
+            limit = round(limit, 1)
+            if not periods or periods[-1]["limit"] != limit:
+                periods.append({"start_period": offset, "limit": limit})
+        start = datetime.datetime.fromtimestamp(now, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        logger.info("GetCompositeSchedule: %d s from %s in %s: %s", duration, start, unit,
+                    ", ".join(f"+{p['start_period']}s {p['limit']}" for p in periods))
+        return call_result.GetCompositeSchedulePayload(
+            status="Accepted", connector_id=connector_id, schedule_start=start,
+            charging_schedule={"duration": int(duration), "start_schedule": start,
+                               "charging_rate_unit": unit, "charging_schedule_period": periods},
         )
+
+    def _effective_amps_without_profiles(self) -> float:
+        limit = float(self._max_current_amps)
+        if self._server_limit_amps is not None:
+            limit = min(limit, self._server_limit_amps)
+        return limit
 
     @on(Action.TriggerMessage)
     async def on_trigger_message(self, requested_message: str, connector_id: int = 0, **kwargs):
@@ -1870,6 +2041,7 @@ class ChargePoint(BaseChargePoint):
         }
         if requested_message not in supported:
             logger.warning("TriggerMessage for unsupported message: %s", requested_message)
+            self.news.note("refused", f"TriggerMessage {requested_message}", "NotImplemented")
             return call_result.TriggerMessagePayload(
                 status=TriggerMessageStatus.not_implemented
             )
@@ -1967,7 +2139,7 @@ class ChargePoint(BaseChargePoint):
                 reason=Reason.hard_reset if type == ResetType.hard else Reason.soft_reset,
             )
 
-        self._profile_scheduler.clear_profile()
+        self._profile_scheduler.transaction_ended()  # (the standing profiles stay, as on a charger)
 
         if type == ResetType.hard:
             asyncio.create_task(self._perform_hard_reset())
@@ -2004,6 +2176,8 @@ class ChargePoint(BaseChargePoint):
             "DataTransfer: vendor=%s message_id=%s data_len=%d",
             vendor_id, message_id, len(data) if data else 0,
         )
+        self.news.note("message", f"DataTransfer {vendor_id}{' / ' + message_id if message_id else ''}",
+                       "answered UnknownVendorId")
         return call_result.DataTransferPayload(
             status=DataTransferStatus.unknown_vendor_id,
             data="",

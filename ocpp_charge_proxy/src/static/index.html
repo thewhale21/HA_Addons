@@ -876,6 +876,10 @@
           <div class="grow">When the schedule changes<div class="note" style="margin:0">A notification through Home Assistant whenever the times it plugs in change. <details class="more"><summary>More</summary><div>Whatever changed it: you (on this page or in Home Assistant), a saving session, Charge now, auto plug-in, the car plugged in sensor or the daily limit. Each day that changed, before and after (e.g. <i>Today: 15:30–21:30 → 14:00–18:00, 20:00–22:00 (saving session 18:00–20:00)</i>), once it's settled for a minute, so a few changes together are one notification.</div></details></div></div>
           <label class="switch"><input type="checkbox" id="n-on" aria-label="Notify when the schedule changes"><span></span></label>
         </div>
+        <div class="row">
+          <div class="grow">When your supplier sends something new<div class="note" style="margin:0">A setting or message the add-on doesn't know, something it had to refuse, or a new connection password (Diagnostics › Health › Supplier)</div></div>
+          <label class="switch"><input type="checkbox" id="n-supplier" aria-label="Notify when your supplier sends something new"><span></span></label>
+        </div>
         <div class="row"><div class="grow">Send to<div class="note" style="margin:0">A notify service: your phone's is <code>notify.mobile_app_…</code> (the Home Assistant app)</div></div></div>
         <div class="row" style="margin-top:6px"><span class="ctl" style="flex:1"><select id="n-service" style="width:100%" aria-label="Notify service"><option value="">Choose…</option></select></span>
           <button class="btn small" id="n-test" type="button" style="margin-left:8px">Send a test</button></div>
@@ -1046,6 +1050,13 @@
       </div>
     </div>
     <div class="section-title">Supplier</div>
+    <div class="card" id="p-news-card">
+      <h2>New from your supplier<span class="spacer"></span>
+        <button class="btn small" id="p-news-seen" type="button" hidden>Mark as seen</button>
+        <button class="btn small" id="p-news-clear" type="button" hidden style="margin-left:6px">Clear</button></h2>
+      <div class="note" style="margin:0 0 8px">Anything <span class="supn" data-f="your supplier">your supplier</span> sends that the add-on doesn't know, or had to refuse, shows here the first time it happens, so a change on their side shows up before it stops a charge. <details class="more"><summary>More</summary><div>New settings, new messages, settings it asked about that a Wallbox doesn't have, things the add-on refused (and why), errors your supplier sent back, and a new connection password. Settings › Notifications can send you a notification for each.</div></details></div>
+      <div id="p-news"></div>
+    </div>
     <div class="grid">
       <div class="card">
         <h2>Charging limits</h2>
@@ -2518,8 +2529,27 @@ async function refreshProvider() {
       + p.auth_cache.map((t) => `<div class="row" style="gap:8px;margin-top:4px"><code>${esc(t.id_tag)}</code><span class="chip ${t.status === 'Accepted' ? 'ok' : ''}">${esc(t.status || '?')}</span></div>`).join('') : '');
   $('p-profiles').innerHTML = (p.charging_profiles || []).length ? p.charging_profiles.map(profileHtml).join('<hr style="border:0;border-top:1px solid var(--divider);margin:16px 0">')
     : `<div class="empty">No charging profile. ${sup('Your supplier')} usually sends one with each RemoteStart (Octopus: TxProfile 32 A), and it's cleared when the session ends.</div>`;
+  drawNews(p);
   drawConfig();
 }
+function drawNews(p) {
+  const items = p.news || [], unseen = items.filter((n) => !n.seen).length;
+  $('p-news-seen').hidden = !unseen; $('p-news-clear').hidden = !items.length;
+  const pw = p.password && p.password.rotated
+    ? '<div class="row" style="gap:8px;margin-bottom:8px"><span class="chip ok">Connection password</span><span class="muted">set by your supplier: the add-on uses it (kept, never shown)</span></div>' : '';
+  const when = (t) => dateTime(new Date(t * 1000).toISOString());
+  $('p-news').innerHTML = pw + (items.length ? items.map((n) => `<div class="row" style="gap:8px;margin-top:6px;align-items:baseline;flex-wrap:wrap">
+      ${n.seen ? '' : '<span class="chip warn">New</span>'}<b>${esc(n.what)}</b><code>${esc(n.name)}</code>${n.detail ? `<span class="muted">${esc(n.detail)}</span>` : ''}
+      <span class="muted" style="font-size:12px">${n.count > 1 ? `${n.count} times, first ${esc(when(n.first))}, last ${esc(when(n.last))}` : esc(when(n.first))}</span></div>`).join('')
+    : '<div class="empty">Nothing new: everything your supplier has sent is something a Wallbox knows</div>');
+}
+async function newsSeen(clear) {
+  try { await api('supplier_news/seen', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({clear: !!clear})}); }
+  catch (e) { toast('Not saved: ' + e.message); return; }
+  refreshProvider();
+}
+$('p-news-seen').addEventListener('click', () => newsSeen(false));
+$('p-news-clear').addEventListener('click', () => newsSeen(true));
 function profileHtml(pr) {
   const periods = (pr.periods || []).slice().sort((a, b) => a.start_period - b.start_period);
   const unit = pr.unit === 'A' ? 'A' : 'W';
@@ -2533,7 +2563,11 @@ function profileHtml(pr) {
     return `<div style="width:${w}%;background:${bg}" title="from +${dur(p.start_period)}: ${p.limit} ${unit}">${p.limit === 0 ? 'pause' : esc(p.limit) + ' ' + unit}</div>`;
   }).join('');
   const startTxt = pr.start ? dateTime(pr.start) : (pr.kind === 'Relative' ? 'When the session starts' : '—');
-  return `<div class="row" style="gap:8px"><b>${esc(pr.purpose)}</b><span class="chip">${esc(pr.kind)}</span><span class="badge">id ${esc(pr.profile_id)} · stack ${esc(pr.stack_level)}</span></div>
+  const what = {ChargePointMaxProfile: 'the overall cap, always applies', TxDefaultProfile: 'the default for every session',
+    TxProfile: "this session's own: overrides the default"}[pr.purpose] || '';
+  const valid = (pr.valid_from || pr.valid_to) ? `<div class="note">Valid ${pr.valid_from ? 'from ' + esc(dateTime(pr.valid_from)) : ''}${pr.valid_to ? ' until ' + esc(dateTime(pr.valid_to)) : ''}</div>` : '';
+  return `<div class="row" style="gap:8px;flex-wrap:wrap"><b>${esc(pr.purpose)}</b><span class="chip">${esc(pr.kind)}${pr.recurrency ? ' · ' + esc(pr.recurrency) : ''}</span><span class="chip ${pr.applies_now ? 'ok' : ''}">${pr.applies_now ? 'Applies now' : 'Not now'}</span><span class="badge">id ${esc(pr.profile_id)} · stack ${esc(pr.stack_level)}</span></div>
+    ${what ? `<div class="note" style="margin:2px 0 0">${what}</div>` : ''}${valid}
     <div class="timeline">${segs || '<div style="width:100%;color:var(--text2)">No periods</div>'}</div>
     <div class="timeline-axis"><span>${esc(startTxt)}</span><span>${pr.duration_s ? '+' + dur(pr.duration_s) : 'open-ended'}</span></div>
     <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>From</th><th class="num">Limit</th><th class="num">≈ Power</th></tr></thead><tbody>
@@ -2615,6 +2649,7 @@ function drawPickers() {
   if (document.activeElement !== $('save-hours')) $('save-hours').value = sim.edit.saving_plug_hours ?? 2;
   $('save-hours-row').hidden = !sim.edit.saving_plug;
   $('n-on').checked = !!sim.edit.notify_on;
+  $('n-supplier').checked = !!sim.edit.notify_supplier;
   drawNotifyServices();
 }
 // Settings › Notifications: Home Assistant's notify services (listed once a page)
@@ -2633,6 +2668,10 @@ async function drawNotifyServices() {
 $('n-on').addEventListener('change', (e) => {
   if (e.target.checked && !$('n-service').value) toast('Choose where to send them too');
   saveSensors({notify_on: e.target.checked}, e.target.checked ? 'You\'ll be notified when the schedule changes' : 'No notifications');
+});
+$('n-supplier').addEventListener('change', (e) => {
+  if (e.target.checked && !$('n-service').value) toast('Choose where to send them too');
+  saveSensors({notify_supplier: e.target.checked}, e.target.checked ? 'You\'ll be notified when your supplier sends something new' : 'No notifications for that');
 });
 $('n-service').addEventListener('change', (e) => saveSensors({notify_service: e.target.value},
   e.target.value ? 'Notifications go to ' + e.target.value : 'No notify service chosen'));

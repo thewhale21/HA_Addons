@@ -1930,3 +1930,132 @@ def test_given_up_after_transaction_message_attempts(mock_connection, mock_persi
 
     _run(scenario())
     assert len([r for r in sent if isinstance(r, _call.StopTransactionPayload)]) == 2 and not cp._offline_queue
+
+
+# --- 2.66.0: news from your supplier, its connection password, charging profiles ---
+
+def _tx_default(limit=0.0, pid=11, stack=0):
+    return {"chargingProfileId": pid, "stackLevel": stack, "chargingProfilePurpose": "TxDefaultProfile",
+            "chargingProfileKind": "Relative",
+            "chargingSchedule": {"chargingRateUnit": "A", "chargingSchedulePeriod": [{"startPeriod": 0, "limit": limit}]}}
+
+
+def test_unknown_message_and_errors_are_news(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._note_unknown('[2,"a","ReserveNow",{}]')
+    cp._note_unknown('[2,"b","Heartbeat",{}]')  # (not a server message we answer, but...)
+    cp._note_unknown('[2,"c","RemoteStartTransaction",{}]')  # (handled: not news)
+    cp._note_unknown('[4,"d","FormationViolation","bad",{}]')
+    names = {(n["kind"], n["name"]) for n in cp.news.snapshot()}
+    assert ("message", "ReserveNow") in names and ("error", "FormationViolation") in names
+    assert ("message", "RemoteStartTransaction") not in names
+
+
+def test_new_settings_and_questions_are_news(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _run(cp.on_change_configuration(key="minSoC", value="25"))  # (Octopus's: known)
+    _run(cp.on_change_configuration(key="MeterValueSampleInterval", value="60"))  # (a charger's own: known)
+    _run(cp.on_change_configuration(key="octoNewThing", value="1"))
+    _run(cp.on_change_configuration(key="LocalPreAuthorize", value="maybe"))  # (refused)
+    _run(cp.on_get_configuration(key=["V2GCapabilities", "SomethingElse"]))
+    _run(cp.on_trigger_message(requested_message="DiagnosticsStatusNotification"))
+    got = {(n["kind"], n["name"]) for n in cp.news.snapshot()}
+    assert got == {("setting", "octoNewThing"), ("refused", "LocalPreAuthorize = maybe"),
+                   ("asked", "SomethingElse"), ("refused", "TriggerMessage DiagnosticsStatusNotification")}
+
+
+def test_news_is_announced_once(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    said = []
+    cp.news.on_new = said.append
+    for _ in range(3):
+        _run(cp.on_change_configuration(key="octoNewThing", value="1"))
+    assert len(said) == 1 and cp.news.snapshot()[0]["count"] == 3
+
+
+def test_authorization_key_kept_hidden_and_passed_on(mock_connection, mock_persistence, caplog):
+    import logging
+    from ocpp.v16.enums import ConfigurationStatus
+    cp = make_cp(mock_connection, mock_persistence)
+    keys = []
+    cp.on_auth_key = keys.append
+    with caplog.at_level(logging.INFO):
+        r = _run(cp.on_change_configuration(key="AuthorizationKey", value="S3cretKey12345678"))
+    assert r.status == ConfigurationStatus.accepted and keys == ["S3cretKey12345678"]
+    assert "S3cretKey12345678" not in caplog.text
+    assert "AuthorizationKey" not in cp._config_store and "AuthorizationKey" not in cp._server_config
+    got = _run(cp.on_get_configuration())
+    assert all(k["key"] != "AuthorizationKey" for k in got.configuration_key)
+    assert any(n["kind"] == "password" for n in cp.news.snapshot())
+    assert _run(cp.on_change_configuration(key="AuthorizationKey", value="has space")).status == ConfigurationStatus.rejected
+
+
+def test_traffic_never_holds_the_password(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    seen = []
+    cp._traffic.record = lambda raw, incoming: seen.append(raw)
+    cp.message_log.record = lambda raw, incoming: seen.append(raw)
+    cp._record_traffic('[2,"x","ChangeConfiguration",{"key":"AuthorizationKey","value":"S3cret"}]', incoming=True)
+    assert len(seen) == 2 and not any("S3cret" in r for r in seen)
+
+
+def test_security_profile_only_stays_at_2(mock_connection, mock_persistence):
+    from ocpp.v16.enums import ConfigurationStatus
+    cp = make_cp(mock_connection, mock_persistence)
+    assert _run(cp.on_change_configuration(key="SecurityProfile", value="2")).status == ConfigurationStatus.accepted
+    assert _run(cp.on_change_configuration(key="SecurityProfile", value="3")).status == ConfigurationStatus.rejected
+
+
+def test_set_charging_profile_checks(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    st = lambda r: str(getattr(r.status, "value", r.status))
+    tx = dict(_tx_default(), chargingProfilePurpose="TxProfile")
+    assert st(_run(cp.on_set_charging_profile(connector_id=1, cs_charging_profiles=tx))) == "Rejected"  # (no session)
+    cap = dict(_tx_default(10.0, pid=12), chargingProfilePurpose="ChargePointMaxProfile")
+    assert st(_run(cp.on_set_charging_profile(connector_id=1, cs_charging_profiles=cap))) == "Rejected"  # (not connector 0)
+    assert st(_run(cp.on_set_charging_profile(connector_id=0, cs_charging_profiles=cap))) == "Accepted"
+    assert st(_run(cp.on_set_charging_profile(connector_id=1, cs_charging_profiles=_tx_default(stack=4, pid=13)))) == "Rejected"
+    assert st(_run(cp.on_set_charging_profile(connector_id=1, cs_charging_profiles=_tx_default()))) == "Accepted"
+    assert mock_persistence.save_charging_profiles.called
+    assert any(n["kind"] == "refused" for n in cp.news.snapshot())
+
+
+def test_profiles_cap_the_current(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)  # (32 A max)
+    cap = dict(_tx_default(10.0, pid=12), chargingProfilePurpose="ChargePointMaxProfile")
+    _run(cp.on_set_charging_profile(connector_id=0, cs_charging_profiles=cap))
+    assert cp._effective_amps() == 10
+
+
+def test_default_profile_survives_the_session_and_a_restart(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    _run(cp.on_set_charging_profile(connector_id=1, cs_charging_profiles=_tx_default(16.0)))
+    cp._profile_scheduler.set_profile(dict(_tx_default(32.0, pid=1), chargingProfilePurpose="TxProfile"))
+    cp._profile_scheduler.transaction_ended()
+    assert [cp._profile_scheduler.purpose(q) for q in cp._profile_scheduler._profiles] == ["TxDefaultProfile"]
+    saved = mock_persistence.save_charging_profiles.call_args[0][0]
+    mock_persistence.load_charging_profiles.return_value = saved
+    cp2 = make_cp(mock_connection, mock_persistence)
+    assert abs(cp2._profile_scheduler.get_current_limit_kw() - 16 * 230 / 1000) < 0.01
+
+
+def test_clear_charging_profile_unknown_when_nothing_matched(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    st = lambda r: str(getattr(r.status, "value", r.status))
+    assert st(_run(cp.on_clear_charging_profile(id=99))) == "Unknown"
+    _run(cp.on_set_charging_profile(connector_id=1, cs_charging_profiles=_tx_default()))
+    assert st(_run(cp.on_clear_charging_profile(charging_profile_purpose="TxDefaultProfile"))) == "Accepted"
+
+
+def test_get_composite_schedule(mock_connection, mock_persistence):
+    cp = make_cp(mock_connection, mock_persistence)
+    cp._max_current_amps = 16
+    r = _run(cp.on_get_composite_schedule(connector_id=1, duration=3600))
+    assert str(getattr(r.status, "value", r.status)) == "Accepted"
+    assert r.charging_schedule["charging_schedule_period"] == [{"start_period": 0, "limit": 16.0}]  # (what it can do)
+    _run(cp.on_set_charging_profile(connector_id=1, cs_charging_profiles=_tx_default(0.0)))
+    r = _run(cp.on_get_composite_schedule(connector_id=0, duration=600, charging_rate_unit="W"))
+    assert r.charging_schedule["charging_rate_unit"] == "W"
+    assert r.charging_schedule["charging_schedule_period"] == [{"start_period": 0, "limit": 0.0}]
+    r = _run(cp.on_get_composite_schedule(connector_id=2, duration=60))
+    assert str(getattr(r.status, "value", r.status)) == "Rejected"

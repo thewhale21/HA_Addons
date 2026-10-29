@@ -95,6 +95,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
     # Notifications (Settings tab): a Home Assistant notify service, e.g. notify.mobile_app_pixel
     if "notify_on" in raw:
         out["notify_on"] = bool(raw["notify_on"])
+    if "notify_supplier" in raw:  # something new from your supplier (src/supplier_news.py)
+        out["notify_supplier"] = bool(raw["notify_supplier"])
     if "notify_service" in raw:
         value = str(raw["notify_service"] or "").strip()
         if value and not re.fullmatch(r"notify\.[a-z0-9_]+", value):
@@ -209,6 +211,7 @@ def default_settings() -> dict:
         "saving_plug": False, "saving_plug_hours": DEFAULT_SAVING_PLUG_HOURS,
         # Notifications when the schedule changes: off, and where to (a notify service)
         "notify_on": False, "notify_service": "",
+        "notify_supplier": False,  # ...and when your supplier sends something new
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",
         "limit_reset": "",  # "": automatic, "rolling": any limit_hours hours, "HH:MM": resets every day then

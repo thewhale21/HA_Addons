@@ -16,6 +16,9 @@ _CURRENT_FILE = "current_setting.json"
 _PLUG_FILE = "plugged_in.json"
 _RAMP_FILE = "ramp_setting.json"
 _AUTH_FILE = "auth.json"
+_AUTH_KEY_FILE = "auth_key.json"
+_PROFILES_FILE = "charging_profiles.json"
+_NEWS_FILE = "supplier_news.json"
 
 
 class Persistence:
@@ -65,6 +68,29 @@ class Persistence:
 
     def save_auth(self, auth: dict) -> None:
         self._write(_AUTH_FILE, "auth", auth)
+
+    def load_auth_key(self) -> dict | None:
+        """The connection password your supplier set (AuthorizationKey), if any."""
+        v = self._read(_AUTH_KEY_FILE, "auth_key", None)
+        return v if isinstance(v, dict) else None
+
+    def save_auth_key(self, value: dict | None) -> None:
+        self._write(_AUTH_KEY_FILE, "auth_key", value)
+
+    def load_charging_profiles(self) -> list:
+        """The standing charging profiles (TxDefaultProfile, ChargePointMaxProfile)."""
+        v = self._read(_PROFILES_FILE, "profiles", [])
+        return v if isinstance(v, list) else []
+
+    def save_charging_profiles(self, profiles: list) -> None:
+        self._write(_PROFILES_FILE, "profiles", profiles)
+
+    def load_supplier_news(self) -> list:
+        v = self._read(_NEWS_FILE, "items", [])
+        return v if isinstance(v, list) else []
+
+    def save_supplier_news(self, items: list) -> None:
+        self._write(_NEWS_FILE, "items", items)
 
     def load_offline_queue(self) -> list:
         """Transaction messages held while offline (see ChargePoint._send_tx)."""

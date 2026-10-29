@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.66.0 — Ready for changes on your supplier's side
+
+- **Feature:** **New from your supplier** (Diagnostics › Health › Supplier):
+  anything your supplier sends that the add-on doesn't know (new settings,
+  messages it has no answer for, settings a Wallbox doesn't have), things it
+  had to refuse and why, errors your supplier sends back, and a new
+  connection password, each shown once with when it was first and last seen,
+  kept across restarts. A notification for each, if you turn it on (Settings
+  › Notifications › When your supplier sends something new)
+- **Feature:** your supplier can change the connection password
+  (`AuthorizationKey`): it's kept (never logged or shown: hidden in the log
+  and message log too) and used from the next connection; if your supplier
+  then refuses it, the add-on's own password is tried again. Reports
+  `SecurityProfile` 2 (TLS with a password)
+- **Feature:** charging profiles work as on a charger: a session's own
+  (`TxProfile`) overrides the default for every session (`TxDefaultProfile`),
+  the overall cap (`ChargePointMaxProfile`) always applies, and the lowest
+  caps the current; Absolute, Relative and Recurring schedules, `validFrom` /
+  `validTo` and durations; the default and the cap stay after a session and
+  across restarts (before, every profile was cleared when a session ended,
+  and the highest stack level won whatever its purpose)
+- **Feature:** `GetCompositeSchedule`: what the charger will allow from now,
+  all profiles combined (before, it wasn't answered)
+- **Improvement:** `SetChargingProfile` is checked as a charger does (and
+  refused with the reason in New from your supplier); `ClearChargingProfile`
+  answers `Unknown` when nothing matched; Diagnostics shows what each profile
+  is for, whether it applies now, and its validity
+
 ## 2.65.1 — Reset zoom over the chart
 
 - **Fix:** **Reset zoom** now sits over the History chart's top right corner

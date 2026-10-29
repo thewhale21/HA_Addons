@@ -14,6 +14,7 @@ import websockets.exceptions
 from aiohttp import web
 
 from src.api import create_api_app
+from src.auth_key import AuthKey, refused_status
 from src.client import ChargePoint
 from src.debug_tools import DebugTools, install_log_buffer
 from src.app_settings import AppSettings
@@ -224,6 +225,19 @@ async def run() -> None:
         start_delay_s=DEFAULT_START_DELAY_S,  # until set on the Settings tab
         ramp_up_s=DEFAULT_RAMP_UP_S,
     )
+    # The connection password, as your supplier may change it (src/auth_key.py)
+    auth = AuthKey(persistence, config.password)
+    cp.on_auth_key = auth.set_new
+    cp.auth_status = lambda: {"rotated": auth.rotated}
+
+    # Something new from your supplier: a notification, if they're on (Settings › Notifications)
+    def announce_news(item: dict) -> None:
+        if not (ha_link.settings.get("notify_supplier") and ha_link.settings.get("notify_service")):
+            return
+        text = f"{item['what']}: {item['name']}" + (f" ({item['detail']})" if item.get("detail") else "")
+        asyncio.get_running_loop().create_task(
+            ha_link.notify("Something new from your supplier", text + "\nDiagnostics › Health › Supplier", force=True))
+    cp.news.on_new = announce_news
     health = Health()
     history = PowerHistory()  # the chart's last hour; older comes from HA's history
     remove_old_history_files(data_dir)
@@ -487,6 +501,7 @@ async def run() -> None:
         on_cancel_charge=cancel_charge_now,
         mover=mover,
         app_settings=app_settings,
+        news=cp.news,
     )
     runner = web.AppRunner(api_app)
     await runner.setup()
@@ -499,11 +514,12 @@ async def run() -> None:
       while not stop_event.is_set():
         try:
             async with websockets.connect(
-                config.websocket_url,
+                auth.url(config),
                 subprotocols=["ocpp1.6"],
                 **_NO_USER_AGENT,
             ) as ws:
                 attempt = 0
+                auth.connected()
                 logger.info("Connected to OCPP server")
                 health.connected()
                 cp.attach(ws)
@@ -526,6 +542,8 @@ async def run() -> None:
             OSError,
         ) as e:
             shared_state.connected_to_server = False
+            if refused_status(e):
+                auth.refused()  # (the password your supplier set: back to yours next time)
             health.disconnected(str(e) or type(e).__name__)
             backoff = BACKOFF_STEPS[min(attempt, len(BACKOFF_STEPS) - 1)]
             backoff = max(backoff, round(offline_hold["until"] - loop.time()))  # Debug: drop for N s

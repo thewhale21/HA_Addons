@@ -32,6 +32,43 @@ def _routine_meter_values(payload) -> bool:
     return contexts == {"Sample.Periodic"}
 
 
+# The connection password your supplier may set (ChangeConfiguration AuthorizationKey):
+# never in the log, the message log or the traffic recorder
+_SECRET_KEYS = ("AuthorizationKey",)
+_Q = r"[\"']"  # (JSON, or Python's repr)
+_VAL = r"(?:\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')"
+_KEY = _Q + "(?:" + "|".join(_SECRET_KEYS) + ")" + _Q
+_SECRET_RE = re.compile(
+    r"(" + _Q + r"key" + _Q + r"\s*:\s*" + _KEY + r"\s*,\s*" + _Q + r"value" + _Q + r"\s*:\s*)" + _VAL
+    + r"|(" + _Q + r"value" + _Q + r"\s*:\s*)" + _VAL + r"(\s*,\s*" + _Q + r"key" + _Q + r"\s*:\s*" + _KEY + ")"
+)
+
+
+def redact_secrets(raw):
+    """A frame (or log line) with any AuthorizationKey value replaced by ***. If it
+    can't be picked out, the whole thing is hidden rather than risk showing it."""
+    if not isinstance(raw, str) or not any(k in raw for k in _SECRET_KEYS):
+        return raw
+    out = _SECRET_RE.sub(lambda m: (m.group(1) + '"***"') if m.group(1) else (m.group(2) + '"***"' + m.group(3)), raw)
+    if out == raw and "ChangeConfiguration" in raw:
+        return "(a message with the connection password in it: hidden)"
+    return out
+
+
+class RedactSecrets(logging.Filter):
+    """The ocpp library logs every frame: hide the connection password in them."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            text = record.getMessage()
+        except Exception:
+            return True
+        clean = redact_secrets(text)
+        if clean != text:
+            record.msg, record.args = clean, ()
+        return True
+
+
 class DemoteRoutineMessages(logging.Filter):
     """Show the ocpp library's Heartbeat and periodic MeterValues lines at DEBUG, not INFO.
 
@@ -103,5 +140,6 @@ class DemoteWebPageRequests(logging.Filter):
 
 
 def install() -> None:
+    logging.getLogger("ocpp").addFilter(RedactSecrets())  # (first)
     logging.getLogger("ocpp").addFilter(DemoteRoutineMessages())
     logging.getLogger("aiohttp.access").addFilter(DemoteWebPageRequests())

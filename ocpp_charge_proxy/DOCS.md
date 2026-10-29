@@ -393,6 +393,10 @@ It's sent once the schedule has settled for a minute, so a few changes
 together (a slot moved and a charge added before a saving session) are one
 notification. **Send a test** checks it reaches you.
 
+**When your supplier sends something new** (off by default) sends one too,
+the first time each new thing shows up in Diagnostics › Health › Supplier ›
+**New from your supplier** (below).
+
 ## Moving to another install
 
 To move the add-on to another install of it without entering anything again,
@@ -557,6 +561,41 @@ one file in `src/supplier_types/`, and a new kind is a new file there.
 
 If the connection drops, the add-on reconnects automatically, retrying after 5, 10
 and 30 seconds, then every minute.
+
+### Ready for changes on your supplier's side
+
+- **New from your supplier** (Diagnostics › Health › Supplier): anything your
+  supplier sends that the add-on doesn't know (a new setting, a message it
+  has no answer for, a setting a Wallbox doesn't have), anything it had to
+  refuse and why, an error your supplier sends back, and a new connection
+  password. Each shows once with when it was first and last seen (kept across
+  restarts); **Mark as seen** and **Clear**; and a notification if you turn
+  it on (Settings › Notifications)
+- **Connection password**: your supplier can set a new one
+  (`AuthorizationKey`, OCPP 1.6's security extension). It's kept in the
+  add-on's data, never logged or shown (hidden in the log and message log
+  too), and used from the next connection. If your supplier then refuses it,
+  the password in the add-on's options is tried again, and if that works the
+  new one is dropped. If you change the password in the options, yours is
+  used. `SecurityProfile` is 2 (TLS with a password); a change to another
+  level is refused
+- **Charging profiles**, as a charger works them out:
+  - a session's own (`TxProfile`) overrides the default for every session
+    (`TxDefaultProfile`); the overall cap (`ChargePointMaxProfile`) always
+    applies; the lowest is the limit, and caps the current (a limit of 0
+    pauses: `SuspendedEVSE`)
+  - of each, the highest stack level with a limit at the time applies
+  - Absolute, Relative (from the session's start) and Recurring (daily or
+    weekly) schedules; `validFrom` / `validTo`; a schedule's duration; amps
+    or watts
+  - the session's own ends with it; the default and the cap stay, across
+    restarts too
+  - `SetChargingProfile` is checked as a charger does (a `TxProfile` only
+    during a session, the cap only on connector 0, within the stack levels,
+    periods and number of profiles reported); `ClearChargingProfile` answers
+    `Unknown` when nothing matched
+  - `GetCompositeSchedule` answers what the charger will allow from now, all
+    profiles combined and never over what it can do (amps or watts)
 
 ### While offline
 
