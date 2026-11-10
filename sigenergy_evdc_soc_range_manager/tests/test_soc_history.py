@@ -64,3 +64,18 @@ def test_the_integrations_alarm_state_is_an_alarm_not_unplugged():
     for running in ("Alarm", "Fault"):
         assert _in(running, lists["alarm_states"]) and not _in(running, lists["plugged_states"])
         assert soc_state(False, False, running, False, True) == "alarm"
+
+
+def test_running_states_match_however_the_integration_writes_them():
+    """0.35.1: the Sigenergy integration's running state came as "preparing_comm" (it had been
+    "Preparing Comm"): read as unplugged, so the car dropped out of the combined SoC (and the
+    energy sensors) for the minute or so the charger takes to start again."""
+    from src.manager import LIST_DEFAULTS, _in
+
+    lists = LIST_DEFAULTS
+    for running in ("preparing_comm", "Preparing Comm", "PREPARING-COMM", "preparing_insulation", "occupied", "ended"):
+        assert _in(running, lists["plugged_states"]), running
+    assert _in("preparing_comm", lists["active_states"])
+    assert not _in("preparing_comm", lists["discharging_states"])
+    assert _in("solar_surplus", lists["energy_mode_states"]) and _in("fast_charging", lists["fast_mode_states"])
+    assert not _in("idle", lists["plugged_states"])

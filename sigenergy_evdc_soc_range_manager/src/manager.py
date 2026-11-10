@@ -96,8 +96,15 @@ def _text(st: Optional[dict]) -> Optional[str]:
     return None if value is None or str(value).lower() in UNKNOWN else str(value)
 
 
+def _norm(value: str) -> str:
+    """A state, to match: without regard to case, or to underscores, dashes or spaces between
+    words (the Sigenergy integration's running state can come as "Preparing Comm" or as
+    "preparing_comm")."""
+    return " ".join(value.replace("_", " ").replace("-", " ").lower().split())
+
+
 def _in(value: Optional[str], options) -> bool:
-    return value is not None and value.strip().lower() in {o.strip().lower() for o in options}
+    return value is not None and _norm(value) in {_norm(o) for o in options}
 
 
 # A device's "plugged in" entity counts as plugged in with one of these states (or a number above 0)

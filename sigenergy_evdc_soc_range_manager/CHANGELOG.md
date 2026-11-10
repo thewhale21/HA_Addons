@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.35.1 — Running states written with underscores
+
+- **Fix:** the Sigenergy integration now writes the charger's running state
+  as e.g. `preparing_comm` (it was `Preparing Comm`), which didn't match, so
+  each time the charger started again the car read as unplugged for the
+  minute or so it takes. Meanwhile the combined battery SoC fell back to the
+  home battery's alone (spikes up while the home battery was fuller, down to
+  0% once it was empty), and the virtual battery and battery rate sensors
+  dropped out. States now match whatever the case, and with underscores or
+  dashes between the words as spaces (Settings › Advanced lists too).
+
 ## 0.35.0 — Combined battery SoC
 
 - **Feature:** a new sensor, `sensor.evdc_soc_range_combined_battery_soc`:
