@@ -4259,7 +4259,7 @@ async function saveEditor(del, anyway = false) {
   try {
     const res = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({entries, ...(anyway ? {allow_over: true} : {}),
       // (the ids it had: a time the add-on put in since, e.g. the automatic schedule planning again, is kept)
-      seen: auto.entries.map((e) => e.id),
+      seen: auto.entries.map((e) => ({id: e.id, date: e.date, time: e.time, action: e.action, source: e.source})),
       ...(extra.length ? {skips: extra.map((k) => ({entry_id: k.entry_id, date: k.date}))} : {})})});
     if (skipOld) await api('automation/skip', {method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({times: [skipOld], skip: true, allow_over: true})});
@@ -4271,6 +4271,13 @@ async function saveEditor(del, anyway = false) {
     week.edit = null;
     await refreshAutomation(true);
   } catch (e) { if (!anyway && isOverErr(e.message)) askOver(e.message); else fail(e.message); if (btn) btn.disabled = false; }
+}
+// A slot's plug-in and unplug on the day, to skip (with their times: one of the automatic
+// schedule's, planned again since with another id, is still found)
+function slotTimes(s, o) {
+  const times = [{entry_id: s.plug.id, date: o.date, time: s.plug.time, action: 'plug'}];
+  if (s.unplug && o.udate) times.push({entry_id: s.unplug.id, date: o.udate, time: s.unplug.time, action: 'unplug'});
+  return times;
 }
 $('w-grid').addEventListener('click', async (ev) => {
   const t = ev.target, ed = week.edit;
@@ -4290,8 +4297,7 @@ $('w-grid').addEventListener('click', async (ev) => {
   if (t.id === 'w-del-day' && ed) { ed.delDay = wdOf(week.occ[ed.k].date); saveEditor(true); return; }
   if (t.id === 'w-skip-del' && ed) {  // delete just this one: skipped (never put back, as Skip this one would if it were)
     const o = week.occ[ed.k], s = week.model.slots[o.i];
-    const times = [{entry_id: s.plug.id, date: o.date}];
-    if (s.unplug && o.udate) times.push({entry_id: s.unplug.id, date: o.udate});
+    const times = slotTimes(s, o);
     t.disabled = true;
     if (await post('automation/skip', {times, skip: true, allow_over: true})) { toast('Skipped this one'); week.edit = null; await refreshAutomation(false); }
     else t.disabled = false;
@@ -4318,8 +4324,7 @@ $('w-grid').addEventListener('click', async (ev) => {
   }
   if (t.id === 'w-stop') {
     const o = week.occ[ed.k], s = week.model.slots[o.i];
-    const times = [{entry_id: s.plug.id, date: o.date}];
-    if (s.unplug && o.udate) times.push({entry_id: s.unplug.id, date: o.udate});
+    const times = slotTimes(s, o);
     t.disabled = true;
     if (await post('automation/skip', {times, skip: true, allow_over: true})) {
       if (state && state.plugged_in) await post('unplug');
@@ -4329,8 +4334,7 @@ $('w-grid').addEventListener('click', async (ev) => {
   }
   if (t.id === 'w-skip' || t.id === 'w-skip-any') {
     const o = week.occ[ed.k], s = week.model.slots[o.i];
-    const times = [{entry_id: s.plug.id, date: o.date}];
-    if (s.unplug && o.udate) times.push({entry_id: s.unplug.id, date: o.udate});
+    const times = slotTimes(s, o);
     if (o.skipped) {
       // Putting it back mustn't take a day over the supplier's daily limit
       const keys = new Set(times.map((x) => x.entry_id + '|' + x.date));
@@ -4897,12 +4901,14 @@ function applyDailyLimit() {
 // Over the supplier's daily limit (Force schedule on supplier on), it asks first.
 const CHARGE_HOURS = [1, 2, 3, 4, 6, 8, 12];
 CHARGE_HOURS.forEach((h) => { const b = document.createElement('button'); b.textContent = h + ' h'; b.dataset.hours = h; $('c-charge').appendChild(b); });
-async function chargeNow(h, confirm) {
+async function chargeNow(h, confirm, shown) {
   const buttons = $('c-charge').querySelectorAll('button');
   buttons.forEach((b) => { b.disabled = true; });
   try {
-    const r = await api('charge_now', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({hours: h, confirm: !!confirm})});
-    if (r.needs_confirm) drawChargeConfirm(h, r.plan);
+    const r = await api('charge_now', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({hours: h, confirm: !!confirm,
+      // (what it showed when it asked: changed since, it asks again)
+      ...(shown ? {expect: {over: shown.over, moved: shown.moved || null}} : {})})});
+    if (r.needs_confirm) drawChargeConfirm(h, r.plan, r.changed);
     else if (r.plan && r.plan.nothing) {
       toast('Nothing scheduled');
       $('c-charge-note').innerHTML = `Nothing scheduled: ${esc(r.plan.notes.join('; '))}.`;
@@ -4919,9 +4925,9 @@ async function chargeNow(h, confirm) {
   } catch (err) { toast('Failed: ' + err.message); }
   buttons.forEach((b) => { b.disabled = false; });
 }
-function drawChargeConfirm(h, p) {
+function drawChargeConfirm(h, p, changed) {
   const o = p.over, cap = p.cap_min;
-  let msg = `Charging for ${hmDur(p.minutes * 60)} now takes you to ${hmDur(o.before * 60)} ${limitDay()}, over ${sup('your supplier')}'s ${cap / 60} hours of smart charging.`;
+  let msg = (changed ? 'The schedule changed since you were asked (e.g. the automatic schedule planned again), so this is the new plan. ' : '') + `Charging for ${hmDur(p.minutes * 60)} now takes you to ${hmDur(o.before * 60)} ${limitDay()}, over ${sup('your supplier')}'s ${cap / 60} hours of smart charging.`;
   if (p.moved) msg += ` If you go ahead, ${esc(p.moved.replace('now starts', 'will start').replace('is skipped', 'will be skipped'))}`
     + (o.left > 0 ? `, but with what's already been charged it's still ${hmDur(o.left * 60)} over ${limitReset() ? 'in one day' : `in one ${limitHours()} hours`}.`
       : o.after > cap ? `, back to the schedule's own ${hmDur(o.after * 60)}.` : ` to stay within ${cap / 60} hours.`);
@@ -4929,7 +4935,7 @@ function drawChargeConfirm(h, p) {
   $('c-charge-note').innerHTML = `<div><span class="chip warn">Over ${cap / 60} hours</span> ${msg}`
     + '<div class="row" style="margin-top:8px"><button class="btn small primary" id="c-charge-yes">Charge anyway</button>'
     + '<button class="btn small" id="c-charge-no">Cancel</button></div></div>';
-  $('c-charge-yes').onclick = () => chargeNow(h, true);
+  $('c-charge-yes').onclick = () => chargeNow(h, true, p);
   $('c-charge-no').onclick = () => { $('c-charge-note').innerHTML = ''; };
 }
 $('c-charge').addEventListener('click', (e) => { const h = Number(e.target.dataset.hours); if (h) chargeNow(h, false); });

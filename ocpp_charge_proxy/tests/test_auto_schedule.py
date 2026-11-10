@@ -1093,3 +1093,59 @@ def test_a_page_behind_a_replan_doesnt_take_its_blocks_out():
     gone = next(e for e in page if e.get("source") == AUTO_SCHED_SOURCE and e["action"] == "plug")
     a.set_schedule(entries=[e for e in page if e["id"] != gone["id"]], seen_ids=[e["id"] for e in page])
     assert not any(e["id"] == gone["id"] for e in a.entries)
+
+
+def _replanned_with_new_ids(a):
+    """As if the automatic schedule planned again at other times: same blocks, other ids."""
+    renamed = {e["id"]: "y" + e["id"][1:] for e in a.entries if e.get("source") == AUTO_SCHED_SOURCE}
+    for e in a.entries:
+        e["id"] = renamed.get(e["id"], e["id"])
+    a.auto_plan["changes"]["added"] = [renamed.get(i, i) for i in a.auto_plan["changes"]["added"]]
+    return renamed
+
+
+def _page_view(entries):
+    return [{"id": e["id"], "date": e.get("date"), "time": e["time"], "action": e["action"], "source": e.get("source")}
+            for e in entries]
+
+
+def test_skip_and_delete_from_a_page_behind_a_replan():
+    """2.96.7: skipping or deleting one of its blocks from a page that had it with its old id:
+    the one at the same time is skipped or deleted; one that's moved asks you to look again."""
+    import pytest
+    a, _ = _auto(at(12, 25))
+    a.sync_auto_schedule([], user_exp(), 12)
+    page = copy.deepcopy(a.entries)
+    plug = next(e for e in page if e["action"] == "plug" and e["time"] == "20:00")
+    unplug = next(e for e in page if e["action"] == "unplug" and e["time"] == "21:00")
+    _replanned_with_new_ids(a)
+    # Skip this one
+    times = [{"entry_id": x["id"], "date": x["date"], "time": x["time"], "action": x["action"]} for x in (plug, unplug)]
+    a.set_skips(times, skip=True)
+    assert ("20:00", "21:00") not in _wins(a)
+    a.set_skips(times, skip=False)  # (and put back)
+    assert ("20:00", "21:00") in _wins(a)
+    # Deleted
+    a.set_schedule(entries=[e for e in page if e["id"] not in (plug["id"], unplug["id"])], seen_ids=_page_view(page))
+    assert ("20:00", "21:00") not in _wins(a) and ("12:30", "15:00") in _wins(a)
+    # Moved since (nothing there at that time now): asks you to look again, nothing changed
+    page = copy.deepcopy(a.entries)
+    first = next(e for e in page if e["action"] == "plug" and e["time"] == "12:30")
+    for e in a.entries:
+        if e["id"] == first["id"]:
+            e["id"], e["time"] = "zz000001", "12:00"
+    a.auto_plan["changes"]["added"] = [("zz000001" if i == first["id"] else i) for i in a.auto_plan["changes"]["added"]]
+    before = copy.deepcopy(a.entries)
+    with pytest.raises(ValueError, match="planned again"):
+        a.set_schedule(entries=[e for e in page if e["id"] != first["id"]], seen_ids=_page_view(page))
+    with pytest.raises(ValueError, match="planned again"):
+        a.set_skips([{"entry_id": first["id"], "date": first["date"], "time": "12:30", "action": "plug"}])
+    assert a.entries == before
+
+
+def test_charge_now_asks_again_when_its_plan_changed():
+    from src.automation import charge_shown as _shown
+    p = {"over": {"before": 400, "after": 360, "added": 40, "left": 0}, "moved": "Your 21:30 slot now starts at 22:10"}
+    assert _shown(p) == _shown({"over": {"before": 401, "after": 361, "added": 40, "left": 0}, "moved": p["moved"]})
+    assert _shown(p) != _shown({"over": {"before": 430, "after": 360, "added": 70, "left": 0}, "moved": p["moved"]})
+    assert _shown(p) != _shown({"over": p["over"], "moved": "Your 21:30 slot is skipped"})

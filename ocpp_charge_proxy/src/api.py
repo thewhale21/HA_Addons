@@ -179,7 +179,8 @@ async def handle_charge_now(request: web.Request) -> web.Response:
     the charge to the schedule as a one-off, as auto plug-in does (see
     src/automation.py). If it would go over Octopus's 6 hours a day, the
     answer is {"needs_confirm": true, "plan": ...} and nothing is done until
-    it's sent again with "confirm": true."""
+    it's sent again with "confirm": true (with "expect": the plan it showed, {over, moved}:
+    changed since, it asks again, {"needs_confirm": true, "changed": true, ...})."""
     on_charge_now = request.app["on_charge_now"]
     if on_charge_now is None:
         return _error("Not available", 503)
@@ -191,7 +192,10 @@ async def handle_charge_now(request: web.Request) -> web.Response:
     except (ValueError, KeyError, TypeError, json.JSONDecodeError):
         return _error("hours must be 0.5 to 12, in half hours", 400)
     try:
-        out = await on_charge_now(hours, bool(body.get("confirm")))
+        # (with what the page showed when it asked: changed since, it asks again)
+        expect = body.get("expect") if isinstance(body.get("expect"), dict) else None
+        out = await (on_charge_now(hours, bool(body.get("confirm")), expect) if expect
+                     else on_charge_now(hours, bool(body.get("confirm"))))
     except ValueError as err:
         return _error(str(err), 400)
     return web.json_response({"status": "ok", **out}, dumps=_dumps)

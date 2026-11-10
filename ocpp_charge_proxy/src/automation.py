@@ -115,6 +115,8 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
 AUTO_PLAN_VERSION = 8
+# (a change from a page that was behind, on a time the add-on has since moved)
+_MOVED = "The schedule changed just before that (the automatic schedule planned again): have a look and try again"
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
                 CAR_PLUGGED_SOURCE: "Car plugged in charge", SAVING_SOURCE: "Saving session charge"}
 SAVING_KEEP = datetime.timedelta(days=8)  # a saving session is remembered this long after it ends (the
@@ -281,6 +283,14 @@ def validate_entry(raw: dict, today: Optional[datetime.date] = None) -> dict:
         "action": action,
         "enabled": _flag(raw.get("enabled"), "enabled", True),
     }
+
+
+def charge_shown(p: dict) -> tuple:
+    """What Charge now's "over the daily limit" question showed ({over, moved}), to the
+    nearest 5 minutes (a few seconds passing between asking and going ahead isn't a change)."""
+    o = p.get("over") or {}
+    near = lambda v: round(float(v or 0) / 5)
+    return (p.get("moved") or None, tuple(near(o.get(k)) for k in ("before", "after", "added", "left")))
 
 
 def plugged_windows(events, open_until=None):
@@ -650,8 +660,22 @@ class Automation:
             # And a time the add-on has now that the page never had (e.g. the automatic schedule
             # planned again just before you saved, its blocks with new ids): kept, as it is
             if isinstance(seen_ids, list):
-                seen = {str(i) for i in seen_ids} | sent_ids
+                # (each an id, or {id, date, time, action, source}: what the page had)
+                had = [x if isinstance(x, dict) else {"id": x} for x in seen_ids if isinstance(x, (str, dict))]
+                seen = {str(x.get("id")) for x in had} | sent_ids
                 unseen = [copy.deepcopy(e) for e in self.entries if e["id"] not in seen]
+                # One of the add-on's you deleted that it's since planned again with another id (at the
+                # same time): that's the one deleted. At another time (it moved): have a look again
+                for x in had:
+                    if str(x.get("id")) in sent_ids or str(x.get("id")) in known or not x.get("date") \
+                            or x.get("source") not in AUTO_SOURCES:
+                        continue
+                    same = next((e for e in unseen if e.get("date") == x["date"] and e["time"] == x.get("time")
+                                 and e["action"] == x.get("action") and e.get("source") in AUTO_SOURCES), None)
+                    if same is not None:
+                        unseen.remove(same)
+                    elif x["source"] == AUTO_SCHED_SOURCE and self.auto_plan:
+                        raise ValueError(_MOVED)
                 if unseen:
                     new_entries = new_entries + unseen
                     logger.info("Schedule: %d time%s the page hadn't caught up with kept",
@@ -3002,6 +3026,14 @@ class Automation:
                 raise ValueError("Each time to skip must be {entry_id, date}")
             entry_id, date = str(t.get("entry_id") or ""), t.get("date")
             entry = next((e for e in self.entries if e["id"] == entry_id), None)
+            if entry is None and t.get("time") and t.get("action"):
+                # One of the add-on's one-offs planned again since the page had it (another id):
+                # the one at the same date and time; moved, have a look again
+                entry = next((e for e in self.entries if e.get("date") == str(date) and e["time"] == t["time"]
+                              and e["action"] == t["action"] and e.get("source") in AUTO_SOURCES), None)
+                if entry is None:
+                    raise ValueError(_MOVED)
+                entry_id = entry["id"]
             if entry is None:
                 raise ValueError("No such schedule time (save the schedule first)")
             day = _parse_date(date)

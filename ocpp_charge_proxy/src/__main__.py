@@ -21,7 +21,7 @@ from src.app_settings import AppSettings
 from src.config import load_config, starting_current_amps
 from src.gui_data import GuiSources, Health, PowerHistory, sample_loop
 from src.ha_history import ChartHistory
-from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, auto_plug_charge, automation_loop, SLOT_LEAD_MIN
+from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, charge_shown, auto_plug_charge, automation_loop, SLOT_LEAD_MIN
 from src.ha_link import HaLink
 from src import auto_schedule, log_filters, migrate, schedule_notify, suppliers
 from src.persistence import Persistence
@@ -319,15 +319,21 @@ async def run() -> None:
             automation.publish(shared_state)
         return plan
 
-    async def charge(hours: float, source: str, plug_source: str, confirm: bool = True) -> dict:
+    async def charge(hours: float, source: str, plug_source: str, confirm: bool = True,
+                     expect: Optional[dict] = None) -> dict:
         """Plug in and add the charge to the schedule (auto plug-in, the car
         plugged in sensor, Charge now). Not plugged in during an off-peak
         time: it plugs in when that ends, if the charge still has time left.
-        Charge now asks first (confirm) if it would go over the daily limit."""
+        Charge now asks first (confirm) if it would go over the daily limit. expect: what the
+        page showed when it asked ({over, moved}): changed since (e.g. the automatic schedule
+        planned again), it asks again."""
         preview = await plan_charge(hours, source, dry_run=True)
         over = preview.get("over")
         if not confirm and over and over["added"] > 0:
             return {"needs_confirm": True, "plan": preview}
+        if confirm and isinstance(expect, dict) and over and over["added"] > 0 \
+                and charge_shown(expect) != charge_shown({"over": over, "moved": preview.get("moved")}):
+            return {"needs_confirm": True, "changed": True, "plan": preview}
         if preview.get("plug_now"):
             await do_plug(source=plug_source)
         elif shared_state.plugged_in:
@@ -337,10 +343,10 @@ async def run() -> None:
     async def on_auto_plug(hours: float, source: str = AUTO_SOURCE, plug_source: str = "auto plug-in (low SoC)") -> None:
         await charge(hours, source, plug_source)
 
-    async def charge_now(hours: float, confirm: bool = False) -> dict:
+    async def charge_now(hours: float, confirm: bool = False, expect: Optional[dict] = None) -> dict:
         """The Charge now button: as auto plug-in, but asks first if it would
         take any 24 hours over the daily limit (the page shows what'd happen)."""
-        return await charge(hours, CHARGE_NOW_SOURCE, "charge now", confirm)
+        return await charge(hours, CHARGE_NOW_SOURCE, "charge now", confirm, expect)
 
     async def cancel_charge_now() -> dict:
         """Charge now's Cancel: out of the schedule, and unplugged unless a slot (or

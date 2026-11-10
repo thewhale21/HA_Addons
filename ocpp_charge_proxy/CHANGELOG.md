@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.96.7 — Schedule: skip, delete and Charge now from a page that's behind
+
+- **Fix:** skipping one of the automatic schedule's blocks just after it
+  planned again failed with "No such schedule time" (the block had a new
+  id). The page now sends each time's date and time too, so the block at
+  the same time is found.
+- **Fix:** deleting one of its blocks just after it planned again did
+  nothing (since 2.96.6 the block, with its new id, was kept as one the page
+  hadn't seen). The block at the same time is deleted.
+- **Improvement:** where the block has moved since (planned at another
+  time), a skip or delete isn't guessed at: you're asked to have a look and
+  try again.
+- **Improvement:** Charge now's "over the daily limit" question asks again,
+  with the new plan, if what it would do changed between asking and you
+  pressing Charge anyway.
+
 ## 2.96.6 — Schedule: blocks no longer vanish when you add a slot
 
 - **Fix:** adding a time slot (e.g. on a later day) just after the
