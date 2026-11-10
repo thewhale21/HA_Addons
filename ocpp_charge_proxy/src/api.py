@@ -550,6 +550,7 @@ async def handle_schedule(request: web.Request) -> web.Response:
             allow_over=_bool(b, "allow_over"),  # save it anyway, over the daily limit
             start_delay=b.get("start_delay"),  # {"enabled", "max_min"}: a random wait before plug-ins
             add_skips=b.get("skips"),  # times to skip with it, e.g. where a new slot overlaps another
+            seen_ids=b.get("seen"),  # the ids the page had: a time it never had is kept
         ),
     )
 

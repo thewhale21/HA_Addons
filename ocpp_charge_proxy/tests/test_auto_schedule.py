@@ -1054,3 +1054,42 @@ def test_a_page_that_was_behind_doesnt_bring_its_blocks_back():
                       "days": [1], "enabled": True, "source": AUTO_SCHED_SOURCE})
     a.clear_auto_schedule()
     assert not any(e["id"] == "abcd1234" for e in a.entries)
+
+
+def test_a_page_behind_a_replan_doesnt_take_its_blocks_out():
+    """2.96.6: a slot added (e.g. on a later day) from a page that had the blocks from just before
+    the automatic schedule planned again: they went (their ids had changed) and came back at
+    its next look. Blocks planned again at the same time keep their ids, and a time the page
+    never had is kept."""
+    a, clock = _auto(at(12, 25))
+    a.set_schedule(enabled=True, entries=[{"time": "06:30", "action": "plug", "days": WEEK},
+                                          {"time": "08:00", "action": "unplug", "days": WEEK}])
+    a.sync_auto_schedule([], user_exp(), 12)
+    blocks = _wins(a)
+    page = copy.deepcopy(a.entries)  # (what the page had)
+    ids = {(e.get("date"), e["time"], e["action"]): e["id"] for e in a.entries if e.get("source") == AUTO_SCHED_SOURCE}
+    a.auto_plan["key"] = None  # (planned again: e.g. the rest of the schedule changed)
+    assert a.sync_auto_schedule([], user_exp(), 12)
+    assert {(e.get("date"), e["time"], e["action"]): e["id"] for e in a.entries
+            if e.get("source") == AUTO_SCHED_SOURCE} == ids  # same ids
+    # A new slot on Friday, saved from that page
+    new = [{"id": "nslot1p", "time": "10:00", "action": "plug", "date": "2026-11-06"},
+           {"id": "nslot1u", "time": "11:00", "action": "unplug", "date": "2026-11-06"}]
+    a.set_schedule(entries=page + new, seen_ids=[e["id"] for e in page])
+    assert _wins(a) == blocks
+    assert ("10:00", "11:00") in _wins(a, 3)
+    # Even where the ids did change (planned at other times): the blocks the page never had are kept
+    page = copy.deepcopy(a.entries)
+    renamed = {e["id"]: "x" + e["id"][1:] for e in a.entries if e.get("source") == AUTO_SCHED_SOURCE}
+    for e in a.entries:
+        e["id"] = renamed.get(e["id"], e["id"])
+    a.auto_plan["changes"]["added"] = [renamed.get(i, i) for i in a.auto_plan["changes"]["added"]]
+    a.set_schedule(entries=[e for e in page if e["id"] != "nslot1p" and e["id"] != "nslot1u"],
+                   seen_ids=[e["id"] for e in page])
+    assert _wins(a) == blocks and ("10:00", "11:00") not in _wins(a, 3)  # (and the slot you deleted, gone)
+    assert all(e["id"] in renamed.values() for e in a.entries if e.get("source") == AUTO_SCHED_SOURCE)
+    # Deleting a block you had on the page still takes it out
+    page = copy.deepcopy(a.entries)
+    gone = next(e for e in page if e.get("source") == AUTO_SCHED_SOURCE and e["action"] == "plug")
+    a.set_schedule(entries=[e for e in page if e["id"] != gone["id"]], seen_ids=[e["id"] for e in page])
+    assert not any(e["id"] == gone["id"] for e in a.entries)

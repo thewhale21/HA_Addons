@@ -602,7 +602,8 @@ class Automation:
                      provider: str = "your supplier", daily_cap_min: Optional[int] = None,
                      unplug_wait_s=None, override_guards: Optional[bool] = None,
                      blocks: Optional[list] = None, allow_over: bool = False,
-                     start_delay: Optional[dict] = None, add_skips: Optional[list] = None) -> None:
+                     start_delay: Optional[dict] = None, add_skips: Optional[list] = None,
+                     seen_ids: Optional[list] = None) -> None:
         """override_guards: with it on, daily_cap_min isn't applied (turning it
         back off checks the schedule, as turning on the ready time does).
         ready_times: the times your supplier accepts as a ready time (None:
@@ -613,7 +614,10 @@ class Automation:
         allow_over: save it anyway, over the daily limit (the page asks first,
         and shows the hours over in red); the unplug times are still checked.
         add_skips: times to skip along with the change ([{entry_id, date}], as set_skips),
-        e.g. a new weekly slot where it would overlap a one-off: checked with them."""
+        e.g. a new weekly slot where it would overlap a one-off: checked with them.
+        seen_ids: the ids of the times the page had when it saved (with entries): a time
+        the add-on has now that the page never had (e.g. a block the automatic schedule put in
+        while the page was behind) is kept, not taken out as if deleted."""
         enabled = None if enabled is None else _flag(enabled, "enabled", False)
         ready_time = None if ready_time is None else _flag(ready_time, "ready_time", False)
         override_guards = None if override_guards is None else _flag(override_guards, "override_guards", False)
@@ -643,6 +647,15 @@ class Automation:
                 new_entries = [e for e in new_entries if e["id"] not in gone_ids]
                 logger.info("Schedule: %d time%s already taken out by the add-on not put back (the page was behind)",
                             len(stale), "" if len(stale) == 1 else "s")
+            # And a time the add-on has now that the page never had (e.g. the automatic schedule
+            # planned again just before you saved, its blocks with new ids): kept, as it is
+            if isinstance(seen_ids, list):
+                seen = {str(i) for i in seen_ids} | sent_ids
+                unseen = [copy.deepcopy(e) for e in self.entries if e["id"] not in seen]
+                if unseen:
+                    new_entries = new_entries + unseen
+                    logger.info("Schedule: %d time%s the page hadn't caught up with kept",
+                                len(unseen), "" if len(unseen) == 1 else "s")
             # Only your own count towards the limit: not the charges the add-on adds (auto
             # plug-in, Charge now...) nor one-offs that have run (kept 14 days, for the
             # Sessions tab), which would otherwise stop any slot being changed
@@ -2529,6 +2542,11 @@ class Automation:
         going_ends = {b for a, b in self.windows(None, now) if a <= now < b}
         past_added += [dict(e) for t, e in timed if t and t > now and t in going_ends and e["action"] == "unplug"]
 
+        # Its times still to come keep their ids when it plans them again at the same time, so a
+        # page that saved just after (with the ids it had) doesn't see them as gone
+        self._auto_ids = {(e.get("date"), e["time"], e["action"], e.get("source")): e["id"] for e in self.entries
+                          if e["id"] in mine and e.get("date")}
+
         def undo():
             self._undo_auto(save=False)
             self.skips = self.skips + [k for k in past_skips if k not in self.skips]
@@ -2610,6 +2628,7 @@ class Automation:
         self._apply_auto(charge, changes)
         if cap_min and fixed and self.ready_time:
             self._auto_reset_splits(cap_min, changes)
+        self._auto_ids = {}
         self.auto_plan["offpeak"] = [[_iso_local(a), _iso_local(b)] for a, b in res["offpeak"]]
         self.auto_plan["top_ups"] = [_iso_local(t) for t in res.get("top_ups") or []]  # (charged in a high export: drawn as charging)
         self.auto_plan["known_until"] = _iso_local(max((b for _, b in res["known"]), default=None)) if res["known"] else None
@@ -2824,10 +2843,10 @@ class Automation:
                 continue
             if cut_start:
                 trims.append({"entry_id": s["plug"]["id"], "date": s["start"].date().isoformat()})
-                adds.append(one_off(pieces[0][0], "plug", s["plug"].get("source")))
+                adds.append(self._same_id(one_off(pieces[0][0], "plug", s["plug"].get("source")), adds))
             if cut_end:
                 trims.append({"entry_id": s["unplug"]["id"], "date": s["end"].date().isoformat()})
-                adds.append(one_off(pieces[-1][1], "unplug", s["unplug"].get("source")))
+                adds.append(self._same_id(one_off(pieces[-1][1], "unplug", s["unplug"].get("source")), adds))
             # A plug-in inside the stretch (e.g. your 15:00 in a 13:00-17:00 run of slots) in the time
             # taken out is skipped too, or it'd plug back in with nothing to end it
             for t, e, skipped in self.timeline(start, self._horizon_days() + 3):
@@ -2854,6 +2873,17 @@ class Automation:
         ents = [e for e in without_fallbacks(self.entries) if e.get("source") in sources]
         return self.windows(ents, now, open_ended=True)
 
+    _auto_ids: dict = {}
+
+    def _same_id(self, e: dict, pending: list = ()) -> dict:
+        """A time the automatic schedule puts in again (as it plans again) at the same date, time
+        and action as one it took out: given that one's id (one nothing else has, or names in a skip)."""
+        old = self._auto_ids.get((e.get("date"), e["time"], e["action"], e.get("source")))
+        if old and not any(x["id"] == old for x in self.entries) and not any(x["id"] == old for x in pending) \
+                and not any(k["entry_id"] == old for k in self.skips):
+            e["id"] = old
+        return e
+
     def _apply_auto(self, charge: list, changes: dict) -> None:
         """Put the automatic schedule's blocks in, as one-offs, for the time nothing has the
         car plugged in already, each joined to a slot it meets."""
@@ -2874,11 +2904,11 @@ class Automation:
             if before is not None:
                 skips.append({"entry_id": before["unplug"]["id"], "date": x.date().isoformat()})
             else:
-                added.append(one_off(x, "plug"))
+                added.append(self._same_id(one_off(x, "plug"), added))
             if after is not None:
                 skips.append({"entry_id": after["plug"]["id"], "date": y.date().isoformat()})
             elif not self._unplug_at(y):
-                added.append(one_off(y, "unplug"))
+                added.append(self._same_id(one_off(y, "unplug"), added))
         self.entries = self.entries + added
         changes["added"] += [e["id"] for e in added]
         changes["skips"] += [k for k in self._claim_skips(skips, changes) if k not in changes["skips"]]
@@ -2904,6 +2934,8 @@ class Automation:
                   if any(a < loc(datetime.datetime.combine(_parse_date(e["date"]),
                                                            datetime.time(*_parse_hhmm(e["time"])))) < b for a, b in mine)]
         splits = [dict(e, source=AUTO_SCHED_SOURCE) for e in splits]
+        for i, e in enumerate(splits):
+            splits[i] = self._same_id(e, splits[:i])
         if splits:
             self.entries = self.entries + splits
             changes["added"] += [e["id"] for e in splits]

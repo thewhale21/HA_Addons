@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.96.6 — Schedule: blocks no longer vanish when you add a slot
+
+- **Fix:** adding a time slot (e.g. on a later day) just after the
+  automatic schedule had planned again made its blocks disappear, then
+  come back about 15 seconds later. The page saved the blocks it had
+  before the replan, with ids the add-on no longer knew, so they were
+  dropped. Blocks planned again at the same time now keep their ids, and
+  the page sends the ids it had, so anything the add-on put in since
+  (that the page never saw) is kept. Only a block you delete is taken out.
+
 ## 2.96.5 — Schedule: no stray times from a page that was behind
 
 - **Fix:** saving from the page just after the automatic schedule was

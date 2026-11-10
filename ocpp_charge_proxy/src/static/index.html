@@ -4258,11 +4258,15 @@ async function saveEditor(del, anyway = false) {
   const btn = $(del ? 'w-del' : 'w-save'); if (btn) btn.disabled = true;
   try {
     const res = await api('automation/schedule', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({entries, ...(anyway ? {allow_over: true} : {}),
+      // (the ids it had: a time the add-on put in since, e.g. the automatic schedule planning again, is kept)
+      seen: auto.entries.map((e) => e.id),
       ...(extra.length ? {skips: extra.map((k) => ({entry_id: k.entry_id, date: k.date}))} : {})})});
     if (skipOld) await api('automation/skip', {method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({times: [skipOld], skip: true, allow_over: true})});
     // A slot longer than the daily limit across its reset time is split there
-    const split = res && res.schedule && res.schedule.entries.length > entries.length && limitReset();
+    // (a time of yours it put in: not one the add-on had that this page hadn't caught up with)
+    const had = new Set([...entries, ...auto.entries].map((e) => e.id));
+    const split = res && res.schedule && res.schedule.entries.some((e) => !had.has(e.id) && !e.source) && limitReset();
     toast(del ? 'Deleted' : ed.moving ? (typeof ed.moving === 'string' ? ed.moving : 'Moved') : ed.skipOver ? 'Schedule saved: skipped where it would go over' : extra.length ? 'Schedule saved: skipped where it overlaps' : split ? `Schedule saved: split at ${limitReset()}, where the daily limit resets` : 'Schedule saved');
     week.edit = null;
     await refreshAutomation(true);
