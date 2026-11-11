@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.38.0 — Report as unplugged in Quick hold
+
+- **Change:** **Report as unplugged** is now one of the Quick hold options,
+  for the same times as the others (1 to 8 hours, or until a time): a
+  one-off schedule entry, ended early with the ✕ on its chip. Its own
+  section (with a date and time to pick) has gone.
+- **Change:** in a schedule entry, **Neither** is now **Unplugged**, and
+  the Report as unplugged tick box has gone: an entry either changes the
+  limits or reports the car as unplugged. (One saved with both still does
+  both, until it's next saved.)
+- **Improvement:** while the car's reported as unplugged, the Overview's
+  status says so ("Reported as unplugged until …"), next to Plugged in.
+- The two Home Assistant helpers still turn it on from a dashboard or an
+  automation.
+
 ## 0.37.0 — Report as unplugged on the schedule
 
 - **Feature:** a schedule entry can report the car as unplugged while it's

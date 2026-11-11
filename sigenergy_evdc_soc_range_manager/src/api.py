@@ -60,7 +60,6 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app.router.add_post("/api/schedule/{id}/skip", handle_skip_schedule)
     app.router.add_get("/api/history", handle_history)
     app.router.add_post("/api/hold", handle_hold)
-    app.router.add_post("/api/report_unplugged", handle_report_unplugged)
     app.router.add_get("/api/soc_history", handle_soc_history)
     # Statistics tab (src/stats.py)
     app.router.add_get("/api/stats", handle_stats)
@@ -328,43 +327,6 @@ async def handle_hold(request: web.Request) -> web.Response:
         return _bad_request(err)
     runner.wake.set()
     return web.json_response({"status": "ok", **_schedule_view(schedule)})
-
-
-async def handle_report_unplugged(request: web.Request) -> web.Response:
-    """{"on": true, "until": "YYYY-MM-DDTHH:MM"} | {"on": false}: Report as unplugged, through its
-    helpers in Home Assistant (the end time, then the switch), so it can be turned on and off there too."""
-    import datetime
-
-    from src.helpers import report_until
-
-    link, runner = request.app["ha_link"], request.app["runner"]
-    if link is None:
-        return _unavailable()
-    try:
-        body = await request.json()
-        if not isinstance(body, dict) or not isinstance(body.get("on"), bool):
-            raise ValueError("Send on (true or false), and until")
-        switch, until_entity = link.settings.get("hide_car"), link.settings.get("hide_car_until")
-        if not switch:
-            raise ValueError("No Report as unplugged helper set on the Settings tab")
-        until = None
-        if body["on"]:
-            if not until_entity:
-                raise ValueError("No Report as unplugged until helper set on the Settings tab")
-            until = report_until(body.get("until"), datetime.datetime.now())
-    except (ValueError, TypeError, json.JSONDecodeError) as err:
-        return _bad_request(err)
-    try:
-        if until is not None:
-            await link.call_service("input_datetime", "set_datetime", data={"datetime": until},
-                                    target={"entity_id": until_entity})
-        await link.call_service(switch.split(".", 1)[0], "turn_on" if body["on"] else "turn_off",
-                                target={"entity_id": switch})
-    except Exception as err:
-        return web.json_response({"status": "error", "message": f"Home Assistant refused it: {err}"}, status=502)
-    if runner is not None:
-        runner.wake.set()
-    return web.json_response({"status": "ok", "on": body["on"], "until": until})
 
 
 async def handle_soc_history(request: web.Request) -> web.Response:

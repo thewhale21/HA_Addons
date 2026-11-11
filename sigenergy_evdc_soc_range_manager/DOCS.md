@@ -138,8 +138,9 @@ worked out from the others if that isn't set).
 **No discharging** puts the low limit at its SoC now, **Discharge only**
 puts the high limit at its SoC now (so it can discharge, down to the low
 limit, but isn't charged), **Hold here** keeps
-it where it is, and **Keep at least** sets a low limit you choose, for 1
-to 8 hours or until a time. Each is a one-off schedule entry, so it ends
+it where it is, **Keep at least** sets a low limit you choose, and
+**Report as unplugged** (below) changes no limits but shows the car as
+unplugged to Home Assistant, for 1 to 8 hours or until a time. Each is a one-off schedule entry, so it ends
 by itself; the ✕ on its chip ends it early.
 
 The **Car SoC** chart shows the last 1, 3, 6, 12, 24 or 48 hours: the SoC (with a
@@ -185,11 +186,10 @@ Power sensors can be in W or kW.
 
 ### Report as unplugged
 
-**Report as unplugged** (on the Schedule tab, in the **Limits now** banner
-under Quick hold) makes the add-on's
-sensors show the car as unplugged until a time you pick, while it still
-manages the charger as before: e.g. when you'll be taking the car out later,
-so Predbat plans as if it weren't there. While it's on:
+**Report as unplugged** makes the add-on's sensors show the car as
+unplugged for a while, while it still manages the charger as before: e.g.
+when you'll be taking the car out later, so Predbat plans as if it weren't
+there. While it's on:
 
 - `binary_sensor.evdc_soc_range_plugged_in` reads off (its
   `actually_plugged_in` attribute says what it really is);
@@ -198,22 +198,22 @@ so Predbat plans as if it weren't there. While it's on:
 - the battery rate sensors leave the car out (all the home battery's).
 
 The car's own SoC, the status, the statistics and the power flow diagram
-stay as they are, and the Overview still shows the real figures. It ends by
-itself at its time, or when the car is really unplugged (for 2 minutes:
-not just the charger starting again); the ✕ on its chip ends it early.
+stay as they are, and the Overview still shows the real figures, with
+**Reported as unplugged** (and until when) beside its status.
 
-To do it at set times (e.g. every weekday 15:00–19:00), add a schedule
-entry with **Report as unplugged** on (below): with **Neither** limit it
-only does that, or it can change a limit too. While such an entry is on,
-the car is reported as unplugged whatever the helper says; it doesn't end
-early when the car's unplugged (the sensors show it unplugged anyway).
+- From now: **Quick hold › Report as unplugged** (above), for 1 to 8
+  hours or until a time. The ✕ on its chip ends it early.
+- At set times (e.g. every weekday 15:00–19:00): a schedule entry set to
+  **Unplugged** (below).
 
-It's two helpers the add-on makes (Settings › Mode and limits): **EVDC SoC
-Range Report As Unplugged** (`input_boolean`) and **EVDC SoC Range Report As
-Unplugged Until** (`input_datetime`), so a dashboard or an automation can
-turn it on too: set the time, then turn the switch on. Turned on with a time
-from before (e.g. last time's), it stays on until it's turned off or the car
-is unplugged.
+From Home Assistant: two helpers the add-on makes (Settings › Mode and
+limits), **EVDC SoC Range Report As Unplugged** (`input_boolean`) and **EVDC
+SoC Range Report As Unplugged Until** (`input_datetime`), so a dashboard or
+an automation can turn it on too: set the time, then turn the switch on. It
+ends by itself at that time, or when the car is really unplugged (for 2
+minutes: not just the charger starting again). Turned on with a time from
+before (e.g. last time's), it stays on until it's turned off or the car is
+unplugged.
 
 ## Its own entities
 
@@ -347,8 +347,9 @@ value makes the **EVDC SoC Range Vehicle Battery Capacity** helper (or finds it)
 uses that instead. **Now** shows the limits in use and where each comes from.
 The schedule below changes the high and/or low limit for a while, every
 week or once. Each entry sets the high limit, the low limit or both, and
-can report the car as unplugged too (**Report as unplugged**, above), or
-only that (**Neither**): shown as a striped purple bar. Its week view shows today and the next 6 days, with high
+or, set to **Unplugged**, changes no limits but reports the car as
+unplugged while it's on (**Report as unplugged**, above): shown as a
+striped purple bar. Its week view shows today and the next 6 days, with high
 limits in the top half of each day and low limits in the bottom half:
 click an entry to change, pause or delete it, drag either end of it to
 change when it starts or ends (in half hours, saved straight away; an

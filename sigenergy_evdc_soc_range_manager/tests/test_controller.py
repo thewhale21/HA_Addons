@@ -837,17 +837,6 @@ def test_report_as_unplugged_hides_the_car_from_the_sensors_but_still_manages_it
     assert not m.hide["on"] and m.hide_end == "the car was unplugged"
 
 
-def test_report_until_from_the_page():
-    import datetime
-
-    from src.helpers import report_until
-    now = datetime.datetime(2026, 11, 11, 14, 0)
-    assert report_until("2026-11-11T17:00", now) == "2026-11-11 17:00:00"
-    for bad in ("2026-11-11T13:59", "2026-11-19T14:00", "", None, "tomorrow"):
-        with pytest.raises(ValueError):
-            report_until(bad, now)
-
-
 def test_a_schedule_entry_reports_the_car_as_unplugged(tmp_path):
     """0.37.0: while a schedule entry with Report as unplugged is on, the sensors show the car as
     unplugged (without the helper); off again after it ends."""

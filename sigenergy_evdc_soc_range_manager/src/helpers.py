@@ -235,22 +235,3 @@ async def ensure_helpers(link, notes: Optional[list] = None) -> list[str]:
     for line in notes:
         logger.warning("Helpers: %s", line)
     return done
-
-
-REPORT_MAX_DAYS = 7
-
-
-def report_until(text, now) -> str:
-    """Report as unplugged's end time from the page ("YYYY-MM-DDTHH:MM", local) as the
-    datetime helper wants it ("YYYY-MM-DD HH:MM:00"). Raises ValueError."""
-    import datetime
-
-    try:
-        when = datetime.datetime.strptime(str(text or "").strip()[:16], "%Y-%m-%dT%H:%M")
-    except ValueError:
-        raise ValueError("Give the time it ends") from None
-    if when <= now:
-        raise ValueError("The time it ends must be later than now")
-    if when > now + datetime.timedelta(days=REPORT_MAX_DAYS):
-        raise ValueError(f"At most {REPORT_MAX_DAYS} days ahead")
-    return when.strftime("%Y-%m-%d %H:%M:00")
