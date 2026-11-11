@@ -108,7 +108,7 @@
   button.btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
   button.btn:disabled { opacity: .5; cursor: default; }
   button.small { padding: 2px 10px; font-size: 12px; }
-  input[type="number"], input[type="search"], input[type="date"], select {
+  input[type="number"], input[type="search"], input[type="date"], input[type="datetime-local"], select {
     font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
     border-radius: 8px; padding: 6px 10px; min-width: 0;
   }
@@ -217,6 +217,10 @@
     display: flex; align-items: center; gap: 3px; }
   .week .wbar.hi { top: 3px; background: linear-gradient(135deg, #29b6f6, var(--w-high)); }
   .week .wbar.lo { bottom: 3px; background: linear-gradient(135deg, #ffb74d, var(--w-low)); color: #3e2723; }
+  /* An entry that reports the car as unplugged: the whole row on its own, else a strip between the lanes */
+  .week .wbar.un { top: calc(50% - 3px); height: 6px; padding: 0; border-radius: 3px; z-index: 2;
+    background: repeating-linear-gradient(135deg, #8e24aa 0 6px, #ba68c8 6px 12px); }
+  .week .wbar.un.full { top: 3px; bottom: 3px; height: auto; padding: 0 7px; border-radius: 6px; }
   .week .wbar.off { opacity: .35; filter: grayscale(.6); }
   .week .wbar.skipped { opacity: .45; text-decoration: line-through; background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.45) 4px 6px); }
   .week .wbar.picked { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); opacity: 1; z-index: 3; }
@@ -337,7 +341,7 @@
   .pk[hidden], .pkcard[hidden] { display: none; }
   .hold { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .hold .seg button { padding: 5px 9px; font-size: 13px; }
-  .hold select { padding: 5px 8px; }
+  .hold select, .hold input[type="datetime-local"] { padding: 5px 8px; }
   a.unskip { color: var(--primary); }
   a.unhold, a.skipnow { color: inherit; text-decoration: none; margin-left: 4px; font-weight: 600; }
   .field { display: flex; align-items: center; gap: 6px; flex: none; }
@@ -532,7 +536,6 @@
           <div class="range-labels"><span>0%</span><span id="o-range-text"></span><span>100%</span></div>
           <div class="row" id="o-sched-now" hidden style="margin-top:10px"></div>
           <div class="row" style="margin-top:12px"><div class="grow sm" id="o-limits-note"></div><button class="btn small" id="o-to-schedule">Limits and schedule ›</button></div>
-          <div class="hold" id="o-hide" style="margin-top:10px"></div>
         </div>
       </div>
     </div>
@@ -597,6 +600,9 @@
           </div>
           <details class="more sm" style="display:block;margin-top:8px"><summary>How it works</summary><div><b>No discharging</b> puts the low limit at the car's SoC now, <b>Discharge only</b> puts the high limit there (so it can discharge but not charge), <b>Hold here</b> keeps it where it is, <b>Keep at least</b> sets a low limit you choose. Each is a one-off entry in the schedule below, so it ends by itself.</div></details>
           <div class="row" id="hold-now" style="margin-top:10px;gap:6px" hidden></div>
+          <div class="k" style="margin:16px 0 8px">Report as unplugged <span style="text-transform:none;letter-spacing:0;opacity:.85">· from now, until a time</span></div>
+          <div class="hold" id="o-hide"></div>
+          <details class="more sm" style="display:block;margin-top:8px"><summary>How it works</summary><div>Until then, the add-on's sensors show the car as unplugged (the plugged in sensor off, the virtual battery empty, the combined SoC the home battery's alone, the battery rates without the car), e.g. so Predbat plans without it when you'll be taking it out later. The add-on still manages the charger as before. It ends by itself then, or when the car is unplugged. To do it at set times, add a schedule entry below with <b>Report as unplugged</b> on.</div></details>
         </div>
       </div>
     </div>
@@ -611,7 +617,7 @@
     </div>
     <div class="card">
       <h2>Schedule<span class="spacer"></span><button class="btn small primary" id="w-add">+ Add</button></h2>
-      <div class="note" style="margin:0 0 14px">Change the high and/or low limit for a while, every week or once. Click or drag across a day to add an entry, click one to change it. <details class="more"><summary>More</summary><div>For example, Tue and Thu 23:00–08:00 high 50%, or tomorrow 06:00–10:00 low 95%. Each day shows the high limit's entries on top and the low limit's below. Any limit an entry doesn't set, and any time nothing's on, uses the defaults. Where entries overlap, the one that started last wins.</div></details></div>
+      <div class="note" style="margin:0 0 14px">Change the high and/or low limit for a while, or report the car as unplugged, every week or once. Click or drag across a day to add an entry, click one to change it. <details class="more"><summary>More</summary><div>For example, Tue and Thu 23:00–08:00 high 50%, or tomorrow 06:00–10:00 low 95%. Each day shows the high limit's entries on top and the low limit's below. An entry with <b>Report as unplugged</b> on (striped purple; on its own, <b>Neither</b> limit) makes the add-on's sensors show the car as unplugged while it's on, e.g. so Predbat plans without it, while the charger is still managed. Any limit an entry doesn't set, and any time nothing's on, uses the defaults. Where entries overlap, the one that started last wins.</div></details></div>
       <div class="week" id="w-grid"></div>
       <div class="legend" style="margin-top:12px"><span><b class="band" style="background:var(--w-high)"></b>High limit (top)</span><span><b class="band" style="background:var(--w-low)"></b>Low limit (bottom)</span><span><b class="band" style="background:var(--text2);opacity:.3"></b>Paused</span><span><b class="band" style="background:repeating-linear-gradient(45deg,var(--w-high) 0 3px,transparent 3px 5px);opacity:.6"></b>Skipped this once</span><span><b class="band" style="background:var(--err);width:2px"></b>Now</span><span id="w-defaults"></span></div>
       <h2 style="margin-top:22px">All entries</h2>
@@ -1073,7 +1079,7 @@ function renderState(s) {
   const onceOn = sched.filter((e) => e.kind === 'once');
   $('hold-now').hidden = !onceOn.length;
   $('hold-now').innerHTML = onceOn.map((e) => `<span class="chip info">${esc(e.label || 'One-off')} until ${whenLocal(e.until)} <a href="#" class="unhold" data-id="${e.id}" title="End it now" aria-label="End it now">✕</a></span>`).join('');
-  $('o-sched-now').innerHTML = sched.map((e) => `<span class="chip info">${e.label && e.label.startsWith('Hold') ? esc(e.label) : `Scheduled: ${[e.high != null ? `high ${num(e.high, 0)}%` : '', e.low != null ? `low ${num(e.low, 0)}%` : ''].filter(Boolean).join(', ')}${e.label ? ' · ' + esc(e.label) : ''}`} until ${whenLocal(e.until)}${e.kind === 'once' ? ` <a href="#" class="unhold" data-id="${e.id}" title="End it now" aria-label="End it now">✕</a>`
+  $('o-sched-now').innerHTML = sched.map((e) => `<span class="chip info">${e.label && e.label.startsWith('Hold') ? esc(e.label) : `Scheduled: ${[e.high != null ? `high ${num(e.high, 0)}%` : '', e.low != null ? `low ${num(e.low, 0)}%` : '', e.unplugged ? 'reported as unplugged' : ''].filter(Boolean).join(', ')}${e.label ? ' · ' + esc(e.label) : ''}`} until ${whenLocal(e.until)}${e.kind === 'once' ? ` <a href="#" class="unhold" data-id="${e.id}" title="End it now" aria-label="End it now">✕</a>`
     : ` <a href="#" class="skipnow" data-id="${e.id}" data-date="${esc((e.started || '').slice(0, 10))}" title="Skip it this time (every other week stays)" aria-label="Skip it this time">✕</a>`}</span>`).join('');
 
   // Power flow
@@ -1323,10 +1329,12 @@ function hideDefault() {  // 4 hours from now, on the half hour, local
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 function drawHide(s) {
-  const h = s.hide || {}, key = h.on ? 'on|' + (h.until || '') : 'off';
+  const h = s.hide || {}, key = h.on ? 'on|' + (h.until || '') + (h.scheduled ? '|s' : '') : 'off';
   if (key === hideDrawn) return;  // (not redrawn while you're picking a time)
   hideDrawn = key;
-  $('o-hide').innerHTML = h.on
+  $('o-hide').innerHTML = h.on && h.scheduled
+    ? `<span class="chip warn" title="A schedule entry reports the car as unplugged: the add-on's sensors show it as unplugged; it still manages the charger">Reported as unplugged (scheduled)${h.until ? ' until ' + whenLocal(h.until) : ''}</span>`
+    : h.on
     ? `<span class="chip warn" title="The add-on's sensors show the car as unplugged (e.g. so Predbat plans without it); it still manages the charger">Reported as unplugged${h.until ? ' until ' + whenLocal(h.until) : ''} <a href="#" class="unhold" id="o-hide-off" title="Report it as it is again" aria-label="Report it as it is again">✕</a></span>`
     : `<input type="datetime-local" id="o-hide-until" value="${hideDefault()}" aria-label="Report as unplugged until"><button class="btn small" id="o-hide-on" title="The add-on's sensors show the car as unplugged until then (e.g. so Predbat plans without it), while it still manages the charger. Ends by itself then, or when the car is unplugged">Report as unplugged</button>`;
 }
@@ -1353,13 +1361,14 @@ function drawSchedule(v) {
   // it's next, and what you can do with it. Click a row to open it in the week above.
   const fmtDay = (iso) => new Date(iso + 'T12:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
   $('o-sched').innerHTML = (v.entries || []).length ? v.entries.map((e) => {
-    const stripe = e.high != null && e.low != null ? `linear-gradient(var(--w-high) 50%, var(--w-low) 50%)` : e.high != null ? 'var(--w-high)' : 'var(--w-low)';
+    const stripe = e.high != null && e.low != null ? `linear-gradient(var(--w-high) 50%, var(--w-low) 50%)` : e.high != null ? 'var(--w-high)' : e.low != null ? 'var(--w-low)' : '#8e24aa';
     const nextDay = tmin(e.end) <= tmin(e.start);
     const when = e.kind === 'weekly'
       ? `<div class="daydots">${WD.map((d) => `<span class="${e.days.includes(d) ? 'on' : ''}">${DAYNAMES[d].slice(0, 2)}</span>`).join('')}</div>`
       : `<div class="daydots"><span class="on" style="width:auto;padding:0 8px">Once · ${fmtDay(e.date)}</span></div>`;
     const lims = [e.high != null ? `<span class="lim"><i style="background:var(--w-high)"></i>High <b>${num(e.high, 0)}%</b></span>` : '',
-      e.low != null ? `<span class="lim"><i style="background:var(--w-low)"></i>Low <b>${num(e.low, 0)}%</b></span>` : ''].join('');
+      e.low != null ? `<span class="lim"><i style="background:var(--w-low)"></i>Low <b>${num(e.low, 0)}%</b></span>` : '',
+      e.unplugged ? '<span class="lim"><i style="background:#8e24aa"></i>Reported <b>unplugged</b></span>' : ''].join('');
     const skips = (e.skips || []).filter((d) => d >= isoAt(-1)).map((d) => `<div class="sub">Skipping ${fmtDay(d)} · <a href="#" class="unskip" data-id="${e.id}" data-date="${d}">undo</a></div>`).join('');
     const status = on.has(e.id) ? '<span class="pill ok"><span class="pdot"></span>On now</span>'
       : !e.enabled ? '<span class="pill none">Paused</span>'
@@ -1481,6 +1490,11 @@ function drawWeek() {
         const text = (kind, v) => w > 20 && e.label ? `${kind} ${num(v, 0)}% · ${esc(e.label)}` : w > 9 ? `${kind} ${num(v, 0)}%` : w > 3.5 ? `${num(v, 0)}%` : '';
         if (e.high != null) bars += `<div class="wbar hi ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`high ${num(e.high, 0)}%`))}">${text('↑ High', e.high)}${handles}</div>`;
         if (e.low != null) bars += `<div class="wbar lo ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`low ${num(e.low, 0)}%`))}">${text('↓ Low', e.low)}${handles}</div>`;
+        // Reported as unplugged: the whole row on its own, else a strip between the limits' lanes
+        if (e.unplugged) {
+          const only = e.high == null && e.low == null;
+          bars += `<div class="wbar un ${only ? 'full' : ''} ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title('reported as unplugged'))}">${only ? (w > 12 ? (e.label && w > 24 ? `Unplugged · ${esc(e.label)}` : 'Reported unplugged') : '') + handles : ''}</div>`;
+        }
       }
     });
     const extra = d === 0 ? `<div class="past" style="width:${nowMin / 14.4}%"></div><div class="now" style="left:${nowMin / 14.4}%"></div>` : '';
@@ -1501,9 +1515,9 @@ const timeOptions = (val) => {
 function openEditor(row, entry, start, end, occ) {
   week.edit = entry
     ? {row, id: entry.id, occ: occ || null, form: {kind: entry.kind, days: [...(entry.days || [wdAt(row)])], date: entry.date || isoAt(row), start: entry.start, end: entry.end,
-        high: entry.high, low: entry.low, label: entry.label || '', enabled: entry.enabled,
-        sets: entry.high != null && entry.low != null ? 'both' : entry.high != null ? 'high' : 'low'}}
-    : {row, id: null, form: {kind: 'weekly', days: [wdAt(row)], date: isoAt(row), start, end, high: null, low: null, label: '', enabled: true, sets: 'high'}};
+        high: entry.high, low: entry.low, label: entry.label || '', enabled: entry.enabled, unplugged: !!entry.unplugged,
+        sets: entry.high != null && entry.low != null ? 'both' : entry.high != null ? 'high' : entry.low != null ? 'low' : 'none'}}
+    : {row, id: null, form: {kind: 'weekly', days: [wdAt(row)], date: isoAt(row), start, end, high: null, low: null, label: '', enabled: true, unplugged: false, sets: 'high'}};
   drawWeek();
 }
 function drawEditor() {
@@ -1517,9 +1531,10 @@ function drawEditor() {
       : `<input type="date" data-f="date" value="${esc(f.date)}" aria-label="Date">`}
     <label>From <select data-f="start">${timeOptions(f.start)}</select></label>
     <label>until <select data-f="end">${timeOptions(f.end)}</select></label>${nextDay ? '<span class="muted">next day</span>' : ''}
-    <div class="seg" role="group" aria-label="Sets"><button data-sets="high" aria-pressed="${f.sets === 'high'}">High</button><button data-sets="low" aria-pressed="${f.sets === 'low'}">Low</button><button data-sets="both" aria-pressed="${f.sets === 'both'}">Both</button></div>
-    ${f.sets !== 'low' ? `<label class="field">High <input type="number" data-f="high" min="21" max="99" step="1" value="${f.high ?? ''}"><span class="unit">%</span></label>` : ''}
-    ${f.sets !== 'high' ? `<label class="field">Low <input type="number" data-f="low" min="20" max="98" step="1" value="${f.low ?? ''}"><span class="unit">%</span></label>` : ''}
+    <div class="seg" role="group" aria-label="Sets"><button data-sets="high" aria-pressed="${f.sets === 'high'}">High</button><button data-sets="low" aria-pressed="${f.sets === 'low'}">Low</button><button data-sets="both" aria-pressed="${f.sets === 'both'}">Both</button><button data-sets="none" aria-pressed="${f.sets === 'none'}" title="No limits: only report the car as unplugged">Neither</button></div>
+    ${f.sets !== 'low' && f.sets !== 'none' ? `<label class="field">High <input type="number" data-f="high" min="21" max="99" step="1" value="${f.high ?? ''}"><span class="unit">%</span></label>` : ''}
+    ${f.sets !== 'high' && f.sets !== 'none' ? `<label class="field">Low <input type="number" data-f="low" min="20" max="98" step="1" value="${f.low ?? ''}"><span class="unit">%</span></label>` : ''}
+    <label title="While it's on, the add-on's sensors show the car as unplugged (e.g. so Predbat plans without it); the charger is still managed"><input type="checkbox" data-f="unplugged" ${f.unplugged ? 'checked' : ''}> Report as unplugged</label>
     <input type="search" data-f="label" placeholder="Label (optional)" maxlength="60" value="${esc(f.label)}">
     <label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label>
     <span class="acts"><button class="btn small primary" id="w-save">Save</button>${skipButton(ed)}${ed.id ? '<button class="btn small" id="w-del">Delete</button>' : ''}<button class="btn small" id="w-close">Cancel</button></span>
@@ -1545,9 +1560,10 @@ async function skipOccurrence(id, date, skip) {
 async function saveEditor(del) {
   const ed = week.edit; if (!ed) return;
   const f = ed.form, num0 = (v) => v === '' || v == null ? null : Number(v);
-  const body = {kind: f.kind, start: f.start, end: f.end, high: f.sets === 'low' ? null : num0(f.high),
-    low: f.sets === 'high' ? null : num0(f.low), label: f.label, enabled: f.enabled};
-  if (!del && body.high == null && body.low == null) { const el = $('w-err'); if (el) el.textContent = 'Give the limit a value'; return; }
+  const body = {kind: f.kind, start: f.start, end: f.end, high: f.sets === 'low' || f.sets === 'none' ? null : num0(f.high),
+    low: f.sets === 'high' || f.sets === 'none' ? null : num0(f.low), label: f.label, enabled: f.enabled, unplugged: !!f.unplugged};
+  if (!del && f.sets !== 'none' && ((f.sets !== 'low' && body.high == null) || (f.sets !== 'high' && body.low == null))) { const el = $('w-err'); if (el) el.textContent = 'Give the limit a value'; return; }
+  if (!del && f.sets === 'none' && !body.unplugged) { const el = $('w-err'); if (el) el.textContent = 'Set a limit, or turn on Report as unplugged'; return; }
   if (f.kind === 'weekly') body.days = f.days; else body.date = f.date;
   try {
     const v = del ? await api('schedule/' + ed.id, {method: 'DELETE'})
@@ -1577,7 +1593,7 @@ $('w-grid').addEventListener('click', (ev) => {
 $('w-grid').addEventListener('change', (ev) => {
   const ed = week.edit, f = ev.target.dataset.f;
   if (!ed || !f) return;
-  ed.form[f] = f === 'enabled' ? ev.target.checked : ev.target.value;
+  ed.form[f] = f === 'enabled' || f === 'unplugged' ? ev.target.checked : ev.target.value;
   if (f === 'start' || f === 'end' || f === 'date') drawEditor();
 });
 $('w-add').addEventListener('click', () => {

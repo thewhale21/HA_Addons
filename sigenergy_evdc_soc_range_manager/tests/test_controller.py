@@ -846,3 +846,34 @@ def test_report_until_from_the_page():
     for bad in ("2026-11-11T13:59", "2026-11-19T14:00", "", None, "tomorrow"):
         with pytest.raises(ValueError):
             report_until(bad, now)
+
+
+def test_a_schedule_entry_reports_the_car_as_unplugged(tmp_path):
+    """0.37.0: while a schedule entry with Report as unplugged is on, the sensors show the car as
+    unplugged (without the helper); off again after it ends."""
+    import datetime
+
+    from src.ha_entities import values
+    from src.schedule import Schedule
+    from src.shared_state import SharedState
+
+    m = Manager(str(tmp_path / "m"))
+    (tmp_path / "s").mkdir()
+    m.schedule = Schedule(str(tmp_path / "s"))
+    start = datetime.datetime.now().replace(second=0, microsecond=0) + datetime.timedelta(hours=1)
+    m.schedule.add({"kind": "once", "date": start.date().isoformat(), "start": start.strftime("%H:%M"),
+                    "end": (start + datetime.timedelta(hours=2)).strftime("%H:%M"), "unplugged": True})
+    t0 = start.timestamp()
+
+    def published(now):
+        s = SharedState()
+        s.apply(m.snapshot(now), False)
+        return values(s)
+
+    _run(m.step(_states(), _entities(), _settings(), now=t0 - 60))
+    assert not m.hide["on"] and published(t0 - 60)["plugged_in"][0] == "on"
+    _run(m.step(_states(), _entities(), _settings(), now=t0 + 60))
+    assert m.hide["on"] and m.hide["scheduled"] and m.hide["until"] == t0 + 7200
+    assert published(t0 + 60)["plugged_in"][0] == "off" and published(t0 + 60)["vb_max"][0] == 0.01
+    _run(m.step(_states(), _entities(), _settings(), now=t0 + 7260))
+    assert not m.hide["on"] and m.hide_end is None  # (nothing to turn off: no helper)

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.37.0 — Report as unplugged on the schedule
+
+- **Feature:** a schedule entry can report the car as unplugged while it's
+  on (**Report as unplugged** in the entry's editor), with or without
+  changing a limit (**Neither**), every week or once: e.g. every weekday
+  15:00–19:00, so Predbat plans without the car. Shown as a striped purple
+  bar.
+- **Change:** **Report as unplugged** (until a time) has moved from the
+  Overview to the Schedule tab, under Quick hold.
+
 ## 0.36.0 — Report as unplugged
 
 - **Feature:** **Report as unplugged** (Overview, under the car): until a

@@ -6,6 +6,10 @@ an entry is on, its limits are used instead. Saved in /data/schedule.json.
 A weekly entry can be skipped once (one day's on-period: "skips", the dates
 it starts on), e.g. this Thursday's high of 50% when you're not going in.
 
+An entry can also (or only) report the car as unplugged ("unplugged": the
+add-on's sensors show it as unplugged while it's on, e.g. for Predbat; the
+charger's still managed: src/manager.py).
+
 When entries overlap, the one that started last wins (per limit). If a
 scheduled limit crosses the other one, the other moves out of its way:
 a scheduled low of 95% with an default high of 80% makes the high 96%.
@@ -76,8 +80,9 @@ def validate_entry(raw: dict) -> dict:
             raise ValueError(f"The {key} limit must be a number") from None
         check_limit(key, value)
         out[key] = value
-    if out["high"] is None and out["low"] is None:
-        raise ValueError("Set a high limit, a low limit or both")
+    out["unplugged"] = raw.get("unplugged") is True
+    if out["high"] is None and out["low"] is None and not out["unplugged"]:
+        raise ValueError("Set a high limit, a low limit, or report the car as unplugged")
     if out["high"] is not None and out["low"] is not None and out["low"] >= out["high"]:
         raise ValueError("The low limit must be below the high limit")
     return out
@@ -253,5 +258,7 @@ class Schedule:
 
 def describe(e: dict) -> str:
     when = (", ".join(d.capitalize() for d in e["days"]) if e["kind"] == "weekly" else e["date"])
-    limits = " and ".join(f"{k} {e[k]:g}%" for k in ("high", "low") if e.get(k) is not None)
-    return f"{when} {e['start']}-{e['end']}: {limits}" + (f" ({e['label']})" if e.get("label") else "")
+    parts = [f"{k} {e[k]:g}%" for k in ("high", "low") if e.get(k) is not None]
+    if e.get("unplugged"):
+        parts.append("reported as unplugged")
+    return f"{when} {e['start']}-{e['end']}: {' and '.join(parts)}" + (f" ({e['label']})" if e.get("label") else "")

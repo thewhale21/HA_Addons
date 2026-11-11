@@ -185,7 +185,8 @@ Power sensors can be in W or kW.
 
 ### Report as unplugged
 
-**Report as unplugged** (on the Overview, under the car) makes the add-on's
+**Report as unplugged** (on the Schedule tab, in the **Limits now** banner
+under Quick hold) makes the add-on's
 sensors show the car as unplugged until a time you pick, while it still
 manages the charger as before: e.g. when you'll be taking the car out later,
 so Predbat plans as if it weren't there. While it's on:
@@ -200,6 +201,12 @@ The car's own SoC, the status, the statistics and the power flow diagram
 stay as they are, and the Overview still shows the real figures. It ends by
 itself at its time, or when the car is really unplugged (for 2 minutes:
 not just the charger starting again); the ✕ on its chip ends it early.
+
+To do it at set times (e.g. every weekday 15:00–19:00), add a schedule
+entry with **Report as unplugged** on (below): with **Neither** limit it
+only does that, or it can change a limit too. While such an entry is on,
+the car is reported as unplugged whatever the helper says; it doesn't end
+early when the car's unplugged (the sensors show it unplugged anyway).
 
 It's two helpers the add-on makes (Settings › Mode and limits): **EVDC SoC
 Range Report As Unplugged** (`input_boolean`) and **EVDC SoC Range Report As
@@ -339,7 +346,9 @@ tab). If the capacity comes from a sensor, or nothing's picked, entering a
 value makes the **EVDC SoC Range Vehicle Battery Capacity** helper (or finds it) and
 uses that instead. **Now** shows the limits in use and where each comes from.
 The schedule below changes the high and/or low limit for a while, every
-week or once. Each entry sets the high limit, the low limit or both. Its week view shows today and the next 6 days, with high
+week or once. Each entry sets the high limit, the low limit or both, and
+can report the car as unplugged too (**Report as unplugged**, above), or
+only that (**Neither**): shown as a striped purple bar. Its week view shows today and the next 6 days, with high
 limits in the top half of each day and low limits in the bottom half:
 click an entry to change, pause or delete it, drag either end of it to
 change when it starts or ends (in half hours, saved straight away; an
