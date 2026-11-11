@@ -97,14 +97,9 @@ def values(state) -> dict:
     """The value of each sensor (by its key in SENSORS) from the shared state:
     the value, or (value, extra attributes)."""
     i, energy, last, st = state.inputs or {}, state.energy or {}, state.last_action or {}, state.stats or {}
-    rates = state.rates or {}
-    # Report as unplugged: the car's left out, as if it were unplugged (it's still managed)
-    hidden = bool((getattr(state, "hide", None) or {}).get("on") and getattr(state, "reported", None))
-    if hidden:
-        energy, rates = state.reported.get("energy") or {}, state.reported.get("rates") or {}
     vb_attrs = {"low_limit": i.get("low"), "high_limit": i.get("high"),
                 "car_capacity_kwh": (state.readings or {}).get("capacity_kwh"),
-                "in_use": (energy.get("window_kwh") or 0) > 0.01, "reported_as_unplugged": hidden}
+                "in_use": (energy.get("window_kwh") or 0) > 0.01}
     action = None
     if last:
         verb = last.get("action") or ""
@@ -114,19 +109,17 @@ def values(state) -> dict:
         "status": (state.status, {"reason": state.reason, "rule": state.rule, "watch_only": state.observe_only}),
         "last_action": (action, {k: last.get(k) for k in ("at", "rule", "reason", "soc", "error")} if last else {}),
         "vehicle_soc": (i.get("soc"), {"read_at": state.soc_at, "from_before_plug_in": state.soc_before_plug_in}),
-        "plugged_in": (_onoff(False if hidden else i.get("plugged_in")),
-                       {"reported_as_unplugged": hidden, "actually_plugged_in": bool(i.get("plugged_in")),
-                        "reported_until": (state.hide or {}).get("until") if hidden else None}) if i else None,
+        "plugged_in": _onoff(i.get("plugged_in")) if i else None,
         "charger_running": (_onoff(i.get("active")) if i else None, {"running_state": i.get("running_state")}),
         "charger_alarm": (_onoff(i.get("alarm")) if i else None, {"running_state": i.get("running_state")}),
         "vb_soc": (energy.get("window_pct"), vb_attrs),
         "vb_usable": (energy.get("available_kwh"), vb_attrs),
         "vb_max": (energy.get("window_kwh"), vb_attrs),
-        "combined_soc": _combined(state, energy),
+        "combined_soc": _combined(state),
         "power_flow": _power_flow(state),
-        "battery_rate": rates.get("rate_kw"),
-        "battery_rate_car": rates.get("car_kw"),
-        "battery_rate_house": rates.get("house_kw"),
+        "battery_rate": (state.rates or {}).get("rate_kw"),
+        "battery_rate_car": (state.rates or {}).get("car_kw"),
+        "battery_rate_house": (state.rates or {}).get("house_kw"),
         "capacity_estimate": st.get("capacity_kwh"),
         "battery_health": st.get("health_pct"),
         "charge_efficiency": _pct(st.get("charge_efficiency")),
@@ -138,15 +131,13 @@ def values(state) -> dict:
     }
 
 
-def _combined(state, energy=None):
-    """The combined battery SoC sensor: its % and, as attributes, the kWh in each. `energy`: the
-    virtual battery as reported (as if unplugged, with Report as unplugged on)."""
+def _combined(state):
+    """The combined battery SoC sensor: its % and, as attributes, the kWh in each."""
     from src.manager import combined_battery
     r = state.readings or {}
-    energy = state.energy or {} if energy is None else energy
-    c = combined_battery(energy, r.get("home_soc"), r.get("home_kwh"))
+    c = combined_battery(state.energy or {}, r.get("home_soc"), r.get("home_kwh"))
     attrs = {k: c.get(k) for k in ("kwh", "max_kwh", "home_kwh", "home_max_kwh", "virtual_kwh", "virtual_max_kwh")}
-    return (c["pct"], {**attrs, "home_battery_soc": r.get("home_soc"), "virtual_battery_soc": energy.get("window_pct")})
+    return (c["pct"], {**attrs, "home_battery_soc": r.get("home_soc"), "virtual_battery_soc": (state.energy or {}).get("window_pct")})
 
 
 def _r2(v):

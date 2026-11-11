@@ -52,7 +52,6 @@ class Runner:
         self.link, self.manager, self.settings, self.state, self.stats = link, manager, settings, state, stats
         self.soc_history = soc_history or SocHistory()
         self._brief_at = 0.0
-        self._hide_off_at = 0.0  # when Report as unplugged's helper was last turned off by the add-on
         self.wake = asyncio.Event()
         self.lock = asyncio.Lock()
         manager.press = self.press
@@ -68,18 +67,6 @@ class Runner:
             stamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
             await self.link.call_service("notify", service.split(".", 1)[1],
                                          data={"title": title, "message": f"{stamp} - {message}"})
-
-    async def _end_hide(self, now: float) -> None:
-        """Report as unplugged's time is up, or the car's been unplugged: its helper turned off."""
-        entity_id = self.link.settings.get("hide_car")
-        if not self.manager.hide_end or not entity_id or not self.link.available or now - self._hide_off_at < 60:
-            return
-        self._hide_off_at = now
-        logger.info("Report as unplugged: ended (%s): turning %s off", self.manager.hide_end, entity_id)
-        try:
-            await self.link.call_service(entity_id.split(".", 1)[0], "turn_off", target={"entity_id": entity_id})
-        except Exception as err:
-            logger.warning("Couldn't turn %s off: %s", entity_id, err)
 
     def publish(self) -> None:
         self.state.apply(self.manager.snapshot(), bool(self.settings.data.get("observe_only")))
@@ -102,7 +89,6 @@ class Runner:
             decision = await self.manager.step(self.link.states, entities, self.settings.data, now)
             while self.manager.dropouts:
                 await self.dropout(self.manager.dropouts.pop(0))
-            await self._end_hide(now)
             sample = self.manager.stats_sample(self.link.states, entities, now)
             if sample is not None:
                 self.stats.feed(sample, self.settings.data)

@@ -28,11 +28,6 @@ HELPERS = {
     "v2x_mode": ("input_select", {
         "name": "SigEnergy EVDC Charging Mode", "options": ["V2X", "Solar Surplus", "Fast Charging"],
         "initial": "V2X", "icon": "mdi:ev-station"}),
-    # Report as unplugged: on, the add-on's sensors show the car as unplugged (e.g. so Predbat
-    # plans without it) until the time in the second, while it still manages the charger
-    "hide_car": ("input_boolean", {"name": "EVDC SoC Range Report As Unplugged", "icon": "mdi:car-off"}),
-    "hide_car_until": ("input_datetime", {"name": "EVDC SoC Range Report As Unplugged Until",
-                                          "has_date": True, "has_time": True, "icon": "mdi:clock-end"}),
 }
 # Helpers a hand-made V2X automation may already have: a new helper starts at their value
 KNOWN_VALUES = {

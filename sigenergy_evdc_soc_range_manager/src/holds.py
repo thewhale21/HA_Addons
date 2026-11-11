@@ -8,8 +8,6 @@ a time (or for so many hours), made from the car's SoC now.
 - hold: the low limit at the SoC now and the high limit 1% above it, so it
   stays where it is.
 - at_least: the low limit at a level you give (e.g. 90% for a trip).
-- unplugged: no limits changed: the car reported as unplugged (the add-on's
-  sensors show it unplugged, e.g. so Predbat plans without it; it's still managed).
 
 They're ordinary schedule entries (src/schedule.py): they show on the
 Schedule tab, and end by themselves.
@@ -21,7 +19,7 @@ from typing import Optional
 
 from src.controller import SOC_CEILING, SOC_FLOOR
 
-KINDS = ("no_discharge", "discharge_only", "hold", "at_least", "unplugged")
+KINDS = ("no_discharge", "discharge_only", "hold", "at_least")
 MAX_HOURS = 23.75  # a one-off entry runs at most to the same time the next day
 
 
@@ -55,9 +53,6 @@ def make_hold(kind: str, soc: Optional[float], now: datetime.datetime, *, until:
     elif kind == "discharge_only":
         entry["high"] = max(SOC_FLOOR + 1, min(round(soc), SOC_CEILING))
         entry["label"] = f"Hold: discharge only, no charging above {entry['high']:g}%"
-    elif kind == "unplugged":
-        entry["unplugged"] = True
-        entry["label"] = "Hold: reported as unplugged"
     elif kind == "hold":
         entry["low"] = max(SOC_FLOOR, min(round(soc), SOC_CEILING - 1))
         entry["high"] = entry["low"] + 1

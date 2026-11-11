@@ -417,11 +417,10 @@ def test_missing_helpers_are_found_or_made(tmp_path):
     assert link.settings["capacity"] == "input_number.evdc_soc_range_vehicle_battery_capacity"  # already there
     assert link.settings["soc_high"] == "input_number.evdc_soc_range_high_limit"
     made = {p["name"]: p for p in link.made}
-    assert set(made) == {"EVDC SoC Range High Limit", "EVDC SoC Range Low Limit",
-                         "EVDC SoC Range Report As Unplugged", "EVDC SoC Range Report As Unplugged Until"}
+    assert set(made) == {"EVDC SoC Range High Limit", "EVDC SoC Range Low Limit"}
     assert made["EVDC SoC Range Low Limit"]["initial"] == 35.0  # from the automation's own helper
     assert made["EVDC SoC Range High Limit"]["initial"] == 80 and made["EVDC SoC Range High Limit"]["type"] == "input_number/create"
-    assert len(done) == 6 and _run(ensure_helpers(link)) == []  # nothing left to do
+    assert len(done) == 4 and _run(ensure_helpers(link)) == []  # nothing left to do
 
     fresh = FakeLink({}, tmp_path / "b")
     _run(ensure_helpers(fresh))
@@ -645,7 +644,7 @@ def test_the_limits_are_the_add_ons_own_helpers_too(tmp_path):
                      "input_number.v2x_cut_off_threshold_high": "99"}, tmp_path / "a")
     link.settings.update({"soc_high": "input_number.evdc_soc_range_high_limit", "soc_low": "input_number.evdc_soc_range_low_limit",
                           "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "capacity": "input_number.c",
-                          "import_rate": "sensor.r", "hide_car": "input_boolean.h", "hide_car_until": "input_datetime.h"})
+                          "import_rate": "sensor.r"})
     notes = []
     _run(ensure_helpers(link, notes))
     made = {p["name"]: p for p in link.made}
@@ -657,7 +656,7 @@ def test_the_limits_are_the_add_ons_own_helpers_too(tmp_path):
                     tmp_path / "b")
     yaml.settings.update({"soc_high": "input_number.evdc_soc_range_high_limit", "soc_low": "input_number.my_low",
                           "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "capacity": "input_number.c",
-                          "import_rate": "sensor.r", "hide_car": "input_boolean.h", "hide_car_until": "input_datetime.h"})
+                          "import_rate": "sensor.r"})
     notes = []
     _run(ensure_helpers(yaml, notes))
     assert yaml.made == [] and len(notes) == 1 and "evdc_soc_range_high_limit is defined in YAML" in notes[0]
@@ -665,7 +664,7 @@ def test_the_limits_are_the_add_ons_own_helpers_too(tmp_path):
     mine = FakeLink({}, tmp_path / "c")
     mine.settings.update({"soc_high": "input_number.my_high", "soc_low": "input_number.my_low",
                           "v2x_mode": "input_select.sigenergy_evdc_charging_mode", "capacity": "input_number.c",
-                          "import_rate": "sensor.r", "hide_car": "input_boolean.h", "hide_car_until": "input_datetime.h"})
+                          "import_rate": "sensor.r"})
     import logging
     seen = []
 
@@ -781,88 +780,3 @@ def test_the_house_can_show_its_whole_use_with_devices(tmp_path):
     m.observe(st, ent, _settings(), 1000.0)
     f = m.power_flow()
     assert f["house_kw"] == 10 and f["home_kw"] is None and f["devices"][0]["kw"] == 7
-
-
-def test_report_as_unplugged_hides_the_car_from_the_sensors_but_still_manages_it(tmp_path):
-    """0.36.0: with the Report as unplugged helper on, the sensors show the car as unplugged
-    (e.g. so Predbat plans without it) until its time, while the charger is still managed. It
-    ends when the time's up or the car's really unplugged (not a charger restart)."""
-    from src.ha_entities import values
-    from src.shared_state import SharedState
-
-    p = Presses()
-    m = Manager(str(tmp_path), press=p.press)
-    ent = _entities(hide_car="input_boolean.hide", hide_car_until="input_datetime.until",
-                    home_battery_soc="sensor.home_soc", home_battery_capacity="sensor.home_kwh")
-
-    def states(on, until=None, lc=500.0, running="Occupied"):
-        st = _states(lc=0.0, running=running)
-        st["input_boolean.hide"] = {"state": "on" if on else "off", "attributes": {}, "last_changed": lc}
-        st["input_datetime.until"] = {"state": "x", "attributes": {} if until is None else {"timestamp": until}}
-        st["sensor.home_soc"] = {"state": "80", "attributes": {}}
-        st["sensor.home_kwh"] = {"state": "10", "attributes": {}}
-        return st
-
-    def published(now):
-        s = SharedState()
-        s.apply(m.snapshot(now), False)
-        return values(s)
-
-    _run(m.step(states(False), ent, _settings(), now=1000.0))
-    v = published(1000.0)
-    assert v["plugged_in"][0] == "on" and v["vb_max"][0] == 25.6 and v["combined_soc"][0] != 80.0
-    # On until 2000: the car's left out of the sensors...
-    d = _run(m.step(states(True, until=2000.0), ent, _settings(), now=1100.0))
-    v = published(1100.0)
-    assert m.hide["on"] and m.hide_end is None
-    assert v["plugged_in"][0] == "off" and v["plugged_in"][1]["actually_plugged_in"] is True
-    assert v["vb_max"][0] == 0.01 and v["vb_usable"][0] == 0.01 and v["vb_soc"][0] == 0.0
-    assert v["combined_soc"][0] == 80.0 and v["battery_rate_car"] == 0.0
-    assert v["vehicle_soc"][0] == 60  # (the car's own SoC is still its own)
-    # ...but it's still managed: the same decision as without it, and the page has the real figures
-    assert d.rule == _run(Manager(None, press=Presses().press).step(states(False), ent, _settings(), now=1100.0)).rule
-    assert m.energy()["window_kwh"] == 25.6
-    # A charger restart (a moment "unplugged") doesn't end it; the time does
-    _run(m.step(states(True, until=2000.0, running="Idle"), ent, _settings(), now=1150.0))
-    _run(m.step(states(True, until=2000.0), ent, _settings(), now=1200.0))
-    assert m.hide["on"] and m.hide_end is None
-    _run(m.step(states(True, until=2000.0), ent, _settings(), now=2000.0))
-    assert not m.hide["on"] and m.hide_end == "its time is up" and published(2000.0)["plugged_in"][0] == "on"
-    # An end time from before it was turned on (last time's): on until it's turned off or unplugged
-    _run(m.step(states(True, until=400.0), ent, _settings(), now=2100.0))
-    assert m.hide == {"on": True, "until": None}
-    _run(m.step(states(True, until=400.0, running="Idle"), ent, _settings(), now=2200.0))
-    assert m.hide["on"]
-    _run(m.step(states(True, until=400.0, running="Idle"), ent, _settings(), now=2330.0))
-    assert not m.hide["on"] and m.hide_end == "the car was unplugged"
-
-
-def test_a_schedule_entry_reports_the_car_as_unplugged(tmp_path):
-    """0.37.0: while a schedule entry with Report as unplugged is on, the sensors show the car as
-    unplugged (without the helper); off again after it ends."""
-    import datetime
-
-    from src.ha_entities import values
-    from src.schedule import Schedule
-    from src.shared_state import SharedState
-
-    m = Manager(str(tmp_path / "m"))
-    (tmp_path / "s").mkdir()
-    m.schedule = Schedule(str(tmp_path / "s"))
-    start = datetime.datetime.now().replace(second=0, microsecond=0) + datetime.timedelta(hours=1)
-    m.schedule.add({"kind": "once", "date": start.date().isoformat(), "start": start.strftime("%H:%M"),
-                    "end": (start + datetime.timedelta(hours=2)).strftime("%H:%M"), "unplugged": True})
-    t0 = start.timestamp()
-
-    def published(now):
-        s = SharedState()
-        s.apply(m.snapshot(now), False)
-        return values(s)
-
-    _run(m.step(_states(), _entities(), _settings(), now=t0 - 60))
-    assert not m.hide["on"] and published(t0 - 60)["plugged_in"][0] == "on"
-    _run(m.step(_states(), _entities(), _settings(), now=t0 + 60))
-    assert m.hide["on"] and m.hide["scheduled"] and m.hide["until"] == t0 + 7200
-    assert published(t0 + 60)["plugged_in"][0] == "off" and published(t0 + 60)["vb_max"][0] == 0.01
-    _run(m.step(_states(), _entities(), _settings(), now=t0 + 7260))
-    assert not m.hide["on"] and m.hide_end is None  # (nothing to turn off: no helper)

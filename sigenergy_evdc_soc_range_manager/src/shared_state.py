@@ -29,8 +29,6 @@ class SharedState:
     observe_only: bool = False
     setup_note: Optional[str] = None  # a problem making the helpers, for the page
     card: dict = field(default_factory=dict)  # the dashboard card's install: {"ok", "note"} (src/card.py)
-    hide: dict = field(default_factory=dict)  # Report as unplugged: {"on", "until" (ISO 8601, UTC)}
-    reported: Optional[dict] = None  # ...while on, the energy and rates the sensors report
     updated: Optional[str] = None
 
     def apply(self, snap: dict, observe_only: bool) -> None:
@@ -38,7 +36,7 @@ class SharedState:
         self.timers = {k: inputs.pop(k, None) for k in ("inactive_for", "export_held_s")}
         self.inputs = inputs
         for key in ("status", "reason", "rule", "soc_at", "soc_before_plug_in", "active_since", "presses_today",
-                    "last_action", "log", "energy", "rates", "flow", "readings", "hide", "reported"):
+                    "last_action", "log", "energy", "rates", "flow", "readings"):
             setattr(self, key, snap.get(key))
         self.observe_only = observe_only
 

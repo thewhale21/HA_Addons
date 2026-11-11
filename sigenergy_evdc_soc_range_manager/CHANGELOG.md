@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.38.1 — Back to 0.35.1
+
+- **Change:** back to 0.35.1, as asked: Report as unplugged (0.36.0 to
+  0.38.0) has been taken out, in Quick hold, the schedule and the Overview.
+  The add-on no longer reads or makes its two helpers (**EVDC SoC Range
+  Report As Unplugged** and **…Until**); they stay in Home Assistant until
+  you delete them (Settings › Devices & services › Helpers). A schedule
+  entry set to **Unplugged** (with no limits) is dropped; one that also
+  changed a limit keeps the limit. Numbered 0.38.1 so Home Assistant
+  offers it as an update.
+
 ## 0.38.0 — Report as unplugged in Quick hold
 
 - **Change:** **Report as unplugged** is now one of the Quick hold options,

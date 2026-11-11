@@ -239,37 +239,3 @@ def test_a_weekly_entry_can_be_skipped_once(tmp_path):
     s.skip(e["id"], "2026-10-13")
     s.tidy(datetime.datetime(2026, 10, 20, 12, 0))
     assert s.entries[0]["skips"] == []
-
-
-def test_an_entry_can_report_the_car_as_unplugged(tmp_path):
-    """0.37.0: an entry with "unplugged" (with or without limits) reports the car as unplugged
-    while it's on; its limits apply as usual."""
-    import datetime
-
-    import pytest
-
-    from src.schedule import Schedule, describe, validate_entry
-
-    only = validate_entry({"kind": "once", "date": "2026-11-12", "start": "15:00", "end": "19:00", "unplugged": True})
-    assert only["unplugged"] and only["high"] is None and only["low"] is None
-    assert describe(only) == "2026-11-12 15:00-19:00: reported as unplugged"
-    with pytest.raises(ValueError):
-        validate_entry({"kind": "once", "date": "2026-11-12", "start": "15:00", "end": "19:00"})
-    assert validate_entry({"kind": "weekly", "days": ["mon"], "start": "15:00", "end": "19:00", "low": 50})["unplugged"] is False
-    sch = Schedule(str(tmp_path))
-    sch.add({"kind": "once", "date": "2026-11-12", "start": "15:00", "end": "19:00", "unplugged": True, "low": 60})
-    high, low, on = sch.apply(80, 40, datetime.datetime(2026, 11, 12, 16, 0))
-    assert (high, low) == (80, 60) and on[0]["unplugged"] and on[0]["until"] == "2026-11-12T19:00"
-    assert Schedule(str(tmp_path)).entries[0]["unplugged"]  # (kept)
-
-
-def test_a_quick_hold_can_report_the_car_as_unplugged():
-    """0.38.0: Quick hold's Report as unplugged: a one-off entry, no limits changed."""
-    import datetime
-
-    from src.holds import make_hold
-    from src.schedule import validate_entry
-
-    e = validate_entry(make_hold("unplugged", None, datetime.datetime(2026, 11, 11, 14, 5), hours=2))
-    assert e["unplugged"] and e["high"] is None and e["low"] is None
-    assert (e["start"], e["end"]) == ("14:05", "16:05") and e["label"] == "Hold: reported as unplugged"
