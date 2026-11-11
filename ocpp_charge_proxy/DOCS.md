@@ -425,7 +425,9 @@ Assistant starts) the sessions already found are kept, not cancelled.
   session (striped purple), the automatic schedule (cyan), and the time a
   slot was moved to for a saving session (purple). The automatic schedule's
   charging and the charge before a saving session keep their colour where they
-  overlap or join a slot of yours (drawn on top of it). With the automatic
+  overlap or join a slot of yours: joined on to one end of it, the slot is
+  drawn for its own times and the charge as a piece of its own next to it
+  (one charge: it stays plugged in from one to the other). With the automatic
   schedule on, your slots still to come up to the end of the last limit day it
   has planned (e.g. 12:00 tomorrow) are cyan too, as what's left of them is
   part of its plan (where it joins its charging on to one of your slots,

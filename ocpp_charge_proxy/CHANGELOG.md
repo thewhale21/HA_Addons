@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.96.8 — Schedule: a saving session's charge drawn next to the slot it joins
+
+- **Improvement:** the charge before a saving session, joined on to one of
+  your slots, was drawn over the end of that slot, so the slot looked as if
+  it had been taken over. The slot is now drawn for its own times and the
+  charge (striped purple) as a piece of its own next to it, as the
+  automatic schedule's charging is. It still charges straight through: one
+  charge, plugged in from one to the other.
+
 ## 2.96.7 — Schedule: skip, delete and Charge now from a page that's behind
 
 - **Fix:** skipping one of the automatic schedule's blocks just after it

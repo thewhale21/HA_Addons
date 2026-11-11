@@ -260,7 +260,9 @@
   .week .track .seg.autopart { background: color-mix(in srgb, var(--c-auto) 55%, #fff) !important; z-index: 2; opacity: 1;
     box-shadow: -2px 0 0 var(--card), 2px 0 0 var(--card); border-color: transparent; }
   .week { --pre-stripes: repeating-linear-gradient(135deg, #8e24aa 0 6px, #ba68c8 6px 12px); }
-  .week .track .seg.prepart { background: var(--pre-stripes) !important; z-index: 2; opacity: 1; }
+  /* The charge before a saving session joined on to a slot: a piece of its own, with a gap where it joins */
+  .week .track .seg.prepart { background: var(--pre-stripes) !important; z-index: 2; opacity: 1;
+    box-shadow: -2px 0 0 var(--card), 2px 0 0 var(--card); border-color: transparent; }
   .week .track .seg.ghost { opacity: .4; pointer-events: none; box-shadow: none; }
   .week .track .seg.skip { opacity: 1; box-shadow: none; background: repeating-linear-gradient(135deg, var(--divider) 0 6px, transparent 6px 12px) !important;
     outline: 1px dashed var(--text2); outline-offset: -1px; }
@@ -3725,19 +3727,28 @@ function drawWeek() {
   const meetAt = [...startsAt.keys()].filter((t) => endsAt.has(t));
   // A slot of yours the automatic schedule joins its charging on to (its unplug skipped that
   // day, or plug-in) is drawn for its own time; the part it added is drawn on its own (o.da, o.db)
+  // The same for the charge before a saving session joined on to a slot: the slot drawn for its
+  // own time, the charge as a piece of its own next to it (o.pa, o.pb: trimmed for that alone)
+  const trim = (o, parts, a, b) => {
+    for (let n = 0; n < 4; n++) {
+      const end = parts.find(([x, y]) => x > a && x < b && y >= b);
+      if (end) b = end[0];
+      const start = parts.find(([x, y]) => y < b && y > a && x <= a);
+      if (start) a = start[1];
+      if (!end && !start) break;
+    }
+    return [a, b];
+  };
   occ.forEach((o) => {
-    o.da = o.a; o.db = o.b;
+    o.da = o.a; o.db = o.b; o.pa = o.a; o.pb = o.b;
     const s = model.slots[o.i];
     // (in the automatic schedule's colour already: drawn as one charge, joined part and all)
     o.full = tyAt(s, o) === 'auto_schedule';
-    if (o.skipped || typeOf(s) === 'auto_schedule') return;
-    for (let n = 0; n < 4; n++) {
-      const end = autoParts.find(([x, y]) => x > o.da && x < o.db && y >= o.db);
-      if (end) o.db = end[0];
-      const start = autoParts.find(([x, y]) => y < o.db && y > o.da && x <= o.da);
-      if (start) o.da = start[1];
-      if (!end && !start) break;
-    }
+    if (o.skipped || typeOf(s) === 'saving_session') return;
+    [o.pa, o.pb] = trim(o, preParts, o.a, o.b);
+    [o.da, o.db] = [o.pa, o.pb];
+    if (typeOf(s) === 'auto_schedule') return;
+    [o.da, o.db] = trim(o, autoParts, o.pa, o.pb);
   });
   // Each day's charging: the time plugged in from its limit reset (e.g. 12:00) to the next, that
   // afternoon and the next morning (from midnight without a reset time), shown under its date
@@ -3815,7 +3826,7 @@ function drawWeek() {
     const before = d < 0 && week.pluggedSince && new Date(week.pluggedSince) > new Date(day0.getTime() + hi * 60000);
     const bars = d < 0 ? pastBars : occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi && !o.hidden).map(([o, k]) => {
       const s = model.slots[o.i];
-      const va = o.full ? o.a : o.da, vb = o.full ? o.b : o.db;  // (as drawn)
+      const va = o.full ? o.pa : o.da, vb = o.full ? o.pb : o.db;  // (as drawn)
       const {x0, x1} = span(va, vb);
       // The hours over the limit: a red piece of the slot, its own block
       const over = o.skipped || !s.enabled ? [] : plan.overs.map(([x, y]) => [Math.max(x, o.a, lo), Math.min(y, o.b, hi)]).filter(([x, y]) => y > x)
