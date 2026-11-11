@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.36.0 — Report as unplugged
+
+- **Feature:** **Report as unplugged** (Overview, under the car): until a
+  time you pick, the add-on's sensors show the car as unplugged (the
+  plugged in sensor off, the virtual battery at 0.01 kWh, the combined SoC
+  the home battery's alone, the battery rates without the car), e.g. so
+  Predbat plans without it when you'll be taking it out later, while the
+  add-on still manages the charger. It ends by itself at that time, or when
+  the car is really unplugged.
+- **Feature:** two new helpers the add-on makes, **EVDC SoC Range Report As
+  Unplugged** and **…Until**, so it can be turned on and off from a
+  dashboard or an automation too.
+
 ## 0.35.1 — Running states written with underscores
 
 - **Fix:** the Sigenergy integration now writes the charger's running state

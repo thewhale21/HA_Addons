@@ -183,6 +183,31 @@ change these if your set-up reports different words.
 
 Power sensors can be in W or kW.
 
+### Report as unplugged
+
+**Report as unplugged** (on the Overview, under the car) makes the add-on's
+sensors show the car as unplugged until a time you pick, while it still
+manages the charger as before: e.g. when you'll be taking the car out later,
+so Predbat plans as if it weren't there. While it's on:
+
+- `binary_sensor.evdc_soc_range_plugged_in` reads off (its
+  `actually_plugged_in` attribute says what it really is);
+- the virtual battery sensors read 0.01 kWh (0%), as when unplugged;
+- the combined battery SoC is the home battery's alone;
+- the battery rate sensors leave the car out (all the home battery's).
+
+The car's own SoC, the status, the statistics and the power flow diagram
+stay as they are, and the Overview still shows the real figures. It ends by
+itself at its time, or when the car is really unplugged (for 2 minutes:
+not just the charger starting again); the ✕ on its chip ends it early.
+
+It's two helpers the add-on makes (Settings › Mode and limits): **EVDC SoC
+Range Report As Unplugged** (`input_boolean`) and **EVDC SoC Range Report As
+Unplugged Until** (`input_datetime`), so a dashboard or an automation can
+turn it on too: set the time, then turn the switch on. Turned on with a time
+from before (e.g. last time's), it stays on until it's turned off or the car
+is unplugged.
+
 ## Its own entities
 
 | Entity | |
@@ -190,7 +215,7 @@ Power sensors can be in W or kW.
 | `sensor.evdc_soc_range_status` | What it's doing, with the reason as an attribute |
 | `sensor.evdc_soc_range_last_action` | Started, Stopped, Would start (watch only) or Failed to…, with when, why and the SoC |
 | `sensor.evdc_soc_range_vehicle_soc` | The car's last known SoC (kept while the charger reports 0 or nothing, and after a restart) |
-| `binary_sensor.evdc_soc_range_plugged_in` | Car plugged in |
+| `binary_sensor.evdc_soc_range_plugged_in` | Car plugged in (off while it's reported as unplugged, above) |
 | `binary_sensor.evdc_soc_range_charger_running` | Charger running (charging, discharging or preparing) |
 | `sensor.evdc_soc_range_virtual_battery_soc` | The virtual battery's SoC: how full the window between the limits is (%) |
 | `sensor.evdc_soc_range_virtual_battery_usable_energy` | Its usable energy: kWh the car can give before the low limit |

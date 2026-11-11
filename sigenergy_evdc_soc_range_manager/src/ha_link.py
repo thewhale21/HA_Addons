@@ -76,6 +76,10 @@ ENTITY_KEYS = {
     "flow_home_power": ("sensor",),
     "flow_car_power": ("sensor",),
     "grid_voltage": ("sensor",),  # shown on the grid circle (phase A)
+    # Report as unplugged (src/manager.py): on, the sensors show the car as unplugged until the
+    # time in the second (made as helpers when empty: src/helpers.py)
+    "hide_car": ("input_boolean", "switch"),
+    "hide_car_until": ("input_datetime",),
 }
 # The power flow card's own devices off the house (a car charger, a heat pump...): each a
 # name, an icon, a power sensor and (optional) when it's plugged in. Not shown without a

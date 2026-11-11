@@ -532,6 +532,7 @@
           <div class="range-labels"><span>0%</span><span id="o-range-text"></span><span>100%</span></div>
           <div class="row" id="o-sched-now" hidden style="margin-top:10px"></div>
           <div class="row" style="margin-top:12px"><div class="grow sm" id="o-limits-note"></div><button class="btn small" id="o-to-schedule">Limits and schedule ›</button></div>
+          <div class="hold" id="o-hide" style="margin-top:10px"></div>
         </div>
       </div>
     </div>
@@ -1105,7 +1106,9 @@ function renderState(s) {
       + (i.charge_signal ? ' · <span class="chip ok">charge signal</span>' : '')],
     ['EMS mode', i.ems_mode ? esc(i.ems_mode) + (i.ems_blocked ? ' <span class="chip warn">no charging from export</span>' : '') : '<span class="muted">—</span>'],
   ]);
-  $('o-energy-note').textContent = inUse ? 'The car between its limits, as one battery: what Predbat sees through the available energy, window and battery rate sensors.' : '';
+  $('o-energy-note').textContent = (s.hide || {}).on ? 'Reported to Home Assistant as unplugged: the virtual battery, combined SoC and battery rate sensors leave the car out (shown here as it is).'
+    : inUse ? 'The car between its limits, as one battery: what Predbat sees through the available energy, window and battery rate sensors.' : '';
+  drawHide(s);
 
   // Log
   $('o-presses').textContent = `${s.presses_today || 0} button press${s.presses_today === 1 ? '' : 'es'} today`;
@@ -1312,6 +1315,31 @@ function whenLocal(iso) {
   const days = Math.round((new Date(d.toDateString()) - new Date(now.toDateString())) / 86400000);
   return days === 0 ? t : days === 1 ? `tomorrow ${t}` : `${d.toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'})} ${t}`;
 }
+// ---------- Report as unplugged: the sensors show the car as unplugged until a time (it's still managed) ----------
+let hideDrawn = null;
+function hideDefault() {  // 4 hours from now, on the half hour, local
+  const d = new Date(Date.now() + 4 * 3600e3); d.setMinutes(d.getMinutes() < 30 ? 30 : 60, 0, 0);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function drawHide(s) {
+  const h = s.hide || {}, key = h.on ? 'on|' + (h.until || '') : 'off';
+  if (key === hideDrawn) return;  // (not redrawn while you're picking a time)
+  hideDrawn = key;
+  $('o-hide').innerHTML = h.on
+    ? `<span class="chip warn" title="The add-on's sensors show the car as unplugged (e.g. so Predbat plans without it); it still manages the charger">Reported as unplugged${h.until ? ' until ' + whenLocal(h.until) : ''} <a href="#" class="unhold" id="o-hide-off" title="Report it as it is again" aria-label="Report it as it is again">✕</a></span>`
+    : `<input type="datetime-local" id="o-hide-until" value="${hideDefault()}" aria-label="Report as unplugged until"><button class="btn small" id="o-hide-on" title="The add-on's sensors show the car as unplugged until then (e.g. so Predbat plans without it), while it still manages the charger. Ends by itself then, or when the car is unplugged">Report as unplugged</button>`;
+}
+$('o-hide').addEventListener('click', async (ev) => {
+  if (ev.target.id === 'o-hide-on') {
+    ev.target.disabled = true;
+    if (await post('report_unplugged', {on: true, until: $('o-hide-until').value})) { toast('Reported as unplugged'); hideDrawn = null; setTimeout(pollState, 800); }
+    else ev.target.disabled = false;
+  } else if (ev.target.id === 'o-hide-off') {
+    ev.preventDefault();
+    if (await post('report_unplugged', {on: false})) { toast('Reported as it is'); hideDrawn = null; setTimeout(pollState, 800); }
+  }
+});
 // ---------- Limit schedule (src/schedule.py) ----------
 const DAYNAMES = {mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun'};
 function drawSchedule(v) {
@@ -2159,6 +2187,8 @@ const PICKERS = [
   ['Statistics', 'home_power', 'House power', "The house's use, for the power flow diagram. Optional: worked out from the others without it.", 'sensor'],
   ['Statistics', 'inverter_power', 'Inverter AC power', "The inverter's AC side, for the losses. W or kW.", 'sensor'],
   ['Mode and limits', 'charge_signal', 'Charge signal', 'On = charge the car now if there\'s room, e.g. Predbat charging. Optional.', 'binary_sensor,input_boolean,switch'],
+  ['Mode and limits', 'hide_car', 'Report as unplugged', "On: the add-on's sensors show the car as unplugged (e.g. so Predbat plans without it), while it still manages the charger. Helper: made by the add-on.", 'input_boolean,switch'],
+  ['Mode and limits', 'hide_car_until', 'Report as unplugged until', 'When that ends by itself. Helper: a date and time, made by the add-on.', 'input_datetime'],
 ];
 (function buildPickerCards() {
   const cards = [...new Set(PICKERS.map((p) => p[0]))];
@@ -2429,7 +2459,8 @@ async function refreshHealth() {
   try {
     const d = await api('sensors');
     // The helpers it uses (editable in Home Assistant): its own, or ones picked on the Settings tab
-    const helpers = [['soc_high', 'High limit'], ['soc_low', 'Low limit'], ['capacity', 'Battery capacity'], ['v2x_mode', 'Charging mode']]
+    const helpers = [['soc_high', 'High limit'], ['soc_low', 'Low limit'], ['capacity', 'Battery capacity'], ['v2x_mode', 'Charging mode'],
+      ['hide_car', 'Report as unplugged'], ['hide_car_until', 'Report as unplugged until']]
       .map(([k, label]) => {
         const id = (d.settings || {})[k];
         if (!id) return `${label}: <span class="muted">not set</span>`;

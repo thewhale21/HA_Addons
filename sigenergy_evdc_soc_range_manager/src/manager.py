@@ -31,6 +31,7 @@ UNKNOWN = ("unknown", "unavailable", "none", "")
 SOC_TREND_S = 1800  # the SoC's direction is worked out over this long (logging only)
 SOC_TREND_MIN_S = 300  # ...and needs readings at least this far apart
 SOC_SAMPLES_KEEP_S = 7200
+HIDE_UNPLUGGED_S = 120  # Report as unplugged ends once the car's really been unplugged this long
 QUIET_RULES = ("press_gap",)  # decisions not logged when they change (they're about a press just made)
 
 # Lists the Settings tab can change (Advanced); matched without regard to case
@@ -197,6 +198,11 @@ class Manager:
         self._logged_rule: Optional[str] = None  # the last decision written to the log
         self.inputs: Optional[Inputs] = None
         self.decision: Optional[Decision] = None
+        # Report as unplugged: {"on", "until" (epoch or None)} now, and why it's to be turned
+        # off (the time's up, or the car's really unplugged): __main__ turns the helper off
+        self.hide: dict = {"on": False, "until": None}
+        self.hide_end: Optional[str] = None
+        self._really_unplugged_since: Optional[float] = None
         self.readings: dict = {}
         self._load()
 
@@ -333,6 +339,7 @@ class Manager:
         if self.charge_stopped_at is not None and not house_needs_power(self.inputs, settings):
             self.charge_stopped_at = None
             self.inputs = replace(self.inputs, charge_stopped_ago=None)
+        self._observe_hide(get, entities, plugged, now)
         self.readings = {
             "base_high": base_high, "base_low": base_low,
             "scheduled": [{"id": e["id"], "kind": e["kind"], "high": e["high"], "low": e["low"], "until": e["until"],
@@ -590,6 +597,44 @@ class Manager:
         self._save()
         logger.info("The car stopped discharging by itself (at %s%%)", self.soc)
 
+    def _observe_hide(self, get, entities: dict, plugged: bool, now: float) -> None:
+        """Report as unplugged: the helper on (hide_car), and its end time (hide_car_until) still to
+        come; one from before it was turned on (e.g. last time's) counts as none. Ends (the helper
+        to be turned off: hide_end) when the time's up, or the car's really been unplugged
+        HIDE_UNPLUGGED_S (not just the charger restarting)."""
+        self.hide_end = None
+        st = get("hide_car") if entities.get("hide_car") else None
+        on = _in(_text(st), ("on", "true"))
+        if plugged:
+            self._really_unplugged_since = None
+        else:
+            self._really_unplugged_since = self._really_unplugged_since or now
+        if not on:
+            if self.hide.get("on"):
+                logger.info("Report as unplugged: off: the sensors show the car as it is")
+            self.hide = {"on": False, "until": None}
+            return
+        until = None
+        if entities.get("hide_car_until"):
+            u = get("hide_car_until") or {}
+            try:
+                until = float((u.get("attributes") or {}).get("timestamp"))
+            except (TypeError, ValueError):
+                until = None
+        since = (st or {}).get("last_changed")
+        if until is not None and isinstance(since, (int, float)) and until <= since:
+            until = None  # (an old time: on until it's turned off, or the car's unplugged)
+        if until is not None and now >= until:
+            self.hide_end = "its time is up"
+        elif self._really_unplugged_since is not None and now - self._really_unplugged_since >= HIDE_UNPLUGGED_S:
+            self.hide_end = "the car was unplugged"
+        was = self.hide.get("on")
+        self.hide = {"on": self.hide_end is None, "until": until}
+        if self.hide["on"] and not was:
+            logger.info("Report as unplugged: on%s: the sensors show the car as unplugged; the charger is "
+                        "still managed", "" if until is None else " until "
+                        + datetime.datetime.fromtimestamp(until).strftime("%a %H:%M"))
+
     def _new_day(self, now: float) -> None:
         day = datetime.datetime.fromtimestamp(now).strftime("%Y-%m-%d")
         if day != self.day:
@@ -692,7 +737,18 @@ class Manager:
             "rates": self.rates(),
             "flow": self.power_flow(),
             "readings": dict(self.readings),
+            "hide": {"on": self.hide["on"], "until": _iso(self.hide["until"])},
+            # What the sensors report while it's on: the car as unplugged (the page shows the real ones)
+            "reported": self.reported() if self.hide["on"] else None,
         }
+
+    def reported(self) -> dict:
+        """The energy and battery rate sensors as if the car were unplugged (Report as unplugged)."""
+        i, r = self.inputs, self.readings
+        rates = {} if i is None else battery_rates(
+            plugged_in=False, v2x=False, fast=False, available_kw=r.get("available_kw"), home_soc=r.get("home_soc"),
+            home_kwh=r.get("home_kwh"), car_window_kwh=0.0, settings=getattr(self, "_settings", None))
+        return {"energy": {"available_kwh": 0.01, "window_kwh": 0.01, "window_pct": 0.0}, "rates": rates}
 
 
 def _direction(active: bool, discharging: bool, running_state: Optional[str]) -> Optional[str]:

@@ -28,6 +28,11 @@ HELPERS = {
     "v2x_mode": ("input_select", {
         "name": "SigEnergy EVDC Charging Mode", "options": ["V2X", "Solar Surplus", "Fast Charging"],
         "initial": "V2X", "icon": "mdi:ev-station"}),
+    # Report as unplugged: on, the add-on's sensors show the car as unplugged (e.g. so Predbat
+    # plans without it) until the time in the second, while it still manages the charger
+    "hide_car": ("input_boolean", {"name": "EVDC SoC Range Report As Unplugged", "icon": "mdi:car-off"}),
+    "hide_car_until": ("input_datetime", {"name": "EVDC SoC Range Report As Unplugged Until",
+                                          "has_date": True, "has_time": True, "icon": "mdi:clock-end"}),
 }
 # Helpers a hand-made V2X automation may already have: a new helper starts at their value
 KNOWN_VALUES = {
@@ -230,3 +235,22 @@ async def ensure_helpers(link, notes: Optional[list] = None) -> list[str]:
     for line in notes:
         logger.warning("Helpers: %s", line)
     return done
+
+
+REPORT_MAX_DAYS = 7
+
+
+def report_until(text, now) -> str:
+    """Report as unplugged's end time from the page ("YYYY-MM-DDTHH:MM", local) as the
+    datetime helper wants it ("YYYY-MM-DD HH:MM:00"). Raises ValueError."""
+    import datetime
+
+    try:
+        when = datetime.datetime.strptime(str(text or "").strip()[:16], "%Y-%m-%dT%H:%M")
+    except ValueError:
+        raise ValueError("Give the time it ends") from None
+    if when <= now:
+        raise ValueError("The time it ends must be later than now")
+    if when > now + datetime.timedelta(days=REPORT_MAX_DAYS):
+        raise ValueError(f"At most {REPORT_MAX_DAYS} days ahead")
+    return when.strftime("%Y-%m-%d %H:%M:00")
