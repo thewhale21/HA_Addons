@@ -2303,3 +2303,47 @@ def test_saving_with_times_to_skip():
         a.set_schedule(entries=one_off + weekly, add_skips=[{"entry_id": "o1", "date": "2026-11-03"}])
     with pytest.raises(ValueError, match="No such"):
         a.set_schedule(entries=one_off + weekly, add_skips=[{"entry_id": "zz", "date": "2026-11-03"}])
+
+
+def test_off_peak_start_leaves_the_schedules_waiting_unplug():
+    """2.96.9: a slot ending as an off-peak time starts (23:30): the off-peak start unplugged it
+    at once, so the supplier never stopped the session itself (StopTransaction EVDisconnected,
+    not Remote). It waits for the supplier as any other unplug; plugged in by hand, it still
+    unplugs straight away."""
+    from src.shared_state import SharedState
+    every = list(range(7))
+
+    def run(wait_for_supplier):
+        a, clock = _automation(start=datetime.datetime(2026, 10, 5, 23, 29, 50, tzinfo=TZ))
+        a.set_schedule(enabled=True, entries=[{"time": "23:00", "action": "plug", "days": every},
+                                              {"time": "23:30", "action": "unplug", "days": every}],
+                       blocks=[{"start": "23:30", "end": "05:30", "days": every}], unplug_wait_s=60)
+        if not wait_for_supplier:
+            a.set_schedule(entries=[])
+        a.ready_time = True
+        state = SharedState(plugged_in=True)
+        state.transaction_id = 1
+        calls = []
+
+        async def plug(source=None):
+            calls.append(("plug", source))
+
+        async def unplug(source=None):
+            calls.append(("unplug", source))
+            state.plugged_in = False
+
+        async def ticks():
+            task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01))
+            await asyncio.sleep(0.05)
+            clock.dt = datetime.datetime(2026, 10, 5, 23, 30, 4, tzinfo=TZ)
+            await asyncio.sleep(0.1)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+        _run(ticks())
+        return a, calls
+
+    a, calls = run(True)
+    assert calls == [] and a.unplug_at is not None  # waiting for the supplier
+    _, calls = run(False)
+    assert calls == [("unplug", "off-peak time")]

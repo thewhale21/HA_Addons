@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.96.9 — Off-peak start waits for the supplier; quieter while Home Assistant restarts
+
+- **Fix:** a slot ending as an off-peak time starts (e.g. 23:00–23:30, with
+  off-peak from 23:30) unplugged at once at the off-peak start, so your
+  supplier never stopped the session itself (the charger ended it,
+  `EVDisconnected`). The slot's unplug now waits for the supplier as at any
+  other time (up to the unplug wait); plugged in by hand, it still unplugs
+  straight away when an off-peak time starts.
+- **Improvement:** while Home Assistant restarts (502 Bad Gateway), the
+  automatic schedule logged a traceback every 15 s. It's one line, once,
+  and another when Home Assistant answers again.
+
 ## 2.96.8 — Schedule: a saving session's charge drawn next to the slot it joins
 
 - **Improvement:** the charge before a saving session, joined on to one of

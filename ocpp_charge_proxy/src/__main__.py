@@ -11,6 +11,7 @@ from typing import Optional
 
 import websockets
 import websockets.exceptions
+import aiohttp
 from aiohttp import web
 
 from src.api import create_api_app
@@ -57,6 +58,13 @@ DEFAULT_RAMP_UP_S = 5.0
 # messages to the server must fit comfortably inside that window.
 SHUTDOWN_STOP_TX_TIMEOUT = 1.5
 SHUTDOWN_STATUS_TIMEOUT = 1.0
+
+
+def _http_error(err: Exception) -> str:
+    """A short reason for a failed request to Home Assistant, e.g. "502 Bad Gateway"."""
+    if isinstance(err, aiohttp.ClientResponseError):
+        return f"{err.status} {err.message}".strip()
+    return "timed out" if isinstance(err, asyncio.TimeoutError) else (str(err) or type(err).__name__)
 
 
 async def _graceful_shutdown(cp: ChargePoint) -> None:
@@ -399,6 +407,7 @@ async def run() -> None:
         they, the number of half hours or the rest of the schedule change."""
         last_read, last_settings, imp, exp, info = 0.0, None, [], [], {}
         started = time.monotonic()
+        ha_down = False
         while True:
             try:
                 s = ha_link.settings
@@ -409,6 +418,9 @@ async def run() -> None:
                 wanted = (s.get("auto_import_entity"), s.get("auto_export_entity"))
                 if wanted != last_settings or time.monotonic() - last_read >= AUTO_READ_S:
                     states = await ha_link.all_states()
+                    if ha_down:
+                        logger.info("Automatic schedule: Home Assistant answering again")
+                        ha_down = False
                     if states:
                         found = auto_schedule.find_rate_entities(states)
                         pick = lambda key, kind: (auto_schedule.entities_for(s[key], states) if s.get(key)
@@ -442,6 +454,13 @@ async def run() -> None:
                         # (the discharge time needed: how long a full battery exports for, in half hours)
                         int(round(s["auto_discharge_need_h"] * 2)) if s.get("auto_discharge_need_h") else None) or rates_changed:
                     automation.publish(shared_state)
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                # Home Assistant not answering (e.g. restarting: 502 Bad Gateway): one line, once
+                # until it's back, not a traceback every 15 s
+                if not ha_down:
+                    logger.warning("Automatic schedule: couldn't read the rates from Home Assistant (%s), "
+                                   "e.g. while it restarts: trying again", _http_error(err))
+                ha_down = True
             except Exception:
                 logger.warning("Automatic schedule cycle failed", exc_info=True)
             await asyncio.sleep(AUTO_TICK_S)

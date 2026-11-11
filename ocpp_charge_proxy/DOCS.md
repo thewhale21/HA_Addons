@@ -346,7 +346,10 @@ would a slot (click or drag across a day, or **+ Add a slot**) and choose
 can't be added over existing slots), and auto plug-in, the car plugged in
 sensor and Charge now are planned around them (above). At the start of
 each, it unplugs if the car is plugged in (by hand or from Home Assistant,
-say), as nothing should charge then. They're shown hatched in blue-grey.
+say), as nothing should charge then; where a slot ends as one starts, the
+slot's own unplug waits for your supplier to stop the session first (up to
+the unplug wait, 60 s by default), as at any other unplug. They're shown
+hatched in blue-grey.
 
 ### Saving sessions
 

@@ -3701,11 +3701,15 @@ async def automation_loop(
                         await apply_ready_time(automation, set_ready_time)
             for start in automation.block_starts_due():
                 # In case it's plugged in by hand (or from Home Assistant): nothing
-                # charges in an off-peak time
-                if shared_state.plugged_in:
-                    automation.unplug_at = None
+                # charges in an off-peak time. Not while the schedule's own unplug is waiting
+                # for the supplier to stop the session (e.g. a slot ending as it starts):
+                # that unplugs it, within unplug_wait_s
+                if shared_state.plugged_in and automation.unplug_at is None:
                     logger.info("Off-peak time from %s: unplugging", start.strftime("%H:%M"))
                     await unplug(source="off-peak time")
+                elif shared_state.plugged_in:
+                    logger.info("Off-peak time from %s: the schedule's unplug is already waiting for the "
+                                "supplier to stop the session", start.strftime("%H:%M"))
             if automation.unplug_at is not None:
                 if not shared_state.plugged_in:
                     automation.unplug_at = None  # unplugged meanwhile
