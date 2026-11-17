@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.97.1 — A charge going on doesn't run on when a saving session is taken out
+
+- **Fix:** an automatic schedule charge that's going, joined on to the
+  charge before a saving session (e.g. 17:00–18:00, then 18:00–19:00 before
+  a 19:00 Axle event), had no unplug of its own: the charge before the
+  session ended it. Turning saving sessions off (or the session being
+  cancelled, or that charge deleted) took that unplug out too, so it stayed
+  plugged in to the next unplug in the schedule, hours later and through
+  the event, and the ready time moved with it. It isn't planned again while
+  a charge is going, so it stayed like that. Now the charge going ends at its
+  own planned end (or where it ended before, if that's sooner), with an
+  unplug of its own, and the ready time follows.
+
 ## 2.97.0 — Automatic schedule: where it earns the most
 
 - **Feature:** a third way for the automatic schedule to charge, *Where it

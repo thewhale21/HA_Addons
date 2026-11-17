@@ -1238,3 +1238,56 @@ def test_the_mode_setting_takes_value():
     import pytest
     with pytest.raises(ValueError):
         validate_settings({"auto_sched_mode": "most"})
+
+
+def test_saving_sessions_turned_off_during_a_block_joined_to_the_charge_before_it():
+    """2.97.1: Tue 17 Nov. The 17:00-18:00 block was joined on to the charge before the 19:00
+    Axle event (18:00-19:00), which ended it. Saving sessions turned off at 17:00: that charge was
+    taken out, and with it the only unplug, so it ran on to the next one (21:00 for the user, 23:30
+    here), through the event, and wasn't planned again while the block was going. The block ends
+    at its own end again (18:00), as its own unplug, taken out with the plan later."""
+    a, clock = _auto(at(16, 25))
+    a.limit_reset = "12:00"
+    ents = []
+    for p, u in (("17:00", "17:30"), ("18:00", "18:30"), ("19:00", "21:00"), ("22:00", "23:00"), ("06:30", "07:30"), ("15:00", "16:00")):
+        ents += [{"time": p, "action": "plug", "days": WEEK}, {"time": u, "action": "unplug", "days": WEEK}]
+    a.set_schedule(enabled=True, ready_time=True, entries=ents, blocks=[{"start": "23:30", "end": "05:30", "days": WEEK}],
+                   daily_cap_min=360, allow_over=True)
+    exp = []
+    for n in range(96):
+        t = at(0) + n * A.HH
+        hm = (t.hour, t.minute)
+        exp.append((t, t + A.HH, 121.0 if (19, 0) <= hm < (20, 0) else 27.0 if (16, 0) <= hm < (19, 0)
+                    else 17.9 if (20, 0) <= hm < (21, 30) else 15.0, False))
+    a.set_export_rates(exp, {}, high=9)
+    sess = [{"start": at(19), "end": at(20), "summary": "Axle Energy event (export)"}]
+    for _ in range(2):
+        a.sync_saving_sessions(sess, True, None, 360, "Octopus Energy", 1.0)
+        a.sync_auto_schedule(iog_import(2), exp, 12, cap_min=360, provider="Octopus Energy", mode="before",
+                             charge_cap=2, discharge_cap=3)
+    clock.dt = at(17, 0, 0) + datetime.timedelta(seconds=56)
+    assert a.next_unplug(clock.dt) == at(19)
+    assert a.clear_saving_sessions()
+    assert a.next_unplug(clock.dt) == at(18)
+    mine = set(a.auto_plan["changes"]["added"])
+    assert any(e["id"] in mine and e["action"] == "unplug" and e["time"] == "18:00" for e in a.entries)
+    # (not planned again under it, as before; after it, it is)
+    assert not a.sync_auto_schedule(iog_import(2), exp, 12, cap_min=360, provider="Octopus Energy", mode="before",
+                                    charge_cap=2, discharge_cap=3)
+    clock.dt = at(18) + datetime.timedelta(seconds=30)
+    assert a.sync_auto_schedule(iog_import(2), exp, 12, cap_min=360, provider="Octopus Energy", mode="before",
+                                charge_cap=2, discharge_cap=3)
+    # (nothing's taken out with saving sessions on: no unplug added)
+    b, clock2 = _auto(at(16, 25))
+    b.limit_reset = "12:00"
+    b.set_schedule(enabled=True, ready_time=True, entries=ents, blocks=[{"start": "23:30", "end": "05:30", "days": WEEK}],
+                   daily_cap_min=360, allow_over=True)
+    b.set_export_rates(exp, {}, high=9)
+    for _ in range(2):
+        b.sync_saving_sessions(sess, True, None, 360, "Octopus Energy", 1.0)
+        b.sync_auto_schedule(iog_import(2), exp, 12, cap_min=360, provider="Octopus Energy", mode="before",
+                             charge_cap=2, discharge_cap=3)
+    n = len(b.entries)
+    clock2.dt = at(17) + datetime.timedelta(seconds=56)
+    b.sync_saving_sessions(sess, True, None, 360, "Octopus Energy", 1.0)
+    assert len(b.entries) == n and b.next_unplug(clock2.dt) == at(19)

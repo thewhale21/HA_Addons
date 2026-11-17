@@ -691,6 +691,7 @@ class Automation:
                 raise ValueError(f"At most {MAX_ENTRIES} schedule times")
         new_skips = list(self.skips)
         pre_gone = []  # saving sessions whose charge before it was deleted
+        was_end = self._running_end()
         if entries is not None:
             # A charge (auto plug-in, Charge now...) that's deleted puts back the
             # slot it trimmed or joined: its replacement plug-in goes, the skips go
@@ -863,6 +864,8 @@ class Automation:
                         _parse_iso(r["start"]).strftime("%a %H:%M"))
         ids = {e["id"] for e in self.entries}
         self.skips = [k for k in new_skips if k["entry_id"] in ids]
+        if pre_gone:
+            self._auto_mend(was_end)
         self._prune()
         if enabled is not None:
             turned_on = bool(enabled) and not self.schedule_enabled
@@ -1790,6 +1793,7 @@ class Automation:
         Returns whether anything changed (it's saved then)."""
         now = self._now()
         changed = False
+        was_end = self._running_end()
         new = None if sessions is None else {session_id(x["start"], x["end"]): x for x in sessions}
         keep = []
         for r in self.saving_sessions:
@@ -1834,6 +1838,8 @@ class Automation:
         # (kept for the automatic schedule, which puts them in again under its own plan)
         self._saving_args = (ready_times, cap_min, provider, plug_hours)
         changed = self._apply_sessions(ready_times, cap_min, provider, plug_hours) or changed
+        if changed:
+            self._auto_mend(was_end)
         if changed and self.auto_plan:
             self.auto_plan["key"] = None  # (planned again around them, they come first)
         if changed:
@@ -1894,10 +1900,12 @@ class Automation:
         """Saving sessions turned off: put back everything they changed and forget them."""
         if not self.saving_sessions and not self.saving_block:
             return False
+        was_end = self._running_end()
         for r in self.saving_sessions:
             self._undo_session(r)
             self._undo_pre(r)
         self.saving_sessions, self.saving_block = [], False
+        self._auto_mend(was_end)
         self._save()
         logger.info("Saving sessions off: anything they changed in the schedule is put back")
         return True
@@ -1946,6 +1954,39 @@ class Automation:
                 added = set(tr.get("added") or [])
                 self.entries = [x for x in self.entries if x["id"] not in added]
                 self._release_skips(tr.get("skips") or [], tr)
+
+    def _running_end(self) -> Optional[datetime.datetime]:
+        """The end of the plugged-in stretch going now, as the schedule has it (None: none)."""
+        now = self._now()
+        return next((b for a, b in self.windows(None, now) if a <= now < b), None)
+
+    def _auto_mend(self, was: Optional[datetime.datetime]) -> None:
+        """Taking something out never makes the charge going now run longer. The automatic
+        schedule's block that's going, joined on to what came straight after it (e.g. the charge
+        before a saving session), had no unplug of its own: that ended it. With that taken out
+        (saving sessions turned off, a session cancelled, its charge before deleted) nothing would
+        end the block, and it'd run on to the next unplug, hours later, through the session; and
+        it isn't planned again while it's going. `was`: where the stretch going now ended before;
+        if it now runs past that, it gets an unplug of its own at the block's planned end (or at
+        `was`, if that's sooner), as its own change."""
+        cur = self.auto_plan or {}
+        if not cur or not self.schedule_enabled or was is None:
+            return
+        now = self._now()
+        end = self._running_end()
+        if end is None or end <= was:
+            return
+        wins = [(a, b) for a, b in ((_parse_iso(x), _parse_iso(y)) for x, y in cur.get("charge") or []) if a and b]
+        going = next(((a, b) for a, b in wins if a <= now < b), None)
+        if going is None:
+            return
+        at = min(going[1], was)
+        e = self._same_id(validate_entry({"time": at.strftime("%H:%M"), "date": at.date().isoformat(),
+                                          "action": "unplug", "source": AUTO_SCHED_SOURCE}), [])
+        self.entries = self.entries + [e]
+        cur.setdefault("changes", {"added": [], "skips": []}).setdefault("added", []).append(e["id"])
+        logger.info("Automatic schedule: its charge going now ends at %s, as planned (what it was joined "
+                    "on to was taken out, which left it running to %s)", at.strftime("%H:%M"), end.strftime("%a %H:%M"))
 
     def _release_skips(self, keys: list, mine) -> None:
         """Its skips taken out, but not one something else still needs."""
