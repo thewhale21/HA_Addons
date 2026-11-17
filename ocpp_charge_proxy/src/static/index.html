@@ -897,8 +897,8 @@
               <div class="grow">Discharge time needed<div class="note" style="margin:0">How long a full battery exports for (Where it earns the most: how much each half hour's export takes; empty: 2 h). Before the high exports: a high export run longer than this gets a top-up charge inside it, where the battery then exports the most (charge time needed for a full charge, else the same as this). Empty: none.</div></div>
               <span class="ctl"><input type="number" id="as-dneed" min="0" max="12" step="0.5" placeholder="—" aria-label="Discharge time needed (hours)"> h</span>
             </div>
-            <div class="row as-before" hidden>
-              <div class="grow">High export half hours a day<div class="note" style="margin:0">The day's highest export rates, marked in orange on the schedule: the charging goes around them. 0: none.</div></div>
+            <div class="row as-before as-value" hidden>
+              <div class="grow">High export half hours a day<div class="note" style="margin:0">The day's highest export rates, marked in orange on the schedule. Before the high exports: the charging goes around them. Where it earns the most: only marked, to see them (it uses every export rate either way). 0: none.</div></div>
               <span class="ctl"><input type="number" id="as-high" min="0" max="48" step="1" aria-label="High export half hours a day"> × 30 min</span>
             </div>
             <div class="row"><div class="grow">Import rates<div class="note" style="margin:0">For the off-peak times</div></div></div>
@@ -908,6 +908,10 @@
             <div class="row">
               <div class="grow">Show export rates on the schedule<div class="note" style="margin:0">Each half hour's export rate as a coloured line along the top of each day: green where it's lowest, red where it's highest. Shown whether the automatic schedule is on or off.</div></div>
               <label class="switch"><input type="checkbox" id="as-rates" aria-label="Show export rates on the schedule"><span></span></label>
+            </div>
+            <div class="row">
+              <div class="grow">Show high exports on the schedule<div class="note" style="margin:0">The high export half hours (High export half hours a day) in orange along the bottom of each day. Off: still marked and planned around, just not drawn.</div></div>
+              <label class="switch"><input type="checkbox" id="as-highs" aria-label="Show high exports on the schedule"><span></span></label>
             </div>
             <details class="fold" id="as-plan" style="margin-top:12px"><summary id="as-sum">Plan</summary><dl class="kv" id="as-info" style="margin-top:8px"></dl></details>
           </div>
@@ -2752,7 +2756,8 @@ async function refreshSimulation(force) {
   drawSimulation();
   // (the week was drawn before the settings came, e.g. just after the page opened: drawn again
   // now, with the export rates on it if they're to be shown)
-  if (auto.data && week.ratesFor !== undefined && week.ratesFor !== !!sim.edit.auto_show_rates) drawWeekSoon();
+  if (auto.data && week.ratesFor !== undefined && (week.ratesFor !== !!sim.edit.auto_show_rates
+      || week.highsFor !== (sim.edit.auto_show_highs !== false))) drawWeekSoon();
 }
 // Settings save as soon as they change: switches and sensors on click,
 // numbers when you leave the field or press Enter
@@ -2816,6 +2821,7 @@ function drawPickers() {
   $('ro-on').checked = !!sim.edit.read_only;
   $('as-on').checked = !!sim.edit.auto_sched_on;
   $('as-rates').checked = !!sim.edit.auto_show_rates;
+  $('as-highs').checked = sim.edit.auto_show_highs !== false;
   if (document.activeElement !== $('as-n')) $('as-n').value = sim.edit.auto_sched_blocks ?? 12;
   if (document.activeElement !== $('as-high')) $('as-high').value = sim.edit.auto_high_blocks ?? 0;
   if (document.activeElement !== $('as-cneed')) $('as-cneed').value = sim.edit.auto_charge_need_h ?? '';
@@ -2825,7 +2831,7 @@ function drawPickers() {
   $('pop-auto').checked = !!sim.edit.populate_auto;
   const mode = ['before', 'value'].includes(sim.edit.auto_sched_mode) ? sim.edit.auto_sched_mode : 'cheapest';
   $('as-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
-  // (the charge and discharge times: for Before the high exports and Where it earns the most; the high export half hours: only the first)
+  // (the charge and discharge times and the high export half hours: for Before the high exports and Where it earns the most)
   asRows(mode);
   $('as-n-note').textContent = asNote(mode);
   drawAutoSched();
@@ -3044,7 +3050,7 @@ function drawAutoSched() {
     ...(on ? [] : [['Plan', '<span class="muted">Off. If it were turned on, it would do this:</span>']]),
     [on ? 'Charging' : 'Charge', (p.charge || []).length ? p.charge.map(span).join('<br>') : '<span class="muted">None planned</span>'],
     ['Your slots', gave.length ? gave.map((g) => esc(g)).join('<br>') : '<span class="muted">None (none where the export rates are known)</span>'],
-    ...(sim.edit && sim.edit.auto_sched_mode === 'before' ? [['High export', (() => { const h = ((sch && sch.high_rates) || []).filter((w) => new Date(w[1]) > Date.now());
+    ...(sim.edit && ['before', 'value'].includes(sim.edit.auto_sched_mode) ? [['High export', (() => { const h = ((sch && sch.high_rates) || []).filter((w) => new Date(w[1]) > Date.now());
       return h.length ? mergeRuns(h).map((w) => `${span(w)} <span class="muted">(up to ${num(w[2], 1)}p)</span>`).join('<br>') : '<span class="muted">None marked</span>'; })()]] : []),
     ['Off-peak', (p.offpeak || []).length ? p.offpeak.map(span).join('<br>') : '<span class="muted">None (no cheaper import times)</span>'],
     ...(notes.length ? [['Notes', notes.map((n) => `<div class="sub" style="color:var(--warn)">${esc(n)}</div>`).join('')]] : []),
@@ -3087,6 +3093,7 @@ function asRows(mode) {
 $('as-mode').addEventListener('click', (e) => {
   const mode = e.target.dataset && e.target.dataset.mode; if (!mode) return;
   if (mode === 'before' && !Number(sim.edit && sim.edit.auto_high_blocks)) toast('Set High export half hours a day too: it charges before those first');
+  if (mode === 'value' && !Number(sim.edit && sim.edit.auto_high_blocks)) toast('Set High export half hours a day to see the highest export rates on the schedule');
   if (sim.edit) sim.edit.auto_sched_mode = mode;
   $('as-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
   asRows(mode);
@@ -3109,6 +3116,11 @@ $('as-high').addEventListener('change', (e) => {
   if (!Number.isInteger(n) || n < 0 || n > 48) { toast('0 to 48 half hours'); refreshSimulation(true); return; }
   saveSensors({auto_high_blocks: n}, n ? `The ${hmDur(n * 1800)} a day with the highest export rates are marked` : 'High export half hours not marked')
     .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
+});
+$('as-highs').addEventListener('change', (e) => {
+  if (sim.edit) sim.edit.auto_show_highs = e.target.checked;
+  drawWeek();
+  saveSensors({auto_show_highs: e.target.checked}, e.target.checked ? 'High exports shown on the schedule' : 'High exports hidden on the schedule');
 });
 $('as-rates').addEventListener('change', (e) => {
   if (sim.edit) sim.edit.auto_show_rates = e.target.checked;
@@ -3142,7 +3154,7 @@ function highBars(d, lo, hi, span) {
   // (not the half hours it tops up in, Charge: Before the high exports with a discharge time: they're charging)
   const sch = auto.data && auto.data.schedule;
   const tops = new Set(((sch && sch.auto_plan && sch.auto_plan.top_ups) || []).map((x) => new Date(x).getTime()));
-  const r = (d < 0 ? [] : (sch && sch.high_rates) || []).filter((x) => !tops.has(new Date(x[0]).getTime()));
+  const r = (d < 0 || !highsShown() ? [] : (sch && sch.high_rates) || []).filter((x) => !tops.has(new Date(x[0]).getTime()));
   const runs = [];  // (back to back ones together, an estimate's apart)
   r.forEach(([a, b, pr, est]) => {
     const last = runs[runs.length - 1];
@@ -3156,9 +3168,11 @@ function highBars(d, lo, hi, span) {
     return `<div class="xpk${est ? ' est' : ''}" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="${esc(`High export ${hm(x)}–${hm(y)} (up to ${num(pr, 1)}p): one of the day's highest export rates${est ? ' (an estimate: the day before\'s, until the rates are out)' : ''}`)}"></div>`;
   }).join('');
 }
+// (shown unless Show high exports on the schedule is off)
+function highsShown() { return !(sim.edit && sim.edit.auto_show_highs === false); }
 function drawRatesLegend() {
   const r = ratesShown(), el = $('w-rates-legend');
-  const highs = ((auto.data && auto.data.schedule && auto.data.schedule.high_rates) || []).length;
+  const highs = highsShown() ? ((auto.data && auto.data.schedule && auto.data.schedule.high_rates) || []).length : 0;
   el.hidden = !r && !highs;
   const ps = r ? r.map((x) => x[2]) : [];
   el.innerHTML = (highs ? '<span style="margin-right:14px"><b class="band" style="background:#f9a825;height:4px;opacity:1"></b>High export</span>' : '')
@@ -3678,6 +3692,7 @@ window.addEventListener('resize', weekFit);
 function drawWeek() {
   week.redraw = false;
   week.ratesFor = !!(sim.edit && sim.edit.auto_show_rates);  // (drawn with the export rates or not: see refreshSimulation)
+  week.highsFor = highsShown();
   const on = auto.data ? auto.data.schedule.enabled : false;
   // Grey outline when the schedule sets the supplier's ready time; the
   // supplier's planned slots as outlines in its colour

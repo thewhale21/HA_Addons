@@ -215,10 +215,11 @@ one-line summary; click it to see it all.
   counted). E.g. Axle's 121p 19:00–20:00 with 27p from 16:00: it charges
   straight before 19:00 and not in it, and tops up between the 27p half
   hours.
-- *Charge time needed and Discharge time needed show with Before the high
-  exports and Where it earns the most; High export half hours a day only
-  with Before the high exports (with the other two, no high export half
-  hours are marked).*
+- *Charge time needed, Discharge time needed and High export half hours a
+  day show with Before the high exports and Where it earns the most (with
+  Where exporting pays least, no high export half hours are marked). With
+  Where it earns the most the high export half hours are only marked, so
+  you can see them: the plan uses every export rate either way.*
 - **Charge time needed** (hours, in half hours; empty for none): with
   *Before the high exports*, the most each charge before, and after, a high
   export run is. E.g. a 2-hour run with an hour needed: an hour before it and
@@ -253,6 +254,11 @@ one-line summary; click it to see it all.
   along the top of each day on the schedule, green where it's lowest and red
   where it's highest (across all the rates known), with the range in the
   legend. Hover over one for its price.
+- **Show high exports on the schedule** (its own switch, on by default): the
+  high export half hours (High export half hours a day) in orange along the
+  bottom of each day. Off, they're not drawn (or in the legend), but they're
+  still marked, listed in the plan and, with Before the high exports,
+  planned around.
 - **Tomorrow, before its rates are out:** until the export rates for
   tomorrow are published (Octopus: about 16:00), tomorrow is planned on an
   estimate, the day before's rates, exactly as if known (your slots there give

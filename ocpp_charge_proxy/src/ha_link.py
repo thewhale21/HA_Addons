@@ -124,6 +124,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         out["auto_sched_on"] = bool(raw["auto_sched_on"])
     if "auto_show_rates" in raw:
         out["auto_show_rates"] = bool(raw["auto_show_rates"])
+    if "auto_show_highs" in raw:  # the high export half hours drawn on the schedule (marked either way)
+        out["auto_show_highs"] = bool(raw["auto_show_highs"])
     if "auto_sched_mode" in raw:  # charge where exporting pays least, before the high export times, or where it earns the most
         if raw["auto_sched_mode"] not in ("cheapest", "before", "value"):
             raise ValueError("auto_sched_mode must be cheapest, before or value")
@@ -296,7 +298,7 @@ def default_settings() -> dict:
         "slot_lead_min": SLOT_LEAD_MIN,
         "read_only": False,  # nothing plugs in or unplugs by itself (shown, logged, not done)
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
-        "auto_sched_on": False, "auto_show_rates": False, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",
+        "auto_sched_on": False, "auto_show_rates": False, "auto_show_highs": True, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",
         # Populate schedule (Automations tab): best charging times per weekday from a power sensor's history
         "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 12, "populate_auto": False,
         # Your supplier: empty / None = found automatically

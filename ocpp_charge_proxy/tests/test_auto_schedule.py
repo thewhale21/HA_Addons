@@ -1291,3 +1291,19 @@ def test_saving_sessions_turned_off_during_a_block_joined_to_the_charge_before_i
     clock2.dt = at(17) + datetime.timedelta(seconds=56)
     b.sync_saving_sessions(sess, True, None, 360, "Octopus Energy", 1.0)
     assert len(b.entries) == n and b.next_unplug(clock2.dt) == at(19)
+
+
+def test_high_exports_marked_with_where_it_earns_the_most_but_not_planned_around():
+    """2.98.0: with Where it earns the most the high export half hours are marked (for the
+    schedule), but the plan doesn't change with them; the switch to hide them is a setting."""
+    from src.ha_link import validate_settings
+    imp, exp = axle_day()
+    a, _ = _auto(at(12, 5))
+    a.limit_reset = "12:00"
+    a.sync_auto_schedule(imp, exp, 12, cap_min=360, mode="value", charge_cap=2, discharge_cap=3)
+    plan = list(a.auto_plan["charge"])
+    a.set_export_rates(exp, {}, high=2)
+    assert [x[0][11:16] for x in a.high_rates] == ["19:00", "19:30"]
+    assert not a.sync_auto_schedule(imp, exp, 12, cap_min=360, mode="value", charge_cap=2, discharge_cap=3)
+    assert a.auto_plan["charge"] == plan
+    assert validate_settings({"auto_show_highs": False})["auto_show_highs"] is False

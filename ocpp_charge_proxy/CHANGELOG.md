@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.98.0 — High exports shown with Where it earns the most, and a switch for them
+
+- **Feature:** with Charge *Where it earns the most*, High export half hours
+  a day shows too, and the day's highest export rates are marked on the
+  schedule as with Before the high exports. They're only marked, to see
+  them: the plan still uses every export rate, so marking more or fewer
+  doesn't change it.
+- **Feature:** Show high exports on the schedule (Automations › Automatic
+  schedule), a switch like Show export rates: off, the orange high export
+  marks (and their legend) aren't drawn; they're still marked and planned
+  around. On by default, as they were.
+- **Docs:** both.
+
 ## 2.97.1 — A charge going on doesn't run on when a saving session is taken out
 
 - **Fix:** an automatic schedule charge that's going, joined on to the
