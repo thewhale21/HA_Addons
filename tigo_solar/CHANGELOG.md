@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0 — Each panel through every past day, from Tigo
+
+- **Feature:** Tigo keeps each panel's power and reclaimed power every 15
+  minutes (the time slider in the Tigo app), so once the rest of the
+  history is read, the add-on reads them back for every earlier day,
+  newest first, gently (about 70 requests a day of history). Past days
+  then show each panel's own power and reclaimed power through the day,
+  not an estimate; so does any time the add-on was stopped. The first few
+  answers are checked against the system's power before the rest are
+  trusted; if they don't add up, it stops and those days stay estimated.
+- **Improvement:** **History** shows how far back each panel's power has
+  been read, and whether it's still reading.
+
 ## 0.3.3 — Some panels chosen look like the whole system
 
 - **Fix:** on a day's chart, with some panels chosen (not all), the

@@ -7,9 +7,10 @@ Times are the system's own local time as Tigo gives them ("YYYY-MM-DD HH:MM", da
   would make without the optimisers) and reclaimed (what the optimisers won back).
 - system_energy: its energy by the day (Wh), the same three.
 - panel_energy: each panel's energy by the day (Wh).
-- panel_power: each panel's power and reclaimed power (W), as the add-on read them (Tigo
-  keeps only the latest, so these start when the add-on does).
-- done: the days whose history has been read in full (not read again).
+- panel_power: each panel's power and reclaimed power (W), every 15 minutes (as Tigo
+  keeps them): read as they came, and the past ones read back (src/collector.py).
+- done: the days whose history has been read in full (not read again): "day" (energy and
+  the system's power), "month" (its days), "panels" (each panel through the day).
 """
 from __future__ import annotations
 
@@ -106,6 +107,9 @@ class Store:
         """[(day, panel, wh)] from start to end."""
         return self._read("SELECT day, panel, wh FROM panel_energy WHERE day >= ? AND day <= ? ORDER BY day",
                           (start, end))
+
+    def done_count(self, kind: str) -> int:
+        return self._read("SELECT COUNT(*) FROM done WHERE kind = ?", (kind,))[0][0]
 
     def first_day(self) -> Optional[str]:
         rows = self._read("SELECT MIN(day) FROM (SELECT MIN(day) AS day FROM system_energy WHERE total > 0 "

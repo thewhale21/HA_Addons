@@ -9,11 +9,11 @@ so the page can stack the panels and show what each made at any point.
 
 Where each panel's numbers come from:
 - energy by the day: Tigo has each panel's energy for every day (exact);
-- power through a day: Tigo keeps only each panel's latest reading, so the add-on records
-  them as it reads (exact, from when it started). For a day before that, each panel's
+- power through a day: Tigo keeps each panel's readings every 15 minutes; the add-on reads
+  them as they come, and the past ones a slot at a time (src/collector.py; exact). Where
+  it has none yet (still reading the history, or Tigo didn't send them), each panel's
   power is estimated: the system's power by the minute (which Tigo keeps) times the
-  panel's share of that day's energy ("estimated": true); so is any part of a day
-  without the add-on's readings (before it started, or while it was stopped).
+  panel's share of that day's energy ("estimated": true).
 - reclaimed: Tigo splits it off for the whole system by the minute and the day; for a
   panel, from the add-on's own readings (or, estimated, the system's times its share).
 """
@@ -191,13 +191,13 @@ def _day(store, day: str, out: dict, energy: dict, whole: bool, chosen: Optional
         guessed = sum(1 for r in rows if r[2])
         out["estimated"] = guessed > 0
         if guessed == len(rows):
-            out["note"] = ("Each panel's power is estimated for this day: Tigo keeps only each panel's latest "
-                           "reading, so it's the system's power times the panel's share of the day's energy. "
-                           "The add-on records each panel's own readings from when it started.")
+            out["note"] = ("Each panel's power is estimated for this day: the add-on hasn't read each panel's "
+                           "readings for it from Tigo yet (see History), so it's the system's power times the "
+                           "panel's share of the day's energy.")
         elif guessed:
-            out["note"] = ("Each panel's power is partly estimated for this day: where the add-on wasn't "
-                           "recording each panel (before it started, or while it was stopped), it's the "
-                           "system's power times the panel's share of the day's energy.")
+            out["note"] = ("Each panel's power is partly estimated for this day: where the add-on hasn't "
+                           "read each panel from Tigo (yet), it's the system's power times the panel's share "
+                           "of the day's energy.")
         if whole:
             out["system_points"] = [{"t": t[11:16], "total": tot, "base": base, "reclaimed": rec}
                                     for t, tot, base, rec in system]

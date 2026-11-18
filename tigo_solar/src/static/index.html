@@ -700,7 +700,9 @@ function renderState(s) {
   const h = s.history || {};
   $('o-history').innerHTML = kv([
     ['Read from Tigo', h.from ? `${esc(h.from)} on: ${h.done} of ${h.days} days${h.running ? ' <span class="chip info">reading</span>' : ' <span class="chip ok">done</span>'}` : '<span class="muted">Not yet</span>'],
-    ['Each panel through the day', h.panel_power_from ? `From ${esc(h.panel_power_from.slice(0, 10))} (Tigo keeps only the latest reading, so the add-on records them)` : '<span class="muted">From the first reading</span>'],
+    ['Each panel through the day', h.panels_off ? `From ${esc((h.panel_power_from || '').slice(0, 10) || 'the first reading')} (Tigo didn't send earlier readings, so earlier days are estimated)`
+      : h.panel_power_from ? `From ${esc(h.panel_power_from.slice(0, 10))}, every 15 minutes${h.panels_running ? ' <span class="chip info">reading</span>' : h.panels_done ? ' <span class="chip ok">done</span>' : ''}`
+      : '<span class="muted">From the first reading</span>'],
     ['Plan', s.premium === null ? '—' : s.premium ? 'Premium (read every minute)' : 'Free (Tigo updates about every 15 minutes; read every 5)'],
   ]);
   const sig = JSON.stringify((s.panels || []).map((p) => [p.id, p.left, p.top, p.power, p.energy_today]));

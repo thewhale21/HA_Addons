@@ -169,6 +169,56 @@ def test_the_history_is_read_a_day_at_a_time_and_once(tmp_path):
     assert not any(isinstance(x, tuple) and x[0] == "aggenergy" for x in c.client.calls)
 
 
+def _past_day_tigo(c, store, fair=True):
+    """Tigo with each panel's readings for any time: 12 panels sharing the system's power
+    then (fair), or always the latest reading whatever the time (not)."""
+    system = {t: tot for t, tot, _, _ in store.system_power("2026-11-18")}
+
+    async def lastvalue(day, kind, hhmm):
+        c.client.calls.append(("lastvalue", kind, day, hhmm))
+        tot = system.get(f"{day} {hhmm}") if fair else 156.0
+        if tot is None:
+            return {"dataset": {}}
+        each = tot / 12 if kind == "pin" else tot / 120
+        return {"dataset": {str(p): each for p in IDS}}
+    c.client.lastvalue = lastvalue
+
+
+def test_each_panel_through_past_days_is_read_every_15_minutes(tmp_path):
+    c, state, store = _collector(now="2026-11-18T09:00:00+00:00", tmp_path=tmp_path)
+    _run(c.poll())
+    c._start = "2026-11-18"
+    # (the add-on read each panel at 08:13 as it happened; the system made power from 07:30)
+    _past_day_tigo(c, store)
+    c.client.calls.clear()
+    while _run(c.panel_history_step()):
+        assert len(c.client.calls) < 50
+    asked = sorted({x[3] for x in c.client.calls})
+    assert asked == ["07:30", "07:45", "08:00"]  # (08:15: the 08:13 reading covers it)
+    rows = store.panel_power("2026-11-18")
+    assert {r[0] for r in rows} == {"2026-11-18 07:30", "2026-11-18 07:45", "2026-11-18 08:00", "2026-11-18 08:13"}
+    a1 = [r for r in rows if r[0] == "2026-11-18 08:00" and r[1] == IDS[0]][0]
+    assert a1[2] == pytest.approx(store.system_power("2026-11-18")[30][1] / 12) and a1[3] is not None
+    assert state.history["panels_running"] is False and not state.history["panels_off"]
+    # asked once: nothing more
+    c.client.calls.clear()
+    assert not _run(c.panel_history_step()) and not c.client.calls
+
+
+def test_each_panel_through_past_days_stops_if_tigo_sends_only_the_latest(tmp_path):
+    c, state, store = _collector(now="2026-11-18T09:00:00+00:00", tmp_path=tmp_path)
+    _run(c.poll())
+    c._start = "2026-11-18"
+    _past_day_tigo(c, store, fair=False)
+    store.put_panel_power("2026-11-18 08:13", {}, {})  # (nothing read as it happened)
+    steps = 0
+    while _run(c.panel_history_step()):
+        steps += 1
+        assert steps < 10
+    assert state.history["panels_off"] and c._panel_off
+    assert {r[0] for r in store.panel_power("2026-11-18")} == {"2026-11-18 08:13"}
+
+
 def test_a_new_day_finishes_yesterday(tmp_path):
     c, state, store = _collector(now="2026-11-17T22:00:00+00:00", tmp_path=tmp_path)
     _run(c.poll())

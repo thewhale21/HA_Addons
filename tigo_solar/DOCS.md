@@ -64,15 +64,19 @@ readings (voltages, current, temperature) aren't used.
     it, the peak and average power (or the average a day or month), and
     each panel's energy, share of it, reclaimed energy and peak. The roof
     colours each panel by its energy then. **Close** clears it.
-  - **Each panel's power through a day:** Tigo keeps only each panel's
-    latest reading, so the add-on records them every time it reads (exact,
-    from when it started). For a day before that, and for any part of a
-    day it wasn't recording (before it started, or while it was stopped),
-    each panel's power is estimated: the system's power by the minute (which Tigo keeps) times the
-    panel's share of that day's energy (which Tigo has for every day). The
-    chart says when it's estimated. Energy by the day is always exact.
-- **History:** how much of your history has been read from Tigo, since when
-  each panel's power through the day has been recorded, and your Tigo plan.
+  - **Each panel's power through a day:** Tigo keeps each panel's power
+    and reclaimed power every 15 minutes. The add-on reads them as they
+    come, and once the rest of the history is read, reads them back for
+    every earlier day, newest first: about 70 requests a day of history,
+    gently, so it takes a while (see **History**). Until a day is read, and
+    if Tigo ever doesn't send them, each panel's power that day is
+    estimated: the system's power by the minute (which Tigo keeps) times
+    the panel's share of that day's energy (which Tigo has for every day).
+    The chart says when it's estimated. Energy by the day is always exact.
+
+- **History:** how much of your history has been read from Tigo, how far
+  back each panel's power through the day has been read (and whether it's
+  still reading), and your Tigo plan.
 
 ## Its Home Assistant sensors
 

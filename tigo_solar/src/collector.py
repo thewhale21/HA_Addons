@@ -12,6 +12,12 @@ Each poll, for today (in the system's time zone):
 The history, a day at a time, newest first, between polls: each panel's energy that day
 and the system's power by the minute, and each month's days; a day is read once, and
 yesterday once more after midnight (Tigo can still be catching up then).
+
+Then each panel's power and reclaimed power through each day, newest first: Tigo keeps
+them every 15 minutes (lastvalue, for a time), so each 15 minutes the system was making
+power, that the add-on didn't read as it happened, is asked for once. Checked against the
+system's power then before it's trusted: if Tigo's answers don't add up (e.g. it sends the
+latest reading whatever the time), it stops and the charts estimate each panel instead.
 """
 from __future__ import annotations
 
@@ -32,6 +38,10 @@ LIFETIME_EVERY_S = 1800
 BACKFILL_GAP_S = 3.0  # between history requests: gentle on Tigo
 BACKFILL_YEARS = 5  # looked back this far for the first month with production
 ERROR_BACKOFF_S = (60, 120, 300, 600)
+PANEL_SLOT_MIN = 15  # Tigo keeps each panel's readings this often
+PANEL_NEAR_MIN = 7  # a reading this near a slot already covers it
+PANEL_CHECKS = 3  # slots that must add up to the system's power before the rest are read
+PANEL_MISSES = 3  # slots without an answer, or not adding up, before giving up
 
 
 def _zone(name: Optional[str]):
@@ -76,6 +86,10 @@ class Collector:
         self._live: dict = {}  # panel ID -> {"power", "reclaimed", "energy_today"}
         self._start: Optional[str] = None  # the first day with production
         self.wake = asyncio.Event()  # (set to poll now, e.g. the page asked)
+        self._panel_ok = 0  # each panel's history: slots that added up (PANEL_CHECKS: trusted)
+        self._panel_bad = 0  # ... and that didn't, before it was trusted
+        self._panel_off = False  # Tigo doesn't keep it: not asked again until a restart
+        self._tried: set = set()  # slots asked for (once each)
 
     # --- time ------------------------------------------------------------------------
 
@@ -237,10 +251,86 @@ class Collector:
         self._history(start, days, running=False)
         return False
 
+    # --- each panel through each day -------------------------------------------------
+
+    def _slots(self, day: str) -> list[str]:
+        """The 15 minutes of a day the system was making power ("HH:MM"), and not read
+        yet as they happened."""
+        rows = [r for r in self.store.system_power(day) if r[1]]
+        if not rows:
+            return []
+        mins = lambda ts: int(ts[11:13]) * 60 + int(ts[14:16])  # noqa: E731
+        first = -(-mins(rows[0][0]) // PANEL_SLOT_MIN) * PANEL_SLOT_MIN
+        last = mins(rows[-1][0])
+        if day == self._day and self._last_reading and self._last_reading[:10] == day:
+            last = min(last, mins(self._last_reading))
+        have = sorted({mins(t) for t, *_ in self.store.panel_power(day)})
+        out = []
+        for m in range(first, last + 1, PANEL_SLOT_MIN):
+            if any(abs(h - m) <= PANEL_NEAR_MIN for h in have):
+                continue
+            out.append(f"{m // 60:02d}:{m % 60:02d}")
+        return out
+
+    async def panel_history_step(self) -> bool:
+        """Read each panel at one more 15 minutes of the past. False when there's nothing
+        left (or Tigo doesn't keep it)."""
+        if self._panel_off or not self._start:
+            return False
+        today = self.today()
+        for day in reversed(_days(self._start, today)):
+            if day != today and self.store.is_done(day, "panels"):
+                continue
+            todo = [s for s in self._slots(day) if (day, s) not in self._tried]
+            if not todo:
+                if day != today and self.store.is_done(day, "day"):
+                    self.store.mark_done(day, "panels")
+                continue
+            hhmm = todo[0]
+            self._tried.add((day, hhmm))
+            power = tigo_data.parse_lastvalue(await self.client.lastvalue(day, "pin", hhmm))
+            await self._sleep(BACKFILL_GAP_S)
+            if not self._trust(day, hhmm, power):
+                return not self._panel_off
+            reclaimed = tigo_data.parse_lastvalue(await self.client.lastvalue(day, "reclaimedPower", hhmm))
+            self.store.put_panel_power(f"{day} {hhmm}", power, reclaimed)
+            self._panel_history(running=True)
+            return True
+        self._panel_history(running=False)
+        return False
+
+    def _trust(self, day: str, hhmm: str, power: dict) -> bool:
+        """Do each panel's readings for a time add up to the system's power then? Until
+        PANEL_CHECKS have, each is checked; once they have, they're kept as they come."""
+        system = {t[11:16]: tot for t, tot, _, _ in self.store.system_power(day)}
+        near = [system[k] for k in (hhmm,) if k in system and system[k]]
+        if self._panel_ok >= PANEL_CHECKS:
+            return bool(power)
+        if power and near and abs(sum(power.values()) - near[0]) <= max(30.0, 0.35 * near[0]):
+            self._panel_ok += 1
+            return True
+        self._panel_bad += 1
+        if self._panel_bad >= PANEL_MISSES:
+            self._panel_off = True
+            logger.info("Tigo didn't send each panel's readings for past times (or they didn't add up to "
+                        "the system's power), so each panel is estimated for days before the add-on read them")
+            self._panel_history(running=False, off=True)
+        return False
+
+    def _panel_history(self, running: bool, off: bool = False) -> None:
+        h = dict(self.state.history or {})
+        h["panels_running"] = running and not off
+        h["panels_off"] = off
+        h["panel_power_from"] = self.store.panel_power_since()
+        h["panels_done"] = self.store.done_count("panels")
+        self.state.history = h
+
     def _history(self, start: str, days: list, running: bool = True) -> None:
         done = sum(1 for d in days if self.store.is_done(d, "day"))
+        old = self.state.history or {}
         self.state.history = {"from": start, "done": done, "days": len(days), "running": running and done < len(days),
-                              "panel_power_from": self.store.panel_power_since()}
+                              "panel_power_from": self.store.panel_power_since(),
+                              **{k: old[k] for k in ("panels_running", "panels_off", "panels_done") if k in old}}
 
     # --- the loop --------------------------------------------------------------------
 
@@ -248,6 +338,7 @@ class Collector:
         failures = 0
         next_poll = 0.0
         history_left = True
+        panels_left = True
         while True:
             try:
                 if self._clock() >= next_poll:
@@ -257,8 +348,13 @@ class Collector:
                     failures = 0
                     next_poll = self._clock() + (POLL_PREMIUM_S if self.state.premium else POLL_S)
                     history_left = True  # (a new day may have one more)
+                    panels_left = True
                 if history_left:
                     history_left = await self.backfill_step()
+                    await self._sleep(BACKFILL_GAP_S)
+                    continue
+                if panels_left:
+                    panels_left = await self.panel_history_step()
                     await self._sleep(BACKFILL_GAP_S)
                     continue
             except asyncio.CancelledError:
@@ -272,7 +368,7 @@ class Collector:
                 if type(err).__name__ == "TigoAuthError":
                     self.state.status = "Tigo refused the login"
                 next_poll = self._clock() + wait
-                history_left = False
+                history_left = panels_left = False
             self.wake.clear()
             try:
                 await asyncio.wait_for(self.wake.wait(), max(1.0, next_poll - self._clock()))
