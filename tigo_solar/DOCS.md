@@ -73,6 +73,9 @@ readings (voltages, current, temperature) aren't used.
     estimated: the system's power by the minute (which Tigo keeps) times
     the panel's share of that day's energy (which Tigo has for every day).
     The chart says when it's estimated. Energy by the day is always exact.
+    On the chart each panel is drawn every minute, as the whole system: the
+    system's power then, shared out by the panels' readings (going
+    smoothly from one 15-minute reading to the next).
 
 - **History:** how much of your history has been read from Tigo, how far
   back each panel's power through the day has been read (and whether it's

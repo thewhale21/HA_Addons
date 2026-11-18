@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1 — Each panel every minute, from its 15-minute readings
+
+- **Fix:** a day with each panel's readings (every 15 minutes) was drawn
+  at those 15 minutes, while the whole system is drawn every minute, so
+  choosing some panels or all of them changed the shape a lot. Each panel
+  is now drawn every minute: the system's power then, shared out by the
+  panels' readings (going smoothly from one reading to the next), so the
+  panels always add up to the system and the shape is the same, just
+  smaller. Reclaimed power the same way.
+
 ## 0.4.0 — Each panel through every past day, from Tigo
 
 - **Feature:** Tigo keeps each panel's power and reclaimed power every 15

@@ -9,7 +9,9 @@ so the page can stack the panels and show what each made at any point.
 
 Where each panel's numbers come from:
 - energy by the day: Tigo has each panel's energy for every day (exact);
-- power through a day: Tigo keeps each panel's readings every 15 minutes; the add-on reads
+- power through a day (every minute, as the system's: its power shared out by each
+  panel's share at its readings, going smoothly between them): Tigo keeps each panel's
+  readings every 15 minutes; the add-on reads
   them as they come, and the past ones a slot at a time (src/collector.py; exact). Where
   it has none yet (still reading the history, or Tigo didn't send them), each panel's
   power is estimated: the system's power by the minute (which Tigo keeps) times the
@@ -146,6 +148,44 @@ def _near(m: int, recorded: list) -> bool:
     return any(0 <= k < len(recorded) and abs(recorded[k] - m) <= RECORDED_GAP_MIN for k in (i - 1, i))
 
 
+def _shares(recorded: dict, need: set) -> list:
+    """Each reading of the panels as shares: [(minute, {panel: share of the power},
+    {panel: share of the reclaimed power})], by time. A reading missing any panel in `need`
+    (those that made something that day) is left out: its shares would be wrong."""
+    out = []
+    for t in sorted(recorded):
+        vals = recorded[t]
+        if not need <= {p for p, v in vals.items() if v[0] is not None}:
+            continue
+        tot = sum(v[0] or 0.0 for v in vals.values())
+        rec = sum(v[1] or 0.0 for v in vals.values())
+        if tot <= 0:
+            continue
+        out.append((_mins(t), {p: (v[0] or 0.0) / tot for p, v in vals.items()},
+                    {p: (v[1] or 0.0) / rec for p, v in vals.items()} if rec > 0 else {}))
+    return out
+
+
+def _share_at(m: int, at: list, readings: list):
+    """Each panel's shares at minute m: between the readings either side (if they're near
+    enough), else the nearest one if near, else None."""
+    import bisect
+    i = bisect.bisect_left(at, m)
+    before = readings[i - 1] if i > 0 else None
+    after = readings[i] if i < len(readings) else None
+    if after and after[0] == m:
+        return after[1], after[2]
+    if before and after and after[0] - before[0] <= 2 * RECORDED_GAP_MIN:
+        f = (m - before[0]) / (after[0] - before[0])
+        mix = lambda a, b: {p: (a.get(p) or 0.0) * (1 - f) + (b.get(p) or 0.0) * f for p in set(a) | set(b)}  # noqa: E731
+        return mix(before[1], after[1]), mix(before[2], after[2]) if before[2] and after[2] else (before[2] or after[2])
+    near = [r for r in (before, after) if r and abs(r[0] - m) <= RECORDED_GAP_MIN]
+    if not near:
+        return None
+    r = min(near, key=lambda r: abs(r[0] - m))
+    return r[1], r[2]
+
+
 def _series(rows: list, panel_ids: list):
     """Each panel's power and reclaimed power, and the totals, from (ts, {panel: (power,
     reclaimed)}, estimated) rows in time order."""
@@ -173,20 +213,23 @@ def _day(store, day: str, out: dict, energy: dict, whole: bool, chosen: Optional
     day_total = sum(energy.values())
 
     if system and day_total > 0:
-        # Each panel's own readings where the add-on has them (exact); before them, after
-        # them and in any gap (e.g. the add-on was stopped), estimated: the system's power
-        # by the minute, shared out by each panel's share of the day's energy
-        share = {p: (energy.get(p) or 0.0) / day_total for p in panel_ids}
-        rec_mins = sorted(_mins(t) for t in recorded)
-        steps = [r for r in system if int(r[0][14:16]) % ESTIMATE_STEP_MIN == 0] or system
+        # Every minute, as the whole system: the system's power shared out between the
+        # panels. Each panel's share comes from its readings (every 15 minutes), going
+        # smoothly from one reading to the next; where there are none near (not read yet,
+        # or Tigo didn't send them), from its share of the day's energy (estimated).
+        day_share = {p: (energy.get(p) or 0.0) / day_total for p in panel_ids}
+        readings = _shares(recorded, {p for p, wh in energy.items() if wh})  # [(minute, {panel: power share}, {panel: reclaimed share})]
+        at = [m for m, _, _ in readings]
         rows = []  # (ts, {panel: (power, reclaimed)}, estimated)
-        for r in steps:
-            if not _near(_mins(r[0]), rec_mins):
-                rows.append((r[0], {p: (None if r[1] is None else r[1] * share[p],
-                                        None if r[3] is None else r[3] * share[p]) for p in panel_ids}, True))
-        if len(recorded) >= 2:
-            rows += [(t, recorded[t], False) for t in recorded]
-        rows.sort(key=lambda r: r[0])
+        for ts, tot, _base, rec in system:
+            shares = _share_at(_mins(ts), at, readings)
+            if shares is None:
+                ps, rs, guess = day_share, day_share, True
+            else:
+                (ps, rs), guess = shares, False
+                rs = rs or ps  # (no panel reclaimed anything then: shared as the power)
+            rows.append((ts, {p: (None if tot is None else tot * (ps.get(p) or 0.0),
+                                  None if rec is None else rec * (rs.get(p) or 0.0)) for p in panel_ids}, guess))
         series, reclaimed, points = _series(rows, panel_ids)
         guessed = sum(1 for r in rows if r[2])
         out["estimated"] = guessed > 0

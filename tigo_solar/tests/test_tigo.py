@@ -306,19 +306,33 @@ def test_charts_for_chosen_panels():
 
 
 def test_a_day_recorded_from_part_way_is_estimated_before_that():
-    """The add-on started recording each panel at 08:05 (e.g. after a restart): before that,
-    each panel is estimated from the system's power, not left out."""
+    """Each panel's readings from 08:05 (e.g. after a restart): every minute, as the whole
+    system, its power shared out by the readings; before them (more than 20 minutes off),
+    by the day's energy (estimated)."""
     store = _filled_store()
     store.put_panel_energy("2026-11-18", tigo_data.parse_aggenergy(SAMPLES["aggenergy_today"])["panels"])
-    store.put_panel_power("2026-11-18 08:05", {90375862: 30.0}, {90375862: 1.5})
-    store.put_panel_power("2026-11-18 08:13", {90375862: 41.0}, {90375862: 2.5})
-    day = charts.build(store, "day", "2026-11-18", [90375862], IDS)
+    others = {p: 10.0 for p in IDS[1:]}
+    store.put_panel_power("2026-11-18 08:05", {IDS[0]: 30.0, **others}, {IDS[0]: 3.0, **{p: 1.0 for p in IDS[1:]}})
+    store.put_panel_power("2026-11-18 08:13", {IDS[0]: 50.0, **others}, {IDS[0]: 4.0, **{p: 1.0 for p in IDS[1:]}})
+    day = charts.build(store, "day", "2026-11-18", [IDS[0]], IDS)
+    system = {t[11:16]: (tot, rec) for t, tot, _, rec in store.system_power("2026-11-18")}
     times = [p["t"] for p in day["points"]]
-    assert times[0] == "07:30" and times[-2:] == ["08:05", "08:13"]
-    assert "07:45" not in times  # (within 20 minutes of a reading: the reading is used)
+    assert times == sorted(system)  # (every minute, as the whole system)
+    a1 = dict(zip(times, day["panel_series"][str(IDS[0])]))
+    assert a1["08:05"] == pytest.approx(system["08:05"][0] * 30 / 140, abs=0.1)
+    assert a1["08:13"] == pytest.approx(system["08:13"][0] * 50 / 160, abs=0.1)
+    # (between: going smoothly from one share to the next)
+    assert a1["08:09"] == pytest.approx(system["08:09"][0] * (30 / 140 + 50 / 160) / 2, abs=0.1)
+    rec = dict(zip(times, day["panel_reclaimed"][str(IDS[0])]))
+    assert rec["08:13"] == pytest.approx(system["08:13"][1] * 4 / 15, abs=0.1)
+    # before 07:45: estimated from the day's energy
+    share = 3.4 / sum(tigo_data.parse_aggenergy(SAMPLES["aggenergy_today"])["panels"].values())
+    assert a1["07:40"] == pytest.approx(system["07:40"][0] * share, abs=0.1)
     assert day["estimated"] and "partly estimated" in day["note"]
-    assert day["panel_series"]["90375862"][-2:] == [30.0, 41.0]
-    assert day["panel_reclaimed"]["90375862"][-1] == 2.5
+    # all of them: the stack adds up to the system
+    whole = charts.build(store, "day", "2026-11-18", None, IDS)
+    assert sum(v[-1] for v in whole["panel_series"].values()) == pytest.approx(system["08:13"][0], abs=1)  # (each rounded to 0.1 W)
+
 
 
 def test_your_layout_wins_over_tigos(tmp_path):
