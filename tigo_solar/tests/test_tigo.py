@@ -219,12 +219,12 @@ def test_charts_for_the_whole_system():
 
 def test_a_past_day_estimates_each_panel_from_the_system():
     """A day before the add-on read each panel: the system's power by the minute, shared out by
-    each panel's share of the day's energy, every 5 minutes; said so."""
+    each panel's share of the day's energy, every minute (as the whole system); said so."""
     store = _filled_store()
     store.put_panel_energy("2026-11-18", tigo_data.parse_aggenergy(SAMPLES["aggenergy_today"])["panels"])
     day = charts.build(store, "day", "2026-11-18", None, IDS)
     assert day["estimated"] and "estimated" in day["note"] and len(day["panel_series"]) == 12
-    assert all(int(p["t"][3:]) % 5 == 0 for p in day["points"])
+    assert [p["t"] for p in day["points"]] == [r["t"] for r in day["system_points"]]
     last = day["points"][-1]
     stacked = sum(v[-1] for v in day["panel_series"].values())
     assert stacked == pytest.approx(last["total"], abs=0.5)

@@ -24,7 +24,8 @@ import datetime
 from typing import Optional
 
 VIEWS = ("day", "week", "month", "year")
-ESTIMATE_STEP_MIN = 5  # an estimated day: a point every this many minutes
+ESTIMATE_STEP_MIN = 1  # an estimated day: a point every this many minutes (each of Tigo's, so
+# some panels chosen look like the whole system, just smaller)
 
 
 def _date(text: str) -> datetime.date:

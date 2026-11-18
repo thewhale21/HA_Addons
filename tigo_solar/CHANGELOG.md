@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3 — Some panels chosen look like the whole system
+
+- **Fix:** on a day's chart, with some panels chosen (not all), the
+  estimated power was drawn every 5 minutes, while the whole system is
+  drawn every minute, so the two looked quite different (smoothed peaks
+  and dips, and a different end of the day). Each panel's estimate is now
+  every minute too, so the shape is the same, just smaller.
+
 ## 0.3.2 — Choose a string's panels in one click
 
 - **Feature:** under the roof, next to **All panels** and **None**, a
