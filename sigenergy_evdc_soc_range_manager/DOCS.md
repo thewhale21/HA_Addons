@@ -329,10 +329,9 @@ On the page the high limit is called **Maximum charge** and the low limit
 **Keep at least**.
 
 The schedule below changes the high and/or low limit for a while, every
-week or once, or makes the charger work one way only. Each entry sets the
-maximum charge, the keep-at-least, both or neither, and can be:
+week or once, or makes the charger work one way only. Each entry is one
+of **Maximum charge**, **Keep at least**, **Both**, or:
 
-- **Both ways** (as usual);
 - **Charge only**: the charger is only started when there's spare power to
   charge from (exporting, or a charge signal such as Predbat charging),
   never for the house or just for being between the limits, and it's
@@ -344,14 +343,16 @@ maximum charge, the keep-at-least, both or neither, and can be:
   power.
 
 Either way the limits still hold: it's stopped charging at the maximum
-charge and discharging at the keep-at-least. Where one-way entries
-overlap, the one that started last wins.
+charge and discharging at the keep-at-least. A limit entry and a charge or
+discharge only entry can overlap (e.g. keep at least 50% all day, and
+charge only from 10:00 to 16:00): each does its part. Where charge only
+and discharge only entries overlap, the one that started last wins.
 
 The same start and end time (e.g. 00:00–00:00) is 24 hours.
 
-Its week view shows today and the next 6 days, with maximum charge
-entries in the top half of each day, keep-at-least ones in the bottom half,
-and charge or discharge only (with no limit) across the whole row, in purple:
+Its week view shows today and the next 6 days, each in three lanes:
+maximum charge entries on top, charge or discharge only in the middle (in
+purple) and keep-at-least ones below:
 click an entry to change, pause or delete it, drag either end of it to
 change when it starts or ends (in half hours, saved straight away; an
 every-week entry changes every week), or click or drag across a day (or

@@ -206,20 +206,22 @@
   .zoom-reset { position: absolute; top: 16px; right: 10px; z-index: 5; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
   .zoom-reset[hidden] { display: none; }
   .socchart { touch-action: pan-y; }  /* (across and pinch: the chart's own, see chartTouch) */
-  .week .track { position: relative; height: 48px; border-radius: 10px; background: var(--hover); overflow: hidden; touch-action: pan-y; cursor: copy; }
+  .week .track { position: relative; height: 66px; border-radius: 10px; background: var(--hover); overflow: hidden; touch-action: pan-y; cursor: copy; }
   .week .track.today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 45%, transparent); }
-  .week .lane { position: absolute; left: 0; right: 0; height: 50%; pointer-events: none; }
+  /* Three lanes a day: the maximum charge on top, charge or discharge only in the middle, keep at least below */
+  .week .lane { position: absolute; left: 0; right: 0; height: 33.333%; pointer-events: none; }
   .week .lane.hi { top: 0; background: color-mix(in srgb, var(--w-high) 6%, transparent); }
-  .week .lane.lo { top: 50%; background: color-mix(in srgb, var(--w-low) 6%, transparent); }
+  .week .lane.way { top: 33.333%; background: color-mix(in srgb, #7e57c2 5%, transparent); }
+  .week .lane.lo { top: 66.666%; background: color-mix(in srgb, var(--w-low) 6%, transparent); }
   .week .g3 { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--divider); pointer-events: none; }
   .week .past { position: absolute; top: 0; bottom: 0; left: 0; background: var(--card); opacity: .5; pointer-events: none; z-index: 2; }
-  .week .wbar { position: absolute; height: calc(50% - 5px); border-radius: 6px; cursor: pointer; color: #fff; font-size: 11px; font-weight: 500;
+  .week .wbar { position: absolute; height: calc(33.333% - 4px); border-radius: 6px; cursor: pointer; color: #fff; font-size: 11px; font-weight: 500;
     line-height: 19px; padding: 0 7px; overflow: hidden; white-space: nowrap; box-sizing: border-box; box-shadow: 0 1px 2px rgba(0,0,0,.15); z-index: 1;
     display: flex; align-items: center; gap: 3px; }
-  .week .wbar.hi { top: 3px; background: linear-gradient(135deg, #29b6f6, var(--w-high)); }
-  .week .wbar.lo { bottom: 3px; background: linear-gradient(135deg, #ffb74d, var(--w-low)); color: #3e2723; }
-  /* An entry that only makes it charge or discharge (no limit): across the whole day's row */
-  .week .wbar.way { top: 3px; height: calc(100% - 6px); background: repeating-linear-gradient(135deg, #7e57c2 0 8px, #6a45b0 8px 16px); }
+  .week .wbar.hi { top: 2px; background: linear-gradient(135deg, #29b6f6, var(--w-high)); }
+  .week .wbar.lo { bottom: 2px; background: linear-gradient(135deg, #ffb74d, var(--w-low)); color: #3e2723; }
+  /* Charge only or discharge only: the middle lane */
+  .week .wbar.way { top: calc(33.333% + 2px); background: linear-gradient(135deg, #9575cd, #6a45b0); }
   .lim.way i { background: #7e57c2; }
   .week .wbar.off { opacity: .35; filter: grayscale(.6); }
   .week .wbar.skipped { opacity: .45; text-decoration: line-through; background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.45) 4px 6px); }
@@ -614,9 +616,9 @@
     </div>
     <div class="card">
       <h2>Schedule<span class="spacer"></span><button class="btn small primary" id="w-add">+ Add</button></h2>
-      <div class="note" style="margin:0 0 14px">Change the maximum charge and/or keep-at-least for a while, or make it charge only or discharge only, every week or once. Click or drag across a day to add an entry, click one to change it. <details class="more"><summary>More</summary><div>For example, Tue and Thu 23:00–08:00 maximum charge 50%, tomorrow 06:00–10:00 keep at least 95%, or weekdays 16:00–19:00 discharge only. Each day shows the maximum charge's entries on top and the keep-at-least's below; charge or discharge only (with no limit) fills the day's row. <b>Charge only</b>: it's only started when there's spare power to charge from, and stopped if it discharges. <b>Discharge only</b>: only started when the house needs power, and stopped if it charges. Either way it stays between the limits. Any limit an entry doesn't set, and any time nothing's on, uses the defaults. Where entries overlap, the one that started last wins.</div></details></div>
+      <div class="note" style="margin:0 0 14px">Change the maximum charge and/or keep-at-least for a while, or make it charge only or discharge only, every week or once. Click or drag across a day to add an entry, click one to change it. <details class="more"><summary>More</summary><div>For example, Tue and Thu 23:00–08:00 maximum charge 50%, tomorrow 06:00–10:00 keep at least 95%, or weekdays 16:00–19:00 discharge only. Each day shows the maximum charge's entries on top, charge or discharge only in the middle, and the keep-at-least's below. A limit and a charge or discharge only entry can overlap, e.g. keep at least 50% and charge only at the same time. <b>Charge only</b>: it's only started when there's spare power to charge from, and stopped if it discharges. <b>Discharge only</b>: only started when the house needs power, and stopped if it charges. Either way it stays between the limits. Any limit an entry doesn't set, and any time nothing's on, uses the defaults. Where entries overlap, the one that started last wins.</div></details></div>
       <div class="week" id="w-grid"></div>
-      <div class="legend" style="margin-top:12px"><span><b class="band" style="background:var(--w-high)"></b>Maximum charge (top)</span><span><b class="band" style="background:var(--w-low)"></b>Keep at least (bottom)</span><span><b class="band" style="background:#7e57c2"></b>Charge or discharge only</span><span><b class="band" style="background:var(--text2);opacity:.3"></b>Paused</span><span><b class="band" style="background:repeating-linear-gradient(45deg,var(--w-high) 0 3px,transparent 3px 5px);opacity:.6"></b>Skipped this once</span><span><b class="band" style="background:var(--err);width:2px"></b>Now</span><span id="w-defaults"></span></div>
+      <div class="legend" style="margin-top:12px"><span><b class="band" style="background:var(--w-high)"></b>Maximum charge (top)</span><span><b class="band" style="background:var(--w-low)"></b>Keep at least (bottom)</span><span><b class="band" style="background:#7e57c2"></b>Charge or discharge only (middle)</span><span><b class="band" style="background:var(--text2);opacity:.3"></b>Paused</span><span><b class="band" style="background:repeating-linear-gradient(45deg,var(--w-high) 0 3px,transparent 3px 5px);opacity:.6"></b>Skipped this once</span><span><b class="band" style="background:var(--err);width:2px"></b>Now</span><span id="w-defaults"></span></div>
       <h2 style="margin-top:22px">All entries</h2>
       <div class="entries" id="o-sched"></div>
     </div>
@@ -1445,7 +1447,7 @@ function drawWeek() {
   const ed = week.edit, now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
   const short = (d) => d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : dateAt(d).toLocaleDateString([], {weekday: 'short'});
   const label = (d) => d === 0 ? 'Today' : `${dateAt(d).toLocaleDateString([], {weekday: 'short'})} ${dateAt(d).getDate()}`;
-  const lanes = '<div class="lane hi"></div><div class="lane lo"></div>' + [3, 6, 9, 12, 15, 18, 21].map((h) => `<div class="g3" style="left:${h / 24 * 100}%"></div>`).join('');
+  const lanes = '<div class="lane hi"></div><div class="lane way"></div><div class="lane lo"></div>' + [3, 6, 9, 12, 15, 18, 21].map((h) => `<div class="g3" style="left:${h / 24 * 100}%"></div>`).join('');
   let html = ed && ed.top ? '<div class="slot-pop top" id="w-pop"></div>' : '';
   for (let d = 0; d < 7; d++) {
     let bars = '';
@@ -1460,15 +1462,13 @@ function drawWeek() {
         const s0 = tmin(e.start), e0 = tmin(e.end), night = e0 <= s0, own = occ === isoAt(d);
         const handles = skipped ? '' : (own ? '<i class="rh l" data-edge="l" title="Drag to change when it starts"></i>' : '')
           + ((own ? !night || e0 === 0 : night && e0 > 0) ? '<i class="rh r" data-edge="r" title="Drag to change when it ends"></i>' : '');
-        // as much of a label as fits: "Max 50% · Cheap night", "50%", or nothing (charge or
-        // discharge only, with a limit: an arrow before it)
-        const way = e.only === 'charge' ? '⇧ ' : e.only === 'discharge' ? '⇩ ' : '', wayText = e.only ? ` · ${e.only} only` : '';
-        const text = (kind, v) => w > 20 && e.label ? `${way}${kind} ${num(v, 0)}% · ${esc(e.label)}` : w > 9 ? `${way}${kind} ${num(v, 0)}%` : w > 3.5 ? `${way}${num(v, 0)}%` : '';
-        if (e.high != null) bars += `<div class="wbar hi ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`maximum charge ${num(e.high, 0)}%${wayText}`))}">${text('Max', e.high)}${handles}</div>`;
-        if (e.low != null) bars += `<div class="wbar lo ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`keep at least ${num(e.low, 0)}%${wayText}`))}">${text('At least', e.low)}${handles}</div>`;
-        if (e.high == null && e.low == null && e.only) {
-          const what = e.only === 'charge' ? 'Charge only' : 'Discharge only';
-          bars += `<div class="wbar way ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(what.toLowerCase()))}">${w > 20 && e.label ? `${way}${what} · ${esc(e.label)}` : w > 9 ? way + what : w > 3.5 ? way.trim() : ''}${handles}</div>`;
+        // as much of a label as fits: "Max 50% · Cheap night", "50%", or nothing
+        const text = (kind, v) => w > 20 && e.label ? `${kind} ${num(v, 0)}% · ${esc(e.label)}` : w > 9 ? `${kind} ${num(v, 0)}%` : w > 3.5 ? `${num(v, 0)}%` : '';
+        if (e.high != null) bars += `<div class="wbar hi ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`maximum charge ${num(e.high, 0)}%`))}">${text('Max', e.high)}${handles}</div>`;
+        if (e.low != null) bars += `<div class="wbar lo ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`keep at least ${num(e.low, 0)}%`))}">${text('At least', e.low)}${handles}</div>`;
+        if (e.only) {
+          const what = e.only === 'charge' ? 'Charge only' : 'Discharge only', arrow = e.only === 'charge' ? '⇧' : '⇩';
+          bars += `<div class="wbar way ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(what.toLowerCase()))}">${w > 20 && e.label ? `${arrow} ${what} · ${esc(e.label)}` : w > 9 ? `${arrow} ${what}` : w > 3.5 ? arrow : ''}${handles}</div>`;
         }
       }
     });
@@ -1490,9 +1490,9 @@ const timeOptions = (val) => {
 function openEditor(row, entry, start, end, occ) {
   week.edit = entry
     ? {row, id: entry.id, occ: occ || null, form: {kind: entry.kind, days: [...(entry.days || [wdAt(row)])], date: entry.date || isoAt(row), start: entry.start, end: entry.end,
-        high: entry.high, low: entry.low, label: entry.label || '', enabled: entry.enabled, only: entry.only || 'both',
-        sets: entry.high != null && entry.low != null ? 'both' : entry.high != null ? 'high' : entry.low != null ? 'low' : 'none'}}
-    : {row, id: null, form: {kind: 'weekly', days: [wdAt(row)], date: isoAt(row), start, end, high: null, low: null, label: '', enabled: true, sets: 'high', only: 'both'}};
+        high: entry.high, low: entry.low, label: entry.label || '', enabled: entry.enabled, only: entry.only || null,
+        sets: entry.high != null && entry.low != null ? 'both' : entry.high != null ? 'high' : entry.low != null ? 'low' : entry.only || 'high'}}
+    : {row, id: null, form: {kind: 'weekly', days: [wdAt(row)], date: isoAt(row), start, end, high: null, low: null, label: '', enabled: true, sets: 'high', only: null}};
   drawWeek();
 }
 function drawEditor() {
@@ -1506,10 +1506,9 @@ function drawEditor() {
       : `<input type="date" data-f="date" value="${esc(f.date)}" aria-label="Date">`}
     <label>From <select data-f="start">${timeOptions(f.start)}</select></label>
     <label>until <select data-f="end">${timeOptions(f.end)}</select></label>${f.start === f.end ? '<span class="muted">next day (24 hours)</span>' : nextDay ? '<span class="muted">next day</span>' : ''}
-    <div class="seg" role="group" aria-label="Sets"><button data-sets="high" aria-pressed="${f.sets === 'high'}">Maximum charge</button><button data-sets="low" aria-pressed="${f.sets === 'low'}">Keep at least</button><button data-sets="both" aria-pressed="${f.sets === 'both'}">Both</button><button data-sets="none" aria-pressed="${f.sets === 'none'}" title="No limit: the defaults (with charge or discharge only)">Neither</button></div>
+    <div class="seg" role="group" aria-label="Sets"><button data-sets="high" aria-pressed="${f.sets === 'high'}">Maximum charge</button><button data-sets="low" aria-pressed="${f.sets === 'low'}">Keep at least</button><button data-sets="both" aria-pressed="${f.sets === 'both'}">Both</button><button data-sets="charge" aria-pressed="${f.sets === 'charge'}" title="Only started when there's spare power to charge from; stopped if it discharges. Still within the limits.">Charge only</button><button data-sets="discharge" aria-pressed="${f.sets === 'discharge'}" title="Only started when the house needs power; stopped if it charges. Still within the limits.">Discharge only</button></div>
     ${f.sets === 'high' || f.sets === 'both' ? `<label class="field">Maximum charge <input type="number" data-f="high" min="21" max="99" step="1" value="${f.high ?? ''}"><span class="unit">%</span></label>` : ''}
     ${f.sets === 'low' || f.sets === 'both' ? `<label class="field">Keep at least <input type="number" data-f="low" min="20" max="98" step="1" value="${f.low ?? ''}"><span class="unit">%</span></label>` : ''}
-    <div class="seg" role="group" aria-label="Charger" title="Charge only: only started when there's spare power to charge from. Discharge only: only started when the house needs power. Either way it stays between the limits."><button data-only="both" aria-pressed="${f.only === 'both'}">Both ways</button><button data-only="charge" aria-pressed="${f.only === 'charge'}">Charge only</button><button data-only="discharge" aria-pressed="${f.only === 'discharge'}">Discharge only</button></div>
     <input type="search" data-f="label" placeholder="Label (optional)" maxlength="60" value="${esc(f.label)}">
     <label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label>
     <span class="acts"><button class="btn small primary" id="w-save">Save</button>${skipButton(ed)}${ed.id ? '<button class="btn small" id="w-del">Delete</button>' : ''}<button class="btn small" id="w-close">Cancel</button></span>
@@ -1535,10 +1534,12 @@ async function skipOccurrence(id, date, skip) {
 async function saveEditor(del) {
   const ed = week.edit; if (!ed) return;
   const f = ed.form, num0 = (v) => v === '' || v == null ? null : Number(v);
+  // (a limit entry, or a charge or discharge only one: separate entries, and they can overlap;
+  // an older entry with both keeps its one way when its limit is changed)
+  const way = f.sets === 'charge' || f.sets === 'discharge';
   const body = {kind: f.kind, start: f.start, end: f.end, high: f.sets === 'high' || f.sets === 'both' ? num0(f.high) : null,
-    low: f.sets === 'low' || f.sets === 'both' ? num0(f.low) : null, label: f.label, enabled: f.enabled, only: f.only === 'both' ? null : f.only};
-  if (!del && f.sets !== 'none' && ((f.sets !== 'low' && body.high == null) || (f.sets !== 'high' && body.low == null))) { const el = $('w-err'); if (el) el.textContent = 'Give the limit a value'; return; }
-  if (!del && body.high == null && body.low == null && !body.only) { const el = $('w-err'); if (el) el.textContent = 'Set a limit, or choose charge only or discharge only'; return; }
+    low: f.sets === 'low' || f.sets === 'both' ? num0(f.low) : null, label: f.label, enabled: f.enabled, only: way ? f.sets : f.only || null};
+  if (!del && !way && ((f.sets !== 'low' && body.high == null) || (f.sets !== 'high' && body.low == null))) { const el = $('w-err'); if (el) el.textContent = 'Give the limit a value'; return; }
   if (f.kind === 'weekly') body.days = f.days; else body.date = f.date;
   try {
     const v = del ? await api('schedule/' + ed.id, {method: 'DELETE'})
@@ -1554,7 +1555,6 @@ $('w-grid').addEventListener('click', (ev) => {
   if (t.id === 'w-skip') { skipOccurrence(ed.id, ed.occ, t.dataset.skip === '1'); return; }
   if (ed && t.dataset.rep) { ed.form.kind = t.dataset.rep; drawEditor(); return; }
   if (ed && t.dataset.sets) { ed.form.sets = t.dataset.sets; drawEditor(); return; }
-  if (ed && t.dataset.only) { ed.form.only = t.dataset.only; drawEditor(); return; }
   if (ed && t.dataset.day && t.closest('#w-pop')) {
     const d = t.dataset.day;
     ed.form.days = ed.form.days.includes(d) ? ed.form.days.filter((x) => x !== d) : [...ed.form.days, d];

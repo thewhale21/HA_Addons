@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.42.1 — Charge and discharge only as entries of their own
+
+- **Change:** in the schedule editor an entry is now one of **Maximum
+  charge**, **Keep at least**, **Both**, **Charge only** or **Discharge
+  only** (no more **Neither** or **Both ways**). A limit and a charge or
+  discharge only entry are separate and can overlap, e.g. keep at least
+  50% all day with charge only from 10:00 to 16:00.
+- **Change:** the week view has a middle lane for charge and discharge
+  only, between the maximum charge (top) and keep at least (bottom), so
+  overlapping entries all show.
+
 ## 0.42.0 — Charge only and discharge only, and the limits renamed
 
 - **Feature:** a schedule entry can make the charger work one way only,
