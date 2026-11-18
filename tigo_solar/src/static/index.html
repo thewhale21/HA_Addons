@@ -284,6 +284,7 @@
   svg.roof .pnl.off { opacity: .35; }
   svg.roof .pnl text { pointer-events: none; font: 500 13px Roboto, sans-serif; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.45); stroke-width: 2.5px; stroke-linejoin: round; }
   svg.roof .pnl text.v { font-weight: 400; font-size: 11px; }
+  svg.roof .pnl text.r { opacity: .8; }
   svg.roof.edit .pnl rect.f { cursor: grab; stroke-dasharray: 4 3; }
   svg.roof .grid line { stroke: color-mix(in srgb, var(--text) 8%, transparent); }
   .scale { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); margin-top: 8px; flex-wrap: wrap; }
@@ -296,6 +297,7 @@
   svg.chart .base { fill: #43a047; } svg.chart .rec { fill: #a5d6a7; } svg.chart .tot { fill: #66bb6a; }
   svg.chart .line { fill: none; stroke: #2e7d32; stroke-width: 1.5; }
   svg.chart rect.hit { fill: transparent; cursor: crosshair; }
+  svg.chart { touch-action: pan-y; user-select: none; }
   .at-box { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--divider); border-radius: 10px; }
   table.at { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
   table.at th { text-align: left; font-weight: 500; color: var(--text2); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--divider); }
@@ -651,11 +653,15 @@ setInterval(() => {
 }, 5000);
 
 // ---------- Overview: now, the roof and the charts ----------
+// (small amounts in Wh, so a short time doesn't read 0.00 kWh)
+const wh = (v) => v === null || v === undefined ? '—' : Math.abs(v) < 1000 ? `${num(v, Math.abs(v) < 10 ? 1 : 0)} Wh` : kwh(v);
 const kwh = (wh, d = 2) => wh === null || wh === undefined ? '—' : (Math.abs(wh) >= 1e6 ? `${num(wh / 1e6, 2)} MWh` : `${num(wh / 1000, d)} kWh`);
 const watts = (w) => w === null || w === undefined ? '—' : (Math.abs(w) >= 1000 ? `${num(w / 1000, 2)} kW` : `${num(w, 0)} W`);
 const view = {
   mode: 'day', day: null, colour: 'power', edit: false, chart: null, sig: '', drag: null,
   split: 'panels', cursor: null, cursorKey: '', cursorPts: [], chartX: null, prevColour: null,
+  range: null,  // [first, last] point highlighted on the chart (dragged across it)
+  drag0: null,  // where a drag across the chart started
   selected: null,  // panel IDs chosen (null: all)
 };
 try {
@@ -729,6 +735,13 @@ function panelValue(p) {
   if (view.colour === 'energy') { const e = view.chart && view.chart.panels ? view.chart.panels[String(p.id)] : null; return e ?? null; }
   return p.power;
 }
+// Its reclaimed part, shown in brackets under the number (none by the day: Tigo keeps
+// reclaimed energy only for the whole system)
+function panelReclaimed(p) {
+  if (view.colour === 'cursor') { const at = cursorValues(); const r = at && at.panels[String(p.id)]; return r ? r.r ?? null : null; }
+  if (view.colour === 'energy') return null;
+  return p.reclaimed ?? null;
+}
 function drawRoof() {
   const svg = $('roof'), panels = (state && state.panels) || [];
   if (!panels.length) { svg.setAttribute('viewBox', '0 0 400 120'); svg.innerHTML = `<text x="200" y="64" text-anchor="middle" fill="currentColor" style="font:13px Roboto,sans-serif;opacity:.6">${state && state.configured ? 'Reading your panels from Tigo…' : 'Set your Tigo login in the add-on\'s Configuration'}</text>`; return; }
@@ -739,17 +752,21 @@ function drawRoof() {
   svg.classList.toggle('edit', view.edit);
   const vals = panels.map(panelValue).filter((v) => v !== null && v !== undefined);
   const max = vals.length ? Math.max(...vals, 1) : 1;
-  const unit = view.colour === 'energy' || (view.colour === 'cursor' && view.chart && view.chart.view !== 'day') ? (v) => kwh(v, 2) : (v) => `${num(v, 0)} W`;
+  const kwhMode = view.colour === 'energy' || (view.colour === 'cursor' && view.chart && (view.chart.view !== 'day' || view.range));
+  const unit = kwhMode ? wh : (v) => `${num(v, 0)} W`;
   // (text in the roof's own units: as big on a phone as the panels allow)
   const scale = (svg.clientWidth || 600) / (x1 - x0), fs = Math.max(w * 0.2, Math.min(w * 0.3, 13 / scale));
   // (each outlined in its colour on the charts)
   const colours = panelColours(), sw = Math.max(3 / scale, w * 0.06);
   svg.innerHTML = panels.map((p) => {
-    const v = panelValue(p), on = isOn(p.id);
+    const v = panelValue(p), on = isOn(p.id), r = v === null || v === undefined ? null : panelReclaimed(p);
+    const up = r === null ? 0 : fs * 0.45;
     return `<g class="pnl ${view.selected === null ? '' : on ? 'on' : 'off'}" data-id="${p.id}" transform="translate(${p.left},${p.top})">`
       + `<rect class="f" x="${sw / 2}" y="${sw / 2}" width="${w - sw}" height="${h - sw}" rx="4" stroke="${colours[p.id] || '#90a4ae'}" stroke-width="${sw}" fill="${v === null || v === undefined ? '#455a64' : heat(v / max)}"><title>${esc(p.label)}${p.string ? ' · ' + esc(p.string) : ''}${p.watts ? ` · ${num(p.watts, 0)} W panel` : ''}\nNow: ${p.power === null ? '—' : num(p.power, 0) + ' W'}${p.reclaimed ? ` (${num(p.reclaimed, 1)} W reclaimed)` : ''}\nToday: ${kwh(p.energy_today)}</title></rect>`
-      + `<text x="${w / 2}" y="${h / 2 - fs * 0.2}" text-anchor="middle" style="font-size:${fs}px">${esc(p.label)}</text>`
-      + `<text class="v" x="${w / 2}" y="${h / 2 + fs * 1.05}" text-anchor="middle" style="font-size:${fs * 0.85}px">${v === null || v === undefined ? '—' : unit(v)}</text></g>`;
+      + `<text x="${w / 2}" y="${h / 2 - fs * 0.2 - up}" text-anchor="middle" style="font-size:${fs}px">${esc(p.label)}</text>`
+      + `<text class="v" x="${w / 2}" y="${h / 2 + fs * 1.05 - up}" text-anchor="middle" style="font-size:${fs * 0.85}px">${v === null || v === undefined ? '—' : unit(v)}</text>`
+      + (r === null ? '' : `<text class="v r" x="${w / 2}" y="${h / 2 + fs * 1.95 - up}" text-anchor="middle" style="font-size:${fs * 0.7}px">(${kwhMode ? unit(r) : num(r, r < 10 ? 1 : 0) + ' W'})</text>`)
+      + '</g>';
   }).join('');
   $('r-lo').textContent = unit(0);
   $('r-hi').textContent = vals.length ? unit(max) : '—';
@@ -758,9 +775,13 @@ function drawRoof() {
   $('r-reset').hidden = !(view.edit && state.layout_moved);
   $('r-edit').textContent = view.edit ? 'Done' : 'Move panels';
   $('r-hint').textContent = view.edit ? 'Drag panels to where they are on your roof. Saved as you drop each one.'
-    : 'Click a panel to add it to the charts or take it out. Energy colours each panel by what it made over the chart\'s time.';
+    : 'Click a panel to add it to the charts or take it out. In brackets: what its optimiser reclaimed. Energy colours each panel by what it made over the chart\'s time.';
   $('r-colour').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.c === view.colour));
-  if (view.colour === 'cursor') { const at = cursorValues(); $('r-hint').textContent = at ? `Each panel at the point chosen on the chart (${view.chart.view === 'day' ? at.t : 'that ' + (view.chart.view === 'year' ? 'month' : 'day')}). Close it below the chart to go back.` : $('r-hint').textContent; }
+  if (view.colour === 'cursor') {
+    const at = cursorValues();
+    if (at) $('r-hint').textContent = at.range ? 'Each panel\'s energy over the time highlighted on the chart. Close it below the chart to go back.'
+      : `Each panel at the point chosen on the chart (${view.chart.view === 'day' ? at.t : 'that ' + (view.chart.view === 'year' ? 'month' : 'day')}). Close it below the chart to go back.`;
+  }
 }
 function svgPoint(svg, ev) {
   const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
@@ -809,7 +830,7 @@ $('r-reset').addEventListener('click', async () => {
 });
 $('r-colour').addEventListener('click', (ev) => {
   const c = ev.target.dataset && ev.target.dataset.c; if (!c) return;
-  view.cursor = null; view.colour = c; view.prevColour = c; saveView(); drawRoof(); if (view.chart) drawChart(view.chart);
+  view.cursor = null; view.range = null; view.colour = c; view.prevColour = c; saveView(); drawRoof(); if (view.chart) drawChart(view.chart);
 });
 
 // --- the charts ---
@@ -869,7 +890,7 @@ function drawChart(c, err) {
     svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle">${esc(err || 'Choose a panel on the roof, or All panels')}</text>`;
     $('c-totals').innerHTML = ''; $('c-legend').innerHTML = ''; $('c-note').hidden = true; $('c-who').textContent = '';
     $('c-at').hidden = true;
-    if (view.colour === 'cursor') { view.cursor = null; view.colour = view.prevColour || 'power'; drawRoof(); }
+    if (view.colour === 'cursor') { view.cursor = null; view.range = null; view.colour = view.prevColour || 'power'; drawRoof(); }
     return;
   }
   $('c-when').textContent = whenText(c);
@@ -885,6 +906,7 @@ function drawChart(c, err) {
   const max = Math.max(0, ...pts.map((p) => p.total || 0));
   view.cursorPts = pts;
   if (view.cursor !== null && (view.cursor >= pts.length || view.cursorKey !== `${c.view}${c.day}`)) view.cursor = null;
+  if (view.range && (view.range[1] >= pts.length || view.cursorKey !== `${c.view}${c.day}`)) view.range = null;
   view.cursorKey = `${c.view}${c.day}`;
   let x, slot;
   if (!pts.length || max <= 0) {
@@ -922,6 +944,10 @@ function drawChart(c, err) {
         const xx = L + (W - L - R) * (m - t0) / Math.max(60, t1 - t0);
         out += `<text x="${xx}" y="${H - 8}" text-anchor="middle">${String(m / 60).padStart(2, '0')}:00</text>`;
       }
+      if (view.range) {
+        const xa = x(view.range[0]), xb = x(view.range[1]);
+        out += `<rect x="${xa}" y="${T}" width="${Math.max(1, xb - xa)}" height="${H - T - B}" fill="color-mix(in srgb, var(--primary) 16%, transparent)" stroke="var(--primary)" stroke-width="1"/>`;
+      }
       if (view.cursor !== null) {
         const cx = x(view.cursor);
         out += `<line x1="${cx}" x2="${cx}" y1="${T}" y2="${H - B}" stroke="var(--text)" stroke-width="1.5" stroke-dasharray="3 3"/>`
@@ -933,7 +959,7 @@ function drawChart(c, err) {
       pts.forEach((p, i) => {
         const x0 = L + slot * i + (slot - bw) / 2;
         let base = 0;
-        if (view.cursor === i) out += `<rect x="${L + slot * i}" y="${T}" width="${slot}" height="${H - T - B}" fill="color-mix(in srgb, var(--primary) 14%, transparent)"/>`;
+        if (view.cursor === i || (view.range && i >= view.range[0] && i <= view.range[1])) out += `<rect x="${L + slot * i}" y="${T}" width="${slot}" height="${H - T - B}" fill="color-mix(in srgb, var(--primary) 14%, transparent)"/>`;
         layers.forEach((l) => {
           const v = l[1][i] || 0; if (v <= 0) return;
           out += `<rect ${fillOf(l)} x="${x0}" y="${y(base + v)}" width="${bw}" height="${Math.max(0, y(base) - y(base + v))}"/>`;
@@ -960,8 +986,50 @@ function drawChart(c, err) {
   $('c-note').hidden = !c.note; $('c-note').textContent = c.note || '';
   drawAt();
 }
+// Energy (Wh) under a line of [minutes, W] points (trapezoids), and its peak
+function underLine(pairs) {
+  let wh = 0, peak = null;
+  pairs.forEach(([m, v], i) => {
+    if (v !== null && v !== undefined) peak = Math.max(peak ?? v, v);
+    if (i) { const [m0, v0] = pairs[i - 1]; wh += ((v0 || 0) + (v || 0)) / 2 * (m - m0) / 60; }
+  });
+  return {wh, peak};
+}
+const minsOf = (t) => +t.slice(0, 2) * 60 + +t.slice(3, 5);
+// The part of the chart highlighted (dragged across): what was made over it, each panel's part
+function rangeValues() {
+  const c = view.chart; if (!c || !view.range) return null;
+  const [a, b] = view.range, pts = view.cursorPts, out = {};
+  if (c.view === 'day') {
+    const ta = pts[a].t, tb = pts[b].t, inside = (t) => t >= ta && t <= tb;
+    const sys = pts.filter((p) => inside(p.t));
+    const tot = underLine(sys.map((p) => [minsOf(p.t), p.total]));
+    const rec = sys.some((p) => p.reclaimed !== null && p.reclaimed !== undefined) ? underLine(sys.map((p) => [minsOf(p.t), p.reclaimed])).wh : null;
+    const own = (c.points || []).map((p, i) => [p, i]).filter(([p]) => inside(p.t));
+    Object.entries(c.panel_series || {}).forEach(([id, vals]) => {
+      const rv = c.panel_reclaimed ? c.panel_reclaimed[id] || [] : [];
+      out[id] = {v: underLine(own.map(([p, i]) => [minsOf(p.t), vals[i]])).wh,
+                 r: rv.length && own.some(([, i]) => rv[i] !== null && rv[i] !== undefined) ? underLine(own.map(([p, i]) => [minsOf(p.t), rv[i]])).wh : null,
+                 peak: underLine(own.map(([p, i]) => [minsOf(p.t), vals[i]])).peak};
+    });
+    const hours = (minsOf(tb) - minsOf(ta)) / 60;
+    return {range: true, ta, tb, total: tot.wh, reclaimed: rec, peak: tot.peak, avg: hours > 0 ? tot.wh / hours : null, panels: out};
+  }
+  let total = 0, reclaimed = null;
+  for (let i = a; i <= b; i++) {
+    total += pts[i].total || 0;
+    if (pts[i].reclaimed !== null && pts[i].reclaimed !== undefined) reclaimed = (reclaimed || 0) + pts[i].reclaimed;
+  }
+  Object.entries(c.panel_series || {}).forEach(([id, vals]) => {
+    let v = null;
+    for (let i = a; i <= b; i++) if (vals[i] !== null && vals[i] !== undefined) v = (v || 0) + vals[i];
+    out[id] = {v, r: null};
+  });
+  return {range: true, ta: pts[a].t, tb: pts[b].t, total, reclaimed, panels: out, bars: b - a + 1};
+}
 // The point chosen on the chart: each panel's output then (and on the roof)
 function cursorValues() {
+  if (view.range) return rangeValues();
   const c = view.chart; if (!c || view.cursor === null) return null;
   const i = view.cursor, out = {};
   const pts = c.points || [];
@@ -978,6 +1046,7 @@ function drawAt() {
   const box = $('c-at'), at = cursorValues();
   if (!at) { box.hidden = true; if (view.colour === 'cursor') { view.colour = view.prevColour || 'power'; drawRoof(); } return; }
   const c = view.chart, day = c.view === 'day';
+  if (at.range) { drawRange(at); return; }
   const when = day ? `${at.t} on ${dayName(c.day, true)}` : c.view === 'year' ? `${MONTHS[+at.t.slice(5, 7) - 1]} ${at.t.slice(0, 4)}` : dayName(at.t, true);
   const fmt = (v) => v === null || v === undefined ? '—' : day ? `${num(v, 0)} W` : kwh(v);
   const rows = Object.entries(at.panels).sort((a, b) => panelLabel(a[0]).localeCompare(panelLabel(b[0]), undefined, {numeric: true}));
@@ -1003,6 +1072,32 @@ function drawAt() {
   if (view.colour !== 'cursor') view.prevColour = view.colour;
   view.colour = 'cursor'; drawRoof();
 }
+function drawRange(at) {
+  const box = $('c-at'), c = view.chart, day = c.view === 'day';
+  const label = (t) => c.view === 'year' ? `${MONTHS[+t.slice(5, 7) - 1]} ${t.slice(0, 4)}` : dayName(t, true);
+  const when = day ? `${at.ta}–${at.tb} on ${dayName(c.day, true)}` : `${label(at.ta)} – ${label(at.tb)}`;
+  const rows = Object.entries(at.panels).sort((a, b) => panelLabel(a[0]).localeCompare(panelLabel(b[0]), undefined, {numeric: true}));
+  const sum = rows.reduce((s, [, r]) => s + (r.v || 0), 0);
+  const colours = panelColours(), est = c.estimated && day;
+  const stat = (k, v) => `<div><div class="label">${k}</div><div class="big">${v}</div></div>`;
+  box.hidden = false;
+  box.innerHTML = `<div class="row" style="margin:0"><b class="grow">${esc(when)}</b><button class="btn small" id="c-clear">Close</button></div>`
+    + '<div class="totals" style="margin-top:6px">'
+    + stat(c.whole ? 'Made (whole system)' : 'Made (these panels)', wh(at.total))
+    + (at.reclaimed !== null && at.reclaimed !== undefined ? stat(`Reclaimed${est ? ' (estimated)' : ''}`, `${wh(at.reclaimed)}${at.total ? ` <span class="muted" style="font-size:13px">(${num(100 * at.reclaimed / at.total, 1)}%)</span>` : ''}`) : '')
+    + (day ? stat('Peak', at.peak === null ? '—' : watts(at.peak)) + stat('Average', at.avg === null ? '—' : watts(at.avg))
+      : stat(`Average a ${c.view === 'year' ? 'month' : 'day'}`, wh(at.total / Math.max(1, at.bars))))
+    + '</div>'
+    + (rows.length ? `<table class="at"><thead><tr><th>Panel</th><th>Energy</th><th>Share</th>${day ? '<th>Reclaimed</th><th>Peak</th>' : ''}</tr></thead><tbody>`
+      + rows.map(([id, r]) => `<tr><td><i style="background:${colours[id] || '#888'}"></i>${esc(panelLabel(id))}</td><td>${r.v === null || r.v === undefined ? '—' : wh(r.v)}</td><td>${sum && r.v ? num(100 * r.v / sum, 1) + '%' : '—'}</td>`
+        + (day ? `<td>${r.r === null || r.r === undefined ? '—' : wh(r.r)}</td><td>${r.peak === null || r.peak === undefined ? '—' : num(r.peak, 0) + ' W'}</td>` : '') + '</tr>').join('')
+      + '</tbody></table>' : '<div class="note">No panel figures for this time.</div>')
+    + (est ? '<div class="note">Each panel estimated for this day (see below the chart).</div>' : '')
+    + '<div class="note">Drag across the chart to highlight another time, or click a point.</div>';
+  $('c-clear').onclick = () => { view.range = null; drawChart(view.chart); };
+  if (view.colour !== 'cursor') view.prevColour = view.colour;
+  view.colour = 'cursor'; drawRoof();
+}
 function nearestIndex(ev) {
   const svg = $('chart'), x = view.chartX, n = (view.cursorPts || []).length;
   if (!x || !n) return null;
@@ -1012,15 +1107,34 @@ function nearestIndex(ev) {
   for (let i = 0; i < n; i++) { const dd = Math.abs(x(i) - px); if (dd < d) { d = dd; best = i; } }
   return best;
 }
-$('chart').addEventListener('click', (ev) => {
+// Click: a point; drag across: a time highlighted
+let dragFrame = 0;
+$('chart').addEventListener('pointerdown', (ev) => {
   const i = nearestIndex(ev); if (i === null) return;
-  view.cursor = i; drawChart(view.chart);
+  view.drag0 = i;
+  $('chart').setPointerCapture(ev.pointerId);
 });
+$('chart').addEventListener('pointermove', (ev) => {
+  if (view.drag0 === null) return;
+  const i = nearestIndex(ev); if (i === null || i === view.drag0) return;
+  view.range = [Math.min(view.drag0, i), Math.max(view.drag0, i)]; view.cursor = null;
+  if (!dragFrame) dragFrame = requestAnimationFrame(() => { dragFrame = 0; drawChart(view.chart); });
+});
+function endDrag(ev) {
+  if (view.drag0 === null) return;
+  const i = nearestIndex(ev), start = view.drag0;
+  view.drag0 = null;
+  if (i === null || i === start) { view.range = null; view.cursor = start; }
+  else { view.range = [Math.min(start, i), Math.max(start, i)]; view.cursor = null; }
+  drawChart(view.chart);
+}
+$('chart').addEventListener('pointerup', endDrag);
+$('chart').addEventListener('pointercancel', () => { view.drag0 = null; });
 $('chart').addEventListener('mousemove', (ev) => {
   const i = nearestIndex(ev); if (i === null) { $('chart').removeAttribute('title'); return; }
   const p = view.cursorPts[i], c = view.chart;
   const t = c.view === 'day' ? p.t : c.view === 'year' ? `${MONTHS[+p.t.slice(5, 7) - 1]}` : dayName(p.t, true);
-  $('c-hover').textContent = `${t}: ${c.view === 'day' ? num(p.total, 0) + ' W' : kwh(p.total)}${p.reclaimed ? ` · ${c.view === 'day' ? num(p.reclaimed, 0) + ' W' : kwh(p.reclaimed)} reclaimed` : ''} · click for each panel`;
+  $('c-hover').textContent = `${t}: ${c.view === 'day' ? num(p.total, 0) + ' W' : kwh(p.total)}${p.reclaimed ? ` · ${c.view === 'day' ? num(p.reclaimed, 0) + ' W' : kwh(p.reclaimed)} reclaimed` : ''} · click for each panel, or drag across to add up a time`;
 });
 $('chart').addEventListener('mouseleave', () => { $('c-hover').textContent = ''; });
 $('c-split').addEventListener('click', (ev) => {

@@ -31,7 +31,9 @@ readings (voltages, current, temperature) aren't used.
 - **Your roof:** your panels where Tigo's layout puts them (the one in the
   Tigo portal). **Power now** colours each by its power at the latest
   reading; **Energy** by what it made over the time the chart below shows,
-  dark to yellow. Hover over a panel for its details.
+  dark to yellow. Hover over a panel for its details. In brackets under
+  each panel's number: what its optimiser reclaimed (not with **Energy**:
+  Tigo keeps each panel's reclaimed energy only through the day).
   - **Click a panel** to take it out of the charts or put it back in (the
     ones left out are faded);
     **All panels** and **None** choose all or none. The choice is kept in
@@ -56,6 +58,11 @@ readings (voltages, current, temperature) aren't used.
     then (or its energy that day or month) in a table under the chart, with
     the total, and the roof colours each panel by it. **Show this day**
     opens that day of a week or month; **Close** puts the roof back.
+  - **Drag across the chart** to highlight a time: part of a day, or a run
+    of days or months. Under the chart: what was made and reclaimed over
+    it, the peak and average power (or the average a day or month), and
+    each panel's energy, share of it, reclaimed energy and peak. The roof
+    colours each panel by its energy then. **Close** clears it.
   - **Each panel's power through a day:** Tigo keeps only each panel's
     latest reading, so the add-on records them every time it reads (exact,
     from when it started). For a day before that, each panel's power is

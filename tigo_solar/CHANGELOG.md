@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 — Highlight a time on the chart, and reclaimed on the roof
+
+- **Feature:** drag across the chart to highlight a time (part of a day,
+  or a run of days or months). Under the chart: what was made and
+  reclaimed over it, the peak and average power (or the average a day or
+  month), and each panel's energy, share, reclaimed energy and peak. The
+  roof colours each panel by its energy over that time. A click still
+  picks a single point.
+- **Feature:** each panel on the roof shows its reclaimed power in
+  brackets under its number (or its reclaimed energy, for a point or a
+  time picked on a day's chart). Not shown with **Energy**: Tigo keeps
+  each panel's reclaimed energy only through the day.
+- **Improvement:** small amounts of energy are shown in Wh, not as
+  0.00 kWh.
+
 ## 0.2.1 — Each panel outlined in its chart colour
 
 - **Improvement:** each panel on the roof is outlined in its colour on the
