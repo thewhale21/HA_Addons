@@ -1,0 +1,15 @@
+---
+configuration:
+  username:
+    name: Tigo username
+    description: >-
+      The email address you log in to the Tigo portal (ei.tigoenergy.com) with.
+  password:
+    name: Tigo password
+    description: >-
+      Your Tigo password. Only sent to Tigo, to log in.
+  system_id:
+    name: Tigo system ID
+    description: >-
+      Your system's number on Tigo: in the portal's address when you look at
+      your system (system_id=...), or in the Tigo integration's settings.
