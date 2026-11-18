@@ -255,6 +255,22 @@ def test_charts_for_chosen_panels():
     assert empty["points"] == [] and empty["total_wh"] is None
 
 
+def test_a_day_recorded_from_part_way_is_estimated_before_that():
+    """The add-on started recording each panel at 08:05 (e.g. after a restart): before that,
+    each panel is estimated from the system's power, not left out."""
+    store = _filled_store()
+    store.put_panel_energy("2026-11-18", tigo_data.parse_aggenergy(SAMPLES["aggenergy_today"])["panels"])
+    store.put_panel_power("2026-11-18 08:05", {90375862: 30.0}, {90375862: 1.5})
+    store.put_panel_power("2026-11-18 08:13", {90375862: 41.0}, {90375862: 2.5})
+    day = charts.build(store, "day", "2026-11-18", [90375862], IDS)
+    times = [p["t"] for p in day["points"]]
+    assert times[0] == "07:30" and times[-2:] == ["08:05", "08:13"]
+    assert "07:45" not in times  # (within 20 minutes of a reading: the reading is used)
+    assert day["estimated"] and "partly estimated" in day["note"]
+    assert day["panel_series"]["90375862"][-2:] == [30.0, 41.0]
+    assert day["panel_reclaimed"]["90375862"][-1] == 2.5
+
+
 def test_your_layout_wins_over_tigos(tmp_path):
     panels = tigo_data.parse_config(SAMPLES["config"])["panels"]
     layout = Layout(str(tmp_path))

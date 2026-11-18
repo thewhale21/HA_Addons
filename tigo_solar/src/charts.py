@@ -12,7 +12,8 @@ Where each panel's numbers come from:
 - power through a day: Tigo keeps only each panel's latest reading, so the add-on records
   them as it reads (exact, from when it started). For a day before that, each panel's
   power is estimated: the system's power by the minute (which Tigo keeps) times the
-  panel's share of that day's energy ("estimated": true).
+  panel's share of that day's energy ("estimated": true); so is any part of a day
+  without the add-on's readings (before it started, or while it was stopped).
 - reclaimed: Tigo splits it off for the whole system by the minute and the day; for a
   panel, from the add-on's own readings (or, estimated, the system's times its share).
 """
@@ -130,6 +131,35 @@ def build(store, view: str, day: str, selected: Optional[list] = None, all_ids: 
     return out
 
 
+RECORDED_GAP_MIN = 20  # an estimate fills in where no reading of each panel is this near
+
+
+def _mins(ts: str) -> int:
+    return int(ts[11:13]) * 60 + int(ts[14:16])
+
+
+def _near(m: int, recorded: list) -> bool:
+    """Is a reading of each panel within RECORDED_GAP_MIN of minute m? (`recorded` sorted)"""
+    import bisect
+    i = bisect.bisect_left(recorded, m)
+    return any(0 <= k < len(recorded) and abs(recorded[k] - m) <= RECORDED_GAP_MIN for k in (i - 1, i))
+
+
+def _series(rows: list, panel_ids: list):
+    """Each panel's power and reclaimed power, and the totals, from (ts, {panel: (power,
+    reclaimed)}, estimated) rows in time order."""
+    series = {p: [_r((r[1].get(p) or (None, None))[0], 1) for r in rows] for p in panel_ids}
+    reclaimed = {p: [_r((r[1].get(p) or (None, None))[1], 1) for r in rows] for p in panel_ids}
+    points = []
+    for i, r in enumerate(rows):
+        tot = sum(series[p][i] or 0.0 for p in panel_ids)
+        rec_vals = [reclaimed[p][i] for p in panel_ids if reclaimed[p][i] is not None]
+        rec = sum(rec_vals) if rec_vals else None
+        points.append({"t": r[0][11:16], "total": _r(tot, 1), "reclaimed": _r(rec, 1),
+                       "base": _r(tot - rec, 1) if rec is not None else None})
+    return series, reclaimed, points
+
+
 def _day(store, day: str, out: dict, energy: dict, whole: bool, chosen: Optional[list], keep) -> None:
     """A day's power: each panel's recorded readings, else estimated from the system's."""
     recorded: dict[str, dict[int, tuple]] = {}
@@ -141,42 +171,39 @@ def _day(store, day: str, out: dict, energy: dict, whole: bool, chosen: Optional
         panel_ids = sorted({p for v in recorded.values() for p in v})
     day_total = sum(energy.values())
 
-    if len(recorded) >= 2:
-        # The add-on's own readings of each panel (exact)
-        times = sorted(recorded)
-        series = {p: [_r((recorded[t].get(p) or (None, None))[0], 1) for t in times] for p in panel_ids}
-        reclaimed = {p: [_r((recorded[t].get(p) or (None, None))[1], 1) for t in times] for p in panel_ids}
-        points = []
-        for i, t in enumerate(times):
-            tot = sum(series[p][i] or 0.0 for p in panel_ids)
-            rec_vals = [reclaimed[p][i] for p in panel_ids if reclaimed[p][i] is not None]
-            rec = sum(rec_vals) if rec_vals else None
-            points.append({"t": t[11:16], "total": _r(tot, 1), "reclaimed": _r(rec, 1),
-                           "base": _r(tot - rec, 1) if rec is not None else None})
-        if whole and system:
-            # (the whole system: Tigo's own minute-by-minute total, split base / reclaimed)
+    if system and day_total > 0:
+        # Each panel's own readings where the add-on has them (exact); before them, after
+        # them and in any gap (e.g. the add-on was stopped), estimated: the system's power
+        # by the minute, shared out by each panel's share of the day's energy
+        share = {p: (energy.get(p) or 0.0) / day_total for p in panel_ids}
+        rec_mins = sorted(_mins(t) for t in recorded)
+        steps = [r for r in system if int(r[0][14:16]) % ESTIMATE_STEP_MIN == 0] or system
+        rows = []  # (ts, {panel: (power, reclaimed)}, estimated)
+        for r in steps:
+            if not _near(_mins(r[0]), rec_mins):
+                rows.append((r[0], {p: (None if r[1] is None else r[1] * share[p],
+                                        None if r[3] is None else r[3] * share[p]) for p in panel_ids}, True))
+        if len(recorded) >= 2:
+            rows += [(t, recorded[t], False) for t in recorded]
+        rows.sort(key=lambda r: r[0])
+        series, reclaimed, points = _series(rows, panel_ids)
+        guessed = sum(1 for r in rows if r[2])
+        out["estimated"] = guessed > 0
+        if guessed == len(rows):
+            out["note"] = ("Each panel's power is estimated for this day: Tigo keeps only each panel's latest "
+                           "reading, so it's the system's power times the panel's share of the day's energy. "
+                           "The add-on records each panel's own readings from when it started.")
+        elif guessed:
+            out["note"] = ("Each panel's power is partly estimated for this day: where the add-on wasn't "
+                           "recording each panel (before it started, or while it was stopped), it's the "
+                           "system's power times the panel's share of the day's energy.")
+        if whole:
             out["system_points"] = [{"t": t[11:16], "total": tot, "base": base, "reclaimed": rec}
                                     for t, tot, base, rec in system]
-    elif system and day_total > 0:
-        # Before the add-on was reading each panel: the system's power, shared out by each
-        # panel's share of the day's energy
-        rows = [r for r in system if int(r[0][14:16]) % ESTIMATE_STEP_MIN == 0] or system
-        share = {p: (energy.get(p) or 0.0) / day_total for p in panel_ids}
-        times = [r[0] for r in rows]
-        series = {p: [_r((r[1] or 0.0) * share[p], 1) for r in rows] for p in panel_ids}
-        reclaimed = {p: [_r(r[3] * share[p], 1) if r[3] is not None else None for r in rows] for p in panel_ids}
-        points = []
-        for i, r in enumerate(rows):
-            tot = sum(series[p][i] or 0.0 for p in panel_ids)
-            rec_vals = [reclaimed[p][i] for p in panel_ids if reclaimed[p][i] is not None]
-            rec = sum(rec_vals) if rec_vals else None
-            points.append({"t": r[0][11:16], "total": _r(tot, 1), "reclaimed": _r(rec, 1),
-                           "base": _r(tot - rec, 1) if rec is not None else None})
-        out["estimated"] = True
-        out["note"] = ("Each panel's power is estimated for this day: Tigo keeps only each panel's latest "
-                       "reading, so it's the system's power times the panel's share of the day's energy. "
-                       "The add-on records each panel's own readings from when it started.")
-        if whole:
+    elif len(recorded) >= 2:
+        # The add-on's own readings of each panel (exact)
+        series, reclaimed, points = _series([(t, recorded[t], False) for t in sorted(recorded)], panel_ids)
+        if whole and system:
             out["system_points"] = [{"t": t[11:16], "total": tot, "base": base, "reclaimed": rec}
                                     for t, tot, base, rec in system]
     elif whole and system:

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.1 — The whole day by panel, and the chart's colours after a restart
+
+- **Fix:** **By panel** on a day's chart showed only the time since the
+  add-on started recording each panel (e.g. from 9am after a restart).
+  Before that, and in any gap while the add-on was stopped, each panel is
+  now estimated from the system's power, as on earlier days, and the note
+  under the chart says the day is partly estimated.
+- **Fix:** the chart was grey after the add-on restarted, until you
+  switched to **Reclaimed** and back: it was drawn before the add-on had
+  read your panels from Tigo. It's drawn again in their colours as soon as
+  they come.
+
 ## 0.3.0 — Highlight a time on the chart, and reclaimed on the roof
 
 - **Feature:** drag across the chart to highlight a time (part of a day,

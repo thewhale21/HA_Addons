@@ -65,8 +65,9 @@ readings (voltages, current, temperature) aren't used.
     colours each panel by its energy then. **Close** clears it.
   - **Each panel's power through a day:** Tigo keeps only each panel's
     latest reading, so the add-on records them every time it reads (exact,
-    from when it started). For a day before that, each panel's power is
-    estimated: the system's power by the minute (which Tigo keeps) times the
+    from when it started). For a day before that, and for any part of a
+    day it wasn't recording (before it started, or while it was stopped),
+    each panel's power is estimated: the system's power by the minute (which Tigo keeps) times the
     panel's share of that day's energy (which Tigo has for every day). The
     chart says when it's estimated. Energy by the day is always exact.
 - **History:** how much of your history has been read from Tigo, since when

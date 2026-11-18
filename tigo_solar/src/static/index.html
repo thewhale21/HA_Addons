@@ -701,7 +701,13 @@ function renderState(s) {
   ]);
   const sig = JSON.stringify((s.panels || []).map((p) => [p.id, p.left, p.top, p.power, p.energy_today]));
   if (sig !== view.sig && !view.drag) { view.sig = sig; drawRoof(); }
+  // (the panels just became known, e.g. after the add-on restarted: the chart again, in
+  // their colours and with all of them counted)
+  const ids = JSON.stringify((s.panels || []).map((p) => [p.id, p.string]));
+  const panelsChanged = view.panelIds !== undefined && ids !== view.panelIds;
+  view.panelIds = ids;
   if (!view.day) { view.day = systemToday(); loadChart(); }
+  else if (panelsChanged) loadChart();
   drawSensors();
 }
 
