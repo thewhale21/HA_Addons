@@ -339,6 +339,25 @@ def test_a_day_recorded_from_part_way_is_estimated_before_that():
 
 
 
+def test_through_the_year_each_day_by_the_time_of_day():
+    store = _filled_store()
+    grid = charts.year_grid(store, 2026, None, IDS)
+    # (the sample has the system's minutes for 18 Nov, 07:30-08:13)
+    assert grid["days"] == ["2026-11-18"] and grid["whole"] and grid["step"] == 30
+    assert grid["slots"] == [7 * 60 + 30, 8 * 60]
+    rows = store.system_power("2026-11-18")
+    first = [r[1] for r in rows if r[0] < "2026-11-18 08:00"]
+    assert grid["made"][0][0] == pytest.approx(sum(first) / len(first), abs=0.1)
+    assert grid["max_made"] == max(grid["made"][0])
+    # some panels: as on the day's chart (estimated from their share of the day)
+    store.put_panel_energy("2026-11-18", tigo_data.parse_aggenergy(SAMPLES["aggenergy_today"])["panels"])
+    one = charts.year_grid(store, 2026, [IDS[0]], IDS)
+    assert one["days"] == ["2026-11-18"] and not one["whole"] and one["made"][0][1] < grid["made"][0][1]
+    assert charts.year_grid(store, 2025, None, IDS)["days"] == []
+    with pytest.raises(ValueError):
+        charts.year_grid(store, 1, None, IDS)
+
+
 def test_your_layout_wins_over_tigos(tmp_path):
     panels = tigo_data.parse_config(SAMPLES["config"])["panels"]
     layout = Layout(str(tmp_path))

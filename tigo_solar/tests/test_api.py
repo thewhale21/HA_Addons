@@ -54,6 +54,10 @@ async def test_chart_and_layout(aiohttp_client, state, tmp_path):
     data = await (await client.get("/api/chart?view=week&day=2026-11-17&panels=2")).json()
     assert not data["whole"] and data["total_wh"] == 250
     assert (await client.get("/api/chart?view=decade&day=2026-11-17")).status == 400
+    store.put_system_power([("2026-11-17 12:00", 400.0, 380.0, 20.0), ("2026-11-17 12:10", 600.0, 570.0, 30.0)])
+    data = await (await client.get("/api/year?year=2026")).json()
+    assert data["days"] == ["2026-11-17"] and data["made"] == [[500.0]] and data["reclaimed"] == [[25.0]]
+    assert (await client.get("/api/year?year=abc")).status == 400
     resp = await client.post("/api/layout", json={"moved": {"1": {"left": 10, "top": 20}}})
     assert resp.status == 200 and layout.moved == {1: {"left": 10.0, "top": 20.0}}
     assert (await client.post("/api/layout", json={"moved": {"x": {}}})).status == 400

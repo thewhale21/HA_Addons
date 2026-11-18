@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0 — Through the year: each day by the time of day
+
+- **Feature:** a **Through the year** chart under **Production**: each day
+  of the year across, the time of day up, and the average power in each
+  half hour as the colour (**Heatmap**, hover for the values) or as the
+  height of a surface you can turn by dragging (**3D**). Show what was
+  **Made**, **Reclaimed**, or **Reclaimed %** (of what was made), for the
+  panels chosen on the roof; ‹ and › change the year. Your east and west
+  strings, sunrise and sunset through the seasons, and when the
+  optimisers win most all show at a glance.
+
 ## 0.5.1 — Reclaimed as a percentage
 
 - **Improvement:** wherever reclaimed is shown it now has its share of

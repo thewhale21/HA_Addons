@@ -45,6 +45,7 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app.router.add_get("/api/health", handle_health)
     # The charts and the roof (src/charts.py, src/layout.py)
     app.router.add_get("/api/chart", handle_chart)
+    app.router.add_get("/api/year", handle_year)
     app.router.add_post("/api/layout", handle_layout)
     app.router.add_post("/api/refresh", handle_refresh)
     # Your Home Assistant entities (Settings tab)
@@ -148,6 +149,25 @@ async def handle_chart(request: web.Request) -> web.Response:
         all_ids = [p["id"] for p in request.app["shared_state"].panels]
         day = q.get("day") or datetime.date.today().isoformat()
         out = await asyncio.to_thread(charts.build, store, q.get("view", "day"), day, selected, all_ids)
+    except ValueError as err:
+        return _bad_request(err)
+    return web.json_response(out, dumps=_dumps)
+
+
+async def handle_year(request: web.Request) -> web.Response:
+    """?year=YYYY&panels=all|ID,ID,...: each day by the time of day (src/charts.py year_grid)."""
+    from src import charts
+
+    store = request.app["store"]
+    if store is None:
+        return _unavailable()
+    q = request.query
+    panels = q.get("panels", "all")
+    try:
+        selected = None if panels in ("", "all") else [int(x) for x in panels.split(",") if x.strip()]
+        all_ids = [p["id"] for p in request.app["shared_state"].panels]
+        year = int(q.get("year") or datetime.date.today().year)
+        out = await asyncio.to_thread(charts.year_grid, store, year, selected, all_ids)
     except ValueError as err:
         return _bad_request(err)
     return web.json_response(out, dumps=_dumps)

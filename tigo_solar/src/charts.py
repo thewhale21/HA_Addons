@@ -290,3 +290,60 @@ def _day(store, day: str, out: dict, energy: dict, whole: bool, chosen: Optional
         out["reclaimed_wh"] = _r(rec_share)
         if rec_share is not None:
             out["reclaimed_estimated"] = True
+
+
+# --- Through the year: each day by the time of day ------------------------------------
+
+YEAR_STEP_MIN = 30  # the time of day in steps of this many minutes
+
+
+def year_grid(store, year: int, selected: Optional[list] = None, all_ids: Optional[list] = None,
+              step: int = YEAR_STEP_MIN) -> dict:
+    """Each day of `year` with any power, by the time of day: the average power (W) made and
+    reclaimed in each `step` minutes. `selected`: panel IDs (None or all: the whole system,
+    from Tigo's own minutes; else these panels, as on a day's chart)."""
+    year = int(year)
+    if not 2000 <= year <= 2100 or 1440 % step:
+        raise ValueError("Give a year, and a step that divides a day")
+    all_ids = [int(p) for p in (all_ids or [])]
+    chosen = None if selected is None else sorted({int(p) for p in selected})
+    whole = chosen is None or bool(all_ids and set(chosen) >= set(all_ids))
+    days, made, reclaimed = [], [], []
+    start, end = datetime.date(year, 1, 1), datetime.date(year, 12, 31)
+    have = {r[0] for r in store.system_energy(start.isoformat(), end.isoformat()) if r[1]}
+    d = start
+    while d <= end:
+        day = d.isoformat()
+        d += datetime.timedelta(days=1)
+        if whole:
+            rows = [(t[11:16], tot, rec) for t, tot, _b, rec in store.system_power(day)]
+        elif day in have or store.panel_power(day):
+            c = build(store, "day", day, chosen, all_ids)
+            rows = [(p["t"], p["total"], p["reclaimed"]) for p in c["points"]]
+        else:
+            rows = []
+        if not any(r[1] for r in rows):
+            continue
+        n = 1440 // step
+        sums, recs, counts = [0.0] * n, [0.0] * n, [0] * n
+        rec_seen = [False] * n
+        for t, tot, rec in rows:
+            i = (int(t[:2]) * 60 + int(t[3:5])) // step
+            sums[i] += tot or 0.0
+            counts[i] += 1
+            if rec is not None:
+                recs[i] += rec
+                rec_seen[i] = True
+        days.append(day)
+        made.append([round(sums[i] / counts[i], 1) if counts[i] else None for i in range(n)])
+        reclaimed.append([round(recs[i] / counts[i], 1) if counts[i] and rec_seen[i] else None for i in range(n)])
+    # (only the times of day anything was made, all year)
+    used = [i for i in range(1440 // step) if any(row[i] for row in made)]
+    lo, hi = (min(used), max(used)) if used else (0, -1)
+    cut = lambda rows: [r[lo:hi + 1] for r in rows]  # noqa: E731
+    flat = [v for r in made for v in r if v is not None]
+    rflat = [v for r in reclaimed for v in r if v is not None]
+    return {"year": year, "step": step, "whole": whole, "selected": None if whole else chosen,
+            "days": days, "slots": [i * step for i in range(lo, hi + 1)],
+            "made": cut(made), "reclaimed": cut(reclaimed),
+            "max_made": max(flat) if flat else None, "max_reclaimed": max(rflat) if rflat else None}

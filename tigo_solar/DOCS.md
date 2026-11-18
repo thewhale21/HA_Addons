@@ -81,6 +81,13 @@ readings (voltages, current, temperature) aren't used.
     system's power then, shared out by the panels' readings (going
     smoothly from one 15-minute reading to the next).
 
+- **Through the year:** each day of the year across and the time of day
+  up, with the average power in each half hour as the colour
+  (**Heatmap**; hover for the day, time and values) or as the height of a
+  surface (**3D**; drag to turn it). **Made**, **Reclaimed** or
+  **Reclaimed %** (of what was made; the scale leaves out the top 2%, so a
+  few dawn and dusk spikes don't wash out the rest), for the panels chosen
+  on the roof. ‹ and › change the year.
 - **History:** how much of your history has been read from Tigo, how far
   back each panel's power through the day has been read (and whether it's
   still reading), and your Tigo plan.

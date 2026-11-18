@@ -303,6 +303,8 @@
   svg.chart rect.hit { fill: transparent; cursor: crosshair; }
   svg.chart { touch-action: pan-y; user-select: none; }
   .chartbox { position: relative; }
+  canvas.ycanvas { display: block; width: 100%; height: 320px; touch-action: pan-y; cursor: crosshair; }
+  canvas.ycanvas.turn { cursor: grab; } canvas.ycanvas.turn:active { cursor: grabbing; }
   .tip { position: absolute; pointer-events: none; z-index: 4; background: var(--card); color: var(--text); font-size: 12px;
     padding: 6px 9px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.2), 0 0 0 1px var(--divider); white-space: nowrap; line-height: 1.5; }
   .tip .pg { display: grid; grid-template-columns: auto auto; gap: 0 12px; margin-top: 3px; }
@@ -386,6 +388,15 @@
       <div class="at-box" id="c-at" hidden></div>
       <div class="totals" id="c-totals"></div>
       <div class="note" id="c-note" hidden></div>
+    </div>
+    <div class="card">
+      <h2>Through the year<span class="spacer"></span>
+        <span class="seg" id="y-what" role="group" aria-label="Show"><button data-w="made">Made</button><button data-w="reclaimed">Reclaimed</button><button data-w="pct">Reclaimed %</button></span>
+        <span class="seg" id="y-style" role="group" aria-label="Chart"><button data-s="map">Heatmap</button><button data-s="3d">3D</button></span>
+      </h2>
+      <div class="chart-nav"><button class="btn small" id="y-prev" aria-label="Earlier year">‹</button><span class="when" id="y-when">—</span><button class="btn small" id="y-next" aria-label="Later year">›</button><span class="spacer" style="flex:1"></span><span class="note" style="margin:0" id="y-who"></span></div>
+      <div class="chartbox" id="y-box"><canvas id="y-canvas" class="ycanvas"></canvas><div class="tip" id="y-tip" hidden></div></div>
+      <div class="scale" style="margin-top:6px"><span id="y-lo">0</span><b></b><span id="y-hi">—</span><span class="spacer" style="flex:1"></span><span class="note" style="margin:0" id="y-hint"></span></div>
     </div>
     <div class="card" id="o-history-card">
       <h2>History</h2>
@@ -898,9 +909,174 @@ async function loadChart() {
     const c = await api(`chart?view=${view.mode}&day=${view.day}&panels=${panels}`);
     if (n !== chartReq) return;
     view.chart = c; drawChart(c);
+    loadYear();  // (only asks again when the panels chosen or the year changed)
     if (view.colour === 'energy') drawRoof();
   } catch (e) { if (n === chartReq) { view.chart = null; drawChart(null, e.message); } }
 }
+// --- Through the year: each day by the time of day, as a heatmap or a 3D surface -----
+const yv = {year: null, what: 'made', style: 'map', grid: null, key: '', req: 0, yaw: -0.6, pitch: 0.55, drag: null};
+try { const s = JSON.parse(localStorage.getItem('tigo.year') || '{}'); if (s.what) yv.what = s.what; if (s.style) yv.style = s.style; } catch (e) { /* (none kept) */ }
+const saveYear = () => { try { localStorage.setItem('tigo.year', JSON.stringify({what: yv.what, style: yv.style})); } catch (e) { /* (not kept) */ } };
+async function loadYear(force) {
+  if (yv.year === null) yv.year = +(view.day || systemToday()).slice(0, 4);
+  const panels = view.selected === null ? 'all' : (view.selected.length ? view.selected.join(',') : 'none');
+  const key = `${yv.year}|${panels}`;
+  if (!force && key === yv.key && yv.grid) return;
+  yv.key = key;
+  const n = ++yv.req;
+  $('y-when').textContent = String(yv.year);
+  $('y-next').disabled = yv.year >= +systemToday().slice(0, 4);
+  if (panels === 'none') { yv.grid = null; drawYear(); return; }
+  try {
+    const g = await api(`year?year=${yv.year}&panels=${panels}`);
+    if (n === yv.req) { yv.grid = g; drawYear(); }
+  } catch (e) { if (n === yv.req) { yv.grid = null; drawYear(e.message); } }
+}
+// The value of a cell for what's shown (W, or reclaimed as % of made; null: nothing)
+function yValue(g, d, s) {
+  const m = g.made[d][s], r = g.reclaimed[d][s];
+  if (yv.what === 'made') return m;
+  if (yv.what === 'reclaimed') return r;
+  return m && m >= 20 && r !== null ? 100 * r / m : null;
+}
+function yMax(g) {
+  if (yv.what === 'made') return g.max_made || 1;
+  if (yv.what === 'reclaimed') return g.max_reclaimed || 1;
+  const vals = []; g.days.forEach((_, d) => g.slots.forEach((_, s) => { const v = yValue(g, d, s); if (v !== null) vals.push(v); }));
+  vals.sort((a, b) => a - b);
+  return vals.length ? Math.max(1, vals[Math.floor(vals.length * 0.98)]) : 1;  // (a few dawn spikes don't flatten the rest)
+}
+const yFmt = (v) => yv.what === 'pct' ? `${num(v, 1)}%` : watts(v);
+const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+function yCanvas() {
+  const cv = $('y-canvas'), r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  const W = Math.max(300, r.width), H = 320;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  const css = getComputedStyle(document.documentElement);
+  return {cv, ctx, W, H, text: css.getPropertyValue('--text2').trim() || '#888', line: css.getPropertyValue('--divider').trim() || '#ddd'};
+}
+function drawYear(err) {
+  $('y-what').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.w === yv.what));
+  $('y-style').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.s === yv.style));
+  const g = yv.grid, {cv, ctx, W, H, text} = yCanvas();
+  cv.classList.toggle('turn', yv.style === '3d');
+  $('y-tip').hidden = true;
+  $('y-who').textContent = g ? (g.whole ? 'The whole system' : `${g.selected.length} panel${g.selected.length === 1 ? '' : 's'}`) : '';
+  if (!g || !g.days.length) {
+    ctx.fillStyle = text; ctx.font = '13px Roboto, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(err || (view.selected && !view.selected.length ? 'Choose a panel on the roof, or All panels' : 'Nothing made this year (or not read yet)'), W / 2, H / 2);
+    $('y-lo').textContent = ''; $('y-hi').textContent = ''; $('y-hint').textContent = '';
+    return;
+  }
+  const max = yMax(g);
+  $('y-lo').textContent = yFmt(0); $('y-hi').textContent = yFmt(max);
+  $('y-hint').textContent = yv.style === '3d' ? 'Drag to turn it' : 'Hover for the values';
+  if (yv.style === '3d') draw3d(g, max, ctx, W, H, text); else drawMap(g, max, ctx, W, H, text);
+}
+// Heatmap: days across (from the first with power), the time of day up
+function drawMap(g, max, ctx, W, H, text) {
+  const L = 44, R = 8, T = 8, B = 22;
+  const first = new Date(g.days[0] + 'T12:00:00'), last = new Date(g.days[g.days.length - 1] + 'T12:00:00');
+  const nDays = Math.round((last - first) / 864e5) + 1, ns = g.slots.length;
+  const cw = (W - L - R) / nDays, ch = (H - T - B) / ns;
+  const dayIx = (iso) => Math.round((new Date(iso + 'T12:00:00') - first) / 864e5);
+  g.days.forEach((iso, d) => {
+    const x = L + dayIx(iso) * cw;
+    for (let s = 0; s < ns; s++) {
+      const v = yValue(g, d, s); if (v === null) continue;
+      ctx.fillStyle = heat(v / max);
+      ctx.fillRect(x, T + (ns - 1 - s) * ch, Math.ceil(cw) + 0.5, Math.ceil(ch) + 0.5);
+    }
+  });
+  ctx.fillStyle = text; ctx.font = '11px Roboto, sans-serif';
+  ctx.textAlign = 'right';
+  g.slots.forEach((m, s) => { if (m % 120 === 0) ctx.fillText(hhmm(m), L - 6, T + (ns - 1 - s) * ch + ch / 2 + 4); });
+  ctx.textAlign = 'center';
+  for (let k = 0; k < nDays; k++) {
+    const dt = new Date(first.getTime() + k * 864e5);
+    if (dt.getDate() === 1 || k === 0) ctx.fillText(MONTHS[dt.getMonth()], L + (k + (dt.getDate() === 1 ? 0 : 0.5)) * cw + (k === 0 ? 14 : 0), H - 6);
+  }
+  yv.hit = {kind: 'map', L, T, cw, ch, ns, nDays, first, index: Object.fromEntries(g.days.map((iso, d) => [iso, d]))};
+}
+// 3D: the same as a surface, height and colour for the value; drag to turn it
+function draw3d(g, max, ctx, W, H, text) {
+  const nd = g.days.length, ns = g.slots.length;
+  // (a column a day; each point: x along the days, y along the time of day, z up)
+  const cy = Math.cos(yv.yaw), sy = Math.sin(yv.yaw), cp = Math.cos(yv.pitch), sp = Math.sin(yv.pitch);
+  const scale = Math.min(W, H * 1.6) * 0.42;
+  const P = (x, y, z) => {  // x, y in -1..1, z 0..1 -> screen, and depth
+    const rx = x * cy - y * sy, ry = x * sy + y * cy;
+    const sx = W / 2 + rx * scale, syy = H * 0.62 - (ry * sp + z * 0.9 * cp) * scale * 0.75;
+    return [sx, syy, ry * cp - z * sp];
+  };
+  const X = (d) => nd > 1 ? -1 + 2 * d / (nd - 1) : 0, Y = (s) => ns > 1 ? -0.7 + 1.4 * s / (ns - 1) : 0;
+  const Z = (d, s) => { const v = yValue(g, d, s); return v === null ? 0 : Math.min(1, v / max); };
+  // (the floor and its labels)
+  const corner = [[-1, -0.7], [1, -0.7], [1, 0.7], [-1, 0.7]].map(([x, y]) => P(x, y, 0));
+  ctx.strokeStyle = text; ctx.globalAlpha = 0.35; ctx.beginPath();
+  corner.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.stroke(); ctx.globalAlpha = 1;
+  const quads = [];
+  for (let d = 0; d < nd - 1; d++) {
+    for (let s = 0; s < ns - 1; s++) {
+      const z = [Z(d, s), Z(d + 1, s), Z(d + 1, s + 1), Z(d, s + 1)];
+      if (!z[0] && !z[1] && !z[2] && !z[3]) continue;
+      const pts = [P(X(d), Y(s), z[0]), P(X(d + 1), Y(s), z[1]), P(X(d + 1), Y(s + 1), z[2]), P(X(d), Y(s + 1), z[3])];
+      quads.push([(pts[0][2] + pts[1][2] + pts[2][2] + pts[3][2]) / 4, pts, (z[0] + z[1] + z[2] + z[3]) / 4, z[1] + z[2] - z[0] - z[3]]);
+    }
+  }
+  quads.sort((a, b) => b[0] - a[0]);  // (far first)
+  quads.forEach(([, pts, z, slope]) => {
+    ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath();
+    ctx.fillStyle = heat(z); ctx.fill();
+    const shade = Math.max(-0.25, Math.min(0.25, slope * 1.5));  // (light from one side: the shape shows)
+    if (shade) { ctx.fillStyle = shade > 0 ? `rgba(255,255,255,${shade})` : `rgba(0,0,0,${-shade})`; ctx.fill(); }
+  });
+  ctx.fillStyle = text; ctx.font = '11px Roboto, sans-serif'; ctx.textAlign = 'center';
+  const months = []; g.days.forEach((iso, d) => { if (iso.slice(8) === '01' || d === 0) months.push([d, MONTHS[+iso.slice(5, 7) - 1]]); });
+  months.forEach(([d, m]) => { const [x, y] = P(X(d), -0.82, 0); ctx.fillText(m, x, y + 4); });
+  [6, 9, 12, 15, 18, 21].forEach((h) => {
+    const s = g.slots.indexOf(h * 60); if (s < 0) return;
+    const [x, y] = P(1.12, Y(s), 0); ctx.fillText(`${h}:00`, x, y + 4);
+  });
+  yv.hit = {kind: '3d'};
+}
+$('y-what').addEventListener('click', (ev) => { const w = ev.target.dataset && ev.target.dataset.w; if (!w) return; yv.what = w; saveYear(); drawYear(); });
+$('y-style').addEventListener('click', (ev) => { const s = ev.target.dataset && ev.target.dataset.s; if (!s) return; yv.style = s; saveYear(); drawYear(); });
+$('y-prev').addEventListener('click', () => { yv.year -= 1; loadYear(); });
+$('y-next').addEventListener('click', () => { yv.year += 1; loadYear(); });
+window.addEventListener('resize', () => { if (yv.grid) drawYear(); });
+// Heatmap hover: that day and time; 3D: drag to turn it
+$('y-canvas').addEventListener('mousemove', (ev) => {
+  const g = yv.grid, h = yv.hit, tip = $('y-tip');
+  if (!g || !h || h.kind !== 'map') { tip.hidden = true; return; }
+  const r = $('y-canvas').getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+  const k = Math.floor((x - h.L) / h.cw), s = h.ns - 1 - Math.floor((y - h.T) / h.ch);
+  if (k < 0 || k >= h.nDays || s < 0 || s >= h.ns) { tip.hidden = true; return; }
+  const dt = new Date(h.first.getTime() + k * 864e5), iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  const d = h.index[iso];
+  if (d === undefined) { tip.hidden = true; return; }
+  const m = g.made[d][s], rc = g.reclaimed[d][s];
+  tip.innerHTML = `<b>${esc(dayName(iso, true))} · ${hhmm(g.slots[s])}–${hhmm(g.slots[s] + g.step)}</b><br>Made ${m === null ? '—' : watts(m)} on average`
+    + (rc !== null ? `<br>Reclaimed ${watts(rc)}${m ? ` (${num(100 * rc / m, 1)}%)` : ''}` : '');
+  tip.hidden = false;
+  tip.style.left = (x + 14 + tip.offsetWidth > r.width ? Math.max(0, x - 14 - tip.offsetWidth) : x + 14) + 'px';
+  tip.style.top = Math.max(0, Math.min(y - 20, r.height - tip.offsetHeight)) + 'px';
+});
+$('y-canvas').addEventListener('mouseleave', () => { $('y-tip').hidden = true; });
+$('y-canvas').addEventListener('pointerdown', (ev) => {
+  if (yv.style !== '3d') return;
+  yv.drag = {x: ev.clientX, y: ev.clientY, yaw: yv.yaw, pitch: yv.pitch};
+  $('y-canvas').setPointerCapture(ev.pointerId);
+});
+let yFrame = 0;
+$('y-canvas').addEventListener('pointermove', (ev) => {
+  const d = yv.drag; if (!d) return;
+  yv.yaw = d.yaw + (ev.clientX - d.x) * 0.01;
+  yv.pitch = Math.max(0.1, Math.min(1.45, d.pitch + (ev.clientY - d.y) * 0.01));
+  if (!yFrame) yFrame = requestAnimationFrame(() => { yFrame = 0; drawYear(); });
+});
+['pointerup', 'pointercancel'].forEach((e) => $('y-canvas').addEventListener(e, () => { yv.drag = null; }));
 // Each panel's colour on the charts: a hue per string, lighter along it
 // (none of them green, yellow or grey: the colours a panel's power fills it with on the roof)
 const STRING_HUES = [212, 285, 330, 8, 190, 250, 300, 230];
