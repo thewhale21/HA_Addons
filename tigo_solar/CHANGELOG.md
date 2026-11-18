@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 — Values on hover, and one scale for all the panels
+
+- **Feature:** hover over the chart for the values there in a box by the
+  pointer, as on the Sigenergy charger's charts: the time, what was made
+  and reclaimed, and with **By panel** each panel's power (reclaimed in
+  brackets) or energy, in its colour. A line and a dot mark the point.
+- **Change:** the chart's scale is always the one for all the panels over
+  the time shown, so choosing fewer panels shows them as less, not
+  stretched to fill the chart.
+
 ## 0.4.1 — Each panel every minute, from its 15-minute readings
 
 - **Fix:** a day with each panel's readings (every 15 minutes) was drawn

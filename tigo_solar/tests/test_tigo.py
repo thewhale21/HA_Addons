@@ -297,6 +297,10 @@ def test_charts_for_chosen_panels():
     assert day["panel_series"] == {"90375862": [30.0, 41.0]} and day["panel_reclaimed"] == {"90375862": [1.5, 2.5]}
     week = charts.build(store, "week", "2026-11-17", [90375862, 90375863], IDS)
     assert week["points"][-1]["total"] == 725 and week["points"][-1]["reclaimed"] is None and week["note"]
+    # (on the scale of all the panels, not rescaled to these two)
+    assert week["scale_max"] == pytest.approx(max(t for _, t, _, _ in store.system_energy("2026-11-11", "2026-11-17")), abs=0.01)
+    assert week["scale_max"] > max(p["total"] or 0 for p in week["points"])
+    assert charts.build(store, "day", "2026-11-18", [90375862], IDS)["scale_max"] == 156.0
     assert set(week["panel_series"]) == {"90375862", "90375863"}
     # all of them chosen: the whole system, with reclaimed
     assert charts.build(store, "week", "2026-11-17", IDS, IDS)["whole"]

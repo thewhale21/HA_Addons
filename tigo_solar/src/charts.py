@@ -77,6 +77,10 @@ def build(store, view: str, day: str, selected: Optional[list] = None, all_ids: 
     if view == "day":
         out["unit"] = "W"
         _day(store, day, out, energy.get(day, {}), whole, chosen, keep)
+        # (the scale for all the panels, so fewer show as less on the same scale)
+        tops = [r[1] for r in store.system_power(day) if r[1] is not None]
+        tops += [p["total"] for p in out["points"] if p["total"] is not None]
+        out["scale_max"] = max(tops) if tops else None
         return out
 
     out["unit"] = "Wh"
@@ -124,6 +128,19 @@ def build(store, view: str, day: str, selected: Optional[list] = None, all_ids: 
             points.append({"t": k, "total": _r(panels_total), "base": None, "reclaimed": None})
     out["points"] = points
     out["panel_series"] = {str(p): [_r(v) if seen[i] else None for i, v in enumerate(vals)] for p, vals in series.items()}
+    # (the scale for all the panels: the system's total, or all of them added up, at the most)
+    every = [0.0] * len(keys)
+    for d, panels in energy.items():
+        i = idx.get(key_of(d))
+        if i is not None:
+            every[i] += sum(panels.values())
+    sys_sum = [0.0] * len(keys)
+    for d, tot, _base, _rec in store.system_energy(start, end):
+        i = idx.get(key_of(d))
+        if i is not None and tot is not None:
+            sys_sum[i] += tot
+    every = [max(a, b) for a, b in zip(every, sys_sum)]
+    out["scale_max"] = max(every + [p["total"] or 0.0 for p in points]) or None
     totals = [p["total"] for p in points if p["total"] is not None]
     rec = [p["reclaimed"] for p in points if p["reclaimed"] is not None]
     out["total_wh"] = round(sum(totals), 2) if totals else None

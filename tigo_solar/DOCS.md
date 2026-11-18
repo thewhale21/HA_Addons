@@ -55,6 +55,10 @@ readings (voltages, current, temperature) aren't used.
     the optimisers reclaimed (light green). By the day, Tigo has that only
     for the whole system, so with some panels chosen the bars are their
     total.
+  - **Hover** over the chart for the values there: what was made and
+    reclaimed, and with **By panel** each panel's figure in its colour.
+    The scale is always the one for all the panels over the time shown, so
+    fewer panels show as less.
   - **Click a point** on the chart: each panel's power and reclaimed power
     then (or its energy that day or month) in a table under the chart, with
     the total, and the roof colours each panel by it. **Show this day**

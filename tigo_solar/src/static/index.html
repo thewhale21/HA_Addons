@@ -302,6 +302,12 @@
   svg.chart .line { fill: none; stroke: #2e7d32; stroke-width: 1.5; }
   svg.chart rect.hit { fill: transparent; cursor: crosshair; }
   svg.chart { touch-action: pan-y; user-select: none; }
+  .chartbox { position: relative; }
+  .tip { position: absolute; pointer-events: none; z-index: 4; background: var(--card); color: var(--text); font-size: 12px;
+    padding: 6px 9px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.2), 0 0 0 1px var(--divider); white-space: nowrap; line-height: 1.5; }
+  .tip .pg { display: grid; grid-template-columns: auto auto; gap: 0 12px; margin-top: 3px; }
+  .tip .pg span { display: flex; justify-content: space-between; gap: 8px; }
+  .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
   .at-box { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--divider); border-radius: 10px; }
   table.at { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
   table.at th { text-align: left; font-weight: 500; color: var(--text2); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--divider); }
@@ -374,8 +380,8 @@
         <span class="seg" id="c-view" role="group" aria-label="Time"><button data-v="day">Day</button><button data-v="week">Week</button><button data-v="month">Month</button><button data-v="year">Year</button></span>
       </h2>
       <div class="chart-nav"><button class="btn small" id="c-prev" aria-label="Earlier">‹</button><span class="when" id="c-when">—</span><button class="btn small" id="c-next" aria-label="Later">›</button><button class="btn small" id="c-today">Today</button><span class="spacer" style="flex:1"></span><span class="note" style="margin:0" id="c-who"></span></div>
-      <svg class="chart" id="chart" role="img" aria-label="Production chart"></svg>
-      <div class="note" id="c-hover" style="min-height:1.4em;margin-top:2px"></div>
+      <div class="chartbox" id="c-box"><svg class="chart" id="chart" role="img" aria-label="Production chart"></svg><div class="tip" id="c-tip" hidden></div></div>
+      <div class="note" id="c-hover" style="min-height:1.4em;margin-top:2px">Hover for the values, click a point for each panel, or drag across to add up a time.</div>
       <div class="legend" id="c-legend"></div>
       <div class="at-box" id="c-at" hidden></div>
       <div class="totals" id="c-totals"></div>
@@ -942,8 +948,11 @@ function drawChart(c, err) {
   if (!pts.length || max <= 0) {
     svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">${esc(c.view === 'day' && !c.whole ? 'Nothing known of these panels this day' : 'Nothing made then (or not read yet)')}</text>`;
   } else {
-    const step = niceStep(max / 4), top = Math.ceil(max / step) * step;
+    // (the scale: what all the panels made then, so fewer panels show as less, not rescaled)
+    const scale = Math.max(max, c.scale_max || 0);
+    const step = niceStep(scale / 4), top = Math.ceil(scale / step) * step;
     const y = (v) => T + (H - T - B) * (1 - v / top);
+    view.chartY = y;
     let out = '';
     for (let v = 0; v <= top + 1e-9; v += step) {
       out += `<line class="ax" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${c.unit === 'W' ? (top >= 2000 ? num(v / 1000, 1) + 'k' : num(v, 0)) : (top >= 2000 ? num(v / 1000, top >= 20000 ? 0 : 1) : num(v, 0))}</text>`;
@@ -1000,6 +1009,8 @@ function drawChart(c, err) {
       });
     }
     // (hover and click anywhere: the nearest point)
+    out += `<line id="c-cross" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--text2)" stroke-width="1" visibility="hidden"/>`
+      + `<circle id="c-dot" r="3.5" fill="var(--primary)" stroke="var(--card)" stroke-width="1.5" visibility="hidden"/>`;
     out += `<rect class="hit" id="c-hit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}"></rect>`;
     svg.innerHTML = out;
   }
@@ -1140,6 +1151,7 @@ function nearestIndex(ev) {
 // Click: a point; drag across: a time highlighted
 let dragFrame = 0;
 $('chart').addEventListener('pointerdown', (ev) => {
+  if (ev.pointerType !== 'mouse') hideTip();
   const i = nearestIndex(ev); if (i === null) return;
   view.drag0 = i;
   $('chart').setPointerCapture(ev.pointerId);
@@ -1160,13 +1172,38 @@ function endDrag(ev) {
 }
 $('chart').addEventListener('pointerup', endDrag);
 $('chart').addEventListener('pointercancel', () => { view.drag0 = null; });
+// Hover: the values there, in a box by the pointer (as the Sigenergy charger's charts)
+function hideTip() {
+  $('c-tip').hidden = true;
+  ['c-cross', 'c-dot'].forEach((id) => { const e = $(id); if (e) e.setAttribute('visibility', 'hidden'); });
+}
 $('chart').addEventListener('mousemove', (ev) => {
-  const i = nearestIndex(ev); if (i === null) { $('chart').removeAttribute('title'); return; }
-  const p = view.cursorPts[i], c = view.chart;
-  const t = c.view === 'day' ? p.t : c.view === 'year' ? `${MONTHS[+p.t.slice(5, 7) - 1]}` : dayName(p.t, true);
-  $('c-hover').textContent = `${t}: ${c.view === 'day' ? num(p.total, 0) + ' W' : kwh(p.total)}${p.reclaimed ? ` · ${c.view === 'day' ? num(p.reclaimed, 0) + ' W' : kwh(p.reclaimed)} reclaimed` : ''} · click for each panel, or drag across to add up a time`;
+  const i = nearestIndex(ev), c = view.chart; if (i === null || !c) { hideTip(); return; }
+  const p = view.cursorPts[i], day = c.view === 'day';
+  const t = day ? `${p.t} · ${dayName(c.day, true)}` : c.view === 'year' ? `${MONTHS[+p.t.slice(5, 7) - 1]} ${p.t.slice(0, 4)}` : dayName(p.t, true);
+  const v = (x) => x === null || x === undefined ? '—' : day ? `${num(x, x < 10 ? 1 : 0)} W` : wh(x);
+  const byPanel = view.split === 'panels' && Object.keys(c.panel_series || {}).length > 0;
+  let html = `<b>${esc(t)}</b><br>${c.whole ? 'Made' : 'These panels'} ${v(p.total)}`
+    + (p.reclaimed !== null && p.reclaimed !== undefined ? ` · reclaimed ${v(p.reclaimed)}` : '');
+  if (byPanel) {
+    const colours = panelColours();
+    const ids = Object.keys(c.panel_series).sort((a, b) => panelLabel(a).localeCompare(panelLabel(b), undefined, {numeric: true}));
+    html += '<div class="pg">' + ids.map((id) => {
+      const r = c.panel_reclaimed && c.panel_reclaimed[id] ? c.panel_reclaimed[id][i] : null;
+      return `<span><span><i style="background:${colours[id] || '#888'}"></i>${esc(panelLabel(id))}</span><span>${v(c.panel_series[id][i])}${r ? ` <span class="muted">(${v(r)})</span>` : ''}</span></span>`;
+    }).join('') + '</div>';
+  }
+  const tip = $('c-tip');
+  tip.innerHTML = html; tip.hidden = false;
+  const box = $('c-box').getBoundingClientRect(), x = ev.clientX - box.left;
+  // (beside the pointer, on whichever side has room)
+  tip.style.left = (x + 14 + tip.offsetWidth > box.width ? Math.max(0, x - 14 - tip.offsetWidth) : x + 14) + 'px';
+  tip.style.top = '6px';
+  const cx = view.chartX(i), cross = $('c-cross'), dot = $('c-dot');
+  if (cross) { cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('visibility', 'visible'); }
+  if (dot && day && view.chartY) { dot.setAttribute('cx', cx); dot.setAttribute('cy', view.chartY(p.total || 0)); dot.setAttribute('visibility', 'visible'); }
 });
-$('chart').addEventListener('mouseleave', () => { $('c-hover').textContent = ''; });
+$('chart').addEventListener('mouseleave', hideTip);
 $('c-split').addEventListener('click', (ev) => {
   const s = ev.target.dataset && ev.target.dataset.s; if (!s) return;
   view.split = s; saveView(); drawChart(view.chart);
