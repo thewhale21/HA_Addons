@@ -218,6 +218,9 @@
     display: flex; align-items: center; gap: 3px; }
   .week .wbar.hi { top: 3px; background: linear-gradient(135deg, #29b6f6, var(--w-high)); }
   .week .wbar.lo { bottom: 3px; background: linear-gradient(135deg, #ffb74d, var(--w-low)); color: #3e2723; }
+  /* An entry that only makes it charge or discharge (no limit): across the whole day's row */
+  .week .wbar.way { top: 3px; height: calc(100% - 6px); background: repeating-linear-gradient(135deg, #7e57c2 0 8px, #6a45b0 8px 16px); }
+  .lim.way i { background: #7e57c2; }
   .week .wbar.off { opacity: .35; filter: grayscale(.6); }
   .week .wbar.skipped { opacity: .45; text-decoration: line-through; background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(255,255,255,.45) 4px 6px); }
   .week .wbar.picked { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); opacity: 1; z-index: 3; }
@@ -604,16 +607,16 @@
       <h2>Default limits</h2>
       <div class="note" style="margin:0">Used whenever the schedule doesn't set a limit. They're helpers in Home Assistant, so a dashboard or automation can change them too.</div>
       <div class="deflims">
-        <div class="fld"><div class="head">Low limit</div><div class="in"><input type="number" id="o-low" min="20" max="98" step="1" aria-label="Low limit (%)"> %</div><div class="note" id="o-low-note">Stops discharging here</div></div>
-        <div class="fld"><div class="head">High limit</div><div class="in"><input type="number" id="o-high" min="21" max="99" step="1" aria-label="High limit (%)"> %</div><div class="note" id="o-high-note">Stops charging here</div></div>
+        <div class="fld"><div class="head">Keep at least</div><div class="in"><input type="number" id="o-low" min="20" max="98" step="1" aria-label="Keep at least (%)"> %</div><div class="note" id="o-low-note">Stops discharging here</div></div>
+        <div class="fld"><div class="head">Maximum charge</div><div class="in"><input type="number" id="o-high" min="21" max="99" step="1" aria-label="Maximum charge (%)"> %</div><div class="note" id="o-high-note">Stops charging here</div></div>
         <div class="fld"><div class="head">Car battery capacity</div><div class="in"><input type="number" id="o-cap" min="1" max="200" step="0.1" aria-label="Car battery capacity (kWh)"> kWh</div><div class="note" id="o-cap-note">Usable kWh, for the virtual battery sensors</div></div>
       </div>
     </div>
     <div class="card">
       <h2>Schedule<span class="spacer"></span><button class="btn small primary" id="w-add">+ Add</button></h2>
-      <div class="note" style="margin:0 0 14px">Change the high and/or low limit for a while, every week or once. Click or drag across a day to add an entry, click one to change it. <details class="more"><summary>More</summary><div>For example, Tue and Thu 23:00–08:00 high 50%, or tomorrow 06:00–10:00 low 95%. Each day shows the high limit's entries on top and the low limit's below. Any limit an entry doesn't set, and any time nothing's on, uses the defaults. Where entries overlap, the one that started last wins.</div></details></div>
+      <div class="note" style="margin:0 0 14px">Change the maximum charge and/or keep-at-least for a while, or make it charge only or discharge only, every week or once. Click or drag across a day to add an entry, click one to change it. <details class="more"><summary>More</summary><div>For example, Tue and Thu 23:00–08:00 maximum charge 50%, tomorrow 06:00–10:00 keep at least 95%, or weekdays 16:00–19:00 discharge only. Each day shows the maximum charge's entries on top and the keep-at-least's below; charge or discharge only (with no limit) fills the day's row. <b>Charge only</b>: it's only started when there's spare power to charge from, and stopped if it discharges. <b>Discharge only</b>: only started when the house needs power, and stopped if it charges. Either way it stays between the limits. Any limit an entry doesn't set, and any time nothing's on, uses the defaults. Where entries overlap, the one that started last wins.</div></details></div>
       <div class="week" id="w-grid"></div>
-      <div class="legend" style="margin-top:12px"><span><b class="band" style="background:var(--w-high)"></b>High limit (top)</span><span><b class="band" style="background:var(--w-low)"></b>Low limit (bottom)</span><span><b class="band" style="background:var(--text2);opacity:.3"></b>Paused</span><span><b class="band" style="background:repeating-linear-gradient(45deg,var(--w-high) 0 3px,transparent 3px 5px);opacity:.6"></b>Skipped this once</span><span><b class="band" style="background:var(--err);width:2px"></b>Now</span><span id="w-defaults"></span></div>
+      <div class="legend" style="margin-top:12px"><span><b class="band" style="background:var(--w-high)"></b>Maximum charge (top)</span><span><b class="band" style="background:var(--w-low)"></b>Keep at least (bottom)</span><span><b class="band" style="background:#7e57c2"></b>Charge or discharge only</span><span><b class="band" style="background:var(--text2);opacity:.3"></b>Paused</span><span><b class="band" style="background:repeating-linear-gradient(45deg,var(--w-high) 0 3px,transparent 3px 5px);opacity:.6"></b>Skipped this once</span><span><b class="band" style="background:var(--err);width:2px"></b>Now</span><span id="w-defaults"></span></div>
       <h2 style="margin-top:22px">All entries</h2>
       <div class="entries" id="o-sched"></div>
     </div>
@@ -1024,8 +1027,10 @@ setInterval(() => {
 // ---------- Overview ----------
 const RULES = {
   house_needs_power: 'House needs power', charge_opportunity: 'Spare power to charge', in_range: 'Within the limits',
-  high_limit: 'Reached the high limit', low_limit: 'Reached the low limit', manual: 'Pressed on this page',
-  charging_above_high: 'Charging above the high limit',
+  high_limit: 'Reached the maximum charge', low_limit: 'Reached the keep-at-least', manual: 'Pressed on this page',
+  charging_above_high: 'Charging above the maximum charge',
+  charge_only: 'Discharging while charge only', discharge_only: 'Charging while discharge only',
+  discharge_only_idle: 'Not discharging while discharge only',
   dropout: 'Stopped discharging by itself', schedule: 'Schedule', alarm: 'Charger',
   elsewhere_start: 'Started by something else', elsewhere_stop: 'Stopped by something else',
 };
@@ -1067,16 +1072,17 @@ function renderState(s) {
   drawDefaultsNote();
   const from = (k) => { const e = [...sched].reverse().find((x) => x[k] != null); return e ? `scheduled${e.label ? ' (' + esc(e.label) + ')' : ''} until ${whenLocal(e.until)}` : 'default'; };
   $('sc-now').innerHTML = kv([
-    ['High limit', i.high == null ? '—' : `${num(i.high, 0)}% <span class="muted">· ${from('high')}</span>`],
-    ['Low limit', i.low == null ? '—' : `${num(i.low, 0)}% <span class="muted">· ${from('low')}</span>`],
+    ['Maximum charge', i.high == null ? '—' : `${num(i.high, 0)}% <span class="muted">· ${from('high')}</span>`],
+    ['Keep at least', i.low == null ? '—' : `${num(i.low, 0)}% <span class="muted">· ${from('low')}</span>`],
+    ...(r.only ? [['Charger', `${r.only === 'charge' ? 'Charge only' : 'Discharge only'} <span class="muted">· ${(() => { const e = [...sched].reverse().find((x) => x.only); return e ? `scheduled${e.label ? ' (' + esc(e.label) + ')' : ''} until ${whenLocal(e.until)}` : ''; })()}</span>`]] : []),
     ['Car', i.soc == null ? '—' : `${num(i.soc, 0)}%`],
   ]);
-  $('o-limits-note').textContent = sched.length ? '' : `Default limits: ${num(r.base_low ?? i.low, 0)}%–${num(r.base_high ?? i.high, 0)}%`;
+  $('o-limits-note').textContent = sched.length ? '' : `Default limits: keep at least ${num(r.base_low ?? i.low, 0)}%, maximum charge ${num(r.base_high ?? i.high, 0)}%`;
   $('o-sched-now').hidden = !sched.length;
   const onceOn = sched.filter((e) => e.kind === 'once');
   $('hold-now').hidden = !onceOn.length;
   $('hold-now').innerHTML = onceOn.map((e) => `<span class="chip info">${esc(e.label || 'One-off')} until ${whenLocal(e.until)} <a href="#" class="unhold" data-id="${e.id}" title="End it now" aria-label="End it now">✕</a></span>`).join('');
-  $('o-sched-now').innerHTML = sched.map((e) => `<span class="chip info">${e.label && e.label.startsWith('Hold') ? esc(e.label) : `Scheduled: ${[e.high != null ? `high ${num(e.high, 0)}%` : '', e.low != null ? `low ${num(e.low, 0)}%` : ''].filter(Boolean).join(', ')}${e.label ? ' · ' + esc(e.label) : ''}`} until ${whenLocal(e.until)}${e.kind === 'once' ? ` <a href="#" class="unhold" data-id="${e.id}" title="End it now" aria-label="End it now">✕</a>`
+  $('o-sched-now').innerHTML = sched.map((e) => `<span class="chip info">${e.label && e.label.startsWith('Hold') ? esc(e.label) : `Scheduled: ${[e.high != null ? `maximum charge ${num(e.high, 0)}%` : '', e.low != null ? `keep at least ${num(e.low, 0)}%` : '', e.only ? `${e.only} only` : ''].filter(Boolean).join(', ')}${e.label ? ' · ' + esc(e.label) : ''}`} until ${whenLocal(e.until)}${e.kind === 'once' ? ` <a href="#" class="unhold" data-id="${e.id}" title="End it now" aria-label="End it now">✕</a>`
     : ` <a href="#" class="skipnow" data-id="${e.id}" data-date="${esc((e.started || '').slice(0, 10))}" title="Skip it this time (every other week stays)" aria-label="Skip it this time">✕</a>`}</span>`).join('');
 
   // Power flow
@@ -1329,13 +1335,14 @@ function drawSchedule(v) {
   // it's next, and what you can do with it. Click a row to open it in the week above.
   const fmtDay = (iso) => new Date(iso + 'T12:00').toLocaleDateString([], {weekday: 'short', day: 'numeric', month: 'short'});
   $('o-sched').innerHTML = (v.entries || []).length ? v.entries.map((e) => {
-    const stripe = e.high != null && e.low != null ? `linear-gradient(var(--w-high) 50%, var(--w-low) 50%)` : e.high != null ? 'var(--w-high)' : 'var(--w-low)';
+    const stripe = e.high != null && e.low != null ? `linear-gradient(var(--w-high) 50%, var(--w-low) 50%)` : e.high != null ? 'var(--w-high)' : e.low != null ? 'var(--w-low)' : '#7e57c2';
     const nextDay = tmin(e.end) <= tmin(e.start);
     const when = e.kind === 'weekly'
       ? `<div class="daydots">${WD.map((d) => `<span class="${e.days.includes(d) ? 'on' : ''}">${DAYNAMES[d].slice(0, 2)}</span>`).join('')}</div>`
       : `<div class="daydots"><span class="on" style="width:auto;padding:0 8px">Once · ${fmtDay(e.date)}</span></div>`;
-    const lims = [e.high != null ? `<span class="lim"><i style="background:var(--w-high)"></i>High <b>${num(e.high, 0)}%</b></span>` : '',
-      e.low != null ? `<span class="lim"><i style="background:var(--w-low)"></i>Low <b>${num(e.low, 0)}%</b></span>` : ''].join('');
+    const lims = [e.high != null ? `<span class="lim"><i style="background:var(--w-high)"></i>Maximum charge <b>${num(e.high, 0)}%</b></span>` : '',
+      e.low != null ? `<span class="lim"><i style="background:var(--w-low)"></i>Keep at least <b>${num(e.low, 0)}%</b></span>` : '',
+      e.only ? `<span class="lim way"><i></i><b>${e.only === 'charge' ? 'Charge only' : 'Discharge only'}</b></span>` : ''].join('');
     const skips = (e.skips || []).filter((d) => d >= isoAt(-1)).map((d) => `<div class="sub">Skipping ${fmtDay(d)} · <a href="#" class="unskip" data-id="${e.id}" data-date="${d}">undo</a></div>`).join('');
     const status = on.has(e.id) ? '<span class="pill ok"><span class="pdot"></span>On now</span>'
       : !e.enabled ? '<span class="pill none">Paused</span>'
@@ -1343,7 +1350,7 @@ function drawSchedule(v) {
     const skipAt = e.kind === 'weekly' && e.enabled && (on.has(e.id) ? onStart[e.id] : next[e.id]);
     return `<div class="entry ${e.enabled ? '' : 'off'}" data-open="${e.id}">
       <div class="stripe" style="background:${stripe}"></div>
-      <div class="when"><b>${esc(e.start)}–${esc(e.end)}</b>${nextDay ? ' <span class="muted" style="font-size:12px">next day</span>' : ''}${e.label ? `<span class="elabel">${esc(e.label)}</span>` : ''}${when}</div>
+      <div class="when"><b>${esc(e.start)}–${esc(e.end)}</b>${e.start === e.end ? ' <span class="muted" style="font-size:12px">24 hours</span>' : nextDay ? ' <span class="muted" style="font-size:12px">next day</span>' : ''}${e.label ? `<span class="elabel">${esc(e.label)}</span>` : ''}${when}</div>
       <div class="lims">${lims}</div>
       <div class="status">${status}${skips}</div>
       <div class="acts">${skipAt ? `<button class="btn small" data-skip-next="${e.id}" data-date="${skipAt.slice(0, 10)}" title="Leave out ${on.has(e.id) ? 'the one on now' : 'the next one'} only">${on.has(e.id) ? 'Skip this one' : 'Skip next'}</button>` : ''}
@@ -1432,7 +1439,7 @@ function occOn(e, row) {
 }
 function drawDefaultsNote() {
   const r = (state && state.readings) || {};
-  $('w-defaults').textContent = r.base_high != null ? `Gaps use the defaults: high ${num(r.base_high, 0)}%, low ${num(r.base_low, 0)}%` : '';
+  $('w-defaults').textContent = r.base_high != null ? `Gaps use the defaults: maximum charge ${num(r.base_high, 0)}%, keep at least ${num(r.base_low, 0)}%` : '';
 }
 function drawWeek() {
   const ed = week.edit, now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
@@ -1453,10 +1460,16 @@ function drawWeek() {
         const s0 = tmin(e.start), e0 = tmin(e.end), night = e0 <= s0, own = occ === isoAt(d);
         const handles = skipped ? '' : (own ? '<i class="rh l" data-edge="l" title="Drag to change when it starts"></i>' : '')
           + ((own ? !night || e0 === 0 : night && e0 > 0) ? '<i class="rh r" data-edge="r" title="Drag to change when it ends"></i>' : '');
-        // as much of a label as fits: "High 50% · Cheap night", "50%", or nothing
-        const text = (kind, v) => w > 20 && e.label ? `${kind} ${num(v, 0)}% · ${esc(e.label)}` : w > 9 ? `${kind} ${num(v, 0)}%` : w > 3.5 ? `${num(v, 0)}%` : '';
-        if (e.high != null) bars += `<div class="wbar hi ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`high ${num(e.high, 0)}%`))}">${text('↑ High', e.high)}${handles}</div>`;
-        if (e.low != null) bars += `<div class="wbar lo ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`low ${num(e.low, 0)}%`))}">${text('↓ Low', e.low)}${handles}</div>`;
+        // as much of a label as fits: "Max 50% · Cheap night", "50%", or nothing (charge or
+        // discharge only, with a limit: an arrow before it)
+        const way = e.only === 'charge' ? '⇧ ' : e.only === 'discharge' ? '⇩ ' : '', wayText = e.only ? ` · ${e.only} only` : '';
+        const text = (kind, v) => w > 20 && e.label ? `${way}${kind} ${num(v, 0)}% · ${esc(e.label)}` : w > 9 ? `${way}${kind} ${num(v, 0)}%` : w > 3.5 ? `${way}${num(v, 0)}%` : '';
+        if (e.high != null) bars += `<div class="wbar hi ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`maximum charge ${num(e.high, 0)}%${wayText}`))}">${text('Max', e.high)}${handles}</div>`;
+        if (e.low != null) bars += `<div class="wbar lo ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(`keep at least ${num(e.low, 0)}%${wayText}`))}">${text('At least', e.low)}${handles}</div>`;
+        if (e.high == null && e.low == null && e.only) {
+          const what = e.only === 'charge' ? 'Charge only' : 'Discharge only';
+          bars += `<div class="wbar way ${cls}" data-entry="${n}" data-row="${d}" data-occ="${occ}" style="left:${left}%;width:${w}%" title="${esc(title(what.toLowerCase()))}">${w > 20 && e.label ? `${way}${what} · ${esc(e.label)}` : w > 9 ? way + what : w > 3.5 ? way.trim() : ''}${handles}</div>`;
+        }
       }
     });
     const extra = d === 0 ? `<div class="past" style="width:${nowMin / 14.4}%"></div><div class="now" style="left:${nowMin / 14.4}%"></div>` : '';
@@ -1477,9 +1490,9 @@ const timeOptions = (val) => {
 function openEditor(row, entry, start, end, occ) {
   week.edit = entry
     ? {row, id: entry.id, occ: occ || null, form: {kind: entry.kind, days: [...(entry.days || [wdAt(row)])], date: entry.date || isoAt(row), start: entry.start, end: entry.end,
-        high: entry.high, low: entry.low, label: entry.label || '', enabled: entry.enabled,
-        sets: entry.high != null && entry.low != null ? 'both' : entry.high != null ? 'high' : 'low'}}
-    : {row, id: null, form: {kind: 'weekly', days: [wdAt(row)], date: isoAt(row), start, end, high: null, low: null, label: '', enabled: true, sets: 'high'}};
+        high: entry.high, low: entry.low, label: entry.label || '', enabled: entry.enabled, only: entry.only || 'both',
+        sets: entry.high != null && entry.low != null ? 'both' : entry.high != null ? 'high' : entry.low != null ? 'low' : 'none'}}
+    : {row, id: null, form: {kind: 'weekly', days: [wdAt(row)], date: isoAt(row), start, end, high: null, low: null, label: '', enabled: true, sets: 'high', only: 'both'}};
   drawWeek();
 }
 function drawEditor() {
@@ -1492,10 +1505,11 @@ function drawEditor() {
     ${f.kind === 'weekly' ? `<div class="seg days" role="group" aria-label="Days">${WD.map((d) => `<button data-day="${d}" aria-pressed="${f.days.includes(d)}">${DAYNAMES[d].slice(0, 2)}</button>`).join('')}</div>`
       : `<input type="date" data-f="date" value="${esc(f.date)}" aria-label="Date">`}
     <label>From <select data-f="start">${timeOptions(f.start)}</select></label>
-    <label>until <select data-f="end">${timeOptions(f.end)}</select></label>${nextDay ? '<span class="muted">next day</span>' : ''}
-    <div class="seg" role="group" aria-label="Sets"><button data-sets="high" aria-pressed="${f.sets === 'high'}">High</button><button data-sets="low" aria-pressed="${f.sets === 'low'}">Low</button><button data-sets="both" aria-pressed="${f.sets === 'both'}">Both</button></div>
-    ${f.sets !== 'low' ? `<label class="field">High <input type="number" data-f="high" min="21" max="99" step="1" value="${f.high ?? ''}"><span class="unit">%</span></label>` : ''}
-    ${f.sets !== 'high' ? `<label class="field">Low <input type="number" data-f="low" min="20" max="98" step="1" value="${f.low ?? ''}"><span class="unit">%</span></label>` : ''}
+    <label>until <select data-f="end">${timeOptions(f.end)}</select></label>${f.start === f.end ? '<span class="muted">next day (24 hours)</span>' : nextDay ? '<span class="muted">next day</span>' : ''}
+    <div class="seg" role="group" aria-label="Sets"><button data-sets="high" aria-pressed="${f.sets === 'high'}">Maximum charge</button><button data-sets="low" aria-pressed="${f.sets === 'low'}">Keep at least</button><button data-sets="both" aria-pressed="${f.sets === 'both'}">Both</button><button data-sets="none" aria-pressed="${f.sets === 'none'}" title="No limit: the defaults (with charge or discharge only)">Neither</button></div>
+    ${f.sets === 'high' || f.sets === 'both' ? `<label class="field">Maximum charge <input type="number" data-f="high" min="21" max="99" step="1" value="${f.high ?? ''}"><span class="unit">%</span></label>` : ''}
+    ${f.sets === 'low' || f.sets === 'both' ? `<label class="field">Keep at least <input type="number" data-f="low" min="20" max="98" step="1" value="${f.low ?? ''}"><span class="unit">%</span></label>` : ''}
+    <div class="seg" role="group" aria-label="Charger" title="Charge only: only started when there's spare power to charge from. Discharge only: only started when the house needs power. Either way it stays between the limits."><button data-only="both" aria-pressed="${f.only === 'both'}">Both ways</button><button data-only="charge" aria-pressed="${f.only === 'charge'}">Charge only</button><button data-only="discharge" aria-pressed="${f.only === 'discharge'}">Discharge only</button></div>
     <input type="search" data-f="label" placeholder="Label (optional)" maxlength="60" value="${esc(f.label)}">
     <label class="switch" title="On"><input type="checkbox" data-f="enabled" ${f.enabled ? 'checked' : ''} aria-label="On"><span></span></label>
     <span class="acts"><button class="btn small primary" id="w-save">Save</button>${skipButton(ed)}${ed.id ? '<button class="btn small" id="w-del">Delete</button>' : ''}<button class="btn small" id="w-close">Cancel</button></span>
@@ -1521,9 +1535,10 @@ async function skipOccurrence(id, date, skip) {
 async function saveEditor(del) {
   const ed = week.edit; if (!ed) return;
   const f = ed.form, num0 = (v) => v === '' || v == null ? null : Number(v);
-  const body = {kind: f.kind, start: f.start, end: f.end, high: f.sets === 'low' ? null : num0(f.high),
-    low: f.sets === 'high' ? null : num0(f.low), label: f.label, enabled: f.enabled};
-  if (!del && body.high == null && body.low == null) { const el = $('w-err'); if (el) el.textContent = 'Give the limit a value'; return; }
+  const body = {kind: f.kind, start: f.start, end: f.end, high: f.sets === 'high' || f.sets === 'both' ? num0(f.high) : null,
+    low: f.sets === 'low' || f.sets === 'both' ? num0(f.low) : null, label: f.label, enabled: f.enabled, only: f.only === 'both' ? null : f.only};
+  if (!del && f.sets !== 'none' && ((f.sets !== 'low' && body.high == null) || (f.sets !== 'high' && body.low == null))) { const el = $('w-err'); if (el) el.textContent = 'Give the limit a value'; return; }
+  if (!del && body.high == null && body.low == null && !body.only) { const el = $('w-err'); if (el) el.textContent = 'Set a limit, or choose charge only or discharge only'; return; }
   if (f.kind === 'weekly') body.days = f.days; else body.date = f.date;
   try {
     const v = del ? await api('schedule/' + ed.id, {method: 'DELETE'})
@@ -1539,6 +1554,7 @@ $('w-grid').addEventListener('click', (ev) => {
   if (t.id === 'w-skip') { skipOccurrence(ed.id, ed.occ, t.dataset.skip === '1'); return; }
   if (ed && t.dataset.rep) { ed.form.kind = t.dataset.rep; drawEditor(); return; }
   if (ed && t.dataset.sets) { ed.form.sets = t.dataset.sets; drawEditor(); return; }
+  if (ed && t.dataset.only) { ed.form.only = t.dataset.only; drawEditor(); return; }
   if (ed && t.dataset.day && t.closest('#w-pop')) {
     const d = t.dataset.day;
     ed.form.days = ed.form.days.includes(d) ? ed.form.days.filter((x) => x !== d) : [...ed.form.days, d];
@@ -1659,7 +1675,7 @@ $('o-sched').addEventListener('click', (ev) => {
 async function setLimit(key) {
   const el = $('o-' + key), value = Number(el.value);
   if (el.value === '' || isNaN(value)) return;
-  if (await post('limits', {[key]: value})) toast(`${key === 'high' ? 'High' : 'Low'} limit: ${value}%`);
+  if (await post('limits', {[key]: value})) toast(`${key === 'high' ? 'Maximum charge' : 'Keep at least'}: ${value}%`);
   setTimeout(pollState, 800);
 }
 async function setCapacity() {
@@ -2148,8 +2164,8 @@ const PICKERS = [
   ['Home power', 'export_power', 'Grid export power', 'Spare power to charge the car from. Optional.', 'sensor'],
   ['Home power', 'ems_mode', 'EMS control mode', 'In a "Command Discharging" mode export isn\'t used for charging. Optional.', 'select,input_select,sensor'],
   ['Mode and limits', 'v2x_mode', 'V2X mode', 'It only manages the charger while this is V2X (a select) or on (a switch).', 'input_select,select,input_boolean,switch,binary_sensor'],
-  ['Mode and limits', 'soc_high', 'High limit', 'Helper: an input number (%).', 'input_number,number'],
-  ['Mode and limits', 'soc_low', 'Low limit', 'Helper: an input number (%).', 'input_number,number'],
+  ['Mode and limits', 'soc_high', 'Maximum charge (high limit)', 'Helper: an input number (%).', 'input_number,number'],
+  ['Mode and limits', 'soc_low', 'Keep at least (low limit)', 'Helper: an input number (%).', 'input_number,number'],
   ['Mode and limits', 'capacity', 'Battery capacity', "The car's usable kWh, for the energy sensors. Optional.", 'input_number,number,sensor'],
   ['Home battery', 'available_power', 'Available power', 'What the plant can charge or discharge at right now. For the battery rate sensors.', 'sensor'],
   ['Home battery', 'home_battery_soc', 'Home battery SoC', 'Nearly full means the higher battery rate.', 'sensor'],
@@ -2433,7 +2449,7 @@ async function refreshHealth() {
   try {
     const d = await api('sensors');
     // The helpers it uses (editable in Home Assistant): its own, or ones picked on the Settings tab
-    const helpers = [['soc_high', 'High limit'], ['soc_low', 'Low limit'], ['capacity', 'Battery capacity'], ['v2x_mode', 'Charging mode']]
+    const helpers = [['soc_high', 'Maximum charge'], ['soc_low', 'Keep at least'], ['capacity', 'Battery capacity'], ['v2x_mode', 'Charging mode']]
       .map(([k, label]) => {
         const id = (d.settings || {})[k];
         if (!id) return `${label}: <span class="muted">not set</span>`;

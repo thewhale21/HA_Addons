@@ -17,10 +17,10 @@ from collections import deque
 from dataclasses import replace
 from typing import Awaitable, Callable, Optional
 
-from src.controller import RULES, Decision, Inputs, bound_limits, decide, house_needs_power, soc_place
+from src.controller import CHARGE_STOP_RULES, RULES, Decision, Inputs, bound_limits, decide, house_needs_power, soc_place
 from src.flow import flows, house_load
 from src.rates import battery_rates
-from src.schedule import describe
+from src.schedule import describe, only_of
 from src.stats import Sample
 
 logger = logging.getLogger(__name__)
@@ -327,6 +327,7 @@ class Manager:
             ems_mode=ems, charge_signal=signal, ems_blocked=_in(ems, lists["blocked_ems_modes"]),
             charging_for=None if self.charging_since is None else now - self.charging_since,
             charge_stopped_ago=None if self.charge_stopped_at is None else now - self.charge_stopped_at,
+            only=only_of(scheduled),
         )
         # The house stopped needing power (e.g. exporting): the next time it does, the car may be
         # started for it again, even above the high limit
@@ -336,7 +337,8 @@ class Manager:
         self.readings = {
             "base_high": base_high, "base_low": base_low,
             "scheduled": [{"id": e["id"], "kind": e["kind"], "high": e["high"], "low": e["low"], "until": e["until"],
-                           "label": e.get("label") or ""} for e in scheduled],
+                           "label": e.get("label") or "", "only": e.get("only")} for e in scheduled],
+            "only": only_of(scheduled),
             "capacity_kwh": _float(get("capacity")), "capacity_entity": entities.get("capacity") or None, "mode": mode,
             "mode_entity": entities.get("v2x_mode") or None,  # (the Overview's Mode opens it, to change it)
             # Its options (a select's): a "<mode> Plugged In" binary sensor each (src/ha_entities.py)
@@ -496,7 +498,7 @@ class Manager:
                     wait = round(float(settings.get("unanswered_wait_s", 900)) / 60)
                     entry["error"] = (f"The charger hasn't responded to {self.unanswered} {action} presses in a row: "
                                       f"trying again every {wait} min until it does")
-                if rule == "charging_above_high":
+                if rule in CHARGE_STOP_RULES:
                     self.charge_stopped_at = now
                 logger.info("%s the charger: %s [%s]", "Started" if action == "start" else "Stopped", reason, context)
             except Exception as err:

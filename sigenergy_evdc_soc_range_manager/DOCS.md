@@ -325,9 +325,33 @@ the virtual battery sensors (the capacity helper picked on the Settings
 tab). If the capacity comes from a sensor, or nothing's picked, entering a
 value makes the **SigEnergy DC Charger Vehicle Battery Capacity** helper (or finds it) and
 uses that instead. **Now** shows the limits in use and where each comes from.
+On the page the high limit is called **Maximum charge** and the low limit
+**Keep at least**.
+
 The schedule below changes the high and/or low limit for a while, every
-week or once. Each entry sets the high limit, the low limit or both. Its week view shows today and the next 6 days, with high
-limits in the top half of each day and low limits in the bottom half:
+week or once, or makes the charger work one way only. Each entry sets the
+maximum charge, the keep-at-least, both or neither, and can be:
+
+- **Both ways** (as usual);
+- **Charge only**: the charger is only started when there's spare power to
+  charge from (exporting, or a charge signal such as Predbat charging),
+  never for the house or just for being between the limits, and it's
+  stopped if the car discharges;
+- **Discharge only**: only started when the house needs power, and stopped
+  if the car charges for a minute (then not started for the house again
+  until the house stops needing power and needs it again, or the house
+  retry wait is over) or sits doing neither while the house doesn't need
+  power.
+
+Either way the limits still hold: it's stopped charging at the maximum
+charge and discharging at the keep-at-least. Where one-way entries
+overlap, the one that started last wins.
+
+The same start and end time (e.g. 00:00–00:00) is 24 hours.
+
+Its week view shows today and the next 6 days, with maximum charge
+entries in the top half of each day, keep-at-least ones in the bottom half,
+and charge or discharge only (with no limit) across the whole row, in purple:
 click an entry to change, pause or delete it, drag either end of it to
 change when it starts or ends (in half hours, saved straight away; an
 every-week entry changes every week), or click or drag across a day (or

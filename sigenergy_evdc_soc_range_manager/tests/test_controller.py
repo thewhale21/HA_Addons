@@ -141,6 +141,43 @@ def test_stops_at_the_low_limit_when_discharging_unless_told_to_charge():
     assert d(soc=38, **charging).action is None  # charging at the low limit is fine
 
 
+def test_charge_only_starts_only_for_spare_power_and_stops_a_discharge():
+    # between the limits: not started just for that, nor for the house
+    assert d(only="charge").action is None and d(only="charge").rule == "charge_only_wait"
+    assert d(only="charge", grid_kw=2.0).action is None
+    # spare power: started, below the maximum charge
+    assert d(only="charge", export_kw=2.0).rule == "charge_opportunity"
+    assert d(only="charge", export_kw=2.0, soc=85).action is None
+    # discharging: stopped, wherever the SoC
+    stop = d(only="charge", active=True, discharging=True, running_state="Discharging", inactive_for=None)
+    assert stop.action == "stop" and stop.rule == "charge_only"
+    # charging: left to it, and still stopped at the maximum charge
+    assert d(only="charge", active=True, running_state="Charging", inactive_for=None).action is None
+    full = d(only="charge", active=True, running_state="Charging", inactive_for=None, soc=80, charging_for=120)
+    assert full.action == "stop" and full.rule == "charging_above_high"
+
+
+def test_discharge_only_starts_only_for_the_house_and_stops_a_charge():
+    assert d(only="discharge").action is None and d(only="discharge").rule == "discharge_only_wait"
+    assert d(only="discharge", export_kw=2.0).action is None
+    assert d(only="discharge", grid_kw=2.0).rule == "house_needs_power"
+    assert d(only="discharge", grid_kw=2.0, soc=40).action is None  # (at the keep-at-least)
+    # charging for a minute: stopped, wherever the SoC; a moment's charging isn't
+    on = dict(only="discharge", active=True, running_state="Charging", inactive_for=None)
+    assert d(**on, charging_for=10, grid_kw=2.0).action is None
+    stop = d(**on, charging_for=120, grid_kw=2.0)
+    assert stop.action == "stop" and stop.rule == "discharge_only"
+    # then not started for the house again straight away
+    again = d(only="discharge", grid_kw=2.0, charge_stopped_ago=300)
+    assert again.action is None and "in 25 min" in again.reason
+    # running, doing neither, the house quiet: stopped
+    idle = d(only="discharge", active=True, running_state="Occupied", inactive_for=None)
+    assert idle.action == "stop" and idle.rule == "discharge_only_idle"
+    # discharging to the keep-at-least: stopped there as ever
+    low = d(only="discharge", active=True, discharging=True, running_state="Discharging", inactive_for=None, soc=40)
+    assert low.action == "stop" and low.rule == "low_limit"
+
+
 def test_a_margin_keeps_starts_away_from_the_limits():
     t = {"margin_pct": 2}
     assert decide(replace(BASE, soc=79), t).rule == "held_high"
@@ -535,6 +572,19 @@ def test_the_schedule_changes_the_limits_used(tmp_path):
     _run(m.step(_states(soc="60"), _entities(), _settings(), now=now.timestamp()))
     assert m.inputs.high == 50 and m.readings["base_high"] == 80
     assert m.readings["scheduled"][0]["high"] == 50 and m.decision.rule == "held_high"
+
+
+def test_the_schedule_can_make_it_charge_only(tmp_path):
+    import datetime
+    from src.schedule import Schedule
+
+    m = Manager(str(tmp_path))
+    m.schedule = Schedule(str(tmp_path))
+    now = datetime.datetime(2026, 10, 6, 23, 30)  # Tuesday
+    m.schedule.add({"kind": "weekly", "days": ["tue"], "start": "23:00", "end": "08:00", "only": "charge"})
+    _run(m.step(_states(soc="60"), _entities(), _settings(), now=now.timestamp()))
+    assert m.inputs.only == "charge" and m.readings["only"] == "charge" and m.inputs.high == 80
+    assert m.decision.rule == "charge_only_wait"
 
 
 def test_the_history_notes_the_limits_and_schedule_changes(tmp_path):

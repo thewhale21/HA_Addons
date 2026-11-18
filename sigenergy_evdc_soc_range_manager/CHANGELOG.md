@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.42.0 — Charge only and discharge only, and the limits renamed
+
+- **Feature:** a schedule entry can make the charger work one way only,
+  with or without changing a limit: **Charge only** (it's only started
+  when there's spare power to charge from, never for the house or just
+  for being between the limits, and stopped if it discharges) or
+  **Discharge only** (only started when the house needs power, and
+  stopped if it charges for a minute, or sits doing neither while the
+  house doesn't need power). Either way it stays between the limits.
+  Shown across the day's row in the week view, in purple.
+- **Change:** the limits are called **Maximum charge** (the high limit)
+  and **Keep at least** (the low limit) on the page. The helpers keep
+  their names.
+- **Fix:** a schedule entry can run for 24 hours: the same start and end
+  time (e.g. 00:00–00:00) is the whole day, not refused.
+
 ## 0.41.1 — Old sensor names no longer posted
 
 - **Change:** the sensors' old names (`sensor.evdc_soc_range_...`, shown

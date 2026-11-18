@@ -13,15 +13,45 @@ TUE_23 = datetime.datetime(2026, 10, 6, 23, 30)  # a Tuesday
 def test_entries_are_checked():
     e = validate_entry({"kind": "weekly", "days": ["Tuesday", "thu"], "start": "23:00", "end": "08:00", "high": "50"})
     assert e["days"] == ["tue", "thu"] and e["high"] == 50 and e["low"] is None
-    assert describe(e) == "Tue, Thu 23:00-08:00: high 50%"
+    assert describe(e) == "Tue, Thu 23:00-08:00: maximum charge 50%"
     for bad in ({"kind": "weekly", "days": [], "start": "23:00", "end": "08:00", "high": 50},
-                {"kind": "weekly", "days": ["tue"], "start": "23:00", "end": "23:00", "high": 50},
                 {"kind": "once", "date": "soon", "start": "06:00", "end": "10:00", "low": 95},
                 {"kind": "once", "date": "2026-10-09", "start": "06:00", "end": "10:00"},
                 {"kind": "once", "date": "2026-10-09", "start": "6am", "end": "10:00", "low": 95},
                 {"kind": "once", "date": "2026-10-09", "start": "06:00", "end": "10:00", "low": 60, "high": 50}):
         with pytest.raises(ValueError):
             validate_entry(bad)
+
+
+def test_the_same_start_and_end_is_24_hours(tmp_path):
+    s = Schedule(str(tmp_path))
+    s.add({"kind": "weekly", "days": ["tue"], "start": "00:00", "end": "00:00", "high": 50})
+    tue = datetime.datetime(2026, 10, 6)
+    assert s.apply(80, 40, tue)[0] == 50 and s.apply(80, 40, tue + datetime.timedelta(hours=23, minutes=59))[0] == 50
+    assert s.apply(80, 40, tue + datetime.timedelta(days=1))[0] == 80  # (Wed 00:00: over)
+    s.add({"kind": "once", "date": "2026-10-08", "start": "18:00", "end": "18:00", "only": "discharge"})
+    on = s.active(datetime.datetime(2026, 10, 9, 17, 59))
+    assert on and on[-1]["until"] == "2026-10-09T18:00"
+
+
+def test_an_entry_can_make_it_charge_or_discharge_only(tmp_path):
+    from src.schedule import only_of
+    e = validate_entry({"kind": "weekly", "days": ["tue"], "start": "23:00", "end": "08:00", "only": "charge"})
+    assert e["only"] == "charge" and e["high"] is None and e["low"] is None
+    assert describe(e) == "Tue 23:00-08:00: charge only"
+    assert validate_entry({"kind": "weekly", "days": ["tue"], "start": "23:00", "end": "08:00", "low": 50,
+                           "only": "both"})["only"] is None
+    with pytest.raises(ValueError):
+        validate_entry({"kind": "weekly", "days": ["tue"], "start": "23:00", "end": "08:00", "only": "sideways"})
+    s = Schedule(str(tmp_path))
+    s.add({"kind": "weekly", "days": ["tue"], "start": "23:00", "end": "08:00", "only": "charge"})
+    high, low, on = s.apply(80, 40, TUE_23)
+    assert (high, low) == (80, 40) and only_of(on) == "charge"  # (the limits as they were)
+    # a later one says discharge, with a keep-at-least: it wins
+    s.add({"kind": "once", "date": "2026-10-06", "start": "23:15", "end": "23:45", "only": "discharge", "low": 60})
+    high, low, on = s.apply(80, 40, TUE_23)
+    assert (high, low) == (80, 60) and only_of(on) == "discharge"
+    assert only_of([]) is None
 
 
 def test_weekly_entry_runs_past_midnight(tmp_path):

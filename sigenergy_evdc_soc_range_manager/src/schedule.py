@@ -3,6 +3,12 @@ week (e.g. Tue and Thu 23:00-08:00: high 50%) or once (e.g. 9 Oct
 06:00-10:00: low 95%). The limit helpers keep your default limits; while
 an entry is on, its limits are used instead. Saved in /data/schedule.json.
 
+An entry can also make the charger work one way only ("only": "charge" or
+"discharge"), with or without changing a limit: charge only (it's never
+started for the house, and stopped if it discharges) or discharge only
+(never started to charge, and stopped if it charges), still between the
+limits.
+
 A weekly entry can be skipped once (one day's on-period: "skips", the dates
 it starts on), e.g. this Thursday's high of 50% when you're not going in.
 
@@ -25,6 +31,7 @@ from src.controller import SOC_CEILING, SOC_FLOOR, check_limit
 logger = logging.getLogger(__name__)
 
 DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+ONLY = ("charge", "discharge")  # an entry's one way (None: both ways)
 MAX_ENTRIES = 50
 _TIME = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
@@ -42,9 +49,7 @@ def validate_entry(raw: dict) -> dict:
     kind = raw.get("kind")
     if kind not in ("weekly", "once"):
         raise ValueError("kind must be weekly or once")
-    start, end = _minutes(raw.get("start")), _minutes(raw.get("end"))
-    if start == end:
-        raise ValueError("The start and end times must differ")
+    start, end = _minutes(raw.get("start")), _minutes(raw.get("end"))  # (the same: 24 hours)
     out = {"id": str(raw.get("id") or uuid.uuid4().hex[:8]), "kind": kind,
            "start": "%02d:%02d" % divmod(start, 60), "end": "%02d:%02d" % divmod(end, 60),
            "label": str(raw.get("label") or "").strip()[:60], "enabled": raw.get("enabled", True) is not False}
@@ -76,8 +81,15 @@ def validate_entry(raw: dict) -> dict:
             raise ValueError(f"The {key} limit must be a number") from None
         check_limit(key, value)
         out[key] = value
-    if out["high"] is None and out["low"] is None:
-        raise ValueError("Set a high limit, a low limit or both")
+    only = raw.get("only")
+    if only in (None, "", "both"):
+        out["only"] = None
+    elif only in ONLY:
+        out["only"] = only
+    else:
+        raise ValueError("only must be charge, discharge or both")
+    if out["high"] is None and out["low"] is None and out["only"] is None:
+        raise ValueError("Set a maximum charge, a keep-at-least, or charge or discharge only")
     if out["high"] is not None and out["low"] is not None and out["low"] >= out["high"]:
         raise ValueError("The low limit must be below the high limit")
     return out
@@ -100,7 +112,7 @@ def _windows(entry: dict, now: datetime.datetime) -> list[tuple[datetime.datetim
         start = datetime.datetime.combine(day, datetime.time(sh, sm))
         end = datetime.datetime.combine(day, datetime.time(eh, em))
         if end <= start:
-            end += datetime.timedelta(days=1)  # runs past midnight
+            end += datetime.timedelta(days=1)  # runs past midnight (the same time: 24 hours)
         out.append((start, end))
     return out
 
@@ -251,7 +263,22 @@ class Schedule:
         return high, low, on
 
 
+def only_of(on: list) -> Optional[str]:
+    """Which way the charger may work, from the entries on now ("charge", "discharge" or
+    None: both): the latest started that says wins."""
+    only = None
+    for e in on:
+        if e.get("only"):
+            only = e["only"]
+    return only
+
+
+LIMIT_NAMES = {"high": "maximum charge", "low": "keep at least"}
+
+
 def describe(e: dict) -> str:
     when = (", ".join(d.capitalize() for d in e["days"]) if e["kind"] == "weekly" else e["date"])
-    limits = " and ".join(f"{k} {e[k]:g}%" for k in ("high", "low") if e.get(k) is not None)
-    return f"{when} {e['start']}-{e['end']}: {limits}" + (f" ({e['label']})" if e.get("label") else "")
+    parts = [f"{LIMIT_NAMES[k]} {e[k]:g}%" for k in ("high", "low") if e.get(k) is not None]
+    if e.get("only"):
+        parts.append(f"{e['only']} only")
+    return f"{when} {e['start']}-{e['end']}: {' and '.join(parts)}" + (f" ({e['label']})" if e.get("label") else "")

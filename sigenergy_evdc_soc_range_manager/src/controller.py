@@ -17,6 +17,11 @@ high limits:
 - At or below the low limit it only runs when there's spare power to charge
   from (exporting, or a "charge now" signal such as Predbat charging), and
   is stopped if it starts discharging.
+- Charge only (a schedule entry): it's only started when there's spare power to charge
+  from, never for the house or just for being between the limits, and stopped if it
+  discharges. Discharge only: only started when the house needs power, and stopped if it
+  charges (for a minute) or sits doing neither while the house doesn't need power. Either
+  way the limits still hold.
 - After the charger stops, for whatever reason, it isn't started again for
   the restart wait (some cars stop discharging now and then; this stops it
   being restarted straight away, over and over).
@@ -88,6 +93,7 @@ class Inputs:
     alarm: bool = False  # the charger reports an alarm (an error): it's left alone
     charging_for: Optional[float] = None  # seconds it's been charging (None: not charging)
     charge_stopped_ago: Optional[float] = None  # seconds since it was stopped for charging above the high limit
+    only: Optional[str] = None  # "charge" or "discharge": the schedule lets it work this way only (None: both)
 
 
 @dataclass
@@ -105,7 +111,14 @@ RULES = {
     "high_limit": "Stop: reached the high limit",
     "charging_above_high": "Stop: charging at or above the high limit",
     "low_limit": "Stop: reached the low limit",
+    "charge_only": "Stop: discharging while it's charge only",
+    "discharge_only": "Stop: charging while it's discharge only",
+    "discharge_only_idle": "Stop: not discharging while it's discharge only",
 }
+
+# (stopping for these means it charged when started for the house: not started for it again
+# until the house stops needing power and needs it again, or the house retry wait is over)
+CHARGE_STOP_RULES = ("charging_above_high", "discharge_only")
 
 
 def _pct(v: float) -> str:
@@ -173,8 +186,9 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
     charging = i.active and not i.discharging and (i.running_state or "").strip().lower() == "charging"
     # Stopped for charging above the high limit in this spell of the house needing power (the
     # manager forgets the stop once the house stops needing power): it isn't started there for it
+    only = i.only if i.only in ("charge", "discharge") else None
     retry_wait = (i.charge_stopped_ago is not None and i.charge_stopped_ago < float(t["house_retry_s"])
-                  and soc >= high - margin)
+                  and (soc >= high - margin or only == "discharge"))
     house_quiet = (i.battery_kw is not None and i.battery_kw > -t["house_battery_kw"]
                    and i.grid_kw is not None and i.grid_kw < t["house_grid_kw"])
     # Exporting now is enough, as in the automation's condition
@@ -182,14 +196,25 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
     opportunity = i.charge_signal is True or exporting
     why_spare = "a charge signal is on" if i.charge_signal is True else "you're exporting"
 
+    # One way only (the schedule): stop it working the other way
+    if only == "charge" and i.discharging:
+        return Decision("stop", "charge_only", "Stopping",
+                        f"It's charge only for now and the car was discharging (at {_pct(soc)}).")
+    if only == "discharge" and charging and (i.charging_for is None or i.charging_for >= float(t["charge_stop_s"])):
+        return Decision("stop", "discharge_only", "Stopping",
+                        f"It's discharge only for now and the car was charging (at {_pct(soc)}).")
+    if only == "discharge" and i.active and not i.discharging and house_quiet and not charging:
+        return Decision("stop", "discharge_only_idle", "Stopping",
+                        f"It's discharge only for now, and the house doesn't need the car's power (at {_pct(soc)}).")
+
     # 1. The house needs power and the car has some to spare: start, so it can discharge
-    if house_needs and rested and soc > low + margin and not retry_wait:
+    if house_needs and rested and soc > low + margin and not retry_wait and only != "charge":
         return Decision("start", "house_needs_power", "Starting",
                         f"The house needs power ({house_need(i, t) or 'the home battery or the grid'}) and the car "
                         f"is at {_pct(soc)}, {soc_place(soc, high, low)}: started so the car can discharge to the "
                         "house.")
     # 2. Spare power and room in the car: start, so it can charge
-    if opportunity and rested and soc < high - margin and not i.discharging:
+    if opportunity and rested and soc < high - margin and not i.discharging and only != "discharge":
         return Decision("start", "charge_opportunity", "Starting",
                         f"There's spare power ({why_spare}) and the car is at {_pct(soc)}, "
                         f"below the high limit ({_pct(high)}).")
@@ -209,7 +234,7 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
         return Decision("stop", "low_limit", "Stopping",
                         f"The car is at {_pct(soc)}, at or below the low limit ({_pct(low)}), and was discharging.")
     # 5. Within the limits: keep it running
-    if low + margin < soc < high - margin and rested:
+    if low + margin < soc < high - margin and rested and not only:
         return Decision("start", "in_range", "Starting",
                         f"The car is at {_pct(soc)}, between the limits ({_pct(low)}–{_pct(high)}).")
 
@@ -227,6 +252,20 @@ def decide(i: Inputs, tuning: Optional[dict] = None) -> Decision:
             return Decision(None, "restart_wait", f"Reconnecting car in {left} s",
                             f"The charger stopped {round(i.inactive_for)} s ago; it starts again in {left} s: "
                             f"{after.reason[0].lower()}{after.reason[1:]}")
+    if only == "charge":
+        return Decision(None, "charge_only_wait", "Charge only",
+                        f"The car is at {_pct(soc)}. It's charge only for now: it starts when there's spare power "
+                        f"to charge from{'' if soc < high - margin else ' and the car is below the maximum charge'}.")
+    if only == "discharge":
+        if retry_wait and house_needs:
+            left = round((float(t["house_retry_s"]) - i.charge_stopped_ago) / 60)
+            return Decision(None, "discharge_only_wait", "Discharge only",
+                            f"The car is at {_pct(soc)}. It's discharge only for now; it charged when started for "
+                            f"the house, so it's tried again once the house stops needing power and needs it "
+                            f"again, or in {left} min.")
+        return Decision(None, "discharge_only_wait", "Discharge only",
+                        f"The car is at {_pct(soc)}. It's discharge only for now: it starts when the house needs "
+                        f"power{'' if soc > low + margin else ' and the car is above the keep-at-least'}.")
     if soc >= high - margin:
         if retry_wait and house_needs:
             left = round((float(t["house_retry_s"]) - i.charge_stopped_ago) / 60)
