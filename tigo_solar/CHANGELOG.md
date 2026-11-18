@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2 — Choose a string's panels in one click
+
+- **Feature:** under the roof, next to **All panels** and **None**, a
+  button for each string (**String A**, **String B**…) chooses just that
+  string's panels, with a swatch of its colour on the charts. The button
+  for what's chosen is highlighted.
+
 ## 0.3.1 — The whole day by panel, and the chart's colours after a restart
 
 - **Fix:** **By panel** on a day's chart showed only the time since the

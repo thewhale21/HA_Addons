@@ -116,6 +116,10 @@
   .seg button { font: inherit; border: 0; background: none; color: var(--text); padding: 6px 11px; cursor: pointer; }
   .seg button + button { border-left: 1px solid var(--divider); }
   .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  .quick { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .quick #r-strings { display: contents; }
+  .quick button[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+  .quick button i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
   details.more { display: inline; }
   details.more > summary { display: inline; cursor: pointer; color: var(--primary); list-style: none; white-space: nowrap; }
   details.more > summary::-webkit-details-marker { display: none; }
@@ -359,7 +363,7 @@
       <div class="roofwrap"><svg class="roof" id="roof" role="group" aria-label="Your panels"></svg></div>
       <div class="scale"><span id="r-lo">0</span><b></b><span id="r-hi">—</span><span class="spacer" style="flex:1"></span><span id="r-sel"></span></div>
       <div class="row" style="margin-top:10px">
-        <button class="btn small" id="r-all">All panels</button><button class="btn small" id="r-none">None</button>
+        <span class="quick" id="r-quick"><button class="btn small" id="r-all">All panels</button><button class="btn small" id="r-none">None</button><span id="r-strings"></span></span>
         <span class="grow"></span>
         <button class="btn small" id="r-edit">Move panels</button><button class="btn small" id="r-reset" hidden>Put back Tigo's layout</button>
       </div>
@@ -778,6 +782,16 @@ function drawRoof() {
   $('r-hi').textContent = vals.length ? unit(max) : '—';
   const n = view.selected === null ? panels.length : panels.filter((p) => isOn(p.id)).length;
   $('r-sel').textContent = view.selected === null ? `All ${panels.length} panels` : `${n} of ${panels.length} panels chosen`;
+  // (a quick choice per string, pressed when it's just that string's panels)
+  const strings = [...new Set(panels.map((p) => p.string || ''))].filter(Boolean);
+  const chosen = view.selected === null ? null : [...view.selected].sort().join();
+  $('r-strings').innerHTML = strings.length > 1 ? strings.map((st) => {
+    const mine = panels.filter((p) => p.string === st), mid = mine[Math.floor((mine.length - 1) / 2)];
+    const on = chosen !== null && chosen === mine.map((p) => p.id).sort().join();
+    return `<button class="btn small" data-string="${esc(st)}" aria-pressed="${on}"><i style="background:${colours[mid.id] || '#888'}"></i>${esc(st)}</button>`;
+  }).join('') : '';
+  $('r-all').setAttribute('aria-pressed', view.selected === null);
+  $('r-none').setAttribute('aria-pressed', view.selected !== null && view.selected.length === 0);
   $('r-reset').hidden = !(view.edit && state.layout_moved);
   $('r-edit').textContent = view.edit ? 'Done' : 'Move panels';
   $('r-hint').textContent = view.edit ? 'Drag panels to where they are on your roof. Saved as you drop each one.'
@@ -828,6 +842,14 @@ async function dropPanel() {
 $('roof').addEventListener('pointerup', dropPanel);
 $('roof').addEventListener('pointercancel', dropPanel);
 $('r-all').addEventListener('click', () => { view.selected = null; saveView(); drawRoof(); loadChart(); });
+// Quick choice: one string's panels
+$('r-strings').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-string]'); if (!b) return;
+  const all = state.panels.map((p) => p.id);
+  const mine = state.panels.filter((p) => (p.string || '') === b.dataset.string).map((p) => p.id);
+  view.selected = mine.length === all.length ? null : mine;
+  saveView(); drawRoof(); loadChart();
+});
 $('r-none').addEventListener('click', () => { view.selected = []; saveView(); drawRoof(); loadChart(); });
 $('r-edit').addEventListener('click', () => { view.edit = !view.edit; drawRoof(); });
 $('r-reset').addEventListener('click', async () => {

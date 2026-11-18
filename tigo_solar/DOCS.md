@@ -36,7 +36,8 @@ readings (voltages, current, temperature) aren't used.
   Tigo keeps each panel's reclaimed energy only through the day).
   - **Click a panel** to take it out of the charts or put it back in (the
     ones left out are faded);
-    **All panels** and **None** choose all or none. The choice is kept in
+    **All panels** and **None** choose all or none, and a button for each
+    string (**String A**, **String B**…) just that string's panels. The choice is kept in
     this browser.
   - **Move panels** lets you drag them to where they really are on your
     roof (saved as you drop each one; kept across updates).
