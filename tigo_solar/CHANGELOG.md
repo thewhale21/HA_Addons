@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1 — Reclaimed as a percentage
+
+- **Improvement:** wherever reclaimed is shown it now has its share of
+  what was made, as a percentage: hovering over the chart (each minute,
+  day or month), a point clicked on it, the banner's power and today's
+  energy. (The totals under the chart and a highlighted time had it
+  already.)
+
 ## 0.5.0 — Values on hover, and one scale for all the panels
 
 - **Feature:** hover over the chart for the values there in a box by the

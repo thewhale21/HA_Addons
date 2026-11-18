@@ -696,10 +696,10 @@ function renderState(s) {
   const set = (id, t) => { $(id).textContent = t; };
   set('o-power', s.power === null ? '—' : watts(s.power));
   set('o-power-sub', !s.configured ? 'Set your Tigo login in the add-on\'s Configuration'
-    : s.error ? `${s.status}: ${s.error}` : s.reclaimed !== null ? `${watts(s.reclaimed)} of it reclaimed by the optimisers` : s.status);
+    : s.error ? `${s.status}: ${s.error}` : s.reclaimed !== null ? `${watts(s.reclaimed)} of it reclaimed by the optimisers${s.power ? ` (${num(100 * s.reclaimed / s.power, 1)}%)` : ''}` : s.status);
   set('o-asof', s.as_of ? `Tigo's latest reading ${s.as_of.slice(11)}` + (s.sunrise ? ` · sun ${s.sunrise}–${s.sunset}` : '') : '');
   set('o-today', kwh(s.today_wh));
-  set('o-today-sub', s.today_reclaimed_wh ? `${kwh(s.today_reclaimed_wh)} reclaimed` : '');
+  set('o-today-sub', s.today_reclaimed_wh ? `${kwh(s.today_reclaimed_wh)} reclaimed${s.today_wh ? ` (${num(100 * s.today_reclaimed_wh / s.today_wh, 1)}%)` : ''}` : '');
   set('o-month', kwh(s.month_wh, 1));
   set('o-year', [s.year_wh !== null ? `${kwh(s.year_wh, 0)} this year` : '', s.lifetime_wh !== null ? `${kwh(s.lifetime_wh, 0)} in all` : ''].filter(Boolean).join(' · '));
   $('o-bnr').className = 'bnr ' + (s.error ? 'warn' : (s.power || 0) > 0 ? 'good' : 'idle');
@@ -1098,7 +1098,7 @@ function drawAt() {
     + (day ? '' : `<button class="btn small" id="c-open">Show this ${c.view === 'year' ? 'month' : 'day'}</button>`)
     + `<button class="btn small" id="c-clear">Close</button></div>`
     + `<div class="totals" style="margin-top:6px"><div><div class="label">${c.whole ? 'The whole system' : 'These panels'}</div><div class="big">${fmt(p.total)}</div></div>`
-    + (p.reclaimed !== null && p.reclaimed !== undefined ? `<div><div class="label">Reclaimed${c.estimated && day ? ' (estimated)' : ''}</div><div class="big">${fmt(p.reclaimed)}</div></div>` : '') + '</div>'
+    + (p.reclaimed !== null && p.reclaimed !== undefined ? `<div><div class="label">Reclaimed${c.estimated && day ? ' (estimated)' : ''}</div><div class="big">${fmt(p.reclaimed)}${p.total ? ` <span class="muted" style="font-size:13px">(${num(100 * p.reclaimed / p.total, 1)}%)</span>` : ''}</div></div>` : '') + '</div>'
     + (rows.length ? `<table class="at"><thead><tr><th>Panel</th><th>${day ? 'Power' : 'Energy'}</th>${day ? '<th>Reclaimed</th>' : ''}</tr></thead><tbody>`
       + rows.map(([id, r]) => `<tr><td><i style="background:${colours[id] || '#888'}"></i>${esc(panelLabel(id))}</td><td>${fmt(r.v)}</td>${day ? `<td>${r.r === null || r.r === undefined ? '—' : num(r.r, 1) + ' W'}</td>` : ''}</tr>`).join('')
       + '</tbody></table>' : '<div class="note">No panel figures for this point.</div>')
@@ -1184,7 +1184,7 @@ $('chart').addEventListener('mousemove', (ev) => {
   const v = (x) => x === null || x === undefined ? '—' : day ? `${num(x, x < 10 ? 1 : 0)} W` : wh(x);
   const byPanel = view.split === 'panels' && Object.keys(c.panel_series || {}).length > 0;
   let html = `<b>${esc(t)}</b><br>${c.whole ? 'Made' : 'These panels'} ${v(p.total)}`
-    + (p.reclaimed !== null && p.reclaimed !== undefined ? ` · reclaimed ${v(p.reclaimed)}` : '');
+    + (p.reclaimed !== null && p.reclaimed !== undefined ? ` · reclaimed ${v(p.reclaimed)}${p.total ? ` (${num(100 * p.reclaimed / p.total, 1)}%)` : ''}` : '');
   if (byPanel) {
     const colours = panelColours();
     const ids = Object.keys(c.panel_series).sort((a, b) => panelLabel(a).localeCompare(panelLabel(b), undefined, {numeric: true}));
