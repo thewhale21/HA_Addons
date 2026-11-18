@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0 — Each panel stacked on the charts, and each panel at any point
+
+- **Fix:** with a panel left out, a day's chart was empty for every day
+  before the add-on started (Tigo keeps only each panel's latest reading).
+  Those days now estimate each panel's power from the system's power by
+  the minute and the panel's share of the day's energy, and say so.
+- **Feature:** the charts stack each panel in its own colour (a colour per
+  string), by day, week, month and year (**By panel**); **Reclaimed**
+  shows what the panels made on their own and what the optimisers
+  reclaimed, as before.
+- **Feature:** click a point on the chart to see each panel's power and
+  reclaimed power at that time (or its energy that day or month), with the
+  total; the roof shows each panel then too. **Show this day** opens a
+  week's or month's day.
+- **Docs:** both.
+
 ## 0.1.0 — First version
 
 - **Feature:** reads your Tigo system from the Tigo portal with your login

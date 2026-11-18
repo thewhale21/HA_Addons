@@ -296,8 +296,12 @@
   svg.chart .ax { stroke: var(--divider); }
   svg.chart .base { fill: #43a047; } svg.chart .rec { fill: #a5d6a7; } svg.chart .tot { fill: #66bb6a; }
   svg.chart .line { fill: none; stroke: #2e7d32; stroke-width: 1.5; }
-  svg.chart rect.hit { fill: transparent; }
-  svg.chart rect.hit:hover { fill: color-mix(in srgb, var(--text) 6%, transparent); }
+  svg.chart rect.hit { fill: transparent; cursor: crosshair; }
+  .at-box { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--divider); border-radius: 10px; }
+  table.at { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+  table.at th { text-align: left; font-weight: 500; color: var(--text2); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--divider); }
+  table.at td { padding: 4px 6px; border-bottom: 1px solid var(--divider); }
+  table.at td i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
   .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text2); margin-top: 6px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
   .totals { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 10px; }
@@ -361,11 +365,14 @@
     </div>
     <div class="card">
       <h2>Production<span class="spacer"></span>
+        <span class="seg" id="c-split" role="group" aria-label="Show"><button data-s="panels">By panel</button><button data-s="reclaimed">Reclaimed</button></span>
         <span class="seg" id="c-view" role="group" aria-label="Time"><button data-v="day">Day</button><button data-v="week">Week</button><button data-v="month">Month</button><button data-v="year">Year</button></span>
       </h2>
       <div class="chart-nav"><button class="btn small" id="c-prev" aria-label="Earlier">‹</button><span class="when" id="c-when">—</span><button class="btn small" id="c-next" aria-label="Later">›</button><button class="btn small" id="c-today">Today</button><span class="spacer" style="flex:1"></span><span class="note" style="margin:0" id="c-who"></span></div>
       <svg class="chart" id="chart" role="img" aria-label="Production chart"></svg>
+      <div class="note" id="c-hover" style="min-height:1.4em;margin-top:2px"></div>
       <div class="legend" id="c-legend"></div>
+      <div class="at-box" id="c-at" hidden></div>
       <div class="totals" id="c-totals"></div>
       <div class="note" id="c-note" hidden></div>
     </div>
@@ -649,16 +656,18 @@ const kwh = (wh, d = 2) => wh === null || wh === undefined ? '—' : (Math.abs(w
 const watts = (w) => w === null || w === undefined ? '—' : (Math.abs(w) >= 1000 ? `${num(w / 1000, 2)} kW` : `${num(w, 0)} W`);
 const view = {
   mode: 'day', day: null, colour: 'power', edit: false, chart: null, sig: '', drag: null,
+  split: 'panels', cursor: null, cursorKey: '', cursorPts: [], chartX: null, prevColour: null,
   selected: null,  // panel IDs chosen (null: all)
 };
 try {
   const saved = JSON.parse(localStorage.getItem('tigo-solar-view') || '{}');
   if (['day', 'week', 'month', 'year'].includes(saved.mode)) view.mode = saved.mode;
   if (['power', 'energy'].includes(saved.colour)) view.colour = saved.colour;
+  if (['panels', 'reclaimed'].includes(saved.split)) view.split = saved.split;
   if (Array.isArray(saved.selected)) view.selected = saved.selected.map(Number);
 } catch (e) {}
 function saveView() {
-  try { localStorage.setItem('tigo-solar-view', JSON.stringify({mode: view.mode, colour: view.colour, selected: view.selected})); } catch (e) {}
+  try { localStorage.setItem('tigo-solar-view', JSON.stringify({mode: view.mode, colour: view.colour === 'cursor' ? (view.prevColour || 'power') : view.colour, selected: view.selected, split: view.split})); } catch (e) {}
 }
 // The system's own date (Tigo's time zone): from its latest reading, else this browser's
 function systemToday() {
@@ -717,6 +726,7 @@ function heat(f) {
   return `rgb(${a.map((x, i) => Math.round(x + (b[i] - x) * t)).join(',')})`;
 }
 function panelValue(p) {
+  if (view.colour === 'cursor') { const at = cursorValues(); const r = at && at.panels[String(p.id)]; return r ? r.v ?? null : null; }
   if (view.colour === 'energy') { const e = view.chart && view.chart.panels ? view.chart.panels[String(p.id)] : null; return e ?? null; }
   return p.power;
 }
@@ -730,7 +740,7 @@ function drawRoof() {
   svg.classList.toggle('edit', view.edit);
   const vals = panels.map(panelValue).filter((v) => v !== null && v !== undefined);
   const max = vals.length ? Math.max(...vals, 1) : 1;
-  const unit = view.colour === 'energy' ? (v) => kwh(v, 2) : (v) => `${num(v, 0)} W`;
+  const unit = view.colour === 'energy' || (view.colour === 'cursor' && view.chart && view.chart.view !== 'day') ? (v) => kwh(v, 2) : (v) => `${num(v, 0)} W`;
   // (text in the roof's own units: as big on a phone as the panels allow)
   const scale = (svg.clientWidth || 600) / (x1 - x0), fs = Math.max(w * 0.2, Math.min(w * 0.3, 13 / scale));
   svg.innerHTML = panels.map((p) => {
@@ -740,7 +750,7 @@ function drawRoof() {
       + `<text x="${w / 2}" y="${h / 2 - fs * 0.2}" text-anchor="middle" style="font-size:${fs}px">${esc(p.label)}</text>`
       + `<text class="v" x="${w / 2}" y="${h / 2 + fs * 1.05}" text-anchor="middle" style="font-size:${fs * 0.85}px">${v === null || v === undefined ? '—' : unit(v)}</text></g>`;
   }).join('');
-  $('r-lo').textContent = view.colour === 'energy' ? '0 kWh' : '0 W';
+  $('r-lo').textContent = unit(0);
   $('r-hi').textContent = vals.length ? unit(max) : '—';
   const n = view.selected === null ? panels.length : panels.filter((p) => isOn(p.id)).length;
   $('r-sel').textContent = view.selected === null ? `All ${panels.length} panels` : `${n} of ${panels.length} panels chosen`;
@@ -749,6 +759,7 @@ function drawRoof() {
   $('r-hint').textContent = view.edit ? 'Drag panels to where they are on your roof. Saved as you drop each one.'
     : 'Click a panel to add it to the charts or take it out. Energy colours each panel by what it made over the chart\'s time.';
   $('r-colour').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.c === view.colour));
+  if (view.colour === 'cursor') { const at = cursorValues(); $('r-hint').textContent = at ? `Each panel at the point chosen on the chart (${view.chart.view === 'day' ? at.t : 'that ' + (view.chart.view === 'year' ? 'month' : 'day')}). Close it below the chart to go back.` : $('r-hint').textContent; }
 }
 function svgPoint(svg, ev) {
   const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
@@ -797,7 +808,7 @@ $('r-reset').addEventListener('click', async () => {
 });
 $('r-colour').addEventListener('click', (ev) => {
   const c = ev.target.dataset && ev.target.dataset.c; if (!c) return;
-  view.colour = c; saveView(); drawRoof();
+  view.cursor = null; view.colour = c; view.prevColour = c; saveView(); drawRoof(); if (view.chart) drawChart(view.chart);
 });
 
 // --- the charts ---
@@ -832,24 +843,50 @@ async function loadChart() {
     if (view.colour === 'energy') drawRoof();
   } catch (e) { if (n === chartReq) { view.chart = null; drawChart(null, e.message); } }
 }
+// Each panel's colour on the charts: a hue per string, lighter along it
+const STRING_HUES = [205, 145, 32, 280, 350, 180, 60, 245];
+function panelColours() {
+  const panels = (state && state.panels) || [], out = {};
+  const strings = [...new Set(panels.map((p) => p.string || ''))];
+  strings.forEach((s, si) => {
+    const mine = panels.filter((p) => (p.string || '') === s);
+    mine.forEach((p, i) => {
+      const f = mine.length > 1 ? i / (mine.length - 1) : 0.5;
+      out[p.id] = `hsl(${STRING_HUES[si % STRING_HUES.length]}, ${62 - f * 10}%, ${30 + f * 38}%)`;
+    });
+  });
+  return out;
+}
+const panelLabel = (id) => { const p = ((state && state.panels) || []).find((x) => String(x.id) === String(id)); return p ? p.label : String(id); };
 function drawChart(c, err) {
   const svg = $('chart');
   $('c-next').disabled = view.day >= systemToday();
+  $('c-split').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.s === view.split));
   if (!c) {
     $('c-when').textContent = view.day ? whenText({view: view.mode, day: view.day, ...spanOf(view.mode, view.day)}) : '—';
     svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle">${esc(err || 'Choose a panel on the roof, or All panels')}</text>`;
     $('c-totals').innerHTML = ''; $('c-legend').innerHTML = ''; $('c-note').hidden = true; $('c-who').textContent = '';
+    $('c-at').hidden = true;
+    if (view.colour === 'cursor') { view.cursor = null; view.colour = view.prevColour || 'power'; drawRoof(); }
     return;
   }
   $('c-when').textContent = whenText(c);
-  $('c-who').textContent = c.whole ? 'The whole system' : `${c.selected.length} panel${c.selected.length === 1 ? '' : 's'}`;
+  $('c-who').textContent = (c.whole ? 'The whole system' : `${c.selected.length} panel${c.selected.length === 1 ? '' : 's'}`)
+    + (c.estimated && c.view === 'day' ? ' · panels estimated' : '');
   const W = svg.clientWidth || 700, H = 280, L = 48, R = 10, T = 12, B = 26;
-  const pts = c.points || [];
-  const split = pts.some((p) => p.base !== null && p.base !== undefined);
-  const vals = pts.map((p) => p.total || 0);
-  const max = Math.max(...vals, 0);
+  const ids = Object.keys(c.panel_series || {}).sort((a, b) => panelLabel(a).localeCompare(panelLabel(b), undefined, {numeric: true}));
+  // By panel: each panel's part stacked (where Tigo has them); else base and reclaimed
+  const byPanel = view.split === 'panels' && ids.length > 0;
+  const pts = c.view === 'day' && c.whole && !byPanel && c.system_points ? c.system_points : (c.points || []);
+  const split = !byPanel && pts.some((p) => p.base !== null && p.base !== undefined);
+  const colours = panelColours();
+  const max = Math.max(0, ...pts.map((p) => p.total || 0));
+  view.cursorPts = pts;
+  if (view.cursor !== null && (view.cursor >= pts.length || view.cursorKey !== `${c.view}${c.day}`)) view.cursor = null;
+  view.cursorKey = `${c.view}${c.day}`;
+  let x, slot;
   if (!pts.length || max <= 0) {
-    svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">${esc(c.view === 'day' && !c.whole ? 'No readings of these panels this day' : 'Nothing made then (or not read yet)')}</text>`;
+    svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">${esc(c.view === 'day' && !c.whole ? 'Nothing known of these panels this day' : 'Nothing made then (or not read yet)')}</text>`;
   } else {
     const step = niceStep(max / 4), top = Math.ceil(max / step) * step;
     const y = (v) => T + (H - T - B) * (1 - v / top);
@@ -858,56 +895,136 @@ function drawChart(c, err) {
       out += `<line class="ax" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${c.unit === 'W' ? (top >= 2000 ? num(v / 1000, 1) + 'k' : num(v, 0)) : (top >= 2000 ? num(v / 1000, top >= 20000 ? 0 : 1) : num(v, 0))}</text>`;
     }
     out += `<text x="4" y="${T + 2}" style="font-size:10px">${c.unit === 'W' ? 'W' : (top >= 2000 ? 'kWh' : 'Wh')}</text>`;
+    // The layers, bottom up: [class or colour, values]
+    const layers = byPanel ? ids.map((id) => [colours[id] || '#888', (c.panel_series[id] || []).map((v) => v || 0), id])
+      : split ? [['base', pts.map((p) => p.base || 0)], ['rec', pts.map((p) => p.reclaimed || 0)]]
+      : [['tot', pts.map((p) => p.total || 0)]];
+    const fillOf = (l) => (['base', 'rec', 'tot'].includes(l[0]) ? `class="${l[0]}"` : `fill="${l[0]}"`);
     if (c.view === 'day') {
       const mins = (t) => +t.slice(0, 2) * 60 + +t.slice(3, 5);
-      // (today: from sunrise to sunset, so the day ahead shows; else the readings)
       const sun = c.day === systemToday() && state && state.sunrise && state.sunset ? [mins(state.sunrise) - 30, mins(state.sunset) + 30] : [];
       const t0 = Math.max(0, Math.floor(Math.min(...pts.map((p) => mins(p.t)), ...sun) / 60) * 60);
       const t1 = Math.min(1440, Math.ceil((Math.max(...pts.map((p) => mins(p.t)), ...sun) + 1) / 60) * 60);
-      const x = (t) => L + (W - L - R) * (mins(t) - t0) / Math.max(60, t1 - t0);
-      const area = (key, below) => {
-        const top_ = pts.map((p) => [x(p.t), y((below ? (p.base || 0) : 0) + (key === 'total' ? p.total || 0 : p[key] || 0))]);
-        const bot = pts.map((p) => [x(p.t), y(below ? (p.base || 0) : 0)]).reverse();
-        return 'M' + top_.concat(bot).map((q) => q.map((n) => n.toFixed(1)).join(',')).join('L') + 'Z';
-      };
-      if (split) out += `<path class="base" d="${area('base', false)}"/><path class="rec" d="${area('reclaimed', true)}"/>`;
-      else out += `<path class="tot" d="${area('total', false)}" opacity=".6"/>`;
-      out += `<path class="line" d="M${pts.map((p) => `${x(p.t).toFixed(1)},${y(p.total || 0).toFixed(1)}`).join('L')}"/>`;
+      x = (i) => L + (W - L - R) * (mins(pts[i].t) - t0) / Math.max(60, t1 - t0);
+      const below = pts.map(() => 0);
+      layers.forEach((l) => {
+        const upper = l[1].map((v, i) => below[i] + v);
+        const d = 'M' + upper.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('L')
+          + 'L' + below.map((v, i) => [i, v]).reverse().map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('L') + 'Z';
+        out += `<path ${fillOf(l)} d="${d}"${l[0] === 'tot' ? ' opacity=".6"' : ''}${l[2] ? ' stroke="rgba(255,255,255,.35)" stroke-width=".5"' : ''}/>`;
+        upper.forEach((v, i) => { below[i] = v; });
+      });
+      if (!byPanel) out += `<path class="line" d="M${pts.map((p, i) => `${x(i).toFixed(1)},${y(p.total || 0).toFixed(1)}`).join('L')}"/>`;
       const every = t1 - t0 > 720 ? 120 : 60;
       for (let m = Math.ceil(t0 / every) * every; m <= t1; m += every) {
         const xx = L + (W - L - R) * (m - t0) / Math.max(60, t1 - t0);
         out += `<text x="${xx}" y="${H - 8}" text-anchor="middle">${String(m / 60).padStart(2, '0')}:00</text>`;
       }
-      // hover: the nearest reading
-      const bw = (W - L - R) / Math.max(1, pts.length);
-      out += pts.map((p, i) => `<rect class="hit" x="${x(p.t) - bw / 2}" y="${T}" width="${bw}" height="${H - T - B}"><title>${p.t} · ${num(p.total, 0)} W${p.reclaimed ? ` (${num(p.reclaimed, 0)} W reclaimed)` : ''}</title></rect>`).join('');
+      if (view.cursor !== null) {
+        const cx = x(view.cursor);
+        out += `<line x1="${cx}" x2="${cx}" y1="${T}" y2="${H - B}" stroke="var(--text)" stroke-width="1.5" stroke-dasharray="3 3"/>`
+          + `<circle cx="${cx}" cy="${y(pts[view.cursor].total || 0)}" r="4" fill="var(--primary)"/>`;
+      }
     } else {
-      const n = pts.length, slot = (W - L - R) / n, bw = Math.max(3, slot * 0.72);
+      const n = pts.length; slot = (W - L - R) / n; const bw = Math.max(3, slot * 0.72);
+      x = (i) => L + slot * i + slot / 2;
       pts.forEach((p, i) => {
         const x0 = L + slot * i + (slot - bw) / 2;
+        let base = 0;
+        if (view.cursor === i) out += `<rect x="${L + slot * i}" y="${T}" width="${slot}" height="${H - T - B}" fill="color-mix(in srgb, var(--primary) 14%, transparent)"/>`;
+        layers.forEach((l) => {
+          const v = l[1][i] || 0; if (v <= 0) return;
+          out += `<rect ${fillOf(l)} x="${x0}" y="${y(base + v)}" width="${bw}" height="${Math.max(0, y(base) - y(base + v))}"/>`;
+          base += v;
+        });
         const label = c.view === 'year' ? MONTHS[i] : c.view === 'week' ? dayName(p.t) : String(+p.t.slice(8, 10));
-        if (p.total) {
-          if (p.base !== null && p.base !== undefined) {
-            out += `<rect class="base" x="${x0}" y="${y(p.base)}" width="${bw}" height="${y(0) - y(p.base)}" rx="2"/>`;
-            out += `<rect class="rec" x="${x0}" y="${y(p.base + (p.reclaimed || 0))}" width="${bw}" height="${y(p.base) - y(p.base + (p.reclaimed || 0))}" rx="2"/>`;
-          } else out += `<rect class="tot" x="${x0}" y="${y(p.total)}" width="${bw}" height="${y(0) - y(p.total)}" rx="2"/>`;
-        }
         if (c.view !== 'month' || n <= 16 || i % 2 === 0) out += `<text x="${x0 + bw / 2}" y="${H - 8}" text-anchor="middle">${label}</text>`;
-        out += `<rect class="hit" x="${L + slot * i}" y="${T}" width="${slot}" height="${H - T - B}" data-t="${p.t}"><title>${c.view === 'year' ? MONTHS[i] + ' ' + c.start.slice(0, 4) : dayName(p.t, true)}: ${p.total ? kwh(p.total) : 'nothing'}${p.reclaimed ? ` (${kwh(p.reclaimed)} reclaimed)` : ''}</title></rect>`;
       });
     }
+    // (hover and click anywhere: the nearest point)
+    out += `<rect class="hit" id="c-hit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}"></rect>`;
     svg.innerHTML = out;
   }
+  view.chartX = x;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  $('c-legend').innerHTML = split
-    ? '<span><i style="background:#43a047"></i>The panels on their own</span><span><i style="background:#a5d6a7"></i>Reclaimed by the optimisers</span>'
+  $('c-legend').innerHTML = byPanel
+    ? ids.map((id) => `<span><i style="background:${colours[id] || '#888'}"></i>${esc(panelLabel(id))}</span>`).join('')
+    : split ? '<span><i style="background:#43a047"></i>The panels on their own</span><span><i style="background:#a5d6a7"></i>Reclaimed by the optimisers</span>'
     : `<span><i style="background:#66bb6a"></i>${c.view === 'day' ? 'Power' : 'Energy'}</span>`;
   $('c-totals').innerHTML = [
     ['Made', kwh(c.total_wh)],
-    ...(c.reclaimed_wh ? [['Reclaimed', `${kwh(c.reclaimed_wh)}${c.total_wh ? ` <span class="muted" style="font-size:13px">(${num(100 * c.reclaimed_wh / c.total_wh, 1)}%)</span>` : ''}`]] : []),
+    ...(c.reclaimed_wh ? [[c.reclaimed_estimated ? 'Reclaimed (their share)' : 'Reclaimed', `${kwh(c.reclaimed_wh)}${c.total_wh ? ` <span class="muted" style="font-size:13px">(${num(100 * c.reclaimed_wh / c.total_wh, 1)}%)</span>` : ''}`]] : []),
   ].map(([k, v]) => `<div><div class="label">${k}</div><div class="big">${v}</div></div>`).join('');
   $('c-note').hidden = !c.note; $('c-note').textContent = c.note || '';
+  drawAt();
 }
+// The point chosen on the chart: each panel's output then (and on the roof)
+function cursorValues() {
+  const c = view.chart; if (!c || view.cursor === null) return null;
+  const i = view.cursor, out = {};
+  const pts = c.points || [];
+  // (the panel series follow c.points; with the system's own minutes drawn, the nearest)
+  let j = i;
+  if (view.cursorPts !== pts && view.cursorPts[i]) {
+    const t = view.cursorPts[i].t; j = 0;
+    pts.forEach((p, k) => { if (p.t <= t) j = k; });
+  }
+  Object.entries(c.panel_series || {}).forEach(([id, vals]) => { out[id] = {v: vals[j], r: c.panel_reclaimed ? (c.panel_reclaimed[id] || [])[j] : null}; });
+  return {t: (view.cursorPts[i] || {}).t, point: view.cursorPts[i], panels: out};
+}
+function drawAt() {
+  const box = $('c-at'), at = cursorValues();
+  if (!at) { box.hidden = true; if (view.colour === 'cursor') { view.colour = view.prevColour || 'power'; drawRoof(); } return; }
+  const c = view.chart, day = c.view === 'day';
+  const when = day ? `${at.t} on ${dayName(c.day, true)}` : c.view === 'year' ? `${MONTHS[+at.t.slice(5, 7) - 1]} ${at.t.slice(0, 4)}` : dayName(at.t, true);
+  const fmt = (v) => v === null || v === undefined ? '—' : day ? `${num(v, 0)} W` : kwh(v);
+  const rows = Object.entries(at.panels).sort((a, b) => panelLabel(a[0]).localeCompare(panelLabel(b[0]), undefined, {numeric: true}));
+  const colours = panelColours();
+  const p = at.point || {};
+  box.hidden = false;
+  box.innerHTML = `<div class="row" style="margin:0"><b class="grow">${esc(when)}</b>`
+    + (day ? '' : `<button class="btn small" id="c-open">Show this ${c.view === 'year' ? 'month' : 'day'}</button>`)
+    + `<button class="btn small" id="c-clear">Close</button></div>`
+    + `<div class="totals" style="margin-top:6px"><div><div class="label">${c.whole ? 'The whole system' : 'These panels'}</div><div class="big">${fmt(p.total)}</div></div>`
+    + (p.reclaimed !== null && p.reclaimed !== undefined ? `<div><div class="label">Reclaimed${c.estimated && day ? ' (estimated)' : ''}</div><div class="big">${fmt(p.reclaimed)}</div></div>` : '') + '</div>'
+    + (rows.length ? `<table class="at"><thead><tr><th>Panel</th><th>${day ? 'Power' : 'Energy'}</th>${day ? '<th>Reclaimed</th>' : ''}</tr></thead><tbody>`
+      + rows.map(([id, r]) => `<tr><td><i style="background:${colours[id] || '#888'}"></i>${esc(panelLabel(id))}</td><td>${fmt(r.v)}</td>${day ? `<td>${r.r === null || r.r === undefined ? '—' : num(r.r, 1) + ' W'}</td>` : ''}</tr>`).join('')
+      + '</tbody></table>' : '<div class="note">No panel figures for this point.</div>')
+    + (c.estimated && day ? '<div class="note">Estimated for this day (see below the chart).</div>' : '');
+  $('c-clear').onclick = () => { view.cursor = null; drawChart(view.chart); };
+  if ($('c-open')) $('c-open').onclick = () => {
+    const t = at.t; view.cursor = null;
+    if (c.view === 'year') { view.mode = 'month'; view.day = t + '-01'; } else { view.mode = 'day'; view.day = t; }
+    saveView(); loadChart();
+  };
+  // the roof shows each panel then
+  if (view.colour !== 'cursor') view.prevColour = view.colour;
+  view.colour = 'cursor'; drawRoof();
+}
+function nearestIndex(ev) {
+  const svg = $('chart'), x = view.chartX, n = (view.cursorPts || []).length;
+  if (!x || !n) return null;
+  const r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+  const px = (ev.clientX - r.left) * (vb.width / r.width);
+  let best = 0, d = Infinity;
+  for (let i = 0; i < n; i++) { const dd = Math.abs(x(i) - px); if (dd < d) { d = dd; best = i; } }
+  return best;
+}
+$('chart').addEventListener('click', (ev) => {
+  const i = nearestIndex(ev); if (i === null) return;
+  view.cursor = i; drawChart(view.chart);
+});
+$('chart').addEventListener('mousemove', (ev) => {
+  const i = nearestIndex(ev); if (i === null) { $('chart').removeAttribute('title'); return; }
+  const p = view.cursorPts[i], c = view.chart;
+  const t = c.view === 'day' ? p.t : c.view === 'year' ? `${MONTHS[+p.t.slice(5, 7) - 1]}` : dayName(p.t, true);
+  $('c-hover').textContent = `${t}: ${c.view === 'day' ? num(p.total, 0) + ' W' : kwh(p.total)}${p.reclaimed ? ` · ${c.view === 'day' ? num(p.reclaimed, 0) + ' W' : kwh(p.reclaimed)} reclaimed` : ''} · click for each panel`;
+});
+$('chart').addEventListener('mouseleave', () => { $('c-hover').textContent = ''; });
+$('c-split').addEventListener('click', (ev) => {
+  const s = ev.target.dataset && ev.target.dataset.s; if (!s) return;
+  view.split = s; saveView(); drawChart(view.chart);
+});
 function spanOf(mode, day) {
   if (mode === 'day') return {start: day, end: day};
   if (mode === 'week') return {start: shiftDay(day, 'day', -6), end: day};
@@ -925,11 +1042,6 @@ $('c-view').addEventListener('click', (ev) => {
 $('c-prev').addEventListener('click', () => { view.day = shiftDay(view.day, view.mode, -1); loadChart(); });
 $('c-next').addEventListener('click', () => { const t = systemToday(); const d = shiftDay(view.day, view.mode, 1); view.day = d > t ? t : d; loadChart(); });
 $('c-today').addEventListener('click', () => { view.day = systemToday(); loadChart(); });
-$('chart').addEventListener('click', (ev) => {
-  // a day's bar: that day
-  const t = ev.target.dataset && ev.target.dataset.t; if (!t || view.mode === 'year') return;
-  view.mode = 'day'; view.day = t; saveView(); loadChart();
-});
 window.addEventListener('resize', () => { if (view.chart) drawChart(view.chart); });
 // Today's chart moves on as Tigo's readings come
 setInterval(() => { if (!document.hidden && activeTab === 'overview' && view.day === systemToday()) loadChart(); }, 120000);

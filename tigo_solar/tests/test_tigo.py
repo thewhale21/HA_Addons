@@ -186,43 +186,73 @@ def _filled_store():
     store.put_system_power(tigo_data.echart_rows(SAMPLES["agg_line_today"]))
     store.put_system_energy((t[:10], a, b, r) for t, a, b, r in tigo_data.echart_rows(SAMPLES["agg_day_month"]))
     store.put_panel_energy("2026-11-17", tigo_data.parse_aggenergy(SAMPLES["aggenergy_yday"])["panels"])
-    store.put_panel_power("2026-11-18 08:13", {90375862: 41.0, 90375863: 39.0}, {90375862: 2.5, 90375863: 1.0})
     return store
+
+
+IDS = [p["id"] for p in tigo_data.parse_config(SAMPLES["config"])["panels"]]
 
 
 def test_charts_for_the_whole_system():
     store = _filled_store()
-    day = charts.build(store, "day", "2026-11-18")
-    assert day["whole"] and day["unit"] == "W" and day["points"][-1] == {"t": "08:13", "total": 156.0, "base": 149.21,
-                                                                          "reclaimed": 6.79}
-    week = charts.build(store, "week", "2026-11-17")
+    day = charts.build(store, "day", "2026-11-18", None, IDS)
+    # (no panel's energy that day yet: the system's own power, split base / reclaimed)
+    assert day["whole"] and day["unit"] == "W" and day["panel_series"] == {}
+    assert day["points"][-1] == {"t": "08:13", "total": 156.0, "base": 149.21, "reclaimed": 6.79}
+    week = charts.build(store, "week", "2026-11-17", None, IDS)
     assert [p["t"] for p in week["points"]] == [f"2026-11-{d}" for d in range(11, 18)]
     assert week["points"][-1] == {"t": "2026-11-17", "total": 3568.12, "base": 3265.11, "reclaimed": 303.01}
     assert week["panels"]["90375862"] == 363.0
-    month = charts.build(store, "month", "2026-10-05")
+    # each panel's part of each bar, stacked on the page
+    assert len(week["panel_series"]) == 12 and week["panel_series"]["90375862"][-1] == 363
+    assert week["panel_series"]["90375862"][0] is None  # (no panel energy that day)
+    month = charts.build(store, "month", "2026-10-05", None, IDS)
     assert month["start"] == "2026-10-01" and len(month["points"]) == 31 and month["points"][0]["total"] is None
-    year = charts.build(store, "year", "2026-11-17")
+    year = charts.build(store, "year", "2026-11-17", None, IDS)
     assert len(year["points"]) == 12 and year["points"][9]["total"] == pytest.approx(
         sum(r[1] for r in tigo_data.echart_rows(SAMPLES["agg_day_month"]) if r[0].startswith("2026-10")), abs=0.01)
+    assert year["panel_series"]["90375862"][10] == 363
     with pytest.raises(ValueError):
         charts.build(store, "decade", "2026-11-17")
     with pytest.raises(ValueError):
         charts.build(store, "day", "17/11/2026")
 
 
+def test_a_past_day_estimates_each_panel_from_the_system():
+    """A day before the add-on read each panel: the system's power by the minute, shared out by
+    each panel's share of the day's energy, every 5 minutes; said so."""
+    store = _filled_store()
+    store.put_panel_energy("2026-11-18", tigo_data.parse_aggenergy(SAMPLES["aggenergy_today"])["panels"])
+    day = charts.build(store, "day", "2026-11-18", None, IDS)
+    assert day["estimated"] and "estimated" in day["note"] and len(day["panel_series"]) == 12
+    assert all(int(p["t"][3:]) % 5 == 0 for p in day["points"])
+    last = day["points"][-1]
+    stacked = sum(v[-1] for v in day["panel_series"].values())
+    assert stacked == pytest.approx(last["total"], abs=0.5)
+    share = 3.4 / sum(tigo_data.parse_aggenergy(SAMPLES["aggenergy_today"])["panels"].values())
+    assert day["panel_series"]["90375862"][-1] == pytest.approx(last["total"] * share, abs=0.2)
+    assert day["system_points"][-1]["t"] == "08:13"
+    one = charts.build(store, "day", "2026-11-18", [90375862], IDS)
+    assert not one["whole"] and list(one["panel_series"]) == ["90375862"] and one["total_wh"] == 3.4
+
+
 def test_charts_for_chosen_panels():
     store = _filled_store()
-    ids = [p["id"] for p in tigo_data.parse_config(SAMPLES["config"])["panels"]]
-    day = charts.build(store, "day", "2026-11-18", [90375862], ids)
-    assert not day["whole"] and day["points"] == [{"t": "08:13", "total": 41.0, "reclaimed": 2.5, "base": 38.5}]
-    week = charts.build(store, "week", "2026-11-17", [90375862, 90375863], ids)
+    store.put_panel_power("2026-11-18 08:00", {90375862: 30.0, 90375863: 28.0}, {90375862: 1.5, 90375863: 1.0})
+    store.put_panel_power("2026-11-18 08:13", {90375862: 41.0, 90375863: 39.0}, {90375862: 2.5, 90375863: 1.0})
+    day = charts.build(store, "day", "2026-11-18", [90375862], IDS)
+    # (the add-on's own readings of the panel: exact)
+    assert not day["whole"] and not day["estimated"]
+    assert day["points"] == [{"t": "08:00", "total": 30.0, "reclaimed": 1.5, "base": 28.5},
+                             {"t": "08:13", "total": 41.0, "reclaimed": 2.5, "base": 38.5}]
+    assert day["panel_series"] == {"90375862": [30.0, 41.0]} and day["panel_reclaimed"] == {"90375862": [1.5, 2.5]}
+    week = charts.build(store, "week", "2026-11-17", [90375862, 90375863], IDS)
     assert week["points"][-1]["total"] == 725 and week["points"][-1]["reclaimed"] is None and week["note"]
+    assert set(week["panel_series"]) == {"90375862", "90375863"}
     # all of them chosen: the whole system, with reclaimed
-    assert charts.build(store, "week", "2026-11-17", ids, ids)["whole"]
-    # a day before the add-on was reading each panel: said so
-    empty = charts.build(store, "day", "2026-11-17", [90375862], ids)
-    assert empty["points"] == [] and "only known from when the add-on started" in empty["note"]
-    assert empty["total_wh"] == 363
+    assert charts.build(store, "week", "2026-11-17", IDS, IDS)["whole"]
+    # a day with nothing known of the panel: empty
+    empty = charts.build(store, "day", "2026-11-16", [90375862], IDS)
+    assert empty["points"] == [] and empty["total_wh"] is None
 
 
 def test_your_layout_wins_over_tigos(tmp_path):

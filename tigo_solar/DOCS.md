@@ -41,17 +41,23 @@ readings (voltages, current, temperature) aren't used.
 - **Production:** the chart for a **Day** (power through the day), a
   **Week** (the 7 days to the day shown), a **Month** or a **Year** (energy
   by the day or month). ‹ and › go back and forward, **Today** comes back
-  to today; click a day's bar to see that day. Below it: what was made then
-  and what was reclaimed.
-  - **The whole system** (all panels chosen): split into what the panels
-    made on their own (dark green) and what the optimisers reclaimed (light
-    green).
-  - **Some panels chosen:** their energy added up. Tigo splits reclaimed
-    energy off only for the whole system, so the bars are one colour. For a
-    **Day**, their power through the day is only known from when the
-    add-on started: Tigo keeps each panel's latest reading only, so the
-    add-on records them every time it reads (the history from before then
-    has each panel's energy by the day, not by the hour).
+  to today. Below it: what was made then and what was reclaimed.
+  - **By panel:** each chosen panel stacked in its own colour (a colour per
+    string, lighter along it), so you see each panel's part and the total.
+  - **Reclaimed:** what the panels made on their own (dark green) and what
+    the optimisers reclaimed (light green). By the day, Tigo has that only
+    for the whole system, so with some panels chosen the bars are their
+    total.
+  - **Click a point** on the chart: each panel's power and reclaimed power
+    then (or its energy that day or month) in a table under the chart, with
+    the total, and the roof colours each panel by it. **Show this day**
+    opens that day of a week or month; **Close** puts the roof back.
+  - **Each panel's power through a day:** Tigo keeps only each panel's
+    latest reading, so the add-on records them every time it reads (exact,
+    from when it started). For a day before that, each panel's power is
+    estimated: the system's power by the minute (which Tigo keeps) times the
+    panel's share of that day's energy (which Tigo has for every day). The
+    chart says when it's estimated. Energy by the day is always exact.
 - **History:** how much of your history has been read from Tigo, since when
   each panel's power through the day has been recorded, and your Tigo plan.
 
