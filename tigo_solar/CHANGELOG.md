@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0 — By the time of day: a month too, and zoom in 3D
+
+- **Feature:** the time-of-day chart (now **By the time of day**) shows a
+  **Month** as well as a **Year**: each day of the month across, every 15
+  minutes up (a year: every 30). ‹ and › go a month or a year.
+- **Feature:** zoom in on the **3D** chart: scroll, pinch, or the + and −
+  buttons; shift-drag (or two fingers) moves it, and **Reset** puts it
+  back as it was.
+
 ## 0.6.0 — Through the year: each day by the time of day
 
 - **Feature:** a **Through the year** chart under **Production**: each day

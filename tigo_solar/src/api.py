@@ -155,7 +155,8 @@ async def handle_chart(request: web.Request) -> web.Response:
 
 
 async def handle_year(request: web.Request) -> web.Response:
-    """?year=YYYY&panels=all|ID,ID,...: each day by the time of day (src/charts.py year_grid)."""
+    """?year=YYYY[&month=M]&panels=all|ID,ID,...: each day by the time of day (src/charts.py
+    year_grid)."""
     from src import charts
 
     store = request.app["store"]
@@ -167,7 +168,7 @@ async def handle_year(request: web.Request) -> web.Response:
         selected = None if panels in ("", "all") else [int(x) for x in panels.split(",") if x.strip()]
         all_ids = [p["id"] for p in request.app["shared_state"].panels]
         year = int(q.get("year") or datetime.date.today().year)
-        out = await asyncio.to_thread(charts.year_grid, store, year, selected, all_ids)
+        out = await asyncio.to_thread(charts.year_grid, store, year, selected, all_ids, None, q.get("month"))
     except ValueError as err:
         return _bad_request(err)
     return web.json_response(out, dumps=_dumps)

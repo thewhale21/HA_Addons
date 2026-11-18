@@ -304,7 +304,10 @@
   svg.chart { touch-action: pan-y; user-select: none; }
   .chartbox { position: relative; }
   canvas.ycanvas { display: block; width: 100%; height: 320px; touch-action: pan-y; cursor: crosshair; }
-  canvas.ycanvas.turn { cursor: grab; } canvas.ycanvas.turn:active { cursor: grabbing; }
+  canvas.ycanvas.turn { cursor: grab; touch-action: none; } canvas.ycanvas.turn:active { cursor: grabbing; }
+  .zoom { position: absolute; right: 6px; top: 6px; display: flex; gap: 4px; }
+  .zoom .btn { background: var(--card); min-width: 30px; }
+  .zoom[hidden] { display: none; }
   .tip { position: absolute; pointer-events: none; z-index: 4; background: var(--card); color: var(--text); font-size: 12px;
     padding: 6px 9px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.2), 0 0 0 1px var(--divider); white-space: nowrap; line-height: 1.5; }
   .tip .pg { display: grid; grid-template-columns: auto auto; gap: 0 12px; margin-top: 3px; }
@@ -390,12 +393,14 @@
       <div class="note" id="c-note" hidden></div>
     </div>
     <div class="card">
-      <h2>Through the year<span class="spacer"></span>
+      <h2>By the time of day<span class="spacer"></span>
         <span class="seg" id="y-what" role="group" aria-label="Show"><button data-w="made">Made</button><button data-w="reclaimed">Reclaimed</button><button data-w="pct">Reclaimed %</button></span>
         <span class="seg" id="y-style" role="group" aria-label="Chart"><button data-s="map">Heatmap</button><button data-s="3d">3D</button></span>
+        <span class="seg" id="y-period" role="group" aria-label="Time"><button data-p="month">Month</button><button data-p="year">Year</button></span>
       </h2>
-      <div class="chart-nav"><button class="btn small" id="y-prev" aria-label="Earlier year">‹</button><span class="when" id="y-when">—</span><button class="btn small" id="y-next" aria-label="Later year">›</button><span class="spacer" style="flex:1"></span><span class="note" style="margin:0" id="y-who"></span></div>
-      <div class="chartbox" id="y-box"><canvas id="y-canvas" class="ycanvas"></canvas><div class="tip" id="y-tip" hidden></div></div>
+      <div class="chart-nav"><button class="btn small" id="y-prev" aria-label="Earlier">‹</button><span class="when" id="y-when">—</span><button class="btn small" id="y-next" aria-label="Later">›</button><span class="spacer" style="flex:1"></span><span class="note" style="margin:0" id="y-who"></span></div>
+      <div class="chartbox" id="y-box"><canvas id="y-canvas" class="ycanvas"></canvas><div class="tip" id="y-tip" hidden></div>
+        <div class="zoom" id="y-zoom" hidden><button class="btn small" data-z="in" aria-label="Zoom in">+</button><button class="btn small" data-z="out" aria-label="Zoom out">−</button><button class="btn small" data-z="reset">Reset</button></div></div>
       <div class="scale" style="margin-top:6px"><span id="y-lo">0</span><b></b><span id="y-hi">—</span><span class="spacer" style="flex:1"></span><span class="note" style="margin:0" id="y-hint"></span></div>
     </div>
     <div class="card" id="o-history-card">
@@ -914,21 +919,25 @@ async function loadChart() {
   } catch (e) { if (n === chartReq) { view.chart = null; drawChart(null, e.message); } }
 }
 // --- Through the year: each day by the time of day, as a heatmap or a 3D surface -----
-const yv = {year: null, what: 'made', style: 'map', grid: null, key: '', req: 0, yaw: -0.6, pitch: 0.55, drag: null};
-try { const s = JSON.parse(localStorage.getItem('tigo.year') || '{}'); if (s.what) yv.what = s.what; if (s.style) yv.style = s.style; } catch (e) { /* (none kept) */ }
-const saveYear = () => { try { localStorage.setItem('tigo.year', JSON.stringify({what: yv.what, style: yv.style})); } catch (e) { /* (not kept) */ } };
+const yv = {year: null, month: null, period: 'year', what: 'made', style: 'map', grid: null, key: '', req: 0,
+  yaw: -0.6, pitch: 0.55, zoom: 1, ox: 0, oy: 0, drag: null, touches: new Map(), pinch: null};
+try { const s = JSON.parse(localStorage.getItem('tigo.year') || '{}'); ['what', 'style', 'period'].forEach((k) => { if (s[k]) yv[k] = s[k]; }); } catch (e) { /* (none kept) */ }
+const saveYear = () => { try { localStorage.setItem('tigo.year', JSON.stringify({what: yv.what, style: yv.style, period: yv.period})); } catch (e) { /* (not kept) */ } };
 async function loadYear(force) {
-  if (yv.year === null) yv.year = +(view.day || systemToday()).slice(0, 4);
+  if (yv.year === null) { const d = view.day || systemToday(); yv.year = +d.slice(0, 4); yv.month = +d.slice(5, 7); }
   const panels = view.selected === null ? 'all' : (view.selected.length ? view.selected.join(',') : 'none');
-  const key = `${yv.year}|${panels}`;
+  const month = yv.period === 'month' ? yv.month : '';
+  const key = `${yv.year}|${month}|${panels}`;
   if (!force && key === yv.key && yv.grid) return;
   yv.key = key;
   const n = ++yv.req;
-  $('y-when').textContent = String(yv.year);
-  $('y-next').disabled = yv.year >= +systemToday().slice(0, 4);
+  $('y-period').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.p === yv.period));
+  $('y-when').textContent = month ? `${MONTHS[month - 1]} ${yv.year}` : String(yv.year);
+  const now = systemToday();
+  $('y-next').disabled = month ? `${yv.year}-${String(month).padStart(2, '0')}` >= now.slice(0, 7) : yv.year >= +now.slice(0, 4);
   if (panels === 'none') { yv.grid = null; drawYear(); return; }
   try {
-    const g = await api(`year?year=${yv.year}&panels=${panels}`);
+    const g = await api(`year?year=${yv.year}${month ? `&month=${month}` : ''}&panels=${panels}`);
     if (n === yv.req) { yv.grid = g; drawYear(); }
   } catch (e) { if (n === yv.req) { yv.grid = null; drawYear(e.message); } }
 }
@@ -961,6 +970,7 @@ function drawYear(err) {
   $('y-style').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.s === yv.style));
   const g = yv.grid, {cv, ctx, W, H, text} = yCanvas();
   cv.classList.toggle('turn', yv.style === '3d');
+  $('y-zoom').hidden = yv.style !== '3d' || !g || !g.days.length;
   $('y-tip').hidden = true;
   $('y-who').textContent = g ? (g.whole ? 'The whole system' : `${g.selected.length} panel${g.selected.length === 1 ? '' : 's'}`) : '';
   if (!g || !g.days.length) {
@@ -971,13 +981,13 @@ function drawYear(err) {
   }
   const max = yMax(g);
   $('y-lo').textContent = yFmt(0); $('y-hi').textContent = yFmt(max);
-  $('y-hint').textContent = yv.style === '3d' ? 'Drag to turn it' : 'Hover for the values';
+  $('y-hint').textContent = yv.style === '3d' ? 'Drag to turn it, scroll or pinch to zoom (shift-drag or two fingers to move it)' : 'Hover for the values';
   if (yv.style === '3d') draw3d(g, max, ctx, W, H, text); else drawMap(g, max, ctx, W, H, text);
 }
 // Heatmap: days across (from the first with power), the time of day up
 function drawMap(g, max, ctx, W, H, text) {
   const L = 44, R = 8, T = 8, B = 22;
-  const first = new Date(g.days[0] + 'T12:00:00'), last = new Date(g.days[g.days.length - 1] + 'T12:00:00');
+  const first = new Date((g.month ? g.start : g.days[0]) + 'T12:00:00'), last = new Date((g.month ? g.end : g.days[g.days.length - 1]) + 'T12:00:00');
   const nDays = Math.round((last - first) / 864e5) + 1, ns = g.slots.length;
   const cw = (W - L - R) / nDays, ch = (H - T - B) / ns;
   const dayIx = (iso) => Math.round((new Date(iso + 'T12:00:00') - first) / 864e5);
@@ -992,10 +1002,12 @@ function drawMap(g, max, ctx, W, H, text) {
   ctx.fillStyle = text; ctx.font = '11px Roboto, sans-serif';
   ctx.textAlign = 'right';
   g.slots.forEach((m, s) => { if (m % 120 === 0) ctx.fillText(hhmm(m), L - 6, T + (ns - 1 - s) * ch + ch / 2 + 4); });
+  if (g.month) { ctx.strokeStyle = 'rgba(128,128,128,.25)'; for (let k = 1; k < nDays; k++) { ctx.beginPath(); ctx.moveTo(L + k * cw, T); ctx.lineTo(L + k * cw, H - B); ctx.stroke(); } }
   ctx.textAlign = 'center';
   for (let k = 0; k < nDays; k++) {
     const dt = new Date(first.getTime() + k * 864e5);
-    if (dt.getDate() === 1 || k === 0) ctx.fillText(MONTHS[dt.getMonth()], L + (k + (dt.getDate() === 1 ? 0 : 0.5)) * cw + (k === 0 ? 14 : 0), H - 6);
+    if (g.month) { if (k === 0 || (k + 1) % 5 === 0) ctx.fillText(String(dt.getDate()), L + (k + 0.5) * cw, H - 6); }
+    else if (dt.getDate() === 1 || k === 0) ctx.fillText(MONTHS[dt.getMonth()], L + (k + (dt.getDate() === 1 ? 0 : 0.5)) * cw + (k === 0 ? 14 : 0), H - 6);
   }
   yv.hit = {kind: 'map', L, T, cw, ch, ns, nDays, first, index: Object.fromEntries(g.days.map((iso, d) => [iso, d]))};
 }
@@ -1004,10 +1016,10 @@ function draw3d(g, max, ctx, W, H, text) {
   const nd = g.days.length, ns = g.slots.length;
   // (a column a day; each point: x along the days, y along the time of day, z up)
   const cy = Math.cos(yv.yaw), sy = Math.sin(yv.yaw), cp = Math.cos(yv.pitch), sp = Math.sin(yv.pitch);
-  const scale = Math.min(W, H * 1.6) * 0.42;
+  const scale = Math.min(W, H * 1.6) * 0.42 * yv.zoom;
   const P = (x, y, z) => {  // x, y in -1..1, z 0..1 -> screen, and depth
     const rx = x * cy - y * sy, ry = x * sy + y * cy;
-    const sx = W / 2 + rx * scale, syy = H * 0.62 - (ry * sp + z * 0.9 * cp) * scale * 0.75;
+    const sx = W / 2 + yv.ox + rx * scale, syy = H * 0.62 + yv.oy - (ry * sp + z * 0.9 * cp) * scale * 0.75;
     return [sx, syy, ry * cp - z * sp];
   };
   const X = (d) => nd > 1 ? -1 + 2 * d / (nd - 1) : 0, Y = (s) => ns > 1 ? -0.7 + 1.4 * s / (ns - 1) : 0;
@@ -1033,7 +1045,10 @@ function draw3d(g, max, ctx, W, H, text) {
     if (shade) { ctx.fillStyle = shade > 0 ? `rgba(255,255,255,${shade})` : `rgba(0,0,0,${-shade})`; ctx.fill(); }
   });
   ctx.fillStyle = text; ctx.font = '11px Roboto, sans-serif'; ctx.textAlign = 'center';
-  const months = []; g.days.forEach((iso, d) => { if (iso.slice(8) === '01' || d === 0) months.push([d, MONTHS[+iso.slice(5, 7) - 1]]); });
+  const months = []; g.days.forEach((iso, d) => {
+    if (g.month) { if (d === 0 || +iso.slice(8) % 5 === 0) months.push([d, String(+iso.slice(8))]); }
+    else if (iso.slice(8) === '01' || d === 0) months.push([d, MONTHS[+iso.slice(5, 7) - 1]]);
+  });
   months.forEach(([d, m]) => { const [x, y] = P(X(d), -0.82, 0); ctx.fillText(m, x, y + 4); });
   [6, 9, 12, 15, 18, 21].forEach((h) => {
     const s = g.slots.indexOf(h * 60); if (s < 0) return;
@@ -1043,8 +1058,33 @@ function draw3d(g, max, ctx, W, H, text) {
 }
 $('y-what').addEventListener('click', (ev) => { const w = ev.target.dataset && ev.target.dataset.w; if (!w) return; yv.what = w; saveYear(); drawYear(); });
 $('y-style').addEventListener('click', (ev) => { const s = ev.target.dataset && ev.target.dataset.s; if (!s) return; yv.style = s; saveYear(); drawYear(); });
-$('y-prev').addEventListener('click', () => { yv.year -= 1; loadYear(); });
-$('y-next').addEventListener('click', () => { yv.year += 1; loadYear(); });
+function yStep(n) {
+  if (yv.period === 'month') { let m = yv.month + n, y = yv.year; while (m < 1) { m += 12; y -= 1; } while (m > 12) { m -= 12; y += 1; } yv.month = m; yv.year = y; }
+  else yv.year += n;
+  loadYear();
+}
+$('y-prev').addEventListener('click', () => yStep(-1));
+$('y-next').addEventListener('click', () => yStep(1));
+$('y-period').addEventListener('click', (ev) => { const p = ev.target.dataset && ev.target.dataset.p; if (!p) return; yv.period = p; saveYear(); loadYear(); });
+// 3D zoom: about a point on the canvas (the pointer, or the middle), within limits
+function yZoom(f, cx, cy) {
+  const r = $('y-canvas').getBoundingClientRect(), W = r.width, H = 320;
+  const z = Math.max(0.5, Math.min(8, yv.zoom * f)); f = z / yv.zoom;
+  const px = (cx ?? W / 2) - W / 2, py = (cy ?? H * 0.62) - H * 0.62;
+  yv.ox = px - (px - yv.ox) * f; yv.oy = py - (py - yv.oy) * f; yv.zoom = z;
+  drawYear();
+}
+$('y-zoom').addEventListener('click', (ev) => {
+  const z = ev.target.dataset && ev.target.dataset.z; if (!z) return;
+  if (z === 'reset') { yv.zoom = 1; yv.ox = 0; yv.oy = 0; yv.yaw = -0.6; yv.pitch = 0.55; drawYear(); }
+  else yZoom(z === 'in' ? 1.4 : 1 / 1.4);
+});
+$('y-canvas').addEventListener('wheel', (ev) => {
+  if (yv.style !== '3d') return;
+  ev.preventDefault();
+  const r = $('y-canvas').getBoundingClientRect();
+  yZoom(Math.exp(-Math.max(-300, Math.min(300, ev.deltaY)) * 0.001), ev.clientX - r.left, ev.clientY - r.top);
+}, {passive: false});
 window.addEventListener('resize', () => { if (yv.grid) drawYear(); });
 // Heatmap hover: that day and time; 3D: drag to turn it
 $('y-canvas').addEventListener('mousemove', (ev) => {
@@ -1064,19 +1104,45 @@ $('y-canvas').addEventListener('mousemove', (ev) => {
   tip.style.top = Math.max(0, Math.min(y - 20, r.height - tip.offsetHeight)) + 'px';
 });
 $('y-canvas').addEventListener('mouseleave', () => { $('y-tip').hidden = true; });
+// 3D: drag to turn it; shift-drag (or two fingers) to move it; pinch to zoom
 $('y-canvas').addEventListener('pointerdown', (ev) => {
   if (yv.style !== '3d') return;
-  yv.drag = {x: ev.clientX, y: ev.clientY, yaw: yv.yaw, pitch: yv.pitch};
+  yv.touches.set(ev.pointerId, {x: ev.clientX, y: ev.clientY});
   $('y-canvas').setPointerCapture(ev.pointerId);
+  if (yv.touches.size === 2) {
+    const [a, b] = [...yv.touches.values()];
+    yv.pinch = {dist: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2};
+    yv.drag = null;
+  } else {
+    yv.drag = {x: ev.clientX, y: ev.clientY, yaw: yv.yaw, pitch: yv.pitch, ox: yv.ox, oy: yv.oy, pan: ev.shiftKey || ev.button === 2};
+  }
 });
 let yFrame = 0;
+const yRedraw = () => { if (!yFrame) yFrame = requestAnimationFrame(() => { yFrame = 0; drawYear(); }); };
 $('y-canvas').addEventListener('pointermove', (ev) => {
+  if (yv.touches.has(ev.pointerId)) yv.touches.set(ev.pointerId, {x: ev.clientX, y: ev.clientY});
+  if (yv.pinch && yv.touches.size === 2) {
+    const [a, b] = [...yv.touches.values()], r = $('y-canvas').getBoundingClientRect();
+    const dist = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    yv.ox += mx - yv.pinch.mx; yv.oy += my - yv.pinch.my;
+    yv.pinch.mx = mx; yv.pinch.my = my;
+    if (yv.pinch.dist > 0) { const f = dist / yv.pinch.dist; yv.pinch.dist = dist; yZoom(f, mx - r.left, my - r.top); }
+    return;
+  }
   const d = yv.drag; if (!d) return;
-  yv.yaw = d.yaw + (ev.clientX - d.x) * 0.01;
-  yv.pitch = Math.max(0.1, Math.min(1.45, d.pitch + (ev.clientY - d.y) * 0.01));
-  if (!yFrame) yFrame = requestAnimationFrame(() => { yFrame = 0; drawYear(); });
+  if (d.pan) { yv.ox = d.ox + ev.clientX - d.x; yv.oy = d.oy + ev.clientY - d.y; }
+  else {
+    yv.yaw = d.yaw + (ev.clientX - d.x) * 0.01;
+    yv.pitch = Math.max(0.1, Math.min(1.45, d.pitch + (ev.clientY - d.y) * 0.01));
+  }
+  yRedraw();
 });
-['pointerup', 'pointercancel'].forEach((e) => $('y-canvas').addEventListener(e, () => { yv.drag = null; }));
+['pointerup', 'pointercancel'].forEach((e) => $('y-canvas').addEventListener(e, (ev) => {
+  yv.touches.delete(ev.pointerId);
+  if (yv.touches.size < 2) yv.pinch = null;
+  yv.drag = null;
+}));
+$('y-canvas').addEventListener('contextmenu', (ev) => { if (yv.style === '3d') ev.preventDefault(); });
 // Each panel's colour on the charts: a hue per string, lighter along it
 // (none of them green, yellow or grey: the colours a panel's power fills it with on the roof)
 const STRING_HUES = [212, 285, 330, 8, 190, 250, 300, 230];

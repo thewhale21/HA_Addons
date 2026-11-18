@@ -294,22 +294,30 @@ def _day(store, day: str, out: dict, energy: dict, whole: bool, chosen: Optional
 
 # --- Through the year: each day by the time of day ------------------------------------
 
-YEAR_STEP_MIN = 30  # the time of day in steps of this many minutes
+YEAR_STEP_MIN = 30  # the time of day in steps of this many minutes (a year)
+MONTH_STEP_MIN = 15  # ... (a month: finer, as Tigo keeps each panel's readings)
 
 
 def year_grid(store, year: int, selected: Optional[list] = None, all_ids: Optional[list] = None,
-              step: int = YEAR_STEP_MIN) -> dict:
-    """Each day of `year` with any power, by the time of day: the average power (W) made and
-    reclaimed in each `step` minutes. `selected`: panel IDs (None or all: the whole system,
-    from Tigo's own minutes; else these panels, as on a day's chart)."""
+              step: Optional[int] = None, month: Optional[int] = None) -> dict:
+    """Each day of `year` (or of its `month`, 1-12) with any power, by the time of day: the
+    average power (W) made and reclaimed in each `step` minutes (default: 30 for a year, 15
+    for a month). `selected`: panel IDs (None or all: the whole system, from Tigo's own
+    minutes; else these panels, as on a day's chart)."""
     year = int(year)
-    if not 2000 <= year <= 2100 or 1440 % step:
-        raise ValueError("Give a year, and a step that divides a day")
+    month = None if month in (None, "") else int(month)
+    step = int(step or (MONTH_STEP_MIN if month else YEAR_STEP_MIN))
+    if not 2000 <= year <= 2100 or step <= 0 or 1440 % step or (month is not None and not 1 <= month <= 12):
+        raise ValueError("Give a year (and month), and a step that divides a day")
     all_ids = [int(p) for p in (all_ids or [])]
     chosen = None if selected is None else sorted({int(p) for p in selected})
     whole = chosen is None or bool(all_ids and set(chosen) >= set(all_ids))
     days, made, reclaimed = [], [], []
-    start, end = datetime.date(year, 1, 1), datetime.date(year, 12, 31)
+    if month:
+        start = datetime.date(year, month, 1)
+        end = datetime.date(year, month, calendar.monthrange(year, month)[1])
+    else:
+        start, end = datetime.date(year, 1, 1), datetime.date(year, 12, 31)
     have = {r[0] for r in store.system_energy(start.isoformat(), end.isoformat()) if r[1]}
     d = start
     while d <= end:
@@ -343,7 +351,8 @@ def year_grid(store, year: int, selected: Optional[list] = None, all_ids: Option
     cut = lambda rows: [r[lo:hi + 1] for r in rows]  # noqa: E731
     flat = [v for r in made for v in r if v is not None]
     rflat = [v for r in reclaimed for v in r if v is not None]
-    return {"year": year, "step": step, "whole": whole, "selected": None if whole else chosen,
+    return {"year": year, "month": month, "start": start.isoformat(), "end": end.isoformat(),
+            "step": step, "whole": whole, "selected": None if whole else chosen,
             "days": days, "slots": [i * step for i in range(lo, hi + 1)],
             "made": cut(made), "reclaimed": cut(reclaimed),
             "max_made": max(flat) if flat else None, "max_reclaimed": max(rflat) if rflat else None}

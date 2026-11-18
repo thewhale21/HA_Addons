@@ -354,6 +354,13 @@ def test_through_the_year_each_day_by_the_time_of_day():
     one = charts.year_grid(store, 2026, [IDS[0]], IDS)
     assert one["days"] == ["2026-11-18"] and not one["whole"] and one["made"][0][1] < grid["made"][0][1]
     assert charts.year_grid(store, 2025, None, IDS)["days"] == []
+    # a month: its days, every 15 minutes
+    nov = charts.year_grid(store, 2026, None, IDS, month=11)
+    assert nov["start"] == "2026-11-01" and nov["end"] == "2026-11-30" and nov["step"] == 15
+    assert nov["days"] == ["2026-11-18"] and nov["slots"] == [450, 465, 480]
+    assert charts.year_grid(store, 2026, None, IDS, month=10)["days"] == []
+    with pytest.raises(ValueError):
+        charts.year_grid(store, 2026, None, IDS, month=13)
     with pytest.raises(ValueError):
         charts.year_grid(store, 1, None, IDS)
 
