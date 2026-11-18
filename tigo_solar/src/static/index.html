@@ -280,9 +280,8 @@
   /* The roof and the charts */
   .roofwrap { position: relative; width: 100%; overflow: auto; border-radius: 10px; background: color-mix(in srgb, var(--text) 4%, transparent); }
   svg.roof { display: block; width: 100%; height: auto; min-height: 160px; max-height: 460px; user-select: none; touch-action: none; }
-  svg.roof .pnl rect.f { stroke: color-mix(in srgb, var(--text) 30%, transparent); stroke-width: 1; cursor: pointer; }
-  svg.roof .pnl.on rect.f { stroke: var(--primary); stroke-width: 3; }
-  svg.roof .pnl.off { opacity: .42; }
+  svg.roof .pnl rect.f { cursor: pointer; }
+  svg.roof .pnl.off { opacity: .35; }
   svg.roof .pnl text { pointer-events: none; font: 500 13px Roboto, sans-serif; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.45); stroke-width: 2.5px; stroke-linejoin: round; }
   svg.roof .pnl text.v { font-weight: 400; font-size: 11px; }
   svg.roof.edit .pnl rect.f { cursor: grab; stroke-dasharray: 4 3; }
@@ -743,10 +742,12 @@ function drawRoof() {
   const unit = view.colour === 'energy' || (view.colour === 'cursor' && view.chart && view.chart.view !== 'day') ? (v) => kwh(v, 2) : (v) => `${num(v, 0)} W`;
   // (text in the roof's own units: as big on a phone as the panels allow)
   const scale = (svg.clientWidth || 600) / (x1 - x0), fs = Math.max(w * 0.2, Math.min(w * 0.3, 13 / scale));
+  // (each outlined in its colour on the charts)
+  const colours = panelColours(), sw = Math.max(3 / scale, w * 0.06);
   svg.innerHTML = panels.map((p) => {
     const v = panelValue(p), on = isOn(p.id);
     return `<g class="pnl ${view.selected === null ? '' : on ? 'on' : 'off'}" data-id="${p.id}" transform="translate(${p.left},${p.top})">`
-      + `<rect class="f" width="${w}" height="${h}" rx="4" fill="${v === null || v === undefined ? '#455a64' : heat(v / max)}"><title>${esc(p.label)}${p.string ? ' · ' + esc(p.string) : ''}${p.watts ? ` · ${num(p.watts, 0)} W panel` : ''}\nNow: ${p.power === null ? '—' : num(p.power, 0) + ' W'}${p.reclaimed ? ` (${num(p.reclaimed, 1)} W reclaimed)` : ''}\nToday: ${kwh(p.energy_today)}</title></rect>`
+      + `<rect class="f" x="${sw / 2}" y="${sw / 2}" width="${w - sw}" height="${h - sw}" rx="4" stroke="${colours[p.id] || '#90a4ae'}" stroke-width="${sw}" fill="${v === null || v === undefined ? '#455a64' : heat(v / max)}"><title>${esc(p.label)}${p.string ? ' · ' + esc(p.string) : ''}${p.watts ? ` · ${num(p.watts, 0)} W panel` : ''}\nNow: ${p.power === null ? '—' : num(p.power, 0) + ' W'}${p.reclaimed ? ` (${num(p.reclaimed, 1)} W reclaimed)` : ''}\nToday: ${kwh(p.energy_today)}</title></rect>`
       + `<text x="${w / 2}" y="${h / 2 - fs * 0.2}" text-anchor="middle" style="font-size:${fs}px">${esc(p.label)}</text>`
       + `<text class="v" x="${w / 2}" y="${h / 2 + fs * 1.05}" text-anchor="middle" style="font-size:${fs * 0.85}px">${v === null || v === undefined ? '—' : unit(v)}</text></g>`;
   }).join('');
@@ -844,7 +845,8 @@ async function loadChart() {
   } catch (e) { if (n === chartReq) { view.chart = null; drawChart(null, e.message); } }
 }
 // Each panel's colour on the charts: a hue per string, lighter along it
-const STRING_HUES = [205, 145, 32, 280, 350, 180, 60, 245];
+// (none of them green, yellow or grey: the colours a panel's power fills it with on the roof)
+const STRING_HUES = [212, 285, 330, 8, 190, 250, 300, 230];
 function panelColours() {
   const panels = (state && state.panels) || [], out = {};
   const strings = [...new Set(panels.map((p) => p.string || ''))];
@@ -852,7 +854,7 @@ function panelColours() {
     const mine = panels.filter((p) => (p.string || '') === s);
     mine.forEach((p, i) => {
       const f = mine.length > 1 ? i / (mine.length - 1) : 0.5;
-      out[p.id] = `hsl(${STRING_HUES[si % STRING_HUES.length]}, ${62 - f * 10}%, ${30 + f * 38}%)`;
+      out[p.id] = `hsl(${STRING_HUES[si % STRING_HUES.length]}, ${80 - f * 10}%, ${38 + f * 34}%)`;
     });
   });
   return out;

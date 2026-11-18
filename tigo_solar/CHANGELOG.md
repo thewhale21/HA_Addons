@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — Each panel outlined in its chart colour
+
+- **Improvement:** each panel on the roof is outlined in its colour on the
+  charts, so you can tell which is which. The chart colours are now blues,
+  purples and pinks (a hue per string, lighter along it), not the greens
+  and yellows a panel is filled with for its power or energy.
+- **Change:** chosen panels are no longer outlined in blue: the ones left
+  out are faded instead.
+
 ## 0.2.0 — Each panel stacked on the charts, and each panel at any point
 
 - **Fix:** with a panel left out, a day's chart was empty for every day

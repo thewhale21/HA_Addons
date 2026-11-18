@@ -32,7 +32,8 @@ readings (voltages, current, temperature) aren't used.
   Tigo portal). **Power now** colours each by its power at the latest
   reading; **Energy** by what it made over the time the chart below shows,
   dark to yellow. Hover over a panel for its details.
-  - **Click a panel** to take it out of the charts or put it back in;
+  - **Click a panel** to take it out of the charts or put it back in (the
+    ones left out are faded);
     **All panels** and **None** choose all or none. The choice is kept in
     this browser.
   - **Move panels** lets you drag them to where they really are on your
@@ -44,6 +45,9 @@ readings (voltages, current, temperature) aren't used.
   to today. Below it: what was made then and what was reclaimed.
   - **By panel:** each chosen panel stacked in its own colour (a colour per
     string, lighter along it), so you see each panel's part and the total.
+    On the roof each panel is outlined in its colour, so you can tell which
+    is which (the colours are blues, purples and pinks, never the greens and
+    yellows a panel is filled with for its power).
   - **Reclaimed:** what the panels made on their own (dark green) and what
     the optimisers reclaimed (light green). By the day, Tigo has that only
     for the whole system, so with some panels chosen the bars are their
