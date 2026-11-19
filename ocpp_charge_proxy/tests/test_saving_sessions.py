@@ -81,6 +81,7 @@ def test_axle_energy_events_from_its_sensors():
                         "end": "sensor.axle_energy_event_end", "type": "sensor.axle_energy_event_type"}]
     out = sensor_events(states, sources, now, ahead)
     assert [(s["start"].hour, s["end"].hour, s["summary"]) for s in out] == [(19, 20, "Axle Energy event (export)")]
+    assert out[0]["supplier"] == "Axle Energy"  # (whose: its colour on the page)
     # an import event (use more) isn't a saving session; nor is no event, or one that's over
     for start, end, kind in (("2026-10-05T19:00:00+00:00", "2026-10-05T20:00:00+00:00", "import"),
                              ("unknown", "unknown", "unknown"),
@@ -341,8 +342,8 @@ def test_ending_later_stops_at_an_off_peak_time():
 def test_overlapping_sessions_are_one_for_the_schedule_but_keep_their_parts():
     """Octopus's 18:00-19:00 and Axle's 18:30-20:00: one 18:00-20:00 for the
     schedule, with each kept (parts) so the page shows which is running."""
-    octo = {"start": _at(5, 18), "end": _at(5, 19), "summary": "Octopus Energy Saving Session"}
-    axle = {"start": _at(5, 18, 30), "end": _at(5, 20), "summary": "Axle Energy event (export)"}
+    octo = {"start": _at(5, 18), "end": _at(5, 19), "summary": "Octopus Energy Saving Session", "supplier": "Octopus Energy"}
+    axle = {"start": _at(5, 18, 30), "end": _at(5, 20), "summary": "Axle Energy event (export)", "supplier": "Axle Energy"}
     one = merge([axle, octo, dict(octo)])  # (the same one twice: once)
     assert len(one) == 1 and (one[0]["start"].hour, one[0]["end"].hour) == (18, 20)
     assert [(p["start"].strftime("%H:%M"), p["summary"]) for p in one[0]["parts"]] == [
@@ -353,6 +354,8 @@ def test_overlapping_sessions_are_one_for_the_schedule_but_keep_their_parts():
     snap = a.saving_snapshot()[0]
     assert [p["summary"] for p in snap["parts"]] == ["Octopus Energy Saving Session", "Axle Energy event (export)"]
     assert snap["parts"][1]["start"].startswith("2026-10-05T18:30")
+    # each with whose it is, for its colour on the page (the whole: the first's)
+    assert [p["supplier"] for p in snap["parts"]] == ["Octopus Energy", "Axle Energy"] and snap["supplier"] == "Octopus Energy"
 
 
 # --- 2.66.4: the charge before a morning session, with a limit that resets at 12:00 ---

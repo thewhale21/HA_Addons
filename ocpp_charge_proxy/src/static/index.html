@@ -302,14 +302,14 @@
   .un-step.now .stem { background: var(--ok); }
   .un-step.now .dot { background: var(--ok); border-color: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 20%, transparent); }
   .un-step.now.idle .stem { background: var(--text2); } .un-step.now.idle .dot { background: var(--text2); border-color: var(--text2); box-shadow: none; }
-  .un-step.save .dot { border-color: var(--violet); background: repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 4px); }
+  .un-step.save .dot { border-color: var(--sc, var(--violet)); background: repeating-linear-gradient(45deg, var(--sc, var(--violet)) 0 2px, transparent 2px 4px); }
   .un-step.plug .dot { border-color: var(--primary); }
   .un-bar { position: relative; height: 22px; border-radius: 7px; background: var(--hover); margin: 6px 0 4px; overflow: hidden; }
   .un-bar div { position: absolute; top: 0; bottom: 0; }
   .un-bar .plug { top: 3px; bottom: 3px; border-radius: 5px; background: var(--primary); opacity: .25; }
   .un-bar .sup { top: 6px; bottom: 6px; border-radius: 4px; opacity: .9; }
   .un-bar .sup.plan { opacity: 1; border: 1.5px dashed; box-sizing: border-box; }
-  .un-bar .save { background: repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 6px); opacity: .6; }
+  .un-bar .save { background: repeating-linear-gradient(45deg, var(--sc, var(--violet)) 0 2px, transparent 2px 6px); opacity: .6; }
   .un-bar .now { left: 0; width: 2px; background: var(--err); }
   .un-bar .off { background: repeating-linear-gradient(45deg, rgba(84,110,122,.42) 0 4px, rgba(84,110,122,.14) 4px 8px); }
   .un-step.off .dot { border-color: rgb(84,110,122); background: repeating-linear-gradient(45deg, rgba(84,110,122,.6) 0 2px, transparent 2px 4px); }
@@ -368,10 +368,17 @@
   .stl .save.l0, .week .blk.l0, .un-bar .save.l0 { bottom: 50% !important; }
   .stl .save.l1, .week .blk.l1, .un-bar .save.l1 { top: 50% !important; }
   .stl .save.on, .un-bar .save.on { opacity: .95 !important; }
-  .week .blk.on { box-shadow: inset 0 0 0 2px var(--violet); }
+  .week .blk.on { box-shadow: inset 0 0 0 2px var(--sc, var(--violet)); }
+  /* Saving sessions in the schedule: in the supplier's colour (not grey, as an off-peak time is),
+     paler until they start */
+  .week .blk.save { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--sc, var(--violet)) 55%, transparent) 0 3px,
+    color-mix(in srgb, var(--sc, var(--violet)) 12%, transparent) 3px 7px);
+    border-left: 1px solid var(--sc, var(--violet)); border-right: 1px solid var(--sc, var(--violet)); box-sizing: border-box; }
+  .week .blk.save.on { background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--sc, var(--violet)) 85%, transparent) 0 3px,
+    color-mix(in srgb, var(--sc, var(--violet)) 25%, transparent) 3px 7px); }
   .stl .save { position: absolute; top: 0; bottom: 0; opacity: .55;
-    background: repeating-linear-gradient(45deg, var(--violet) 0 2px, transparent 2px 6px);
-    border-left: 1px solid var(--violet); border-right: 1px solid var(--violet); }
+    background: repeating-linear-gradient(45deg, var(--sc, var(--violet)) 0 2px, transparent 2px 6px);
+    border-left: 1px solid var(--sc, var(--violet)); border-right: 1px solid var(--sc, var(--violet)); }
   .stl .chg { position: absolute; top: 9px; bottom: 9px; border-radius: 5px; background: linear-gradient(135deg, #66bb6a, var(--ok));
     box-shadow: 0 1px 2px rgba(0,0,0,.18); cursor: pointer; z-index: 1; color: #fff; font-size: 11px; font-weight: 500; line-height: 16px;
     padding: 0 6px; white-space: nowrap; overflow: hidden; }
@@ -747,7 +754,7 @@
       <div class="week" id="w-grid"></div>
       <div class="empty" id="w-empty" hidden>No times yet: click or drag across a day above to add a slot, e.g. 23:30 to 07:00.</div>
       <div class="sub" id="w-warn" hidden style="margin-top:10px"></div>
-      <div class="legend wlegend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-types"></span><span><b class="band" style="background:var(--ok);height:4px;opacity:1"></b>Charged</span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="opacity:1;background:repeating-linear-gradient(45deg, rgba(84,110,122,.7) 0 2px, rgba(84,110,122,.25) 2px 4px)"></b>Off-peak time</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span><span id="w-rates-legend" hidden></span></div>
+      <div class="legend wlegend"><span><b class="band" id="w-swatch" style="background:var(--primary);opacity:.8"></b><span id="w-label">Plugged in by the schedule</span></span><span id="w-types"></span><span><b class="band" style="background:var(--ok);height:4px;opacity:1"></b>Charged</span><span id="w-sup-legend" hidden><b class="band" id="w-sup-swatch" style="background:transparent;border:2px solid;box-sizing:border-box"></b><span id="w-sup-label"></span></span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 3px, transparent 3px 6px)"></b>Skipped</span><span><b class="band" style="background:linear-gradient(var(--text2),var(--text2)) center/3px 100% no-repeat"></b>Unplug only</span><span><b class="band" style="opacity:1;background:repeating-linear-gradient(45deg, rgba(84,110,122,.7) 0 2px, rgba(84,110,122,.25) 2px 4px)"></b>Off-peak time</span><span id="w-save-legend" hidden><b class="band" id="w-save-swatch" style="opacity:1"></b>Saving session</span><span><b class="band" style="background:var(--err);opacity:.8;width:2px"></b>Now</span><span id="w-rates-legend" hidden></span></div>
       <div class="note" id="a-tz"></div>
       <div class="row" style="margin-top:12px">
         <div class="grow">Random start delay
@@ -1499,6 +1506,8 @@ function savingParts(list) {
   return out;
 }
 const laneCls = (z) => (z.lane === null ? '' : ' l' + z.lane) + (z.on ? ' on' : '');
+// A saving session's colour: its supplier's (Octopus Energy's purple, EDF's yellow...), else violet
+const saveColour = (x) => (x && SUPPLIER_COLOURS[x.supplier]) || cssVar('--violet');
 
 // ---------- Overview: what happens next ----------
 // From the schedule (its next times, joined where slots meet), your supplier's slots, the
@@ -1581,7 +1590,7 @@ function drawNext() {
     steps.push({t: x.a, cls: 'sup', head: when(x.a), small: '–' + hm(x.b), w: `${esc(provider)} slot${x.charge_kwh != null ? ` · ${num(Math.abs(x.charge_kwh), 1)} kWh` : ''}`, s: 'planned', colour: pColour,
       c: `${provider} slot → ${hm(x.b)}${x.charge_kwh != null ? ` · ${num(Math.abs(x.charge_kwh), 1)} kWh` : ''}`});
   for (const x of saves.filter((x) => x.a <= end))
-    steps.push({t: x.a, cls: 'save', head: x.a <= now ? 'Now' : when(x.a), small: '–' + hm(x.b), w: `Saving session${x.summary ? ` (${esc(x.summary)})` : ''}`,
+    steps.push({t: x.a, cls: 'save', head: x.a <= now ? 'Now' : when(x.a), small: '–' + hm(x.b), w: `Saving session${x.summary ? ` (${esc(x.summary)})` : ''}`, sc: saveColour(x),
       s: (() => {
         const all = x.z.of ? new Date(x.z.of.end).getTime() : x.b;  // (with the ones it overlaps)
         const own = all > x.b ? `${hm(x.a)}–${hm(x.b)}; ` : '';
@@ -1611,7 +1620,7 @@ function drawNext() {
     const one = g.length === 1, head = g[0].head;
     const lines = g.map((y, n) => `<div class="w"${n ? ' style="margin-top:6px"' : ''}>${y.w}${!one && y.small && !y.cls.startsWith('save') ? ` <span class="muted">${y.small.replace('–', 'until ')}</span>` : ''}</div>${y.s ? `<div class="s">${y.s}</div>` : ''}`).join('');
     return `<div class="un-step ${lead.cls}" style="max-width:${BW}px"><span class="stem"></span>`
-      + `<span class="dot"${lead.colour ? ` style="border-color:${lead.colour}"` : ''}></span>`
+      + `<span class="dot"${lead.colour ? ` style="border-color:${lead.colour}"` : lead.sc ? ` style="--sc:${lead.sc}"` : ''}></span>`
       + `<div class="t">${head}${one && g[0].small ? `<small>${g[0].small}</small>` : ''}</div>${lines}</div>`;
   };
   const up$ = $('o-next'), down$ = $('o-next-below');
@@ -1674,7 +1683,7 @@ function drawNext() {
     + bands.map(([x, y]) => bar('plug', x, y, '', `Plugged in by the schedule ${hm(x)}–${hm(y)}`)).join('')
     + slots.map((x) => bar('sup' + (x.now ? '' : ' plan'), x.a, x.b, x.now ? `background:${pColour}` : `border-color:${pColour};background:color-mix(in srgb, ${pColour} 15%, transparent)`,
       `${provider} slot ${hm(x.a)}–${hm(x.b)}${x.charge_kwh != null ? ' · ' + num(Math.abs(x.charge_kwh), 1) + ' kWh' : ''}`)).join('')
-    + saves.map((x) => bar('save' + laneCls(x.z), x.a, x.b, '', `${x.z.on ? 'Now: ' : ''}Saving session ${hm(x.a)}–${hm(x.b)}${x.summary ? ' (' + x.summary + ')' : ''}`)).join('')
+    + saves.map((x) => bar('save' + laneCls(x.z), x.a, x.b, `--sc:${saveColour(x)}`, `${x.z.on ? 'Now: ' : ''}Saving session ${hm(x.a)}–${hm(x.b)}${x.summary ? ' (' + x.summary + ')' : ''}`)).join('')
     + '<div class="now"></div>';
   const first = new Date(now); first.setMinutes(0, 0, 0); first.setHours(first.getHours() + (first.getHours() % 2 ? 1 : 2));
   const ticks = [];
@@ -2493,7 +2502,7 @@ function drawSessionTimeline(sd) {
     let inner = '', kwh = 0, secs = 0;
     for (const z of saves.filter((z) => z.b > lo && z.a < hi)) {
       anySave = true;
-      inner += `<div class="save${laneCls(z)}" style="left:${pct(z.a)}%;width:${pct(z.b) - pct(z.a)}%" title="${esc(`${z.on ? 'Now: ' : ''}Saving session ${t(z.a)}–${t(z.b)}${z.x.summary ? ' (' + z.x.summary + ')' : ''}`)}"></div>`;
+      inner += `<div class="save${laneCls(z)}" style="left:${pct(z.a)}%;width:${pct(z.b) - pct(z.a)}%;--sc:${saveColour(z.x)}" title="${esc(`${z.on ? 'Now: ' : ''}Saving session ${t(z.a)}–${t(z.b)}${z.x.summary ? ' (' + z.x.summary + ')' : ''}`)}"></div>`;
     }
     for (const z of plugs.filter((z) => z.b > lo && z.a < hi)) {
       used.add(z.by[2]);
@@ -3171,6 +3180,10 @@ function highBars(d, lo, hi, span) {
 // (shown unless Show high exports on the schedule is off)
 function highsShown() { return !(sim.edit && sim.edit.auto_show_highs === false); }
 function drawRatesLegend() {
+  // (saving sessions in the week: their supplier's colour, so the key says so)
+  const sv = (auto.data && auto.data.schedule && auto.data.schedule.saving_block && auto.data.schedule.saving_sessions) || [];
+  $('w-save-legend').hidden = !sv.length;
+  if (sv.length) { const c = saveColour(sv[0]); $('w-save-swatch').style.background = `repeating-linear-gradient(45deg, ${c} 0 2px, color-mix(in srgb, ${c} 20%, transparent) 2px 4px)`; }
   const r = ratesShown(), el = $('w-rates-legend');
   const highs = highsShown() ? ((auto.data && auto.data.schedule && auto.data.schedule.high_rates) || []).length : 0;
   el.hidden = !r && !highs;
@@ -3845,7 +3858,7 @@ function drawWeek() {
       const a = wallMin(z.x.start), e = wallMin(z.x.end);
       if (!(e > lo && a < hi)) return '';
       const {x0, x1} = span(a, e);
-      return `<div class="blk${laneCls(z)}" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%" title="${esc(`${z.on ? 'Now: ' : ''}Saving session ${hm(z.x.start)}–${hm(z.x.end)}${z.x.summary ? ' (' + z.x.summary + ')' : ''}: nothing is plugged in then`)}"></div>`;
+      return `<div class="blk save${laneCls(z)}" data-row="${d}" style="left:${x0}%;width:${x1 - x0}%;--sc:${saveColour(z.x)}" title="${esc(`${z.on ? 'Now: ' : ''}Saving session ${hm(z.x.start)}–${hm(z.x.end)}${z.x.summary ? ' (' + z.x.summary + ')' : ''}: nothing is plugged in then`)}"></div>`;
     }).join(''));
     const before = d < 0 && week.pluggedSince && new Date(week.pluggedSince) > new Date(day0.getTime() + hi * 60000);
     const bars = d < 0 ? pastBars : occ.map((o, k) => [o, k]).filter(([o]) => o.b > lo && o.a < hi && !o.hidden).map(([o, k]) => {

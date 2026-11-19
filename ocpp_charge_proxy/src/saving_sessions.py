@@ -79,9 +79,11 @@ def _when(value) -> Optional[datetime.datetime]:
     return dt if dt.tzinfo else dt.astimezone()
 
 
-def parse_events(response, entity_id: str, now: datetime.datetime, past: bool = False) -> list[dict]:
+def parse_events(response, entity_id: str, now: datetime.datetime, past: bool = False,
+                 supplier: Optional[str] = None) -> list[dict]:
     """calendar.get_events' response -> the sessions not yet over, in order:
-    [{"start", "end" (aware datetimes), "summary"}] (with `past`, the ones that
+    [{"start", "end" (aware datetimes), "summary", "supplier" (whose calendar it
+    is, for its colour on the page; None if not known)}] (with `past`, the ones that
     are over instead, for the Sessions tab). All-day events, events that end
     before they start and ones longer than MAX_SESSION are left out."""
     events = ((response or {}).get(entity_id) or {}).get("events") or []
@@ -92,7 +94,8 @@ def parse_events(response, entity_id: str, now: datetime.datetime, past: bool = 
         start, end = _when(ev.get("start")), _when(ev.get("end"))
         if start is None or end is None or end <= start or end - start > MAX_SESSION or (end > now if past else end <= now):
             continue
-        out.append({"start": start, "end": end, "summary": str(ev.get("summary") or "Saving session")[:80]})
+        out.append({"start": start, "end": end, "summary": str(ev.get("summary") or "Saving session")[:80],
+                    "supplier": supplier})
     return merge(out)
 
 
@@ -103,7 +106,8 @@ def merge(sessions: list[dict]) -> list[dict]:
     one twice), so the page can show each when it runs."""
     merged: list[dict] = []
     for s in sorted(sessions, key=lambda s: s["start"]):
-        part = {"start": s["start"], "end": s["end"], "summary": s.get("summary") or "Saving session"}
+        part = {"start": s["start"], "end": s["end"], "summary": s.get("summary") or "Saving session",
+                "supplier": s.get("supplier")}
         if merged and s["start"] <= merged[-1]["end"]:
             m = merged[-1]
             m["end"] = max(m["end"], s["end"])
@@ -164,7 +168,7 @@ def sensor_events(states: list, sources: list[dict], now: datetime.datetime,
             continue
         kind = readings.get("type")
         out.append({"start": start, "end": end,
-                    "summary": f"{src['name']} event" + (f" ({kind})" if kind else "")})
+                    "summary": f"{src['name']} event" + (f" ({kind})" if kind else ""), "supplier": src["name"]})
     return out
 
 

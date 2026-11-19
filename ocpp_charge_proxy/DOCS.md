@@ -419,7 +419,10 @@ Assistant starts) the sessions already found are kept, not cancelled.
   running when the session is found unplugs for it (straight away, if it's
   begun) and carries on after it the same way. The weekly entries are
   skipped that day and the new times are added as one-offs. Sessions are
-  shown hatched on the schedule.
+  shown hatched on the schedule in their supplier's colour (Octopus
+  Energy's purple, EDF's yellow, E.ON Next's red; violet for another, e.g.
+  an Axle Energy event), paler until they start, so they aren't mistaken
+  for an off-peak time (hatched grey).
 - **Plug in before a session** (off by default), with **Charge for** hours:
   as soon as a session is known, a charge for that long before it is added
   to the schedule as one-offs (purple), ending as the session starts. Only

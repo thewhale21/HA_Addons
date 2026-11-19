@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.98.1 — Saving sessions in their supplier's colour
+
+- **Improvement:** saving sessions on the schedule are hatched in their
+  supplier's colour (Octopus Energy's purple, EDF's yellow, E.ON Next's
+  red; violet for another, e.g. an Axle Energy event), paler until they
+  start and stronger while they run, not grey like an off-peak time. The
+  same colour on the Overview's strip and the Sessions tab, and the
+  schedule's key shows them.
+
 ## 2.98.0 — High exports shown with Where it earns the most, and a switch for them
 
 - **Feature:** with Charge *Where it earns the most*, High export half hours

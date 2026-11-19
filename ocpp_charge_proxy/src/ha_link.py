@@ -1159,10 +1159,12 @@ class HaLink:
                                      "end_date_time": (now + SAVING_LOOK_AHEAD).isoformat(timespec="seconds")},
                     "return_response": True,
                 })
-                sessions += parse_events((result or {}).get("response"), entity, now)
+                sessions += parse_events((result or {}).get("response"), entity, now, supplier=info["supplier"])
                 # the last week's that are over, for the Sessions tab (kept in the calendar)
-                self.saving_past = [{"start": p["start"].isoformat(), "end": p["end"].isoformat(), "summary": p["summary"]}
-                                    for x in parse_events((result or {}).get("response"), entity, now, past=True)
+                self.saving_past = [{"start": p["start"].isoformat(), "end": p["end"].isoformat(), "summary": p["summary"],
+                                     "supplier": p.get("supplier")}
+                                    for x in parse_events((result or {}).get("response"), entity, now, past=True,
+                                                          supplier=info["supplier"])
                                     for p in (x.get("parts") or [x])]  # (each as it ran)
             sessions = merge_sessions(sessions)
         except Exception as err:

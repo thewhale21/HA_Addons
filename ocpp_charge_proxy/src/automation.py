@@ -1811,7 +1811,8 @@ class Automation:
             keep.append(r)
         known = {r["id"] for r in keep}
         iso = lambda t: _iso_local(self._to_local(t))
-        parts_of = lambda x: [{"start": iso(p["start"]), "end": iso(p["end"]), "summary": p["summary"]}
+        parts_of = lambda x: [{"start": iso(p["start"]), "end": iso(p["end"]), "summary": p["summary"],
+                               **({"supplier": p["supplier"]} if p.get("supplier") else {})}
                               for p in x.get("parts") or []]
         for r in keep:  # (what it's made of can change while it's the same, e.g. a second source adds one)
             if new is not None and r["id"] in new and parts_of(new[r["id"]]) != (r.get("parts") or []):
@@ -1819,12 +1820,18 @@ class Automation:
                 if not r["parts"]:
                     r.pop("parts")
                 changed = True
+            # (whose it is, for its colour on the page: known once it's read again)
+            if new is not None and r["id"] in new and new[r["id"]].get("supplier") and \
+                    r.get("supplier") != new[r["id"]]["supplier"]:
+                r["supplier"] = new[r["id"]]["supplier"]
+                changed = True
         for sid, x in (new or {}).items():
             if sid in known:
                 continue
             # in local time (the add-on's TZ), as the rest of the schedule
             keep.append({"id": sid, "start": iso(x["start"]), "end": iso(x["end"]),
                          "summary": x.get("summary") or "Saving session",
+                         **({"supplier": x["supplier"]} if x.get("supplier") else {}),
                          "changes": {"skips": [], "added": []}, "precharged": False, "notes": [],
                          **({"parts": parts_of(x)} if x.get("parts") else {})})
             logger.info("Saving session found: %s–%s", x["start"].astimezone().strftime("%a %d %b %H:%M"),
@@ -3037,6 +3044,7 @@ class Automation:
         for r in self.saving_sessions:
             pre = (r.get("pre") or {}).get("changes") or {}
             out.append({"id": r["id"], "start": r["start"], "end": r["end"], "summary": r.get("summary"),
+                        "supplier": r.get("supplier"),  # (whose: its colour on the page)
                         "parts": r.get("parts") or [],  # the overlapping ones it's made of, each as it runs
                         "notes": r.get("notes") or [],
                         "skips": (r["changes"].get("skips") or []) + (pre.get("skips") or []),
