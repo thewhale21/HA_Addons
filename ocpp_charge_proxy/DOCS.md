@@ -387,16 +387,8 @@ the car's charging out of your supplier's saving sessions, read from a Home
 Assistant calendar: every upcoming event in it is a session. The calendar
 is read every 5 minutes, up to 8 days ahead.
 
-**Axle Energy** events are read from its sensors instead,
-`sensor.axle_energy_event_start`, `sensor.axle_energy_event_end` and
-`sensor.axle_energy_event_type`, found automatically (the card lists them).
-Its **export** events are saving sessions; its **import** events (when it
-wants you to use more) aren't. With a calendar too, sessions from either
-count (overlapping ones are one session). Without a calendar, Axle's
-sensors are enough. While the sensors are unavailable (e.g. as Home
-Assistant starts) the sessions already found from them are kept, not
-cancelled, and the calendar is still read; the card shows them as
-**Unavailable**.
+**Axle Energy**'s events are on their own card (see below); its export
+events are saving sessions, handled as this card says.
 
 - **Calendar:** found automatically: Octopus Energy's
   `calendar.octopus_energy_<account>_octoplus_power_down` (or the older
@@ -482,6 +474,27 @@ entities). It's read every 5 minutes, up to 8 days ahead.
   moved; turning the card off puts everything back.
 
 They're shown hatched in green on the schedule and the Overview.
+
+### Axle Energy
+
+The **Axle Energy** card on the Automations tab (off by default; on after
+the update if you had **Saving sessions** on, as its events came with them
+before) reads Axle Energy's events from its sensors,
+`sensor.axle_energy_event_start`, `sensor.axle_energy_event_end` and
+`sensor.axle_energy_event_type`, found automatically (the card lists them),
+every 5 minutes.
+
+- **Export events as saving sessions** (on): when Axle wants you to use
+  less. They're handled as the **Saving sessions** card says (**No charging
+  during a session**; **Plug in before a session** only while that card is
+  on). With a saving sessions calendar too, overlapping sessions are one.
+- **Import events as free electricity sessions** (off): when Axle wants you
+  to use more. They're off-peak times, as the free electricity sessions:
+  your slots move before them and the automatic schedule plans around them.
+
+While its sensors are unavailable (e.g. as Home Assistant starts) the events
+already found are kept, not cancelled, and the calendars are still read.
+Turning the card off puts back anything its events changed.
 
 ### Schedule, auto re-plug and start-up
 

@@ -316,9 +316,6 @@ def test_saving_sessions_read_from_the_found_calendar():
                                  "summary": "Saving Session", "supplier": "Octopus Energy"}]
     assert asked[0]["service"] == "get_events" and asked[0]["target"] == {"entity_id": cal} and asked[0]["return_response"]
     assert link.saving_info["entity"] == cal and link.saving_info["auto"] and link.saving_info["supplier"] == "Octopus Energy"
-    # Axle Energy's sensors weren't there: looked for, not found (the page says so)
-    assert link.saving_info["sensors"] == []
-    assert link.saving_info["sensors_known"] == [{"name": "Axle Energy", "entity": "sensor.…axle_energy_event_start"}]
 
     async def no_calendar():
         return [{"entity_id": "calendar.home", "state": "off", "attributes": {}}]
@@ -327,54 +324,60 @@ def test_saving_sessions_read_from_the_found_calendar():
     assert _run(link.read_saving_sessions()) is None and "No saving sessions calendar" in link.saving_info["error"]
 
 
-def test_saving_sessions_read_from_axle_energy_without_a_calendar():
+def test_axle_energy_events_read_from_its_sensors(caplog):
     link, _ = _link()
     asked = []
-
     start = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)).replace(
         hour=19, minute=0, second=0, microsecond=0)
+    kind = ["export"]
 
     async def states():
         return [{"entity_id": "sensor.axle_energy_event_start", "state": start.isoformat()},
                 {"entity_id": "sensor.axle_energy_event_end", "state": (start + datetime.timedelta(hours=1)).isoformat()},
-                {"entity_id": "sensor.axle_energy_event_type", "state": "export"}]
+                {"entity_id": "sensor.axle_energy_event_type", "state": kind[0]}]
 
     async def query(payload, timeout=30):
         asked.append(payload)
         return {}
 
     link.all_states, link.query = states, query
-    sessions = _run(link.read_saving_sessions())
-    assert [(s["start"].hour, s["end"].hour) for s in sessions] == [(19, 20)] and not asked  # no calendar asked
-    assert link.saving_info["entity"] is None and link.saving_info["error"] is None
-    assert link.saving_info["sensors"] == [{"name": "Axle Energy", "entity": "sensor.axle_energy_event_start"}]
+    sessions = _run(link.read_axle_sessions())
+    assert [(s["start"].hour, s["end"].hour, s.get("kind"), s["supplier"]) for s in sessions] == [(19, 20, None, "Axle Energy")]
+    assert not asked and link.axle_info["error"] is None  # (no calendar asked)
+    assert link.axle_info["sensors"] == [{"name": "Axle Energy", "entity": "sensor.axle_energy_event_start"}]
+    # an import event (use more): a free electricity session, if that's on
+    kind[0] = "import"
+    assert _run(link.read_axle_sessions()) == []
+    link.settings.update(axle_import=True)
+    assert [s.get("kind") for s in _run(link.read_axle_sessions())] == ["free"]
+    link.settings.update(axle_export=False)
+    kind[0] = "export"
+    assert _run(link.read_axle_sessions()) == []
 
     async def unavailable():
         return [dict(st, state="unavailable") for st in await states()]
 
     link.all_states = unavailable
-    assert _run(link.read_saving_sessions()) is None and "unavailable" in link.saving_info["error"]
+    assert _run(link.read_axle_sessions()) is None and "unavailable" in link.axle_info["error"]
+    assert "Couldn't read Axle Energy's events" in caplog.text and "power_down" not in caplog.text
+
+    async def none():
+        return [{"entity_id": "calendar.home", "state": "off", "attributes": {}}]
+
+    link.all_states = none
+    assert _run(link.read_axle_sessions()) is None and "weren't found" in link.axle_info["error"]
+    assert link.axle_info["sensors_known"] == [{"name": "Axle Energy", "entity": "sensor.…axle_energy_event_start"}]
 
 
-def test_a_calendar_is_still_read_with_axle_energys_sensors_unavailable(caplog):
-    link, _ = _link()
-    cal = "calendar.octopus_energy_a_1_octoplus_power_down"
-
-    async def states():
-        return [{"entity_id": cal, "state": "off", "attributes": {}},
-                {"entity_id": "sensor.axle_energy_event_start", "state": "unavailable"},
-                {"entity_id": "sensor.axle_energy_event_end", "state": "unavailable"},
-                {"entity_id": "sensor.axle_energy_event_type", "state": "unavailable"}]
-
-    async def query(payload, timeout=30):
-        return {"response": {cal: {"events": [
-            {"start": "2099-01-05T17:00:00+00:00", "end": "2099-01-05T18:00:00+00:00", "summary": "Power Down"}]}}}
-
-    link.all_states, link.query = states, query
-    sessions = _run(link.read_saving_sessions())
-    assert len(sessions) == 1 and link.saving_info["error"] is None
-    assert link.saving_unread == ["Axle Energy"] and link.saving_info["sensors"][0]["unavailable"]
-    assert "Axle Energy's sensors are unavailable" in caplog.text and "Couldn't read" not in caplog.text
+def test_axle_energy_on_with_saving_sessions_from_before(tmp_path):
+    """Before 2.101.0 its events came with the saving sessions: on with them after the update."""
+    import json
+    (tmp_path / "sensors.json").write_text(json.dumps({"saving_on": True}))
+    link, _ = _link(tmp_path)
+    assert link.settings["saving_on"] is True and link.settings["axle_on"] is True
+    (tmp_path / "sensors.json").write_text(json.dumps({"saving_on": True, "axle_on": False}))
+    assert _link(tmp_path)[0].settings["axle_on"] is False
+    assert validate_settings({})["axle_on"] is False and validate_settings({})["axle_export"] is True
 
 
 def test_read_only_keeps_the_next_slot_sensors_as_they_were(tmp_path):

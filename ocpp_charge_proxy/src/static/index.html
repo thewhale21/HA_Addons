@@ -863,7 +863,7 @@
           <h2>Saving sessions<span class="spacer"></span>
             <label class="switch"><input type="checkbox" id="save-on" aria-label="Saving sessions"><span></span></label>
           </h2>
-          <div class="note" style="margin:0 0 10px">Reads your supplier's saving sessions from a Home Assistant calendar (or Axle Energy's sensors). What it does about them is up to the two switches below: move charging out of each session, and add a charge before it. <details class="more"><summary>More</summary><div>Octopus Energy's Saving Sessions (Power Down), E.ON Next's and EDF's sessions: any upcoming event in the calendar is a session. Axle Energy's events are read from its sensors (<code>sensor.axle_energy_event_start</code>, <code>_end</code> and <code>_type</code>), found automatically: its export events are saving sessions (its import events, when it wants you to use more, aren't). With both, sessions from either count. The calendar is read every 5 minutes, up to 8 days ahead. A session that's taken out of the calendar before it starts puts back anything it changed.</div></details></div>
+          <div class="note" style="margin:0 0 10px">Reads your supplier's saving sessions from a Home Assistant calendar. What it does about them is up to the two switches below: move charging out of each session, and add a charge before it. <details class="more"><summary>More</summary><div>Octopus Energy's Saving Sessions (Power Down), E.ON Next's and EDF's sessions: any upcoming event in the calendar is a session. Axle Energy's events are on their own card (below); its export events follow the switches here too. The calendar is read every 5 minutes, up to 8 days ahead. A session that's taken out of the calendar before it starts puts back anything it changed.</div></details></div>
           <div class="note" id="save-what" style="margin:-4px 0 10px;color:var(--text)"></div>
           <div class="row"><div class="grow">Calendar<div class="note" style="margin:0">Where your saving sessions show. <details class="more"><summary>More</summary><div>Found automatically: Octopus Energy's <code>calendar.octopus_energy_…_octoplus_power_down</code> (or the older <code>…_saving_sessions</code>), or another calendar whose name says saving or saver sessions, power down or demand flexibility (E.ON Next, EDF). Octopus's Power Up and free electricity calendars are left out. If yours isn't found, pick it (tick "Show all sensors in the lists" on the Settings tab to see every calendar).</div></details></div></div></div>
           <div class="row" style="margin-top:6px"><span class="picker" data-key="saving_entity" data-domain="calendar" data-fit="saving" data-none="Found automatically"></span></div>
@@ -891,6 +891,25 @@
           <div class="row" style="margin-top:6px"><span class="picker" data-key="free_entity" data-domain="calendar" data-fit="free" data-none="Found automatically"></span></div>
           <dl class="kv" id="free-info" style="margin-top:14px"></dl>
           <div id="free-list" class="sub" style="margin-top:6px"></div>
+        </div>
+        <div class="card">
+          <h2>Axle Energy<span class="spacer"></span>
+            <label class="switch"><input type="checkbox" id="axle-on" aria-label="Axle Energy"><span></span></label>
+          </h2>
+          <div class="note" style="margin:0 0 10px">Reads Axle Energy's events from its sensors. An export event (use less) can be a saving session, and an import event (use more) a free electricity session. <details class="more"><summary>More</summary><div>Its sensors, <code>sensor.axle_energy_event_start</code>, <code>_end</code> and <code>_type</code>, are found automatically (Axle Energy's Home Assistant integration). They hold its next event, read every 5 minutes. Export events are handled as the Saving sessions card says (No charging during a session, Plug in before a session, the latter only while that card is on); import events as free electricity sessions: nothing plugs in during them, your slots move before them and the automatic schedule plans around them. With a saving sessions calendar too, overlapping sessions are one. While its sensors are unavailable (e.g. as Home Assistant starts) the events already found are kept, not cancelled. Turning this off puts back anything they changed.</div></details></div>
+          <div class="note" id="axle-what" style="margin:-4px 0 10px;color:var(--text)"></div>
+          <div id="axle-opts">
+            <div class="row">
+              <div class="grow">Export events as saving sessions<div class="note" style="margin:0">When Axle wants you to use less</div></div>
+              <label class="switch"><input type="checkbox" id="axle-export" aria-label="Axle Energy export events as saving sessions"><span></span></label>
+            </div>
+            <div class="row">
+              <div class="grow">Import events as free electricity sessions<div class="note" style="margin:0">When Axle wants you to use more</div></div>
+              <label class="switch"><input type="checkbox" id="axle-import" aria-label="Axle Energy import events as free electricity sessions"><span></span></label>
+            </div>
+          </div>
+          <dl class="kv" id="axle-info" style="margin-top:14px"></dl>
+          <div id="axle-list" class="sub" style="margin-top:6px"></div>
         </div>
         <div class="card">
           <h2>Automatic schedule<span class="spacer"></span>
@@ -2843,6 +2862,9 @@ function drawPickers() {
   if (document.activeElement !== $('save-hours')) $('save-hours').value = sim.edit.saving_plug_hours ?? 2;
   $('save-hours-row').hidden = !sim.edit.saving_plug;
   $('free-on').checked = !!sim.edit.free_on;
+  $('axle-on').checked = !!sim.edit.axle_on;
+  $('axle-export').checked = sim.edit.axle_export !== false;
+  $('axle-import').checked = !!sim.edit.axle_import;
   $('n-on').checked = !!sim.edit.notify_on;
   $('n-supplier').checked = !!sim.edit.notify_supplier;
   $('n-log').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.l === (sim.edit.notify_log || 'none')));
@@ -2912,16 +2934,11 @@ function drawSaving() {
     : 'sessions are only shown: charging isn\'t changed for them.');
   $('save-info').innerHTML = !on ? kv([['Status', '<span class="chip">Off</span>']]) : kv([
     ['Calendar', info.entity ? `<code>${esc(info.entity)}</code>${info.auto ? ' <span class="chip ok">Found</span>' : ' <span class="chip">Picked</span>'}${info.supplier ? ' <span class="muted">' + esc(info.supplier) + '</span>' : ''}`
-      : (info.sensors || []).length ? '<span class="chip">None</span>' : '<span class="chip warn">None found</span>'],
-    ...(info.sensors || []).map((x) => [esc(x.name), `<code>${esc(x.entity)}</code> ` + (x.unavailable
-      ? '<span class="chip warn">Unavailable</span> <span class="muted">its events aren\'t read for now (the calendar\'s are)</span>' : '<span class="chip ok">Found</span>')]),
-    // the sensor sources (Axle Energy) not found: their integration isn't installed, or named differently
-    ...(info.sensors_known || []).filter((k) => !(info.sensors || []).some((x) => x.name === k.name))
-      .map((k) => [esc(k.name), `<span class="chip">Not found</span> <span class="muted">looked for <code>${esc(k.entity)}</code></span>`]),
+      : '<span class="chip warn">None found</span>'],
     ['Status', info.error ? `<span class="chip warn">Not read</span> <span class="muted">${esc(info.error)}</span>`
       : info.read_at ? `<span class="chip ok">Read</span> <span class="muted">${ago(new Date(info.read_at * 1000).toISOString())}</span>` : '<span class="chip">Not read yet</span>'],
   ]);
-  const list = (on && a && a.schedule ? a.schedule.saving_sessions || [] : []).filter((x) => x.kind !== 'free' && new Date(x.end) > Date.now() - 86400000);
+  const list = (on && a && a.schedule ? a.schedule.saving_sessions || [] : []).filter((x) => x.kind !== 'free' && x.supplier !== 'Axle Energy' && new Date(x.end) > Date.now() - 86400000);
   $('save-list').innerHTML = !on ? '' : !list.length ? 'No saving sessions coming up.'
     : list.map((x) => `<div style="margin-top:4px"><span class="chip info">${esc(dateTime(x.start))}–${esc(hm(x.end))}</span> ${esc(x.parts && x.parts.length > 1 ? 'Saving sessions together' : x.summary || '')}`
       + (x.parts && x.parts.length > 1 ? x.parts.map((p) => { const on = new Date(p.start) <= Date.now() && Date.now() < new Date(p.end);
@@ -2940,9 +2957,32 @@ function drawFree() {
     ['Status', info.error ? `<span class="chip warn">Not read</span> <span class="muted">${esc(info.error)}</span>`
       : info.read_at ? `<span class="chip ok">Read</span> <span class="muted">${ago(new Date(info.read_at * 1000).toISOString())}</span>` : '<span class="chip">Not read yet</span>'],
   ]);
-  const list = (on && a && a.schedule ? a.schedule.saving_sessions || [] : []).filter((x) => x.kind === 'free' && new Date(x.end) > Date.now() - 86400000);
+  const list = (on && a && a.schedule ? a.schedule.saving_sessions || [] : []).filter((x) => x.kind === 'free' && x.supplier !== 'Axle Energy' && new Date(x.end) > Date.now() - 86400000);
   $('free-list').innerHTML = !on ? '' : !list.length ? 'No free electricity sessions coming up.'
     : list.map((x) => `<div style="margin-top:4px"><span class="chip ok">${esc(dateTime(x.start))}–${esc(hm(x.end))}</span> ${esc(x.summary && x.summary !== sessName(x) ? x.summary : '')}`
+      + (x.notes.length ? `<div class="muted">${x.notes.map(esc).join('; ')}</div>` : '') + '</div>').join('');
+}
+// Axle Energy card: its sensors and its events coming up
+function drawAxle() {
+  const d = sim.data, a = auto.data;
+  if (!d) return;
+  const st = d.settings || {}, on = !!st.axle_on, info = d.axle || {};
+  $('axle-opts').hidden = !on;
+  const exp = st.axle_export !== false, imp = !!st.axle_import;
+  $('axle-what').hidden = !on;
+  $('axle-what').innerHTML = !on ? '' : '<b>Now:</b> ' + (exp && imp ? 'export events are saving sessions, import events free electricity sessions.'
+    : exp ? 'export events are saving sessions; import events are left out.' : imp ? 'import events are free electricity sessions; export events are left out.'
+    : 'events are only read: neither kind changes charging.');
+  const found = info.sensors || [];
+  $('axle-info').innerHTML = !on ? kv([['Status', '<span class="chip">Off</span>']]) : kv([
+    ['Sensors', found.length ? found.map((x) => `<code>${esc(x.entity)}</code> <span class="chip ok">Found</span>`).join(' ')
+      : `<span class="chip warn">Not found</span> <span class="muted">looked for ${(info.sensors_known || []).map((k) => `<code>${esc(k.entity)}</code>`).join(', ')}</span>`],
+    ['Status', info.error ? `<span class="chip warn">Not read</span> <span class="muted">${esc(info.error)}</span>`
+      : info.read_at ? `<span class="chip ok">Read</span> <span class="muted">${ago(new Date(info.read_at * 1000).toISOString())}</span>` : '<span class="chip">Not read yet</span>'],
+  ]);
+  const list = (on && a && a.schedule ? a.schedule.saving_sessions || [] : []).filter((x) => x.supplier === 'Axle Energy' && new Date(x.end) > Date.now() - 86400000);
+  $('axle-list').innerHTML = !on ? '' : !list.length ? 'No Axle Energy events coming up.'
+    : list.map((x) => `<div style="margin-top:4px"><span class="chip ${x.kind === 'free' ? 'ok' : 'info'}">${esc(dateTime(x.start))}–${esc(hm(x.end))}</span> ${esc(sessName(x))}`
       + (x.notes.length ? `<div class="muted">${x.notes.map(esc).join('; ')}</div>` : '') + '</div>').join('');
 }
 function drawAutoPlugLast(d) {
@@ -3018,6 +3058,7 @@ function drawSimulation() {
   drawSupplierSettings();
   drawSaving();
   drawFree();
+  drawAxle();
   const e = d.ha_entities || {};
   const sensorList = [...(e.sensors || []), ...(e.slot_sensors || [])].map((id) => `<code>${esc(id)}</code>`).join('<br>');
   $('sim-entities').innerHTML = kv([
@@ -3309,6 +3350,12 @@ $('save-block').addEventListener('change', (e) => saveSensors({saving_block: e.t
   e.target.checked ? 'No charging during saving sessions' : 'Saving sessions don\'t stop charging now').then(() => setTimeout(() => refreshAutomation(true), 1500)));
 $('free-on').addEventListener('change', (e) => saveSensors({free_on: e.target.checked},
   e.target.checked ? 'Free electricity sessions on: kept clear, as off-peak times' : 'Free electricity sessions off: anything they changed is put back').then(() => setTimeout(() => refreshAutomation(true), 1500)));
+$('axle-on').addEventListener('change', (e) => saveSensors({axle_on: e.target.checked},
+  e.target.checked ? 'Axle Energy\'s events on' : 'Axle Energy\'s events off: anything they changed is put back').then(() => setTimeout(() => refreshAutomation(true), 1500)));
+$('axle-export').addEventListener('change', (e) => saveSensors({axle_export: e.target.checked},
+  e.target.checked ? 'Axle Energy\'s export events are saving sessions' : 'Axle Energy\'s export events are left out').then(() => setTimeout(() => refreshAutomation(true), 1500)));
+$('axle-import').addEventListener('change', (e) => saveSensors({axle_import: e.target.checked},
+  e.target.checked ? 'Axle Energy\'s import events are free electricity sessions' : 'Axle Energy\'s import events are left out').then(() => setTimeout(() => refreshAutomation(true), 1500)));
 $('save-plug').addEventListener('change', (e) => {
   $('save-hours-row').hidden = !e.target.checked;
   saveSensors({saving_plug: e.target.checked}, e.target.checked ? 'A charge is added before each saving session' : 'Nothing is added before saving sessions');
@@ -3399,6 +3446,7 @@ async function refreshAutomation(force) {
   drawAutoPlugLast(d);
   drawSaving();
   drawFree();
+  drawAxle();
   drawAutoSched();
   drawWeekSoon();
   refreshPopulatePlan();
@@ -5342,6 +5390,8 @@ function setupRows() {
       : onOff(true) + (($('save-list').textContent || '').trim() ? esc($('save-list').querySelector('div') ? 'Next: ' + $('save-list').querySelector('div').textContent.trim() : $('save-list').textContent.trim()) : '')},
     {t: 'Free electricity sessions', id: 'free', icon: 'bolt', sum: () => !chk('free-on') ? onOff(false)
       : onOff(true) + (($('free-list').textContent || '').trim() ? esc($('free-list').querySelector('div') ? 'Next: ' + $('free-list').querySelector('div').textContent.trim() : $('free-list').textContent.trim()) : '')},
+    {t: 'Axle Energy', id: 'axle', icon: 'bolt', sum: () => !chk('axle-on') ? onOff(false)
+      : onOff(true) + (($('axle-list').textContent || '').trim() ? esc($('axle-list').querySelector('div') ? 'Next: ' + $('axle-list').querySelector('div').textContent.trim() : $('axle-list').textContent.trim()) : '')},
     {t: 'Auto plug-in', id: 'auto-plug', icon: 'plug', sum: () => { const s = kvLine('sim-monitor', 'Status'), soc = kvLine('sim-monitor', 'Monitored SoC');
       return (s || onOff(chk('sim-auto'))) + (chk('sim-auto') && soc ? ` · now ${soc.replace(/<[^>]+>/g, '')}` : '')
         + (chk('sim-auto-ready') && sim.edit && sim.edit.trim_from === 'end' ? ' · over the limit: from the end' : ''); }},

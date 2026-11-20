@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.101.0 — Axle Energy on its own card
+
+- **Change:** Axle Energy's events have their own card on the Automations
+  tab, **Axle Energy**, instead of coming with the saving sessions. It's
+  on after the update if Saving sessions was on, so nothing changes until
+  you turn it off. Its sensors, whether they're found or unavailable, are
+  shown there.
+- **Feature:** Axle's import events (when it wants you to use more) can
+  be free electricity sessions: **Import events as free electricity
+  sessions** (off by default). Its export events stay saving sessions
+  (**Export events as saving sessions**, on).
+
 ## 2.100.1 — Saving sessions read with Axle Energy's sensors unavailable
 
 - **Fix:** while Axle Energy's sensors were unavailable, the saving

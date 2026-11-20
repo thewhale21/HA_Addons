@@ -172,10 +172,11 @@ def find_sensor_sources(states: list) -> list[dict]:
 
 
 def sensor_events(states: list, sources: list[dict], now: datetime.datetime,
-                  look_ahead: datetime.timedelta) -> Optional[list[dict]]:
-    """The sources' events not yet over, as parse_events gives them. None if a
-    sensor is unavailable (e.g. while its integration starts up), so the sessions
-    already known aren't taken as cancelled."""
+                  look_ahead: datetime.timedelta, types: Optional[tuple] = None) -> Optional[list[dict]]:
+    """The sources' events not yet over, as parse_events gives them, each with its "type"
+    (lower case; None without a type sensor). `types`: the types wanted (default: each
+    source's own, e.g. Axle's "export"). None if a sensor is unavailable (e.g. while its
+    integration starts up), so the sessions already known aren't taken as cancelled."""
     by_id = {st.get("entity_id", ""): st for st in states or []}
     out = []
     for src in sources:
@@ -183,7 +184,8 @@ def sensor_events(states: list, sources: list[dict], now: datetime.datetime,
                     for k in ("start", "end", "type") if src.get(k)}
         if any(v == "unavailable" for v in readings.values()):
             return None
-        if src.get("type") and src.get("types") and readings.get("type", "").lower() not in src["types"]:
+        wanted = types if types is not None else src.get("types")
+        if src.get("type") and wanted is not None and readings.get("type", "").lower() not in wanted:
             continue  # no event, or one of another type (Axle: "import", use more)
         if readings["start"].lower() in NO_READING or readings["end"].lower() in NO_READING:
             continue
@@ -192,7 +194,7 @@ def sensor_events(states: list, sources: list[dict], now: datetime.datetime,
                 or start > now + look_ahead:
             continue
         kind = readings.get("type")
-        out.append({"start": start, "end": end,
+        out.append({"start": start, "end": end, "type": kind.lower() if kind else None,
                     "summary": f"{src['name']} event" + (f" ({kind})" if kind else ""), "supplier": src["name"]})
     return out
 

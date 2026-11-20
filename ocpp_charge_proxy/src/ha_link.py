@@ -178,7 +178,7 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
     # Saving sessions (Automations tab)
     if "populate_auto" in raw:
         out["populate_auto"] = bool(raw["populate_auto"])
-    for key in ("saving_on", "saving_block", "saving_plug", "free_on"):
+    for key in ("saving_on", "saving_block", "saving_plug", "free_on", "axle_on", "axle_export", "axle_import"):
         if key in raw:
             out[key] = bool(raw[key])
     for key in ("saving_entity", "free_entity"):
@@ -300,6 +300,9 @@ def default_settings() -> dict:
         "saving_plug": False, "saving_plug_hours": DEFAULT_SAVING_PLUG_HOURS,
         # Free electricity sessions (Octopus Power Up): off; their calendar found automatically unless picked
         "free_on": False, "free_entity": "",
+        # Axle Energy's events (its sensors): off; export events are saving sessions, import ones
+        # (use more) free electricity sessions if that's on
+        "axle_on": False, "axle_export": True, "axle_import": False,
         # Notifications when the schedule changes: off, and where to (a notify service)
         "notify_on": False, "notify_service": "",
         "notify_supplier": False,  # ...and when your supplier sends something new
@@ -408,9 +411,8 @@ class HaLink:
         self.saving_past: list = []  # the calendar's sessions of the last week that are over
         self.saving_info: dict = {"entity": None, "auto": False, "supplier": None, "error": None,
                                   "read_at": None, "count": 0, "sensors": []}
-        # the sensor sources (Axle Energy) that were unavailable at the last read: their sessions
-        # aren't taken as cancelled, and the calendar's are still read
-        self.saving_unread: list[str] = []
+        # Axle Energy's events, read from its sensors (Automations › Axle Energy)
+        self.axle_info: dict = {"sensors": [], "sensors_known": [], "error": None, "read_at": None, "count": 0}
         self.free_info: dict = {"entity": None, "auto": False, "error": None, "read_at": None, "count": 0}
         self._reset_logic()
         self._load()
@@ -487,6 +489,9 @@ class HaLink:
 
     def _load(self) -> None:
         def use(data: dict) -> None:
+            if isinstance(data, dict) and "axle_on" not in data:
+                # (before 2.101.0 Axle Energy's events came with the saving sessions: on with them)
+                data = {**data, "axle_on": bool(data.get("saving_on"))}
             self.settings = validate_settings(data, default_settings())
             self.configured = True
         jsonfile.load(self._path, "Sensor settings", use)
@@ -1133,10 +1138,10 @@ class HaLink:
         return bool(info.get("current"))
 
     async def read_saving_sessions(self) -> Optional[list]:
-        """The saving sessions in the calendar (picked, or found by its name) and
-        from sensors (Axle Energy, src/suppliers.json saving_sessions.sensors), not
-        yet over, the next 8 days: [{"start", "end", "summary"}]; None if they
-        couldn't be read (nothing found, HA not connected...: see saving_info)."""
+        """The saving sessions in the calendar (picked, or found by its name), not yet
+        over, the next 8 days: [{"start", "end", "summary"}]; None if they couldn't be
+        read (no calendar, HA not connected...: see saving_info). Axle Energy's events
+        are read on their own (read_axle_sessions)."""
         info = self.saving_info
         entity = self.settings.get("saving_entity") or ""
         info["auto"] = not entity
@@ -1145,36 +1150,11 @@ class HaLink:
             if not entity:
                 entity = find_calendar(states) or ""
             info["entity"] = entity or None
-            sources = find_sensor_sources(states)
-            info["sensors"] = [{"name": x["name"], "entity": x["start"]} for x in sources]
-            # (and the ones looked for, so the page can say which weren't found)
-            info["sensors_known"] = [{"name": x["name"], "entity": "sensor.…" + x["start"]}
-                                     for x in suppliers.saving_words().get("sensors") or []]
-            if not entity and not sources:
+            if not entity:
                 info["error"] = "No saving sessions calendar found: pick yours"
                 return None
             now = datetime.datetime.now().astimezone()
             sessions = []
-            unread = []
-            if sources:
-                found = sensor_events(states, sources, now, SAVING_LOOK_AHEAD)
-                if found is None:
-                    names = ", ".join(x["name"] for x in sources)
-                    if not entity:
-                        raise RuntimeError(names + "'s sensors are unavailable")
-                    # (the calendar's still read: only these sensors' events aren't, and aren't taken as cancelled)
-                    unread = [x["name"] for x in sources]
-                    if unread != self.saving_unread:
-                        logger.warning("%s's sensors are unavailable: its events can't be read for now "
-                                       "(the saving sessions in %s still are)", names, entity)
-                else:
-                    sessions += found
-            if self.saving_unread and not unread:
-                logger.info("%s's sensors are back: its events are read again", ", ".join(self.saving_unread))
-            self.saving_unread = unread
-            for x in info["sensors"]:
-                if x["name"] in unread:
-                    x["unavailable"] = True
             info["supplier"] = None
             if entity:
                 name = next(((st.get("attributes") or {}).get("friendly_name") or "" for st in states
@@ -1197,12 +1177,44 @@ class HaLink:
             sessions = merge_sessions(sessions)
         except Exception as err:
             if info.get("error") != str(err):
-                logger.warning("Couldn't read the saving sessions (%s): %s",
-                               entity if entity and "sensors" not in str(err) else "no calendar, sensors only", err)
+                logger.warning("Couldn't read the saving sessions (%s): %s", entity or "no calendar", err)
             info["error"] = str(err) or type(err).__name__
             return None
         info.update(error=None, read_at=time.time(), count=len(sessions))
         return sessions
+
+    async def read_axle_sessions(self) -> Optional[list]:
+        """Axle Energy's events from its sensors (src/suppliers.json saving_sessions.sensors),
+        not yet over: its export events (use less) as saving sessions, if axle_export, and its
+        import events (use more) as free electricity sessions ("kind": "free"), if axle_import:
+        [{"start", "end", "summary", "supplier", "kind"?}]. None if they couldn't be read (its
+        sensors not found or unavailable: see axle_info), so none already found is cancelled."""
+        info, s = self.axle_info, self.settings
+        known = suppliers.saving_words().get("sensors") or []
+        info["sensors_known"] = [{"name": x["name"], "entity": "sensor.…" + x["start"]} for x in known]
+        try:
+            states = await self.all_states()
+            sources = find_sensor_sources(states)
+            info["sensors"] = [{"name": x["name"], "entity": x["start"]} for x in sources]
+            if not sources:
+                info["error"] = "Axle Energy's sensors weren't found: is its integration installed?"
+                return None
+            kinds = {**({"export": "saving"} if s.get("axle_export", True) else {}),
+                     **({"import": "free"} if s.get("axle_import") else {})}
+            now = datetime.datetime.now().astimezone()
+            found = sensor_events(states, sources, now, SAVING_LOOK_AHEAD, types=tuple(kinds))
+            if found is None:
+                raise RuntimeError("Axle Energy's sensors are unavailable: its events can't be read for now")
+            events = [{**x, **({"kind": "free"} if kinds.get(x.get("type")) == "free" else {})} for x in found]
+        except Exception as err:
+            if info.get("error") != str(err):
+                logger.warning("Couldn't read Axle Energy's events: %s", err)
+            info["error"] = str(err) or type(err).__name__
+            return None
+        if info.get("error") and "unavailable" in info["error"]:
+            logger.info("Axle Energy's sensors are back: its events are read again")
+        info.update(error=None, read_at=time.time(), count=len(events))
+        return events
 
     async def read_free_sessions(self) -> Optional[list]:
         """The free electricity sessions (Octopus Power Up) in their calendar (picked, or
@@ -1288,6 +1300,7 @@ class HaLink:
             "configured": self.configured,
             "saving": self.saving_info,
             "free": self.free_info,
+            "axle": self.axle_info,
             "ha_entities": {
                 "plugged_in": self.plug_sync.entity_id,
                 "charge_now": [{"entity_id": e, "hours": h} for e, h in self.charge_buttons.items()],

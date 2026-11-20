@@ -374,50 +374,52 @@ async def run() -> None:
     ha_link.on_auto_plug = on_auto_plug
 
     async def saving_sessions_loop() -> None:
-        """Saving sessions and free electricity sessions (Automations tab): read their
-        calendars every few minutes (and straight after a setting changes), keep the
-        schedule clear of them, and add a charge before each saving session if that's on."""
-        last_read, sessions, last_settings = 0.0, None, None
-        free, free_read, free_settings = None, 0.0, None
+        """Saving sessions, free electricity sessions and Axle Energy's events (Automations
+        tab): read every few minutes (and straight after a setting changes), keep the schedule
+        clear of them, and add a charge before each saving session if that's on."""
+        from src.saving_sessions import merge as merge_sessions
+        # each source: [last read (monotonic), the settings it was read with, what it found
+        # (None: not read yet, or couldn't be)]
+        got = {k: [0.0, None, None] for k in ("saving", "free", "axle")}
+        readers = {"saving": ha_link.read_saving_sessions, "free": ha_link.read_free_sessions,
+                   "axle": ha_link.read_axle_sessions}
         while True:
             try:
                 s = ha_link.settings
-                saving_on, free_on = bool(s.get("saving_on")), bool(s.get("free_on"))
-                if not saving_on:
+                on = {"saving": bool(s.get("saving_on")), "free": bool(s.get("free_on")),
+                      "axle": bool(s.get("axle_on"))}
+                wants = {"saving": (s.get("saving_entity"), s.get("saving_block"), s.get("saving_plug"), s.get("saving_plug_hours")),
+                         "free": s.get("free_entity"), "axle": (s.get("axle_export", True), s.get("axle_import"))}
+                for k in got:
+                    if not on[k]:
+                        got[k] = [0.0, None, None]
+                if not on["saving"]:
                     automation.saving_past = []
-                    sessions, last_settings = None, None
-                if not free_on:
-                    free, free_settings = None, None
-                if not saving_on and not free_on:
+                if not any(on.values()):
                     if automation.clear_saving_sessions():
                         automation.publish(shared_state)
                 else:
-                    if saving_on:
-                        wanted = (s.get("saving_entity"), s.get("saving_block"), s.get("saving_plug"), s.get("saving_plug_hours"))
-                        if wanted != last_settings or time.monotonic() - last_read >= SAVING_READ_S:
-                            found = await ha_link.read_saving_sessions()
-                            last_read, last_settings = time.monotonic(), wanted
+                    for k, g in got.items():
+                        if on[k] and (wants[k] != g[1] or time.monotonic() - g[0] >= SAVING_READ_S):
+                            found = await readers[k]()
+                            g[0], g[1] = time.monotonic(), wants[k]
                             if found is not None:
-                                sessions = found
-                                automation.saving_past = ha_link.saving_past
-                    if free_on:
-                        wanted = s.get("free_entity")
-                        if wanted != free_settings or time.monotonic() - free_read >= SAVING_READ_S:
-                            found = await ha_link.read_free_sessions()
-                            free_read, free_settings = time.monotonic(), wanted
-                            if found is not None:
-                                free = [{**x, "kind": "free"} for x in found]
-                    # (one that's on but couldn't be read yet: its sessions aren't taken as cancelled)
-                    unread = tuple(k for k, on, got in (("saving", saving_on, sessions), ("free", free_on, free))
-                                   if on and got is None)
-                    both = None if len(unread) == int(saving_on) + int(free_on) else \
-                        (sessions or []) + (free or [])
-                    if saving_on:
-                        unread += tuple(ha_link.saving_unread)  # (e.g. Axle Energy's sensors unavailable)
+                                g[2] = [{**x, "kind": "free"} for x in found] if k == "free" else found
+                                if k == "saving":
+                                    automation.saving_past = ha_link.saving_past
+                    # (one that's on but couldn't be read: its sessions aren't taken as cancelled.
+                    # The calendars by kind; Axle's by its name, as its events can be either kind)
+                    unread = tuple({"saving": "saving", "free": "free", "axle": "Axle Energy"}[k]
+                                   for k in got if on[k] and got[k][2] is None)
+                    every = [x for k in got if on[k] for x in got[k][2] or []]
+                    # (overlapping ones of a kind are one session, e.g. from a calendar and from Axle)
+                    both = None if len(unread) == sum(on.values()) else \
+                        merge_sessions([x for x in every if x.get("kind") != "free"]) + \
+                        merge_sessions([x for x in every if x.get("kind") == "free"])
                     sc = ha_link.smart_charging()
                     automation.limit_reset = sc.get("limit_reset")
                     cap = sc.get("limit_min") if automation.ready_time and not automation.override_guards else None
-                    plug_hours = float(s.get("saving_plug_hours") or 2) if s.get("saving_plug") and saving_on else None
+                    plug_hours = float(s.get("saving_plug_hours") or 2) if s.get("saving_plug") and on["saving"] else None
                     if automation.sync_saving_sessions(both, bool(s.get("saving_block")), ha_link.ready_times,
                                                        cap, sc.get("provider") or "your supplier", plug_hours, unread):
                         automation.publish(shared_state)
