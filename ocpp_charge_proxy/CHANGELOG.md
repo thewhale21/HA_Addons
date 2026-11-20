@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.100.1 — Saving sessions read with Axle Energy's sensors unavailable
+
+- **Fix:** while Axle Energy's sensors were unavailable, the saving
+  sessions calendar wasn't read either, and the log said it couldn't read
+  the calendar (named), as if that were the problem. The calendar is now
+  read all the same; only Axle's events wait (the ones already found are
+  kept), the log says so once, and the Saving sessions card shows Axle's
+  sensors as **Unavailable**.
+
 ## 2.100.0 — Free electricity sessions
 
 - **Feature:** Automations › **Free electricity sessions** (off by

@@ -1819,7 +1819,8 @@ class Automation:
         to the schedule as soon as it's known (see _plan_precharge).
         Sessions with "kind": "free" are free electricity sessions: always off-peak
         times, with nothing added before them. `unread`: the kinds ("saving", "free")
-        that couldn't be read this time: theirs aren't taken as cancelled.
+        and sources (a supplier's name, e.g. "Axle Energy": its sensors unavailable) that
+        couldn't be read this time: theirs aren't taken as cancelled.
         Returns whether anything changed (it's saved then)."""
         now = self._now()
         changed = False
@@ -1831,7 +1832,8 @@ class Automation:
             if end < now - SAVING_KEEP:
                 changed = True
                 continue
-            if new is not None and r["id"] not in new and start > now and kind_of(r) not in unread:
+            if new is not None and r["id"] not in new and start > now and kind_of(r) not in unread \
+                    and r.get("supplier") not in unread:
                 self._undo_session(r)
                 self._undo_pre(r)
                 logger.info("%s %s–%s is no longer in the calendar%s", session_name(r), start.strftime("%a %H:%M"),

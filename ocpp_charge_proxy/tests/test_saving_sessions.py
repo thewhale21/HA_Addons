@@ -538,6 +538,17 @@ def test_free_and_saving_sessions_together():
     assert not any(x < _at(5, 20) and y > _at(5, 19) for x, y in a.windows())
 
 
+def test_a_sources_sessions_arent_cancelled_while_it_cant_be_read():
+    a, _ = _automation()
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    axle = dict(_session(5, 18, 19), supplier="Axle Energy")
+    a.sync_saving_sessions([axle], block=True)
+    a.sync_saving_sessions([], block=True, unread=("Axle Energy",))  # (its sensors unavailable)
+    assert len(a.saving_sessions) == 1 and _windows(a)[0] == ("05 14:30", "05 18:00")
+    a.sync_saving_sessions([], block=True)
+    assert a.saving_sessions == []
+
+
 def test_free_sessions_in_the_schedule_notifications():
     from src.schedule_notify import causes
     r = [{"start": "2026-10-05T18:00:00+00:00", "end": "2026-10-05T19:00:00+00:00", "kind": "free"},

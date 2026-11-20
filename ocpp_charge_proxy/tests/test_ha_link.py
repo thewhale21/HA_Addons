@@ -356,6 +356,27 @@ def test_saving_sessions_read_from_axle_energy_without_a_calendar():
     assert _run(link.read_saving_sessions()) is None and "unavailable" in link.saving_info["error"]
 
 
+def test_a_calendar_is_still_read_with_axle_energys_sensors_unavailable(caplog):
+    link, _ = _link()
+    cal = "calendar.octopus_energy_a_1_octoplus_power_down"
+
+    async def states():
+        return [{"entity_id": cal, "state": "off", "attributes": {}},
+                {"entity_id": "sensor.axle_energy_event_start", "state": "unavailable"},
+                {"entity_id": "sensor.axle_energy_event_end", "state": "unavailable"},
+                {"entity_id": "sensor.axle_energy_event_type", "state": "unavailable"}]
+
+    async def query(payload, timeout=30):
+        return {"response": {cal: {"events": [
+            {"start": "2099-01-05T17:00:00+00:00", "end": "2099-01-05T18:00:00+00:00", "summary": "Power Down"}]}}}
+
+    link.all_states, link.query = states, query
+    sessions = _run(link.read_saving_sessions())
+    assert len(sessions) == 1 and link.saving_info["error"] is None
+    assert link.saving_unread == ["Axle Energy"] and link.saving_info["sensors"][0]["unavailable"]
+    assert "Axle Energy's sensors are unavailable" in caplog.text and "Couldn't read" not in caplog.text
+
+
 def test_read_only_keeps_the_next_slot_sensors_as_they_were(tmp_path):
     """2.95.3: Read only on, the next slot sensors keep what they were then (also after a restart),
     so Predbat plans on what was going to happen; off, they follow the schedule again."""

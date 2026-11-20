@@ -2913,7 +2913,8 @@ function drawSaving() {
   $('save-info').innerHTML = !on ? kv([['Status', '<span class="chip">Off</span>']]) : kv([
     ['Calendar', info.entity ? `<code>${esc(info.entity)}</code>${info.auto ? ' <span class="chip ok">Found</span>' : ' <span class="chip">Picked</span>'}${info.supplier ? ' <span class="muted">' + esc(info.supplier) + '</span>' : ''}`
       : (info.sensors || []).length ? '<span class="chip">None</span>' : '<span class="chip warn">None found</span>'],
-    ...(info.sensors || []).map((x) => [esc(x.name), `<code>${esc(x.entity)}</code> <span class="chip ok">Found</span>`]),
+    ...(info.sensors || []).map((x) => [esc(x.name), `<code>${esc(x.entity)}</code> ` + (x.unavailable
+      ? '<span class="chip warn">Unavailable</span> <span class="muted">its events aren\'t read for now (the calendar\'s are)</span>' : '<span class="chip ok">Found</span>')]),
     // the sensor sources (Axle Energy) not found: their integration isn't installed, or named differently
     ...(info.sensors_known || []).filter((k) => !(info.sensors || []).some((x) => x.name === k.name))
       .map((k) => [esc(k.name), `<span class="chip">Not found</span> <span class="muted">looked for <code>${esc(k.entity)}</code></span>`]),

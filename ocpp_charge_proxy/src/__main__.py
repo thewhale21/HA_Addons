@@ -412,6 +412,8 @@ async def run() -> None:
                                    if on and got is None)
                     both = None if len(unread) == int(saving_on) + int(free_on) else \
                         (sessions or []) + (free or [])
+                    if saving_on:
+                        unread += tuple(ha_link.saving_unread)  # (e.g. Axle Energy's sensors unavailable)
                     sc = ha_link.smart_charging()
                     automation.limit_reset = sc.get("limit_reset")
                     cap = sc.get("limit_min") if automation.ready_time and not automation.override_guards else None

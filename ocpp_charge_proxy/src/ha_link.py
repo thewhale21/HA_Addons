@@ -408,6 +408,9 @@ class HaLink:
         self.saving_past: list = []  # the calendar's sessions of the last week that are over
         self.saving_info: dict = {"entity": None, "auto": False, "supplier": None, "error": None,
                                   "read_at": None, "count": 0, "sensors": []}
+        # the sensor sources (Axle Energy) that were unavailable at the last read: their sessions
+        # aren't taken as cancelled, and the calendar's are still read
+        self.saving_unread: list[str] = []
         self.free_info: dict = {"entity": None, "auto": False, "error": None, "read_at": None, "count": 0}
         self._reset_logic()
         self._load()
@@ -1152,11 +1155,26 @@ class HaLink:
                 return None
             now = datetime.datetime.now().astimezone()
             sessions = []
+            unread = []
             if sources:
                 found = sensor_events(states, sources, now, SAVING_LOOK_AHEAD)
                 if found is None:
-                    raise RuntimeError(", ".join(x["name"] for x in sources) + "'s sensors are unavailable")
-                sessions += found
+                    names = ", ".join(x["name"] for x in sources)
+                    if not entity:
+                        raise RuntimeError(names + "'s sensors are unavailable")
+                    # (the calendar's still read: only these sensors' events aren't, and aren't taken as cancelled)
+                    unread = [x["name"] for x in sources]
+                    if unread != self.saving_unread:
+                        logger.warning("%s's sensors are unavailable: its events can't be read for now "
+                                       "(the saving sessions in %s still are)", names, entity)
+                else:
+                    sessions += found
+            if self.saving_unread and not unread:
+                logger.info("%s's sensors are back: its events are read again", ", ".join(self.saving_unread))
+            self.saving_unread = unread
+            for x in info["sensors"]:
+                if x["name"] in unread:
+                    x["unavailable"] = True
             info["supplier"] = None
             if entity:
                 name = next(((st.get("attributes") or {}).get("friendly_name") or "" for st in states
@@ -1179,7 +1197,8 @@ class HaLink:
             sessions = merge_sessions(sessions)
         except Exception as err:
             if info.get("error") != str(err):
-                logger.warning("Couldn't read the saving sessions (%s): %s", entity or "sensors", err)
+                logger.warning("Couldn't read the saving sessions (%s): %s",
+                               entity if entity and "sensors" not in str(err) else "no calendar, sensors only", err)
             info["error"] = str(err) or type(err).__name__
             return None
         info.update(error=None, read_at=time.time(), count=len(sessions))

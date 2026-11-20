@@ -394,7 +394,9 @@ Its **export** events are saving sessions; its **import** events (when it
 wants you to use more) aren't. With a calendar too, sessions from either
 count (overlapping ones are one session). Without a calendar, Axle's
 sensors are enough. While the sensors are unavailable (e.g. as Home
-Assistant starts) the sessions already found are kept, not cancelled.
+Assistant starts) the sessions already found from them are kept, not
+cancelled, and the calendar is still read; the card shows them as
+**Unavailable**.
 
 - **Calendar:** found automatically: Octopus Energy's
   `calendar.octopus_energy_<account>_octoplus_power_down` (or the older
