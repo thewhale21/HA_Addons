@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.99.0 — Notifications for problems in the log
+
+- **Feature:** Settings › Notifications › **Problems in the log**: **None**
+  (the default), **Warnings and errors** or **Errors only**, sent through
+  the notify service picked there as they're logged. Lines a few seconds
+  apart come in one notification, and the same problem isn't sent again
+  for an hour, so one that keeps coming back doesn't flood your phone.
+
 ## 2.98.1 — Saving sessions in their supplier's colour
 
 - **Improvement:** saving sessions on the schedule are hatched in their

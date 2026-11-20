@@ -1024,6 +1024,10 @@
           <div class="grow">When your supplier sends something new<div class="note" style="margin:0">A setting or message the add-on doesn't know, something it had to refuse, or a new connection password (Diagnostics › Health › Supplier)</div></div>
           <label class="switch"><input type="checkbox" id="n-supplier" aria-label="Notify when your supplier sends something new"><span></span></label>
         </div>
+        <div class="row">
+          <div class="grow">Problems in the log<div class="note" style="margin:0">A notification for each warning or error the add-on logs. <details class="more"><summary>More</summary><div>Lines a few seconds apart come in one notification, and the same problem isn't sent again for an hour, so one that keeps coming back (e.g. Home Assistant unreachable) doesn't flood your phone. The whole log is under Diagnostics › Debug.</div></details></div></div>
+          <span class="seg" id="n-log" role="group" aria-label="Problems in the log"><button data-l="none">None</button><button data-l="warning">Warnings and errors</button><button data-l="error">Errors only</button></span>
+        </div>
         <div class="row"><div class="grow">Send to<div class="note" style="margin:0">A notify service: your phone's is <code>notify.mobile_app_…</code> (the Home Assistant app)</div></div></div>
         <div class="row" style="margin-top:6px"><span class="ctl" style="flex:1"><select id="n-service" style="width:100%" aria-label="Notify service"><option value="">Choose…</option></select></span>
           <button class="btn small" id="n-test" type="button" style="margin-left:8px">Send a test</button></div>
@@ -2826,6 +2830,7 @@ function drawPickers() {
   $('save-hours-row').hidden = !sim.edit.saving_plug;
   $('n-on').checked = !!sim.edit.notify_on;
   $('n-supplier').checked = !!sim.edit.notify_supplier;
+  $('n-log').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.l === (sim.edit.notify_log || 'none')));
   if (document.activeElement !== $('sl-lead')) $('sl-lead').value = sim.edit.slot_lead_min ?? 5;
   $('ro-on').checked = !!sim.edit.read_only;
   $('as-on').checked = !!sim.edit.auto_sched_on;
@@ -2866,6 +2871,12 @@ $('n-on').addEventListener('change', (e) => {
 $('n-supplier').addEventListener('change', (e) => {
   if (e.target.checked && !$('n-service').value) toast('Choose where to send them too');
   saveSensors({notify_supplier: e.target.checked}, e.target.checked ? 'You\'ll be notified when your supplier sends something new' : 'No notifications for that');
+});
+$('n-log').addEventListener('click', (ev) => {
+  const l = ev.target.dataset && ev.target.dataset.l; if (!l) return;
+  if (l !== 'none' && !$('n-service').value) toast('Choose where to send them too');
+  $('n-log').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.l === l));
+  saveSensors({notify_log: l}, {none: 'No notifications for problems in the log', warning: 'You\'ll be notified of warnings and errors in the log', error: 'You\'ll be notified of errors in the log'}[l]);
 });
 $('n-service').addEventListener('change', (e) => saveSensors({notify_service: e.target.value},
   e.target.value ? 'Notifications go to ' + e.target.value : 'No notify service chosen'));
@@ -5308,8 +5319,12 @@ function setupRows() {
     {t: 'Power', id: 'power', icon: 'power', sum: () => [kvLine('sim-power', 'Power source'), kvLine('sim-power', 'Reported')].filter(Boolean).join(' ')},
     {t: 'Reporting SoC', id: 'soc', icon: 'battery', sum: () => kvLine('sim-soc', 'Reporting SoC') + ' · ' + kvLine('sim-soc', 'Sensor').replace(/^[^·]*·\s*/, '')},
     {t: 'Voltage', id: 'voltage', icon: 'volt', sum: () => kvLine('sim-voltage', 'Using')},
-    {t: 'Notifications', id: 'notify', icon: 'bell', sum: () => (chk('n-on') || chk('n-supplier'))
-      ? `${[chk('n-on') && 'schedule changes', chk('n-supplier') && 'new from your supplier'].filter(Boolean).join(', ')} · to ${esc(val('n-service') || 'nowhere yet')}` : onOff(false)},
+    {t: 'Notifications', id: 'notify', icon: 'bell', sum: () => {
+      const lg = (($('n-log') && $('n-log').querySelector('button[aria-pressed="true"]')) || {}).dataset || {};
+      const what = [chk('n-on') && 'schedule changes', chk('n-supplier') && 'new from your supplier',
+        lg.l === 'warning' && 'warnings and errors', lg.l === 'error' && 'errors'].filter(Boolean);
+      return what.length ? `${what.join(', ')} · to ${esc(val('n-service') || 'nowhere yet')}` : onOff(false);
+    }},
     {t: 'Read only', id: 'read-only', icon: 'lock', sum: () => chk('ro-on') ? '<span class="chip warn">On</span>nothing plugs in by itself' : onOff(false)},
     {t: 'Next slot sensors', id: 'slot-sensors', icon: 'next', sum: () => `Move on ${esc(val('sl-lead') || 0)} min before each slot`},
   ], setbar);

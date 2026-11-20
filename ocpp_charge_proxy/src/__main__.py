@@ -24,7 +24,7 @@ from src.gui_data import GuiSources, Health, PowerHistory, sample_loop
 from src.ha_history import ChartHistory
 from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, charge_shown, auto_plug_charge, automation_loop, SLOT_LEAD_MIN
 from src.ha_link import HaLink
-from src import auto_schedule, log_filters, migrate, schedule_notify, suppliers
+from src import auto_schedule, log_filters, log_notify, migrate, schedule_notify, suppliers
 from src.persistence import Persistence
 from src.shared_state import SharedState
 
@@ -133,6 +133,9 @@ async def run() -> None:
     for line in imported:
         logger.info("Settings from another install: %s", line)
     log_buffer = install_log_buffer(log_format)  # recent lines for Diagnostics › Debug
+    # Warnings and errors, for their notifications (Settings › Notifications; src/log_notify.py)
+    log_notifier = log_notify.LogNotifier()
+    logging.getLogger().addHandler(log_notify.LogNotifyHandler(log_notifier, time.monotonic))
 
     logger.info("Starting OCPP Charge Proxy, connecting to %s", config.redacted_url)
     # The supplier defaults, to copy your changes from (src/suppliers.py)
@@ -606,7 +609,22 @@ async def run() -> None:
                 logger.warning("Schedule notifications cycle failed", exc_info=True)
             await asyncio.sleep(15)
 
+    async def log_notify_loop() -> None:
+        """Settings › Notifications › Problems in the log: warnings and errors
+        (or errors only) sent through the notify service, gathered and not
+        repeated (src/log_notify.py)."""
+        while True:
+            try:
+                setting = ha_link.settings.get("notify_log") if ha_link.settings.get("notify_service") else None
+                due = log_notifier.due(time.monotonic(), setting)
+                if due:
+                    await ha_link.notify(due[0], due[1] + "\nDiagnostics › Debug", force=True)
+            except Exception:
+                logger.debug("Log notifications cycle failed", exc_info=True)
+            await asyncio.sleep(5)
+
     charger_tasks = [
+        asyncio.create_task(log_notify_loop()),
         asyncio.create_task(schedule_notify_loop()),
         asyncio.create_task(supplier_marks_loop()),
         asyncio.create_task(saving_sessions_loop()),

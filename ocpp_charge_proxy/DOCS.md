@@ -670,6 +670,14 @@ notification. **Send a test** checks it reaches you.
 the first time each new thing shows up in Diagnostics › Health › Supplier ›
 **New from your supplier** (below).
 
+**Problems in the log** (**None** by default) sends the add-on's warnings
+and errors (**Warnings and errors**), or only its errors (**Errors only**),
+as they're logged. Lines a few seconds apart come in one notification (up
+to five, then "…and N more"), and the same problem (numbers aside) isn't
+sent again for an hour, so one that keeps coming back doesn't flood your
+phone. The web server's request lines and a notification that couldn't be
+sent aren't. The whole log is under Diagnostics › Debug.
+
 ### Predbat
 
 The add-on always publishes the schedule's next twelve slots as sensors, so

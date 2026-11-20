@@ -266,6 +266,11 @@ def test_saving_session_settings_are_checked():
 def test_notify_settings_are_checked_and_sent():
     s = validate_settings({"notify_on": True, "notify_service": "notify.mobile_app_pixel"})
     assert s["notify_on"] and s["notify_service"] == "notify.mobile_app_pixel"
+    # problems in the log: none, warnings (and errors) or errors only
+    assert validate_settings({"notify_log": "Error"})["notify_log"] == "error"
+    assert validate_settings({"notify_log": None})["notify_log"] == "none"
+    with pytest.raises(ValueError):
+        validate_settings({"notify_log": "debug"})
     for bad in ("light.kitchen", "notify.", "notify.Bad Name"):
         with pytest.raises(ValueError):
             validate_settings({"notify_service": bad})

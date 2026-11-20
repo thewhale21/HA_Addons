@@ -30,7 +30,7 @@ from typing import Awaitable, Callable, Optional
 from src.auto_schedule import is_rates_entity
 from src.automation import SLOT_LEAD_MIN
 from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
-from src import jsonfile, suppliers
+from src import jsonfile, log_notify, suppliers
 from src.ready_time import ALL_DAY_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity, target_time_ids
 from src.smart_charging import check_supplier, find_dispatch_sensors, provider_name, smart_charging
 from src.saving_sessions import (find_calendar, find_sensor_sources, is_saving_calendar, merge as merge_sessions,
@@ -103,6 +103,11 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         out["notify_on"] = bool(raw["notify_on"])
     if "notify_supplier" in raw:  # something new from your supplier (src/supplier_news.py)
         out["notify_supplier"] = bool(raw["notify_supplier"])
+    if "notify_log" in raw:  # warnings and errors in the log (src/log_notify.py)
+        value = str(raw["notify_log"] or "none").strip().lower()
+        if value not in log_notify.LEVELS:
+            raise ValueError("notify_log must be none, warning or error")
+        out["notify_log"] = value
     if "notify_service" in raw:
         value = str(raw["notify_service"] or "").strip()
         if value and not re.fullmatch(r"notify\.[a-z0-9_]+", value):
@@ -295,6 +300,7 @@ def default_settings() -> dict:
         # Notifications when the schedule changes: off, and where to (a notify service)
         "notify_on": False, "notify_service": "",
         "notify_supplier": False,  # ...and when your supplier sends something new
+        "notify_log": "none",  # ...and warnings ("warning": and errors) or errors in the log
         "slot_lead_min": SLOT_LEAD_MIN,
         "read_only": False,  # nothing plugs in or unplugs by itself (shown, logged, not done)
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
