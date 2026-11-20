@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.8 — The old options dropped
+
+- **Fix:** the Supervisor no longer warns "Option 'device_id' (and
+  'poll_seconds') does not exist in the schema" in its log. Those options
+  moved to the Settings tab in 0.3.0 but stayed in the add-on's saved
+  options; once they've been copied over, the add-on now saves its options
+  without them.
+
 ## 0.10.7 — Settings and Diagnostics as lists
 
 - **Improvement:** the Settings and Diagnostics tabs are now lists, as in

@@ -18,7 +18,7 @@ from src.api import create_api_app
 from src.app_settings import AppSettings
 from src.calendar_sync import CalendarSync
 from src.soc_check import check_sessions
-from src.config import load_config
+from src.config import drop_stale_options, load_config
 from src.debug_tools import DebugTools, install_log_buffer
 from src.ha_link import HaLink
 from src.health import Health
@@ -63,6 +63,8 @@ async def run() -> None:
 
     wake = asyncio.Event()  # the device picked on the page changed: read it now
     settings.adopt_options(config)  # device_id / poll_seconds from the options, before they moved to the page
+    # ...and then out of the options, so the Supervisor stops warning that they aren't in the schema
+    asyncio.get_running_loop().create_task(drop_stale_options())
     settings.on_change = lambda changes: wake.set() if {"device_id", "poll_seconds", "calendar"} & set(changes) else None
     calendar = CalendarSync(link, state)
 

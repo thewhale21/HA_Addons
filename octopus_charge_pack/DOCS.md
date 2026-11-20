@@ -38,7 +38,8 @@ and its sensors. In short: enter your Octopus API key on the
 - `src/app_settings.py`: the settings made on the page (device, read
   interval, log level), kept in `/data/settings.json`. A change wakes the
   reader at once. Pre-0.3.0 `device_id` / `poll_seconds` options are copied
-  over once.
+  over once, then dropped from the add-on's options (through the
+  Supervisor), so it stops warning that they aren't in the schema.
 - `src/reader.py`: at the read interval, reads the dispatches and works out
   the sensors' values. The last discharge start time is kept in
   `/data/state.json`, as the template sensor kept its state (and the

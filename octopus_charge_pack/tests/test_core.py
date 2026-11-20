@@ -30,6 +30,16 @@ def test_options_are_read_with_defaults(tmp_path):
     assert load_config(str(tmp_path / "missing.json")) == Config()
 
 
+def test_options_no_longer_in_the_schema_are_found_to_drop(tmp_path):
+    from src.config import stale_options
+    path = tmp_path / "options.json"
+    path.write_text(json.dumps({"api_key": "sk_live_x", "device_id": "dev", "poll_seconds": 60}))
+    assert stale_options(str(path)) == {"api_key": "sk_live_x"}
+    path.write_text(json.dumps({"api_key": "sk_live_x"}))
+    assert stale_options(str(path)) is None
+    assert stale_options(str(tmp_path / "missing.json")) is None
+
+
 def test_app_settings_are_checked_and_saved(tmp_path):
     seen = []
     s = AppSettings(str(tmp_path), on_change=seen.append)
