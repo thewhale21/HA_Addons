@@ -374,32 +374,50 @@ async def run() -> None:
     ha_link.on_auto_plug = on_auto_plug
 
     async def saving_sessions_loop() -> None:
-        """Saving sessions (Automations tab): read the calendar every few
-        minutes (and straight after a setting changes), keep the schedule
-        clear of them, and add a charge before each to the schedule if that's on."""
+        """Saving sessions and free electricity sessions (Automations tab): read their
+        calendars every few minutes (and straight after a setting changes), keep the
+        schedule clear of them, and add a charge before each saving session if that's on."""
         last_read, sessions, last_settings = 0.0, None, None
+        free, free_read, free_settings = None, 0.0, None
         while True:
             try:
                 s = ha_link.settings
-                if not s.get("saving_on"):
+                saving_on, free_on = bool(s.get("saving_on")), bool(s.get("free_on"))
+                if not saving_on:
                     automation.saving_past = []
+                    sessions, last_settings = None, None
+                if not free_on:
+                    free, free_settings = None, None
+                if not saving_on and not free_on:
                     if automation.clear_saving_sessions():
                         automation.publish(shared_state)
-                    sessions, last_settings = None, None
                 else:
-                    wanted = (s.get("saving_entity"), s.get("saving_block"), s.get("saving_plug"), s.get("saving_plug_hours"))
-                    if wanted != last_settings or time.monotonic() - last_read >= SAVING_READ_S:
-                        found = await ha_link.read_saving_sessions()
-                        last_read, last_settings = time.monotonic(), wanted
-                        if found is not None:
-                            sessions = found
-                            automation.saving_past = ha_link.saving_past
+                    if saving_on:
+                        wanted = (s.get("saving_entity"), s.get("saving_block"), s.get("saving_plug"), s.get("saving_plug_hours"))
+                        if wanted != last_settings or time.monotonic() - last_read >= SAVING_READ_S:
+                            found = await ha_link.read_saving_sessions()
+                            last_read, last_settings = time.monotonic(), wanted
+                            if found is not None:
+                                sessions = found
+                                automation.saving_past = ha_link.saving_past
+                    if free_on:
+                        wanted = s.get("free_entity")
+                        if wanted != free_settings or time.monotonic() - free_read >= SAVING_READ_S:
+                            found = await ha_link.read_free_sessions()
+                            free_read, free_settings = time.monotonic(), wanted
+                            if found is not None:
+                                free = [{**x, "kind": "free"} for x in found]
+                    # (one that's on but couldn't be read yet: its sessions aren't taken as cancelled)
+                    unread = tuple(k for k, on, got in (("saving", saving_on, sessions), ("free", free_on, free))
+                                   if on and got is None)
+                    both = None if len(unread) == int(saving_on) + int(free_on) else \
+                        (sessions or []) + (free or [])
                     sc = ha_link.smart_charging()
                     automation.limit_reset = sc.get("limit_reset")
                     cap = sc.get("limit_min") if automation.ready_time and not automation.override_guards else None
-                    plug_hours = float(s.get("saving_plug_hours") or 2) if s.get("saving_plug") else None
-                    if automation.sync_saving_sessions(sessions, bool(s.get("saving_block")), ha_link.ready_times,
-                                                       cap, sc.get("provider") or "your supplier", plug_hours):
+                    plug_hours = float(s.get("saving_plug_hours") or 2) if s.get("saving_plug") and saving_on else None
+                    if automation.sync_saving_sessions(both, bool(s.get("saving_block")), ha_link.ready_times,
+                                                       cap, sc.get("provider") or "your supplier", plug_hours, unread):
                         automation.publish(shared_state)
             except Exception:
                 logger.warning("Saving sessions cycle failed", exc_info=True)

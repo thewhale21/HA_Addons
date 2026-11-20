@@ -475,3 +475,71 @@ def test_deleting_part_of_a_slot_moved_for_a_session_leaves_no_unplug_on_its_own
     a.set_schedule(entries=[e for e in a.entries if e["id"] != early["id"]])  # (just its plug-in)
     assert _today(a) == [("05 19:00", "05 21:30")]
     assert not any(e.get("date") and e["time"] == "18:00" for e in a.entries)
+
+
+# --- free electricity sessions (Octopus Power Up) ----------------------------------
+
+
+def _free(day, h1, h2, m1=0, m2=0):
+    return {"start": _at(day, h1, m1), "end": _at(day, h2, m2), "summary": "Free electricity session", "kind": "free"}
+
+
+def test_free_calendars_found_by_name():
+    from src.saving_sessions import find_free_calendar, is_free_calendar
+    assert is_free_calendar("calendar.octopus_energy_a_1_octoplus_power_up")
+    assert is_free_calendar("calendar.octopus_energy_a_1_octoplus_free_electricity_session")
+    assert not is_free_calendar("calendar.octopus_energy_a_1_octoplus_power_down")
+    assert not is_free_calendar("sensor.octopus_energy_a_1_octoplus_power_up")
+    states = [{"entity_id": "calendar.octopus_energy_a_1_octoplus_free_electricity_session"},
+              {"entity_id": "calendar.octopus_energy_a_1_octoplus_power_up"}, {"entity_id": "calendar.home"}]
+    assert find_free_calendar(states) == "calendar.octopus_energy_a_1_octoplus_power_up"
+    assert find_free_calendar([{"entity_id": "calendar.home"}]) is None
+
+
+def test_a_slot_in_a_free_session_is_moved_before_it():
+    """As overnight: nothing plugs in during it, so the slot keeps its end and starts earlier."""
+    a, _ = _automation()
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    a.sync_saving_sessions([_free(5, 18, 19)], block=False)  # (with saving sessions' own switch off, too)
+    assert _windows(a)[:2] == [("05 14:30", "05 18:00"), ("05 19:00", "05 21:30")]
+    assert a.session_windows() == [(_at(5, 18), _at(5, 19))]
+    snap = a.saving_snapshot()[0]
+    assert snap["kind"] == "free" and snap["blocks"] and snap["id"].startswith("free-")
+
+
+def test_nothing_is_added_before_a_free_session():
+    a, _ = _automation()
+    a.sync_saving_sessions([_free(5, 18, 19), _session(6, 18, 19)], block=True, plug_hours=1.0)
+    free, saving = a.saving_sessions
+    assert free.get("kind") == "free" and free.get("pre") is None
+    assert saving.get("pre") is not None
+
+
+def test_a_free_session_gone_from_its_calendar_puts_its_slot_back():
+    a, _ = _automation()
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    a.sync_saving_sessions([_free(5, 18, 19)], block=True)
+    # the saving sessions couldn't be read: the free one isn't taken as cancelled, but one that's gone is
+    a.sync_saving_sessions([], block=True, unread=("free",))
+    assert _windows(a)[0] == ("05 14:30", "05 18:00")
+    a.sync_saving_sessions([], block=True)
+    assert _windows(a)[0] == ("05 15:30", "05 21:30") and a.saving_sessions == []
+
+
+def test_free_and_saving_sessions_together():
+    a, _ = _automation()
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "21:30", "action": "unplug"}])
+    a.sync_saving_sessions([_session(5, 17, 18), _free(5, 19, 20)], block=True)
+    assert sum((y - x for x, y in a.windows() if x.day == 5), datetime.timedelta(0)) == datetime.timedelta(hours=6)
+    assert not any(x < _at(5, 18) and y > _at(5, 17) or x < _at(5, 20) and y > _at(5, 19) for x, y in a.windows())
+    # the saving one isn't read now (turned off): it's put back, the free one stays
+    a.sync_saving_sessions([_free(5, 19, 20)], block=True)
+    assert [r.get("kind") for r in a.saving_sessions] == ["free"]
+    assert not any(x < _at(5, 20) and y > _at(5, 19) for x, y in a.windows())
+
+
+def test_free_sessions_in_the_schedule_notifications():
+    from src.schedule_notify import causes
+    r = [{"start": "2026-10-05T18:00:00+00:00", "end": "2026-10-05T19:00:00+00:00", "kind": "free"},
+         {"start": "2026-10-06T18:00:00+00:00", "end": "2026-10-06T19:00:00+00:00"}]
+    assert causes([], r, False) == {datetime.date(2026, 10, 5): "free electricity session 18:00–19:00"}

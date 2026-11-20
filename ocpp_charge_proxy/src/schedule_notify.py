@@ -77,10 +77,11 @@ def causes(entries: list, saving_sessions: list, saving_block: bool) -> dict:
         if text not in out.setdefault(day, []):
             out[day].append(text)
 
-    if saving_block:
-        for r in saving_sessions or []:
+    for r in saving_sessions or []:
+        free = r.get("kind") == "free"  # (a free electricity session: always kept clear)
+        if saving_block or free:
             a, b = datetime.datetime.fromisoformat(r["start"]), datetime.datetime.fromisoformat(r["end"])
-            add(a.date(), f"saving session {a.strftime('%H:%M')}–{b.strftime('%H:%M')}")
+            add(a.date(), f"{'free electricity' if free else 'saving'} session {a.strftime('%H:%M')}–{b.strftime('%H:%M')}")
     for e in entries or []:
         text = SOURCE_TEXT.get(e.get("source"))
         if text and e.get("date"):

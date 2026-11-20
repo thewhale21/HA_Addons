@@ -1307,3 +1307,19 @@ def test_high_exports_marked_with_where_it_earns_the_most_but_not_planned_around
     assert not a.sync_auto_schedule(imp, exp, 12, cap_min=360, mode="value", charge_cap=2, discharge_cap=3)
     assert a.auto_plan["charge"] == plan
     assert validate_settings({"auto_show_highs": False})["auto_show_highs"] is False
+
+
+def test_a_free_session_is_kept_clear_and_planned_around():
+    """A free electricity session is an off-peak time: the automatic schedule's half hours go in the
+    next cheapest time instead (as the saving session test above, with saving sessions' switch off)."""
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    a.sync_auto_schedule([], user_exp(), 4, cap_min=360)
+    planned = [(A._when(x), A._when(y)) for x, y in a.auto_plan["charge"]]
+    x0, y0 = planned[0]
+    a.sync_saving_sessions([{"start": x0, "end": y0, "summary": "Free electricity session", "kind": "free"}],
+                           False, None, 360, "Octopus Energy")
+    a.sync_auto_schedule([], user_exp(), 4, cap_min=360)
+    after = [(A._when(x), A._when(y)) for x, y in a.auto_plan["charge"]]
+    assert after and not any(x < y0 and y > x0 for x, y in after)
+    assert sum((y - x for x, y in after), datetime.timedelta(0)) == sum((y - x for x, y in planned), datetime.timedelta(0))

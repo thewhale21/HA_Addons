@@ -10,7 +10,9 @@ The calendar is the one picked on the Automations tab, or found by its name:
   calendar.octopus_energy_<account>_octoplus_saving_sessions;
 - E.ON Next, EDF and others: a calendar whose ID or name mentions saving
   or saver sessions, power down or demand flexibility.
-Calendars for the opposite (Octopus Power Up, free electricity) are left out.
+Calendars for the opposite (Octopus Power Up, free electricity) are left out:
+they're free electricity sessions, read on their own (is_free_calendar,
+find_free_calendar) and kept clear of scheduled charging as off-peak times are.
 
 Or from sensors (sensor_events): Axle Energy's next event is three sensors,
 sensor.axle_energy_event_start, _end and _type; its "export" events are saving
@@ -43,6 +45,29 @@ def is_saving_calendar(entity_id: str, name: str = "") -> bool:
     if any(w in text for w in words["not_words"]):
         return False
     return any(w in text for w in words["words"])
+
+
+# Free electricity sessions (Octopus Power Up): the words in a calendar's ID or name
+FREE_WORDS = ("power_up", "free_electricity", "free_power", "free_session")
+FREE_PREFER = ("power_up",)  # (Octopus: replaces the older ..._octoplus_free_electricity_session)
+
+
+def is_free_calendar(entity_id: str, name: str = "") -> bool:
+    """A calendar that holds free electricity sessions, judging by its ID and name."""
+    if not str(entity_id).startswith("calendar."):
+        return False
+    text = _norm(entity_id) + "__" + _norm(name)
+    return any(w in text for w in FREE_WORDS)
+
+
+def find_free_calendar(states: list) -> Optional[str]:
+    """The free electricity sessions calendar among HA's states, if there's one:
+    Octopus's Power Up first, then the rest."""
+    found = [st.get("entity_id", "") for st in states or []
+             if is_free_calendar(st.get("entity_id", ""), ((st.get("attributes") or {}).get("friendly_name") or ""))]
+    if not found:
+        return None
+    return sorted(found, key=lambda e: (0 if any(w in e for w in FREE_PREFER) else 1, e))[0]
 
 
 def supplier_of(entity_id: str, name: str = "") -> Optional[str]:
@@ -80,7 +105,7 @@ def _when(value) -> Optional[datetime.datetime]:
 
 
 def parse_events(response, entity_id: str, now: datetime.datetime, past: bool = False,
-                 supplier: Optional[str] = None) -> list[dict]:
+                 supplier: Optional[str] = None, name: str = "Saving session") -> list[dict]:
     """calendar.get_events' response -> the sessions not yet over, in order:
     [{"start", "end" (aware datetimes), "summary", "supplier" (whose calendar it
     is, for its colour on the page; None if not known)}] (with `past`, the ones that
@@ -94,7 +119,7 @@ def parse_events(response, entity_id: str, now: datetime.datetime, past: bool = 
         start, end = _when(ev.get("start")), _when(ev.get("end"))
         if start is None or end is None or end <= start or end - start > MAX_SESSION or (end > now if past else end <= now):
             continue
-        out.append({"start": start, "end": end, "summary": str(ev.get("summary") or "Saving session")[:80],
+        out.append({"start": start, "end": end, "summary": str(ev.get("summary") or name)[:80],
                     "supplier": supplier})
     return merge(out)
 

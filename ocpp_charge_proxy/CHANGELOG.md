@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.100.0 — Free electricity sessions
+
+- **Feature:** Automations › **Free electricity sessions** (off by
+  default): your supplier's free electricity sessions (Octopus Power Up),
+  read from their Home Assistant calendar, are off-peak times, as your
+  overnight ones. A slot of yours that runs into one is moved before it
+  (keeping its end and its hours, as for a saving session), and the
+  automatic schedule plans its charging around them, in the next cheapest
+  half hours. Shown hatched in green. Octopus Energy's Power Up calendar is
+  disabled in Home Assistant until you enable it.
+
 ## 2.99.0 — Notifications for problems in the log
 
 - **Feature:** Settings › Notifications › **Problems in the log**: **None**

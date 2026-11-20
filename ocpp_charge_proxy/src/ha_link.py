@@ -33,8 +33,8 @@ from src.autoplug import DEFAULT_AUTO_PLUG_SOC, AutoPlug, CarConnected
 from src import jsonfile, log_notify, suppliers
 from src.ready_time import ALL_DAY_TIMES, allowed_times, pick_ready_time, service_call, target_time_entity, target_time_ids
 from src.smart_charging import check_supplier, find_dispatch_sensors, provider_name, smart_charging
-from src.saving_sessions import (find_calendar, find_sensor_sources, is_saving_calendar, merge as merge_sessions,
-                                 parse_events, sensor_events, supplier_of)
+from src.saving_sessions import (find_calendar, find_free_calendar, find_sensor_sources, is_free_calendar,
+                                 is_saving_calendar, merge as merge_sessions, parse_events, sensor_events, supplier_of)
 from src.ha_entities import (
     ALL_SENSORS, CHARGE_NOW_HOURS, CHARGE_NOW_ICON, HELPER_ICON, HELPER_ID, HELPER_NAME,
     ButtonPresses, PluggedInSync, SensorPublisher, charge_now_entities, charge_now_helper_id,
@@ -178,14 +178,15 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
     # Saving sessions (Automations tab)
     if "populate_auto" in raw:
         out["populate_auto"] = bool(raw["populate_auto"])
-    for key in ("saving_on", "saving_block", "saving_plug"):
+    for key in ("saving_on", "saving_block", "saving_plug", "free_on"):
         if key in raw:
             out[key] = bool(raw[key])
-    if "saving_entity" in raw:
-        value = str(raw["saving_entity"] or "").strip()
-        if value and not value.startswith("calendar."):
-            raise ValueError("saving_entity must be a calendar entity")
-        out["saving_entity"] = value
+    for key in ("saving_entity", "free_entity"):
+        if key in raw:
+            value = str(raw[key] or "").strip()
+            if value and not value.startswith("calendar."):
+                raise ValueError(f"{key} must be a calendar entity")
+            out[key] = value
     if "saving_plug_hours" in raw:
         try:
             hours = float(raw["saving_plug_hours"])
@@ -297,6 +298,8 @@ def default_settings() -> dict:
         # Saving sessions: off; the calendar is found automatically unless picked
         "saving_on": False, "saving_entity": "", "saving_block": True,
         "saving_plug": False, "saving_plug_hours": DEFAULT_SAVING_PLUG_HOURS,
+        # Free electricity sessions (Octopus Power Up): off; their calendar found automatically unless picked
+        "free_on": False, "free_entity": "",
         # Notifications when the schedule changes: off, and where to (a notify service)
         "notify_on": False, "notify_service": "",
         "notify_supplier": False,  # ...and when your supplier sends something new
@@ -405,6 +408,7 @@ class HaLink:
         self.saving_past: list = []  # the calendar's sessions of the last week that are over
         self.saving_info: dict = {"entity": None, "auto": False, "supplier": None, "error": None,
                                   "read_at": None, "count": 0, "sensors": []}
+        self.free_info: dict = {"entity": None, "auto": False, "error": None, "read_at": None, "count": 0}
         self._reset_logic()
         self._load()
         self._load_versions()
@@ -1181,6 +1185,39 @@ class HaLink:
         info.update(error=None, read_at=time.time(), count=len(sessions))
         return sessions
 
+    async def read_free_sessions(self) -> Optional[list]:
+        """The free electricity sessions (Octopus Power Up) in their calendar (picked, or
+        found by its name), not yet over, the next 8 days: [{"start", "end", "summary"}];
+        None if they couldn't be read (see free_info)."""
+        info = self.free_info
+        entity = self.settings.get("free_entity") or ""
+        info["auto"] = not entity
+        try:
+            states = await self.all_states()
+            if not entity:
+                entity = find_free_calendar(states) or ""
+            info["entity"] = entity or None
+            if not entity:
+                info["error"] = ("No free electricity sessions calendar found: Octopus Energy's Power Up calendar "
+                                 "is disabled in Home Assistant until you enable it, or pick yours")
+                return None
+            now = datetime.datetime.now().astimezone()
+            result = await self.query({
+                "type": "call_service", "domain": "calendar", "service": "get_events",
+                "target": {"entity_id": entity},
+                "service_data": {"start_date_time": now.isoformat(timespec="seconds"),
+                                 "end_date_time": (now + SAVING_LOOK_AHEAD).isoformat(timespec="seconds")},
+                "return_response": True,
+            })
+            sessions = parse_events((result or {}).get("response"), entity, now, name="Free electricity session")
+        except Exception as err:
+            if info.get("error") != str(err):
+                logger.warning("Couldn't read the free electricity sessions (%s): %s", entity or "calendar", err)
+            info["error"] = str(err) or type(err).__name__
+            return None
+        info.update(error=None, read_at=time.time(), count=len(sessions))
+        return sessions
+
     async def list_entities(self) -> list[dict]:
         """Sensors, binary sensors and calendars for the pickers."""
         states = await self.all_states()
@@ -1203,6 +1240,7 @@ class HaLink:
                     (s.get("ready_entity_suffix") or "") and s["ready_entity_suffix"] in entity_id
                     for s in suppliers.all_suppliers()),
                 "saving": is_saving_calendar(entity_id, attrs.get("friendly_name") or ""),
+                "free": is_free_calendar(entity_id, attrs.get("friendly_name") or ""),
                 "rates": is_rates_entity(st),  # (the automatic schedule's pickers)
             })
         out.sort(key=lambda e: (e["name"] or "").lower())
@@ -1230,6 +1268,7 @@ class HaLink:
             "settings": s,
             "configured": self.configured,
             "saving": self.saving_info,
+            "free": self.free_info,
             "ha_entities": {
                 "plugged_in": self.plug_sync.entity_id,
                 "charge_now": [{"entity_id": e, "hours": h} for e, h in self.charge_buttons.items()],

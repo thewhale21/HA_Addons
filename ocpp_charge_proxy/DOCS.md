@@ -377,7 +377,8 @@ each, it unplugs if the car is plugged in (by hand or from Home Assistant,
 say), as nothing should charge then; where a slot ends as one starts, the
 slot's own unplug waits for your supplier to stop the session first (up to
 the unplug wait, 60 s by default), as at any other unplug. They're shown
-hatched in blue-grey.
+hatched in blue-grey. Free electricity sessions are off-peak times too (see
+below).
 
 ### Saving sessions
 
@@ -449,6 +450,36 @@ Assistant starts) the sessions already found are kept, not cancelled.
 - A session taken out of the calendar before it starts puts back the slots
   it moved. Turning **No charging during a session** off puts them all back,
   and turning the card off forgets the sessions too.
+
+### Free electricity sessions
+
+The **Free electricity sessions** card on the Automations tab (off by
+default) treats your supplier's free electricity sessions (Octopus Power
+Up) as off-peak times, as your overnight ones: nothing plugs in during a
+session, so the car charges on the free electricity without using your
+supplier's slots. They're read from a Home Assistant calendar, found
+automatically (Octopus Energy's
+`calendar.octopus_energy_<account>_octoplus_power_up`, or the older
+`…_octoplus_free_electricity_session`) or picked on the card. The Octopus
+Energy integration has that calendar **disabled** until you enable it in
+Home Assistant (Settings › Devices & services › Octopus Energy, its
+entities). It's read every 5 minutes, up to 8 days ahead.
+
+- A slot of yours that runs into a session is moved before it, as for a
+  saving session: it keeps its end time and its hours and starts earlier
+  (12:00–15:00 with a 13:00–14:00 session: 11:00–13:00 and 14:00–15:00);
+  if that would be in the past, it ends later instead.
+- The automatic schedule plans its charging around the sessions: its half
+  hours go in the next cheapest time.
+- Auto plug-in, the car plugged in sensor and Charge now are planned
+  around them, as for a saving session.
+- Nothing is added before a session (the saving sessions' **Plug in
+  before a session** is for those only), and it works with the
+  **Saving sessions** card on or off.
+- A session taken out of the calendar before it starts puts back what it
+  moved; turning the card off puts everything back.
+
+They're shown hatched in green on the schedule and the Overview.
 
 ### Schedule, auto re-plug and start-up
 

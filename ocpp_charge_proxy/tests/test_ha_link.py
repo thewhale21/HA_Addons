@@ -374,3 +374,35 @@ def test_read_only_keeps_the_next_slot_sensors_as_they_were(tmp_path):
     assert link.frozen_slots is None
     posted = {e: v for e, v, _ in link.publisher.due(fake.state, 2000.0, None)}
     assert posted[slot_sensor_id(1, "start")] == "19:00:00"
+
+
+def test_free_sessions_settings_and_reading():
+    s = validate_settings({"free_on": True, "free_entity": "calendar.x"})
+    assert s["free_on"] and s["free_entity"] == "calendar.x"
+    assert validate_settings({})["free_on"] is False  # (off until turned on)
+    with pytest.raises(ValueError):
+        validate_settings({"free_entity": "sensor.x"})
+    link, _ = _link()
+    cal = "calendar.octopus_energy_a_1_octoplus_power_up"
+    asked = []
+
+    async def states():
+        return [{"entity_id": cal, "state": "off", "attributes": {"friendly_name": "Power Up"}},
+                {"entity_id": "calendar.octopus_energy_a_1_octoplus_power_down", "state": "off", "attributes": {}}]
+
+    async def query(payload, timeout=30):
+        asked.append(payload)
+        return {"response": {cal: {"events": [
+            {"start": "2099-01-05T13:00:00+00:00", "end": "2099-01-05T14:00:00+00:00"}]}}}
+
+    link.all_states, link.query = states, query
+    sessions = _run(link.read_free_sessions())
+    assert len(sessions) == 1 and sessions[0]["summary"] == "Free electricity session"
+    assert asked[0]["target"] == {"entity_id": cal}
+    assert link.free_info["entity"] == cal and link.free_info["auto"] and link.free_info["count"] == 1
+
+    async def none():
+        return [{"entity_id": "calendar.home", "state": "off", "attributes": {}}]
+
+    link.all_states = none
+    assert _run(link.read_free_sessions()) is None and "Power Up" in link.free_info["error"]

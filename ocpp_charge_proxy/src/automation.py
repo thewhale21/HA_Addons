@@ -50,6 +50,11 @@
   With "plug in before" on, a charge of the chosen hours before it is added
   to the schedule as soon as the session is known, for the time the schedule
   doesn't already cover (sync_saving_sessions, _plan_precharge).
+- Free electricity sessions (Octopus Power Up, src/saving_sessions.py): kept
+  with the saving sessions (kind "free"), and always off-peak times, as the
+  overnight ones are: a slot of yours that runs into one is moved before it,
+  as for a saving session, and the automatic schedule plans its charging
+  around them (the next cheapest half hours). Nothing is added before them.
 - Off-peak times: at the start of each, it unplugs if plugged in (by hand,
   Home Assistant...), as nothing should charge then (block_starts_due).
 - Random start delay: optionally, each of your slots' plug-ins waits a random
@@ -421,6 +426,24 @@ def _local_now() -> datetime.datetime:
 def timezone_name() -> str:
     return os.environ.get("TZ") or _local_now().tzname() or "UTC"
 
+
+
+def kind_of(r: dict) -> str:
+    """A session's kind: "free" (a free electricity session) or "saving"."""
+    return "free" if r.get("kind") == "free" else "saving"
+
+
+def is_free(r: dict) -> bool:
+    return kind_of(r) == "free"
+
+
+def session_name(r: dict) -> str:
+    return "Free electricity session" if is_free(r) else "Saving session"
+
+
+def _sid(x: dict) -> str:
+    """A session's id: from its times (a free electricity session's marked as one)."""
+    return ("free-" if is_free(x) else "") + session_id(x["start"], x["end"])
 
 class Automation:
     def __init__(
@@ -1060,10 +1083,14 @@ class Automation:
                                end if open_ended else None)
 
     def session_windows(self) -> list:
-        """The saving sessions that are off-peak times (with saving_block on): [(a, b)]."""
-        if not self.saving_block:
-            return []
-        return [(_parse_iso(r["start"]), _parse_iso(r["end"])) for r in self.saving_sessions]
+        """The sessions that are off-peak times: the saving sessions with saving_block on, and
+        the free electricity sessions always: [(a, b)]."""
+        return [(_parse_iso(r["start"]), _parse_iso(r["end"])) for r in self.saving_sessions if self._blocks(r)]
+
+    def _blocks(self, r: dict) -> bool:
+        """Whether session `r` is an off-peak time: a free electricity session, or a saving
+        session with saving_block on."""
+        return is_free(r) or self.saving_block
 
     def block_windows(self, start: datetime.date, days: int, blocks: Optional[list] = None,
                       sessions: bool = True) -> list:
@@ -1782,7 +1809,7 @@ class Automation:
 
     def sync_saving_sessions(self, sessions: Optional[list], block: bool, ready_times: Optional[list] = None,
                              cap_min: Optional[int] = None, provider: str = "your supplier",
-                             plug_hours: Optional[float] = None) -> bool:
+                             plug_hours: Optional[float] = None, unread: tuple = ()) -> bool:
         """The sessions read from the calendar ([{"start", "end", "summary"}];
         None: it couldn't be read, so nothing is forgotten). New ones are
         remembered, a cancelled one (gone from the calendar before it starts)
@@ -1790,21 +1817,24 @@ class Automation:
         time: a scheduled slot that runs into it is moved (see _move_for_session).
         With `plug_hours`, a charge for that long before each session is added
         to the schedule as soon as it's known (see _plan_precharge).
+        Sessions with "kind": "free" are free electricity sessions: always off-peak
+        times, with nothing added before them. `unread`: the kinds ("saving", "free")
+        that couldn't be read this time: theirs aren't taken as cancelled.
         Returns whether anything changed (it's saved then)."""
         now = self._now()
         changed = False
         was_end = self._running_end()
-        new = None if sessions is None else {session_id(x["start"], x["end"]): x for x in sessions}
+        new = None if sessions is None else {_sid(x): x for x in sessions}
         keep = []
         for r in self.saving_sessions:
             start, end = _parse_iso(r["start"]), _parse_iso(r["end"])
             if end < now - SAVING_KEEP:
                 changed = True
                 continue
-            if new is not None and r["id"] not in new and start > now:
+            if new is not None and r["id"] not in new and start > now and kind_of(r) not in unread:
                 self._undo_session(r)
                 self._undo_pre(r)
-                logger.info("Saving session %s–%s is no longer in the calendar%s", start.strftime("%a %H:%M"),
+                logger.info("%s %s–%s is no longer in the calendar%s", session_name(r), start.strftime("%a %H:%M"),
                             end.strftime("%H:%M"), ": putting back what it changed" if r.get("notes") else "")
                 changed = True
                 continue
@@ -1830,11 +1860,12 @@ class Automation:
                 continue
             # in local time (the add-on's TZ), as the rest of the schedule
             keep.append({"id": sid, "start": iso(x["start"]), "end": iso(x["end"]),
-                         "summary": x.get("summary") or "Saving session",
+                         "summary": x.get("summary") or session_name(x),
+                         **({"kind": "free"} if is_free(x) else {}),
                          **({"supplier": x["supplier"]} if x.get("supplier") else {}),
                          "changes": {"skips": [], "added": []}, "precharged": False, "notes": [],
                          **({"parts": parts_of(x)} if x.get("parts") else {})})
-            logger.info("Saving session found: %s–%s", x["start"].astimezone().strftime("%a %d %b %H:%M"),
+            logger.info("%s found: %s–%s", session_name(x), x["start"].astimezone().strftime("%a %d %b %H:%M"),
                         x["end"].astimezone().strftime("%H:%M"))
             changed = True
         keep.sort(key=lambda r: _parse_iso(r["start"]))
@@ -1862,7 +1893,7 @@ class Automation:
         moved = False
         movers = []  # the sessions that moved a slot this time
         for r in keep:
-            if not block:
+            if not (block or is_free(r)):
                 if r["changes"]["skips"] or r["changes"]["added"]:
                     self._undo_session(r)
                     self._undo_pre(r)  # (it may have used the session's unplug: redone below)
@@ -1891,7 +1922,7 @@ class Automation:
         # The charge before each session still to come (taken out again if it's
         # turned off, or redone if its hours change)
         for r in keep:
-            if _parse_iso(r["start"]) <= now:
+            if _parse_iso(r["start"]) <= now or is_free(r):  # (nothing before a free electricity session)
                 continue
             pre = r.get("pre")
             if pre is not None and pre.get("hours") != plug_hours:
@@ -2161,7 +2192,7 @@ class Automation:
                     + (f" (the rest isn't carried on past the off-peak time at {stopped_at.strftime('%H:%M')})"
                        if stopped_at is not None else ""))
             r["notes"] = (r.get("notes") or []) + [note]
-            logger.info("Saving session %s–%s: %s", sa.strftime("%a %H:%M"), sb.strftime("%H:%M"), note)
+            logger.info("%s %s–%s: %s", session_name(r), sa.strftime("%a %H:%M"), sb.strftime("%H:%M"), note)
             moved = True
         return moved
 
@@ -3044,6 +3075,8 @@ class Automation:
         for r in self.saving_sessions:
             pre = (r.get("pre") or {}).get("changes") or {}
             out.append({"id": r["id"], "start": r["start"], "end": r["end"], "summary": r.get("summary"),
+                        "kind": kind_of(r),  # "saving" or "free" (free electricity: always an off-peak time)
+                        "blocks": self._blocks(r),  # (nothing plugs in during it)
                         "supplier": r.get("supplier"),  # (whose: its colour on the page)
                         "parts": r.get("parts") or [],  # the overlapping ones it's made of, each as it runs
                         "notes": r.get("notes") or [],
