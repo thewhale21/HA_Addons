@@ -459,12 +459,18 @@ Energy integration has that calendar **disabled** until you enable it in
 Home Assistant (Settings › Devices & services › Octopus Energy, its
 entities). It's read every 5 minutes, up to 8 days ahead.
 
-- A slot of yours that runs into a session is moved before it, as for a
-  saving session: it keeps its end time and its hours and starts earlier
-  (12:00–15:00 with a 13:00–14:00 session: 11:00–13:00 and 14:00–15:00);
-  if that would be in the past, it ends later instead.
+- A slot of yours that runs into a session keeps its hours, and moves as
+  **Your slots in a session** says:
+  - **Before** (the default), as for a saving session: it keeps its end
+    time and starts earlier (12:00–15:00 with a 13:00–14:00 session:
+    11:00–13:00 and 14:00–15:00); if that would be in the past, it ends
+    later instead.
+  - **After**: it keeps its start time and ends that much later
+    (12:00–13:00 and 14:00–16:00), stopping at an off-peak time.
+
+  Changing it moves the slots for the sessions still to come again.
 - The automatic schedule plans its charging around the sessions: its half
-  hours go in the next cheapest time.
+  hours go in the next best time, whichever way your slots move.
 - Auto plug-in, the car plugged in sensor and Charge now are planned
   around them, as for a saving session.
 - Nothing is added before a session (the saving sessions' **Plug in

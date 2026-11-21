@@ -507,6 +507,30 @@ def test_a_slot_in_a_free_session_is_moved_before_it():
     assert snap["kind"] == "free" and snap["blocks"] and snap["id"].startswith("free-")
 
 
+def test_a_slot_in_a_free_session_can_move_after_it_instead():
+    a, _ = _automation()  # (12:00)
+    a.set_schedule(enabled=True, entries=[{"time": "14:30", "action": "plug"}, {"time": "17:00", "action": "unplug"}])
+    a.sync_saving_sessions([_free(5, 15, 16)], block=True, free_move="after")
+    assert _windows(a)[:2] == [("05 14:30", "05 15:00"), ("05 16:00", "05 18:00")]  # keeps its start, ends an hour later
+    assert "keeps its start and ends later" in a.saving_sessions[0]["notes"][0]
+    # changed back: moved before it again (and the setting's kept)
+    a.sync_saving_sessions([_free(5, 15, 16)], block=True, free_move="before")
+    assert _windows(a)[:2] == [("05 13:30", "05 15:00"), ("05 16:00", "05 17:00")]
+    assert a.free_move == "before"
+    # a saving session isn't changed by it
+    b, _ = _automation()
+    b.set_schedule(enabled=True, entries=[{"time": "14:30", "action": "plug"}, {"time": "17:00", "action": "unplug"}])
+    b.sync_saving_sessions([_session(5, 15, 16)], block=True, free_move="after")
+    assert _windows(b)[:2] == [("05 13:30", "05 15:00"), ("05 16:00", "05 17:00")]
+
+
+def test_a_slot_starting_in_a_free_session_moves_after_it_whole():
+    a, _ = _automation()
+    a.set_schedule(enabled=True, entries=[{"time": "15:30", "action": "plug"}, {"time": "16:30", "action": "unplug"}])
+    a.sync_saving_sessions([_free(5, 15, 16)], block=True, free_move="after")
+    assert _windows(a)[0] == ("05 16:00", "05 17:00")
+
+
 def test_nothing_is_added_before_a_free_session():
     a, _ = _automation()
     a.sync_saving_sessions([_free(5, 18, 19), _session(6, 18, 19)], block=True, plug_hours=1.0)

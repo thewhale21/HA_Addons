@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.102.0 — Slots in a free electricity session: before or after it
+
+- **Feature:** Automations › Free electricity sessions › **Your slots in a
+  session**: **Before** (as until now: a slot keeps its end time and
+  starts earlier) or **After** (it keeps its start time and ends that much
+  later). The automatic schedule still plans its own charging in the next
+  best half hours either way.
+
 ## 2.101.0 — Axle Energy on its own card
 
 - **Change:** Axle Energy's events have their own card on the Automations

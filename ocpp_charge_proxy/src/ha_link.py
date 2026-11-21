@@ -86,6 +86,10 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if raw["trim_from"] not in ("start", "end"):
             raise ValueError("trim_from must be start or end")
         out["trim_from"] = raw["trim_from"]
+    if "free_move" in raw:  # a slot in a free electricity session moves before it (keeps its end) or after (keeps its start)
+        if raw["free_move"] not in ("before", "after"):
+            raise ValueError("free_move must be before or after")
+        out["free_move"] = raw["free_move"]
     if "plug_auto" in raw:  # the car plugged in sensor plugs in (off: kept, but does nothing)
         out["plug_auto"] = bool(raw["plug_auto"])
     if "plug_ready" in raw:  # the car plugged in sensor adds a charge to the schedule
@@ -299,7 +303,7 @@ def default_settings() -> dict:
         "saving_on": False, "saving_entity": "", "saving_block": True,
         "saving_plug": False, "saving_plug_hours": DEFAULT_SAVING_PLUG_HOURS,
         # Free electricity sessions (Octopus Power Up): off; their calendar found automatically unless picked
-        "free_on": False, "free_entity": "",
+        "free_on": False, "free_entity": "", "free_move": "before",
         # Axle Energy's events (its sensors): off; export events are saving sessions, import ones
         # (use more) free electricity sessions if that's on
         "axle_on": False, "axle_export": True, "axle_import": False,

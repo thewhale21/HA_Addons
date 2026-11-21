@@ -428,6 +428,8 @@ def timezone_name() -> str:
 
 
 
+FREE_MOVES = ("before", "after")  # where a slot in a free electricity session goes
+
 def kind_of(r: dict) -> str:
     """A session's kind: "free" (a free electricity session) or "saving"."""
     return "free" if r.get("kind") == "free" else "saving"
@@ -494,6 +496,7 @@ class Automation:
         self._preview_key = None
         self.saving_past: list[dict] = []  # set from the calendar (src/__main__.py), for the page
         self.saving_block = False
+        self.free_move = "before"  # a slot in a free electricity session: "before" it (keeps its end) or "after" (keeps its start)
         self._saving_args = None  # (what the saving sessions were last put in with)
         self._sessions_stale = False  # (taken out with the automatic schedule's blocks: put in again)
         # Its blocks that had run when it was turned off, for the Sessions tab: [{"start", "end", "source"}]
@@ -562,6 +565,7 @@ class Automation:
                       if isinstance(k, dict) and k.get("entry_id") and k.get("date")]
         saving = data.get("saving") or {}
         self.saving_block = bool(saving.get("block", False))
+        self.free_move = saving.get("free_move") if saving.get("free_move") in FREE_MOVES else "before"
         self.saving_sessions = [r for r in saving.get("sessions") or []
                                 if isinstance(r, dict) and _parse_iso(r.get("start")) and _parse_iso(r.get("end"))]
         for r in self.saving_sessions:
@@ -617,7 +621,7 @@ class Automation:
                          "unplug_wait_s": self.unplug_wait_s, "start_delay": self.start_delay,
                          "override_guards": self.override_guards, "blocks": self.blocks},
             "replug": self.replug,
-            "saving": {"block": self.saving_block, "sessions": self.saving_sessions},
+            "saving": {"block": self.saving_block, "free_move": self.free_move, "sessions": self.saving_sessions},
             "auto": self.auto_plan,
             "rates_seen": self._rates_seen_saved(),
             "populate_last": self.populate_last,
@@ -1809,7 +1813,8 @@ class Automation:
 
     def sync_saving_sessions(self, sessions: Optional[list], block: bool, ready_times: Optional[list] = None,
                              cap_min: Optional[int] = None, provider: str = "your supplier",
-                             plug_hours: Optional[float] = None, unread: tuple = ()) -> bool:
+                             plug_hours: Optional[float] = None, unread: tuple = (),
+                             free_move: Optional[str] = None) -> bool:
         """The sessions read from the calendar ([{"start", "end", "summary"}];
         None: it couldn't be read, so nothing is forgotten). New ones are
         remembered, a cancelled one (gone from the calendar before it starts)
@@ -1820,7 +1825,8 @@ class Automation:
         Sessions with "kind": "free" are free electricity sessions: always off-peak
         times, with nothing added before them. `unread`: the kinds ("saving", "free")
         and sources (a supplier's name, e.g. "Axle Energy": its sensors unavailable) that
-        couldn't be read this time: theirs aren't taken as cancelled.
+        couldn't be read this time: theirs aren't taken as cancelled. `free_move`: where a slot
+        in a free electricity session goes, "before" it or "after" it (None: as it was).
         Returns whether anything changed (it's saved then)."""
         now = self._now()
         changed = False
@@ -1874,6 +1880,14 @@ class Automation:
         self.saving_sessions = keep
         if bool(block) != self.saving_block:
             self.saving_block = bool(block)
+            changed = True
+        if free_move in FREE_MOVES and free_move != self.free_move:
+            # (the slots the free electricity sessions still to come moved, moved again the other way)
+            self.free_move = free_move
+            for r in keep:
+                if is_free(r) and _parse_iso(r["end"]) > now and (r["changes"]["skips"] or r["changes"]["added"]):
+                    self._undo_session(r)
+            logger.info("Free electricity sessions: slots in them now move %s them", free_move)
             changed = True
         # (kept for the automatic schedule, which puts them in again under its own plan)
         self._saving_args = (ready_times, cap_min, provider, plug_hours)
@@ -2132,11 +2146,14 @@ class Automation:
             skips.append(key(hit["unplug"], hit["end"]))
             # Keep its end, starting earlier; if that would start in the past (or
             # it's running), keep its start and carry on after its end instead
-            segs = [] if running else self._place_back(hit["end"], needed, cuts, soon)
+            # (a free electricity session with "after": it keeps its start and carries on after instead)
+            move_after = is_free(r) and self.free_move == "after"
+            segs = [] if running or move_after else self._place_back(hit["end"], needed, cuts, soon)
             later_end = sum((y - x for x, y in segs), datetime.timedelta(0)) < needed
             if later_end:
-                # as soon as it can: the next half hour (or its own start, if sooner)
-                first = c if running else max(min(hit["start"], _next_half_hour(soon)), soon)
+                # as soon as it can: the next half hour (or its own start, if sooner); "after": its start
+                first = c if running else max(hit["start"], soon) if move_after else \
+                    max(min(hit["start"], _next_half_hour(soon)), soon)
                 segs = self._place(first, needed, cuts)
                 # ... but not past an off-peak time: the car can charge then anyway, so
                 # what's left isn't carried on after it (e.g. to 05:30 the next morning)
@@ -2187,6 +2204,7 @@ class Automation:
                     + (" (joined with the slot before)" if earlier is not None else "")
                     + (" (joined with the next slot)" if after is not None else "")
                     + ((" (ends later: it had begun)" if running else
+                        " (keeps its start and ends later, after the session)" if move_after else
                         " (starts at the next half hour and ends later: starting earlier would be in the past)"
                         if segs and segs[0][0] < hit["start"] else
                         " (ends later: starting earlier would be in the past)")

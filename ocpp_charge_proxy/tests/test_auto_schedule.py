@@ -1318,7 +1318,7 @@ def test_a_free_session_is_kept_clear_and_planned_around():
     planned = [(A._when(x), A._when(y)) for x, y in a.auto_plan["charge"]]
     x0, y0 = planned[0]
     a.sync_saving_sessions([{"start": x0, "end": y0, "summary": "Free electricity session", "kind": "free"}],
-                           False, None, 360, "Octopus Energy")
+                           False, None, 360, "Octopus Energy", free_move="after")  # (either way: the next best)
     a.sync_auto_schedule([], user_exp(), 4, cap_min=360)
     after = [(A._when(x), A._when(y)) for x, y in a.auto_plan["charge"]]
     assert after and not any(x < y0 and y > x0 for x, y in after)

@@ -421,7 +421,8 @@ async def run() -> None:
                     cap = sc.get("limit_min") if automation.ready_time and not automation.override_guards else None
                     plug_hours = float(s.get("saving_plug_hours") or 2) if s.get("saving_plug") and on["saving"] else None
                     if automation.sync_saving_sessions(both, bool(s.get("saving_block")), ha_link.ready_times,
-                                                       cap, sc.get("provider") or "your supplier", plug_hours, unread):
+                                                       cap, sc.get("provider") or "your supplier", plug_hours, unread,
+                                                       s.get("free_move") or "before"):
                         automation.publish(shared_state)
             except Exception:
                 logger.warning("Saving sessions cycle failed", exc_info=True)
