@@ -156,6 +156,16 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             if h * 2 != int(h * 2) or not 0 <= h <= 12:
                 raise ValueError("The time needed is 0 to 12 hours, in half hours")
             out[key] = h or None
+    if "auto_look_back_h" in raw:  # Where it earns the most: hours back it looks for how full the battery is
+        try:
+            if isinstance(raw["auto_look_back_h"], bool):
+                raise TypeError
+            h = float(raw["auto_look_back_h"])
+        except (TypeError, ValueError):
+            raise ValueError("auto_look_back_h must be a number of hours") from None
+        if h * 2 != int(h * 2) or not 0 <= h <= 24:
+            raise ValueError("Look back 0 to 24 hours, in half hours")
+        out["auto_look_back_h"] = h
     if "auto_high_blocks" in raw:  # the high export half hours marked a day (0: none)
         try:
             if isinstance(raw["auto_high_blocks"], bool):
@@ -315,7 +325,7 @@ def default_settings() -> dict:
         "slot_lead_min": SLOT_LEAD_MIN,
         "read_only": False,  # nothing plugs in or unplugs by itself (shown, logged, not done)
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
-        "auto_sched_on": False, "auto_show_rates": False, "auto_show_highs": True, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",
+        "auto_sched_on": False, "auto_show_rates": False, "auto_show_highs": True, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_look_back_h": 6.0, "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",
         # Populate schedule from load (Automations tab): best charging times per weekday from a power sensor's history
         "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 12, "populate_auto": False,
         # Your supplier: empty / None = found automatically

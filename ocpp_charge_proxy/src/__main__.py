@@ -472,6 +472,8 @@ async def run() -> None:
                 # and for Where it earns the most, where they're only marked)
                 rates_changed = automation.set_export_rates(
                     exp, info, int(s.get("auto_high_blocks") or 0) if s.get("auto_sched_mode") in ("before", "value") else 0)
+                # (Where it earns the most: how far back it looks for how full the battery is)
+                automation.look_back_h = float(s.get("auto_look_back_h", 6.0) if s.get("auto_look_back_h") is not None else 6.0)
                 plan = automation.sync_auto_schedule if on else automation.preview_auto_schedule
                 if plan(imp, exp, int(s.get("auto_sched_blocks") or 12), cap,
                         sc.get("provider") or "your supplier", info,

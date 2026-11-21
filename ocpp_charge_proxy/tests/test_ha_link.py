@@ -401,6 +401,10 @@ def test_read_only_keeps_the_next_slot_sensors_as_they_were(tmp_path):
 
 
 def test_free_sessions_settings_and_reading():
+    assert validate_settings({})["auto_look_back_h"] == 6.0 and validate_settings({"auto_look_back_h": 2.5})["auto_look_back_h"] == 2.5
+    for bad in (-1, 25, 1.25, True, "x"):
+        with pytest.raises(ValueError):
+            validate_settings({"auto_look_back_h": bad})
     s = validate_settings({"free_on": True, "free_entity": "calendar.x"})
     assert s["free_on"] and s["free_entity"] == "calendar.x"
     assert validate_settings({})["free_on"] is False  # (off until turned on)

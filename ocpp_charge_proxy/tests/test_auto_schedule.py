@@ -1347,3 +1347,34 @@ def test_where_it_earns_the_most_counts_the_off_peak_as_charging_the_battery():
     q = A.plan(imp, exp, at(22, 45), 1, mode="value", charge_cap=2, discharge_cap=4, day_of=day, cuts=free, fills=free)
     r = A.plan(imp, exp, at(22, 45), 1, mode="value", charge_cap=2, discharge_cap=4, day_of=day, cuts=free)
     assert brief(q["charge"]) == [("06:30", "07:00")] and brief(r["charge"]) == [("10:00", "10:30")]
+
+
+def test_where_it_earns_the_most_looks_back_for_how_full_the_battery_is():
+    """Planned at 16:40: plugged in 15:00-16:30 (the battery charged then), so it's full for the
+    17:30-18:00 high export already, and the half hour goes after it. Without that, from empty now,
+    it'd charge straight before it."""
+    p = A.plan([], user_exp(), at(16, 40), 1, mode="value", charge_cap=2, discharge_cap=3)
+    q = A.plan([], user_exp(), at(16, 40), 1, mode="value", charge_cap=2, discharge_cap=3, plugged=[(at(15), at(16, 30))])
+    assert brief(p["charge"]) == [("17:00", "17:30")] and brief(q["charge"]) == [("18:30", "19:00")]
+    # (looking back no further than VALUE_LOOK_BACK: a charge before then doesn't count)
+    r = A.plan([], user_exp(), at(16, 40), 1, mode="value", charge_cap=2, discharge_cap=3,
+               plugged=[(at(16, 40) - A.VALUE_LOOK_BACK - datetime.timedelta(hours=2), at(16, 40) - A.VALUE_LOOK_BACK)])
+    assert brief(r["charge"]) == [("17:00", "17:30")]
+
+
+def test_how_far_back_it_looks_is_a_setting():
+    q = A.plan([], user_exp(), at(16, 40), 1, mode="value", charge_cap=2, discharge_cap=3, plugged=[(at(15), at(16, 30))],
+               look_back=datetime.timedelta(0))
+    assert brief(q["charge"]) == [("17:00", "17:30")]  # (0: empty when it plans, as before)
+    r = A.plan([], user_exp(), at(16, 40), 1, mode="value", charge_cap=2, discharge_cap=3, plugged=[(at(15), at(16, 30))],
+               look_back=datetime.timedelta(hours=2))
+    assert brief(r["charge"]) == [("18:30", "19:00")]
+
+
+def test_look_back_planned_again_when_changed():
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    assert a.sync_auto_schedule([], user_exp(), 4, cap_min=360, mode="value")
+    assert not a.sync_auto_schedule([], user_exp(), 4, cap_min=360, mode="value")
+    a.look_back_h = 2.0
+    assert a.sync_auto_schedule([], user_exp(), 4, cap_min=360, mode="value")

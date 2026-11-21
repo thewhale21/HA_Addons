@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.105.0 — Where it earns the most: looks back for how full the battery is
+
+- **Improvement:** **Where it earns the most** no longer takes your
+  battery as empty when it plans. It starts from empty a while before
+  (**Look back** on the Automatic schedule card: 6 hours unless you change
+  it, 0 to 24; 0 is as before),
+  fills it with what's been plugged in since (and off-peak times and free
+  electricity sessions), and empties it where the export rates since paid
+  most, as the plan would. So a slot just before (e.g. 15:30–16:00, planned
+  again at 16:00) leaves it charged for the next high export, and a high
+  export just gone leaves it emptier. Planned again after the update.
+
 ## 2.104.0 — Where it earns the most: the battery charges in off-peak times and free sessions
 
 - **Improvement:** the automatic schedule's **Where it earns the most**

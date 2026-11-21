@@ -926,7 +926,7 @@
               <span class="ctl"><input type="number" id="as-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
             </div>
             <div class="row">
-              <div class="grow">Charge<div class="note" style="margin:0">Where exporting pays least: the cheapest export half hours of each day. Before the high exports: straight before each run of the high export half hours (below), as long as the run, so the battery's full for them, then straight after it, as long again; the rest of the charging half hours where exporting pays least. Where it earns the most: the half hours whose charge your battery then exports for the most, less the charging, from the charge and discharge times (below) and every export rate; the battery's taken as empty to start with (its charge isn't read, so the plan doesn't change as it does), and as charging in off-peak times and free electricity sessions, as it does then.</div></div>
+              <div class="grow">Charge<div class="note" style="margin:0">Where exporting pays least: the cheapest export half hours of each day. Before the high exports: straight before each run of the high export half hours (below), as long as the run, so the battery's full for them, then straight after it, as long again; the rest of the charging half hours where exporting pays least. Where it earns the most: the half hours whose charge your battery then exports for the most, less the charging, from the charge and discharge times (below) and every export rate; the battery's taken as empty a while before it plans (Look back, below), then filled by what's been plugged in since and emptied where exporting paid most (its charge isn't read, so the plan doesn't change as it does), and as charging in off-peak times and free electricity sessions, as it does then.</div></div>
             </div>
             <div class="row" style="margin-top:6px"><div class="seg" id="as-mode" role="group" aria-label="Charge"><button data-mode="cheapest">Where exporting pays least</button><button data-mode="before">Before the high exports</button><button data-mode="value">Where it earns the most</button></div></div>
             <div class="row as-before as-value" hidden>
@@ -936,6 +936,10 @@
             <div class="row as-before as-value" hidden>
               <div class="grow">Discharge time needed<div class="note" style="margin:0">How long a full battery exports for (Where it earns the most: how much each half hour's export takes; empty: 2 h). Before the high exports: a high export run longer than this gets a top-up charge inside it, where the battery then exports the most (charge time needed for a full charge, else the same as this). Empty: none.</div></div>
               <span class="ctl"><input type="number" id="as-dneed" min="0" max="12" step="0.5" placeholder="—" aria-label="Discharge time needed (hours)"> h</span>
+            </div>
+            <div class="row as-value-only" hidden>
+              <div class="grow">Look back<div class="note" style="margin:0">How far back it looks for how full your battery is when it plans: empty this long before, filled by what's been plugged in since (and off-peak times and free electricity sessions) and emptied where exporting paid most. 0: taken as empty when it plans.</div></div>
+              <span class="ctl"><input type="number" id="as-lookback" min="0" max="24" step="0.5" aria-label="Look back (hours)"> h</span>
             </div>
             <div class="row as-before as-value" hidden>
               <div class="grow">High export half hours a day<div class="note" style="margin:0">The day's highest export rates, marked in orange on the schedule. Before the high exports: the charging goes around them. Where it earns the most: only marked, to see them (it uses every export rate either way). 0: none.</div></div>
@@ -2882,6 +2886,7 @@ function drawPickers() {
   if (document.activeElement !== $('as-high')) $('as-high').value = sim.edit.auto_high_blocks ?? 0;
   if (document.activeElement !== $('as-cneed')) $('as-cneed').value = sim.edit.auto_charge_need_h ?? '';
   if (document.activeElement !== $('as-dneed')) $('as-dneed').value = sim.edit.auto_discharge_need_h ?? '';
+  if (document.activeElement !== $('as-lookback')) $('as-lookback').value = sim.edit.auto_look_back_h ?? 6;
   if (document.activeElement !== $('pop-weeks')) $('pop-weeks').value = sim.edit.populate_weeks ?? 4;
   if (document.activeElement !== $('pop-slots')) $('pop-slots').value = sim.edit.populate_slots ?? 12;
   $('pop-auto').checked = !!sim.edit.populate_auto;
@@ -3187,6 +3192,7 @@ function asNote(mode) {
     value: 'Where it earns the most first, the rest where exporting pays least'}[mode] || 'Planned where exporting pays least';
 }
 function asRows(mode) {
+  document.querySelectorAll('.as-value-only').forEach((r) => { r.hidden = mode !== 'value'; });
   document.querySelectorAll('.as-before').forEach((r) => { r.hidden = !(mode === 'before' || (mode === 'value' && r.classList.contains('as-value'))); });
 }
 $('as-mode').addEventListener('click', (e) => {
@@ -3209,6 +3215,12 @@ $('as-mode').addEventListener('click', (e) => {
     saveSensors({[key]: h || null}, h ? `${name}: ${hmDur(h * 3600)}` : `${name}: none`)
       .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
   });
+});
+$('as-lookback').addEventListener('change', (e) => {
+  const h = Number(e.target.value.trim() === '' ? 6 : e.target.value);
+  if (!Number.isFinite(h) || h < 0 || h > 24 || h * 2 !== Math.round(h * 2)) { toast('0 to 24 hours, in half hours'); refreshSimulation(true); return; }
+  saveSensors({auto_look_back_h: h}, h ? `Looks back ${hmDur(h * 3600)} for how full the battery is` : 'Battery taken as empty when it plans')
+    .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
 });
 $('as-high').addEventListener('change', (e) => {
   const n = Number(e.target.value);

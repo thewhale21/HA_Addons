@@ -203,9 +203,13 @@ one-line summary; click it to see it all.
   says how much each half hour's charge adds, Discharge time needed how much
   each half hour's export takes (empty: a full charge in 1 hour, a full
   battery exporting for 2 hours, and the Notes say so). Only those times
-  count, so any size of battery works. The battery is taken as **empty** to
-  start with: its charge isn't read, so the plan doesn't change as the
-  battery does (Predbat would otherwise see the slots move about), and it
+  count, so any size of battery works. The battery is taken as **empty a while
+  before** it plans (**Look back**, 6 hours unless you change it, 0 to 24;
+  0: empty when it plans), then filled by what's been plugged in since (and
+  off-peak times and free sessions, below) and emptied where the export
+  rates since paid most, as the plan would: so a slot or a high export in
+  the last few hours counts. Its charge isn't read, so the plan doesn't
+  change as the battery does (Predbat would otherwise see the slots move about), and it
   never counts on charge that may not be there. It's taken as charging
   in off-peak times (your own and the ones from the import rates) and free
   electricity sessions, as your battery does then, so it's full at the end

@@ -275,6 +275,10 @@ def best_top_ups(prices: list, can_charge: list, start: int, charge: int, discha
 ROUND_TRIP = 0.9  # what comes back out of the battery for what's charged into it (the rest is lost)
 VALUE_CHARGE_HH = 2  # "where it earns the most" without a charge time needed: a full charge takes 1 h
 VALUE_EXPORT_HH = 4  # ... and without a discharge time needed: a full battery exports for 2 h
+# ... and how far back it looks for how full the battery is now: from empty this long ago, through
+# what's charged it since (plugged in, an off-peak time, a free electricity session) and the export
+# rates since (it exports where they pay most, as the plan does), rather than empty now
+VALUE_LOOK_BACK = datetime.timedelta(hours=6)
 
 
 def best_value(halves: list, price: dict, cost: float, can_charge: dict, forced: dict,
@@ -343,7 +347,8 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
          fits: Optional[Callable[[set], bool]] = None, plugged: list = (),
          own: Optional[Callable[[object], int]] = None, copies: bool = True,
          mode: str = "cheapest", highs=(), charge_cap: Optional[int] = None,
-         discharge_cap: Optional[int] = None, fills: list = ()) -> dict:
+         discharge_cap: Optional[int] = None, fills: list = (),
+         look_back: Optional[datetime.timedelta] = None) -> dict:
     """The automatic schedule: {"charge": [(a, b)], "offpeak": [(a, b)], "notes": [...], "known": [(a, b)],
     "top_ups": [start]} (top_ups: half hours charged inside a high export run, discharge_cap).
 
@@ -355,7 +360,8 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     - mode "cheapest": the day's half hours that exporting pays least in.
     - mode "value": where it earns the most (best_value): the half hours whose charge the battery
       then exports for the most, less the charging (the cheapest import price), the battery taken
-      as empty to start with (its charge isn't read), and charging for nothing of ours in an off-peak
+      as empty `look_back` ago (default VALUE_LOOK_BACK; its charge isn't read), filled since by what's been plugged in and
+      emptied where the export rates since paid most, and charging for nothing of ours in an off-peak
       time (from the import rates, or `fills`: yours, and free electricity sessions), as the
       battery does then; charge_cap / discharge_cap: how long a full charge takes and how
       long a full battery exports for, in half hours (VALUE_CHARGE_HH / VALUE_EXPORT_HH if not set).
@@ -410,12 +416,15 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         full = charge_cap or VALUE_CHARGE_HH
         dis = discharge_cap or VALUE_EXPORT_HH
         cost = min((r[2] for r in imp if not r[3]), default=0.0)
-        halves = [t for t in future if t >= earliest]
+        # (from look_back ago: the half hours since are only looked at, for how full the battery is
+        # now; nothing's planned in them)
+        back = VALUE_LOOK_BACK if look_back is None else max(datetime.timedelta(0), look_back)
+        halves = sorted(t for t in price if earliest - back <= t)
         # (charging for nothing of ours: plugged in for something else, or an off-peak time or a free
         # electricity session, when the battery charges cheaply or for free anyway)
         fill = off + list(fills)
         forced = {t: _hits(t, fill) or _hits(t, list(busy) + list(plugged)) for t in halves}
-        free = {t: not _hits(t, nope) for t in halves}
+        free = {t: t >= earliest and not _hits(t, nope) for t in halves}
         picked, earned = best_value(halves, price, cost, free, forced, day_of, need, full, dis)
         _, alone = best_value(halves, price, cost, free, forced, day_of, {}, full, dis)
         done = [t for t in picked if take(t)]
@@ -424,10 +433,11 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
                          f"takes {full * 30} min and a full battery exports for {dis * 30} min")
         if done:
             cap = full * dis
+            looked = f"and by what's been plugged in the last {back.total_seconds() / 3600:g} hours, " if back else ""
             notes.append(f"Where it earns the most: {len(done) * 30} min of charging at {cost:g}p, exported for about "
                          f"{(earned - alone) / cap:.0f}p more for each kWh of your battery than without it "
-                         f"(by the export rates alone, the battery charged in off-peak times and free electricity sessions, "
-                         f"not counting what the house uses, with "
+                         f"(by the export rates alone, the battery charged in off-peak times and free electricity sessions "
+                         f"{looked}not counting what the house uses, with "
                          f"{round((1 - ROUND_TRIP) * 100)}% lost charging and discharging)")
         spare = sum(v for v in need.values() if v > 0)
         if spare:

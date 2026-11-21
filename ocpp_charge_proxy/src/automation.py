@@ -119,7 +119,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 10
+AUTO_PLAN_VERSION = 11
 # (a change from a page that was behind, on a time the add-on has since moved)
 _MOVED = "The schedule changed just before that (the automatic schedule planned again): have a look and try again"
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
@@ -2643,7 +2643,8 @@ class Automation:
         highs = [x[0] for x in self.high_rates if _parse_iso(x[1]) > now] if mode == "before" else []
         how = {"mode": mode, "copies": copies, "ready": self.ready_time,  # (what else it's planned with)
                "charge_cap": charge_cap if mode in ("before", "value") else None,
-               "discharge_cap": discharge_cap if mode in ("before", "value") else None}
+               "discharge_cap": discharge_cap if mode in ("before", "value") else None,
+               "look_back": self.look_back_h if mode == "value" else None}
         if cur and cur.get("key") == self._schedule_key() and same_rates and cur.get("v") == AUTO_PLAN_VERSION \
                 and cur.get("limit") == limit and all(cur.get(k) == v for k, v in how.items()) \
                 and [h for h in cur.get("highs") or [] if _parse_iso(h) + planner.HH > now] == highs:
@@ -2763,7 +2764,8 @@ class Automation:
             [(_parse_iso(r["start"]), _parse_iso(r["end"])) for r in self.saving_sessions if is_free(r)]
         res = planner.plan(imp, plan_exp, now, blocks, cuts, cap_min if fixed else None, per, used, busy=first, fits=fits, fills=fills,
                            plugged=plugged, own=lambda d: window_minutes(done, d, day_end(d)), copies=False,
-                           mode=mode, highs=[_parse_iso(x) for x in highs], charge_cap=how["charge_cap"], discharge_cap=how["discharge_cap"])
+                           mode=mode, highs=[_parse_iso(x) for x in highs], charge_cap=how["charge_cap"], discharge_cap=how["discharge_cap"],
+                           look_back=datetime.timedelta(hours=self.look_back_h))
         notes += res["notes"]
         charge = [(a, b) for a, b in res["charge"] if b > now]
         self._apply_auto(charge, changes)
@@ -2783,6 +2785,7 @@ class Automation:
         return True
 
     _previewing = False
+    look_back_h = 6.0  # Where it earns the most: hours back it looks for how full the battery is (set from the settings)
 
     def _to_local(self, t: datetime.datetime) -> datetime.datetime:
         """An aware time in local time, with the offset local time has then: e.g. rates in UTC for
@@ -2870,7 +2873,7 @@ class Automation:
             return changed
         now = self._now()
         key = repr((blocks, cap_min, self.limit_reset, self._schedule_key(), self.override_guards, mode, self.high_rates,
-                    self._copies(info), self.ready_time, charge_cap, discharge_cap,
+                    self._copies(info), self.ready_time, charge_cap, discharge_cap, self.look_back_h,
                     [(a.isoformat(), p) for a, b, p, _ in exp if b > now],
                     [(a.isoformat(), p, adj) for a, b, p, adj in imp if b > now],
                     now.replace(minute=now.minute // 30 * 30, second=0, microsecond=0).isoformat()))
