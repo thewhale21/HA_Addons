@@ -1323,3 +1323,27 @@ def test_a_free_session_is_kept_clear_and_planned_around():
     after = [(A._when(x), A._when(y)) for x, y in a.auto_plan["charge"]]
     assert after and not any(x < y0 and y > x0 for x, y in after)
     assert sum((y - x for x, y in after), datetime.timedelta(0)) == sum((y - x for x, y in planned), datetime.timedelta(0))
+
+
+def test_where_it_earns_the_most_counts_the_off_peak_as_charging_the_battery():
+    """The user's Saturday night and Sunday morning (export from Predbat, Intelligent Octopus Go):
+    the battery charges in the off-peak time (23:30-05:30) anyway, so it's full at 05:30. Charging
+    at 23:00 for the 00:30 export (as when it was taken as empty) or at 05:30-07:00 adds nothing."""
+    night = {"23:00": 16.91, "23:30": 17.24, "00:00": 17.53, "00:30": 18.32, "01:00": 17.88, "01:30": 16.19,
+             "02:00": 16.35, "02:30": 14.76, "03:00": 16.06, "03:30": 15.77, "04:00": 15.75, "04:30": 15.11,
+             "05:00": 15.54, "05:30": 15.05, "06:00": 15.03, "06:30": 15.03, "07:00": 15.13, "07:30": 15.53,
+             "08:00": 15.67, "08:30": 17.17, "09:00": 16.85, "09:30": 18.04, "10:00": 17.77, "10:30": 17.62,
+             "11:00": 16.86}
+    exp = []
+    for k, p in night.items():
+        h, m = map(int, k.split(":"))
+        d = 0 if h >= 12 else 1
+        exp.append((at(h, m, d), at(h, m + 30, d), p, False))
+    imp, day = iog_import(3), (lambda t: 0)
+    p = A.plan(imp, exp, at(22, 45), 1, mode="value", charge_cap=2, discharge_cap=4, day_of=day)
+    assert brief(p["charge"]) == [("09:00", "09:30")]  # (after exporting what the off-peak time put in)
+    # A free electricity session (09:00-10:00) charges it too: planned differently with it than without
+    free = [(at(9, 0, 1), at(10, 0, 1))]
+    q = A.plan(imp, exp, at(22, 45), 1, mode="value", charge_cap=2, discharge_cap=4, day_of=day, cuts=free, fills=free)
+    r = A.plan(imp, exp, at(22, 45), 1, mode="value", charge_cap=2, discharge_cap=4, day_of=day, cuts=free)
+    assert brief(q["charge"]) == [("06:30", "07:00")] and brief(r["charge"]) == [("10:00", "10:30")]

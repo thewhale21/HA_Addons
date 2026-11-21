@@ -206,7 +206,11 @@ one-line summary; click it to see it all.
   count, so any size of battery works. The battery is taken as **empty** to
   start with: its charge isn't read, so the plan doesn't change as the
   battery does (Predbat would otherwise see the slots move about), and it
-  never counts on charge that may not be there. Charging the battery
+  never counts on charge that may not be there. It's taken as charging
+  in off-peak times (your own and the ones from the import rates) and free
+  electricity sessions, as your battery does then, so it's full at the end
+  of each: charging straight before or after one adds nothing until the
+  battery's exported some (how it exports is unchanged). Charging the battery
   couldn't use (it'd be full, or nothing after it pays for it) goes where
   exporting pays least, so all the day's half hours are still used; it
   keeps out of off-peak times and saving sessions (Axle Energy events too)

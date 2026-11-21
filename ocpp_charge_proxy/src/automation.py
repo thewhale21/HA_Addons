@@ -119,7 +119,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 9
+AUTO_PLAN_VERSION = 10
 # (a change from a page that was behind, on a time the add-on has since moved)
 _MOVED = "The schedule changed just before that (the automatic schedule planned again): have a look and try again"
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
@@ -2757,7 +2757,11 @@ class Automation:
         if est:
             notes.append(f"From {est[0][0].strftime('%a %H:%M')}, planned on an estimate: the export rates for then "
                          "aren't out yet (Octopus: about 16:00), so the day before's are used, and it plans again when they are")
-        res = planner.plan(imp, plan_exp, now, blocks, cuts, cap_min if fixed else None, per, used, busy=first, fits=fits,
+        # (where the battery charges anyway, for "where it earns the most": your off-peak times and
+        # the free electricity sessions; the off-peak times from the import rates it finds itself)
+        fills = self.block_windows(now.date() - datetime.timedelta(days=1), self._horizon_days() + 3, sessions=False) + \
+            [(_parse_iso(r["start"]), _parse_iso(r["end"])) for r in self.saving_sessions if is_free(r)]
+        res = planner.plan(imp, plan_exp, now, blocks, cuts, cap_min if fixed else None, per, used, busy=first, fits=fits, fills=fills,
                            plugged=plugged, own=lambda d: window_minutes(done, d, day_end(d)), copies=False,
                            mode=mode, highs=[_parse_iso(x) for x in highs], charge_cap=how["charge_cap"], discharge_cap=how["discharge_cap"])
         notes += res["notes"]

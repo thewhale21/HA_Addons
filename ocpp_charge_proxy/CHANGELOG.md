@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.104.0 — Where it earns the most: the battery charges in off-peak times and free sessions
+
+- **Improvement:** the automatic schedule's **Where it earns the most**
+  takes your battery as charging in off-peak times (yours and the ones from
+  the import rates) and free electricity sessions, as it does then, so it's
+  full at the end of each. Charging straight before one, or straight after
+  it before anything's exported (e.g. 05:30 after the overnight off-peak),
+  isn't planned as if it filled the battery. How it exports is unchanged.
+  Planned again after the update.
+
 ## 2.103.1 — Axle Energy's events move as their kind does
 
 - **Change:** the Axle Energy card's **Your slots in an event** (2.103.0)
