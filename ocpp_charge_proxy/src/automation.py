@@ -429,7 +429,7 @@ def timezone_name() -> str:
 
 
 FREE_MOVES = ("before", "after")
-AXLE = "Axle Energy"  # its events: their own before/after setting (axle_move)  # where a slot in a free electricity session goes
+  # where a slot in a free electricity session goes
 
 def kind_of(r: dict) -> str:
     """A session's kind: "free" (a free electricity session) or "saving"."""
@@ -498,7 +498,6 @@ class Automation:
         self.saving_past: list[dict] = []  # set from the calendar (src/__main__.py), for the page
         self.saving_block = False
         self.free_move = "before"  # a slot in a free electricity session: "before" it (keeps its end) or "after" (keeps its start)
-        self.axle_move = "before"  # ... and in an Axle Energy event (either kind), the same way
         self._saving_args = None  # (what the saving sessions were last put in with)
         self._sessions_stale = False  # (taken out with the automatic schedule's blocks: put in again)
         # Its blocks that had run when it was turned off, for the Sessions tab: [{"start", "end", "source"}]
@@ -568,7 +567,6 @@ class Automation:
         saving = data.get("saving") or {}
         self.saving_block = bool(saving.get("block", False))
         self.free_move = saving.get("free_move") if saving.get("free_move") in FREE_MOVES else "before"
-        self.axle_move = saving.get("axle_move") if saving.get("axle_move") in FREE_MOVES else "before"
         self.saving_sessions = [r for r in saving.get("sessions") or []
                                 if isinstance(r, dict) and _parse_iso(r.get("start")) and _parse_iso(r.get("end"))]
         for r in self.saving_sessions:
@@ -624,8 +622,7 @@ class Automation:
                          "unplug_wait_s": self.unplug_wait_s, "start_delay": self.start_delay,
                          "override_guards": self.override_guards, "blocks": self.blocks},
             "replug": self.replug,
-            "saving": {"block": self.saving_block, "free_move": self.free_move, "axle_move": self.axle_move,
-                       "sessions": self.saving_sessions},
+            "saving": {"block": self.saving_block, "free_move": self.free_move, "sessions": self.saving_sessions},
             "auto": self.auto_plan,
             "rates_seen": self._rates_seen_saved(),
             "populate_last": self.populate_last,
@@ -1097,10 +1094,8 @@ class Automation:
 
     def _move_after(self, r: dict) -> Optional[bool]:
         """Whether a slot in session `r` moves after it (keeping its start) rather than before
-        (keeping its end): an Axle Energy event as axle_move says, a free electricity session as
-        free_move says. None: a saving session from a calendar, which always moves before."""
-        if r.get("supplier") == AXLE:
-            return self.axle_move == "after"
+        (keeping its end): a free electricity session (Axle Energy's import events too) as
+        free_move says. None: a saving session (Axle's export events too), which always moves before."""
         if is_free(r):
             return self.free_move == "after"
         return None
@@ -1828,7 +1823,7 @@ class Automation:
     def sync_saving_sessions(self, sessions: Optional[list], block: bool, ready_times: Optional[list] = None,
                              cap_min: Optional[int] = None, provider: str = "your supplier",
                              plug_hours: Optional[float] = None, unread: tuple = (),
-                             free_move: Optional[str] = None, axle_move: Optional[str] = None) -> bool:
+                             free_move: Optional[str] = None) -> bool:
         """The sessions read from the calendar ([{"start", "end", "summary"}];
         None: it couldn't be read, so nothing is forgotten). New ones are
         remembered, a cancelled one (gone from the calendar before it starts)
@@ -1841,7 +1836,7 @@ class Automation:
         and sources (a supplier's name, e.g. "Axle Energy": its sensors unavailable) that
         couldn't be read this time: theirs aren't taken as cancelled. `free_move`: where a slot
         in a free electricity session goes, "before" it or "after" it (None: as it was);
-        `axle_move`: the same for an Axle Energy event (its own setting, whichever kind).
+        Axle Energy's import events are free electricity sessions, so it's theirs too.
         Returns whether anything changed (it's saved then)."""
         now = self._now()
         changed = False
@@ -1896,8 +1891,7 @@ class Automation:
         if bool(block) != self.saving_block:
             self.saving_block = bool(block)
             changed = True
-        for attr, value, name in (("free_move", free_move, "Free electricity sessions"),
-                                  ("axle_move", axle_move, "Axle Energy's events")):
+        for attr, value, name in (("free_move", free_move, "Free electricity sessions"),):
             if value in FREE_MOVES and value != getattr(self, attr):
                 # (the slots the sessions it's for still to come moved, moved again the other way)
                 was = [r for r in keep if self._move_after(r) is not None]

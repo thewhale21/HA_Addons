@@ -531,19 +531,16 @@ def test_a_slot_starting_in_a_free_session_moves_after_it_whole():
     assert _windows(a)[0] == ("05 16:00", "05 17:00")
 
 
-def test_axle_energy_events_have_their_own_before_or_after():
+def test_axle_energy_import_events_move_as_free_sessions_do():
+    """Its import events are free electricity sessions (their before/after setting); its export
+    events are saving sessions, which always move before."""
     a, _ = _automation()  # (12:00)
     a.set_schedule(enabled=True, entries=[{"time": "14:30", "action": "plug"}, {"time": "17:00", "action": "unplug"},
-                                          {"time": "18:30", "action": "plug"}, {"time": "21:00", "action": "unplug"}])
-    axle_import = dict(_free(5, 15, 16), supplier="Axle Energy")  # (an import event, as a free one)
-    axle_export = dict(_session(5, 19, 20), supplier="Axle Energy")  # (an export event, as a saving session)
-    a.sync_saving_sessions([axle_import, axle_export], block=True, free_move="before", axle_move="after")
-    assert _windows(a)[:4] == [("05 14:30", "05 15:00"), ("05 16:00", "05 18:00"), ("05 18:30", "05 19:00"), ("05 20:00", "05 22:00")]
-    # the free sessions' setting doesn't change them; theirs moves them back before
-    a.sync_saving_sessions([axle_import, axle_export], block=True, free_move="after", axle_move="after")
-    assert _windows(a)[1] == ("05 16:00", "05 18:00")
-    a.sync_saving_sessions([axle_import, axle_export], block=True, free_move="after", axle_move="before")
-    assert _windows(a)[:4] == [("05 13:30", "05 15:00"), ("05 16:00", "05 17:00"), ("05 17:30", "05 19:00"), ("05 20:00", "05 21:00")]
+                                          {"time": "19:30", "action": "plug"}, {"time": "22:00", "action": "unplug"}])
+    axle_import = dict(_free(5, 15, 16), supplier="Axle Energy")
+    axle_export = dict(_session(5, 20, 21), supplier="Axle Energy")
+    a.sync_saving_sessions([axle_import, axle_export], block=True, free_move="after")
+    assert _windows(a)[:4] == [("05 14:30", "05 15:00"), ("05 16:00", "05 18:00"), ("05 18:30", "05 20:00"), ("05 21:00", "05 22:00")]
 
 
 def test_nothing_is_added_before_a_free_session():

@@ -86,7 +86,7 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if raw["trim_from"] not in ("start", "end"):
             raise ValueError("trim_from must be start or end")
         out["trim_from"] = raw["trim_from"]
-    for key in ("free_move", "axle_move"):  # a slot in a free session / Axle event moves before it (keeps its end) or after
+    for key in ("free_move",):  # a slot in a free electricity session moves before it (keeps its end) or after
         if key in raw:
             if raw[key] not in ("before", "after"):
                 raise ValueError(f"{key} must be before or after")
@@ -307,7 +307,7 @@ def default_settings() -> dict:
         "free_on": False, "free_entity": "", "free_move": "before",
         # Axle Energy's events (its sensors): off; export events are saving sessions, import ones
         # (use more) free electricity sessions if that's on
-        "axle_on": False, "axle_export": True, "axle_import": False, "axle_move": "before",
+        "axle_on": False, "axle_export": True, "axle_import": False,
         # Notifications when the schedule changes: off, and where to (a notify service)
         "notify_on": False, "notify_service": "",
         "notify_supplier": False,  # ...and when your supplier sends something new

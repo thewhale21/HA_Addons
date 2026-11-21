@@ -498,12 +498,9 @@ every 5 minutes.
   to use more. They're off-peak times, as the free electricity sessions:
   your slots move before them and the automatic schedule plans around them.
 
-- **Your slots in an event**: **Before** (the default: a slot keeps its end
-  time and starts earlier) or **After** (it keeps its start time and ends
-  that much later), for both kinds of event. This is its own setting: the
-  free electricity sessions' one doesn't apply to Axle's events. The
-  automatic schedule plans its own charging in the next best half hours
-  either way.
+- Your slots move as for the kind of session: before an export event (as
+  for a saving session), and before or after an import event as the
+  **Free electricity sessions** card's **Your slots in a session** says.
 
 While its sensors are unavailable (e.g. as Home Assistant starts) the events
 already found are kept, not cancelled, and the calendars are still read.

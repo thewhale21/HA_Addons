@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.103.1 — Axle Energy's events move as their kind does
+
+- **Change:** the Axle Energy card's **Your slots in an event** (2.103.0)
+  is taken out again. Axle's import events, as free electricity sessions,
+  move before or after as the Free electricity sessions card says (as in
+  2.102.0), and its export events, as saving sessions, always move before.
+
 ## 2.103.0 — Before or after for Axle Energy's events
 
 - **Feature:** Automations › Axle Energy › **Your slots in an event**:
