@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.103.0 — Before or after for Axle Energy's events
+
+- **Feature:** Automations › Axle Energy › **Your slots in an event**:
+  **Before** (as until now) or **After**, for both kinds of its events.
+  Its own setting: the free electricity sessions' one no longer applies to
+  Axle's import events. The automatic schedule still plans its own
+  charging in the next best half hours either way.
+- **Change:** **Populate schedule** is now called **Populate schedule from
+  load**.
+
 ## 2.102.0 — Slots in a free electricity session: before or after it
 
 - **Feature:** Automations › Free electricity sessions › **Your slots in a

@@ -325,9 +325,9 @@ that day only. E.g. with Octopus (6 hours, resetting at 12:00), an
 18:00–23:00 slot tonight and 3 hours from 14:00: the slot starts at 20:00,
 or ends at 21:00.
 
-### Populate schedule
+### Populate schedule from load
 
-**Automations › Populate schedule** finds the best charging times from your
+**Automations › Populate schedule from load** finds the best charging times from your
 house load's history and can make them your schedule. Choose your **house
 load sensor** (a power sensor, W or kW: it includes the car, so its highest
 is when you usually charged; an energy sensor in kWh is refused), **Weeks
@@ -497,6 +497,13 @@ every 5 minutes.
 - **Import events as free electricity sessions** (off): when Axle wants you
   to use more. They're off-peak times, as the free electricity sessions:
   your slots move before them and the automatic schedule plans around them.
+
+- **Your slots in an event**: **Before** (the default: a slot keeps its end
+  time and starts earlier) or **After** (it keeps its start time and ends
+  that much later), for both kinds of event. This is its own setting: the
+  free electricity sessions' one doesn't apply to Axle's events. The
+  automatic schedule plans its own charging in the next best half hours
+  either way.
 
 While its sensors are unavailable (e.g. as Home Assistant starts) the events
 already found are kept, not cancelled, and the calendars are still read.

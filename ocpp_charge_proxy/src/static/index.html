@@ -888,7 +888,7 @@
           </h2>
           <div class="note" style="margin:0 0 10px">Reads your supplier's free electricity sessions (Octopus Power Up) from a Home Assistant calendar and treats each as an off-peak time, as overnight: nothing plugs in during it, so the car can charge on the free electricity without your supplier's slots. <details class="more"><summary>More</summary><div>A slot of yours that runs into a session keeps its hours. With <b>Before</b> it keeps its end time (its ready time) and starts earlier by the time the session takes out of it (e.g. 12:00–15:00 with a 13:00–14:00 session: 11:00–13:00, then 14:00–15:00), as for a saving session; with <b>After</b> it keeps its start time and ends that much later (12:00–13:00, then 14:00–16:00). The automatic schedule plans its charging around them: in the next cheapest half hours instead. Auto plug-in, the car plugged in sensor and Charge now unplug for a session and carry on after it. Nothing is added before a session. The calendar is read every 5 minutes, up to 8 days ahead; a session taken out of it before it starts puts back anything it changed. Shown in the schedule above, hatched green. Octopus Energy's Power Up calendar (<code>calendar.octopus_energy_…_octoplus_power_up</code>, or the older <code>…_free_electricity_session</code>) is disabled in Home Assistant until you enable it (Settings › Devices &amp; services › Octopus Energy › entities).</div></details></div>
           <div class="row">
-            <div class="grow">Your slots in a session<div class="note" style="margin:0">Moved before the session (keeping their end time) or after it (keeping their start time). The automatic schedule plans its own charging in the next best half hours either way.</div></div>
+            <div class="grow">Your slots in a session<div class="note" style="margin:0">Moved before the session (keeping their end time) or after it (keeping their start time). Axle Energy's events have their own setting, on its card. The automatic schedule plans its own charging in the next best half hours either way.</div></div>
             <div class="seg" id="free-move" role="group" aria-label="Your slots in a free electricity session move"><button data-move="before">Before</button><button data-move="after">After</button></div>
           </div>
           <div class="row"><div class="grow">Calendar<div class="note" style="margin:0">Where your free electricity sessions show</div></div></div>
@@ -910,6 +910,10 @@
             <div class="row">
               <div class="grow">Import events as free electricity sessions<div class="note" style="margin:0">When Axle wants you to use more</div></div>
               <label class="switch"><input type="checkbox" id="axle-import" aria-label="Axle Energy import events as free electricity sessions"><span></span></label>
+            </div>
+            <div class="row">
+              <div class="grow">Your slots in an event<div class="note" style="margin:0">Moved before the event (keeping their end time) or after it (keeping their start time), for both kinds of event. The automatic schedule plans its own charging in the next best half hours either way.</div></div>
+              <div class="seg" id="axle-move" role="group" aria-label="Your slots in an Axle Energy event move"><button data-move="before">Before</button><button data-move="after">After</button></div>
             </div>
           </div>
           <dl class="kv" id="axle-info" style="margin-top:14px"></dl>
@@ -957,7 +961,7 @@
           </div>
         </div>
         <div class="card">
-          <h2>Populate schedule<span class="spacer"></span>
+          <h2>Populate schedule from load<span class="spacer"></span>
             <label class="switch" title="Update automatically: once a day, your slots become the plan"><input type="checkbox" id="pop-auto" aria-label="Update the schedule automatically"><span></span></label>
           </h2>
           <div class="note" style="margin:0 0 10px">Finds the best charging times from your house load's history and can make them your schedule. <details class="more"><summary>More</summary><div>Each day uses only that day's history from the previous weeks (e.g. Mondays from Mondays). The 30-minute slots with the highest average house load are picked per day; adjacent slots are merged. Use your <strong>house load</strong> power sensor (W or kW, not an energy sensor in kWh): it includes the car, so its highest is when you usually charged.<br><br>With a supplier's daily limit (Octopus: 6 hours, counted 12:00 to 12:00), each day runs from when the limit resets, so a night's charging counts as one day and the plan never goes over the limit. With no supplier, days run midnight to midnight.<br><br>Your off-peak times are kept: slots can't go in them, so busy half hours there move to the next busiest times, with a note.<br><br>The switch <strong>updates automatically</strong>: once a day from 12:00 (and straight away when it's turned on, or the sensor, weeks or slots change) the plan is worked out again and, if it's changed, made your schedule as Add to schedule does. It waits while a slot or charge is going.<br><br><strong>Add to schedule</strong> replaces all your slots with the plan (off-peak times stay). The add-on's own charges (auto plug-in, Charge now, the car plugged in sensor) stay, and take the time they need from the new slots after them, as when they were planned.</div></details></div>
@@ -2870,6 +2874,7 @@ function drawPickers() {
   $('axle-on').checked = !!sim.edit.axle_on;
   $('axle-export').checked = sim.edit.axle_export !== false;
   $('axle-import').checked = !!sim.edit.axle_import;
+  $('axle-move').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.move === (sim.edit.axle_move || 'before')));
   $('n-on').checked = !!sim.edit.notify_on;
   $('n-supplier').checked = !!sim.edit.notify_supplier;
   $('n-log').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.l === (sim.edit.notify_log || 'none')));
@@ -3295,12 +3300,12 @@ $('as-n').addEventListener('change', (e) => {
 $('pop-weeks').addEventListener('change', (e) => {
   const n = Number(e.target.value);
   if (!Number.isInteger(n) || n < 1 || n > 104) { toast('Weeks previous must be 1 to 104'); refreshSimulation(true); return; }
-  saveSensors({populate_weeks: n}, `Populate schedule: ${n} week${n === 1 ? '' : 's'} previous`).then(() => refreshPopulatePlan(true));
+  saveSensors({populate_weeks: n}, `Populate schedule from load: ${n} week${n === 1 ? '' : 's'} previous`).then(() => refreshPopulatePlan(true));
 });
 $('pop-slots').addEventListener('change', (e) => {
   const n = Number(e.target.value);
   if (!Number.isInteger(n) || n < 1 || n > 48) { toast('Slots to calculate must be 1 to 48'); refreshSimulation(true); return; }
-  saveSensors({populate_slots: n}, `Populate schedule: ${n} slot${n === 1 ? '' : 's'} per day`).then(() => refreshPopulatePlan(true));
+  saveSensors({populate_slots: n}, `Populate schedule from load: ${n} slot${n === 1 ? '' : 's'} per day`).then(() => refreshPopulatePlan(true));
 });
 async function refreshPopulatePlan(force) {
   const el = $('pop-plan'); if (!el) return;
@@ -3331,7 +3336,7 @@ async function refreshPopulatePlan(force) {
   } catch (e) { el.innerHTML = esc('Couldn\'t calculate the plan: ' + (e.message || e)); }
 }
 $('pop-auto').addEventListener('change', (e) => saveSensors({populate_auto: e.target.checked},
-  e.target.checked ? 'Populate schedule: your slots are updated with the plan once a day' : 'Populate schedule: no longer updated automatically')
+  e.target.checked ? 'Populate schedule from load: your slots are updated with the plan once a day' : 'Populate schedule from load: no longer updated automatically')
   .then(() => [3000, 15000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms))));
 function drawPopulateLast(d) {
   const el = $('pop-last'), last = d && d.schedule.populate_last;
@@ -3356,6 +3361,11 @@ $('save-block').addEventListener('change', (e) => saveSensors({saving_block: e.t
 $('free-move').addEventListener('click', (e) => {
   const m = e.target.dataset.move; if (!m || m === (sim.edit.free_move || 'before')) return;
   saveSensors({free_move: m}, m === 'after' ? 'Slots in a free electricity session move after it' : 'Slots in a free electricity session move before it')
+    .then(() => setTimeout(() => refreshAutomation(true), 1500));
+});
+$('axle-move').addEventListener('click', (e) => {
+  const m = e.target.dataset.move; if (!m || m === (sim.edit.axle_move || 'before')) return;
+  saveSensors({axle_move: m}, m === 'after' ? 'Slots in an Axle Energy event move after it' : 'Slots in an Axle Energy event move before it')
     .then(() => setTimeout(() => refreshAutomation(true), 1500));
 });
 $('free-on').addEventListener('change', (e) => saveSensors({free_on: e.target.checked},
@@ -5392,7 +5402,7 @@ function setupRows() {
       + [({before: 'Before the high exports', value: 'Where it earns the most'})[sim.edit && sim.edit.auto_sched_mode] || '',
         esc(($('as-sum').textContent || '').replace(/^Plan( if it were on)?: /, chk('as-on') ? '' : 'If on: ').replace(/^Plan$/, ''))]
         .filter(Boolean).join(' · ')},
-    {t: 'Populate schedule', id: 'populate-schedule', icon: 'list', sum: () => {
+    {t: 'Populate schedule from load', id: 'populate-schedule', icon: 'list', sum: () => {
       const s = sim.edit || {};
       return (s.populate_auto ? 'Daily · ' : '') + (s.populate_power_entity ? esc(s.populate_power_entity) : 'No house load sensor') + ` · ${esc(String(s.populate_weeks ?? 4))} wk · ${esc(String(s.populate_slots ?? 12))} slots/day`;
     }},

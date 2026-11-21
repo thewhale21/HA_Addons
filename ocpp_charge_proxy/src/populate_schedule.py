@@ -1,4 +1,4 @@
-"""Best charging times from your house load's history (Automations › Populate schedule).
+"""Best charging times from your house load's history (Automations › Populate schedule from load).
 
 For each weekday, uses only that weekday's history over the previous N weeks to find
 the X 30-minute slots with the highest average power. Adjacent slots are merged.
@@ -254,7 +254,7 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int,
     try:
         tz = ZoneInfo(((await ha_link.query({"type": "get_config"}) or {}).get("time_zone")) or "")
     except Exception:
-        logger.debug("Populate schedule: Home Assistant's time zone not found; using the add-on's")
+        logger.debug("Populate schedule from load: Home Assistant's time zone not found; using the add-on's")
     now = datetime.datetime.now(tz) if tz else datetime.datetime.now().astimezone()
     start = (now - datetime.timedelta(weeks=max(1, int(weeks)))).timestamp()
     end = now.timestamp()
@@ -269,7 +269,7 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int,
                 "statistic_ids": [entity_id], "period": period, "types": ["mean"],
             }, timeout=60) or {}
         except Exception as err:
-            logger.debug("Populate schedule %s stats (%s): %s", entity_id, period, err)
+            logger.debug("Populate schedule from load %s stats (%s): %s", entity_id, period, err)
             return []
         return parse_statistics(result, entity_id)
 
@@ -296,7 +296,7 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int,
                 pass
         scale, assumed_unit = _power_scale(unit, vals)
     except Exception as err:
-        logger.debug("Populate schedule unit lookup for %s: %s", entity_id, err)
+        logger.debug("Populate schedule from load unit lookup for %s: %s", entity_id, err)
     if assumed_unit:
         notes.append("Power unit assumed from values")
 
@@ -330,7 +330,7 @@ async def calculate(ha_link, entity_id: str, weeks: int, slots: int,
             if five:
                 notes.append("Estimated from raw history (less precise)")
         except Exception as err:
-            logger.debug("Populate schedule history fallback for %s: %s", entity_id, err)
+            logger.debug("Populate schedule from load history fallback for %s: %s", entity_id, err)
             return {"ok": False, "message": f"Couldn't read history for {entity_id}: {err}"}
 
     return build_plan(five, hourly, weeks=int(weeks), slots=int(slots), scale=scale, now=now, extra_notes=notes,

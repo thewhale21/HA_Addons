@@ -86,10 +86,11 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         if raw["trim_from"] not in ("start", "end"):
             raise ValueError("trim_from must be start or end")
         out["trim_from"] = raw["trim_from"]
-    if "free_move" in raw:  # a slot in a free electricity session moves before it (keeps its end) or after (keeps its start)
-        if raw["free_move"] not in ("before", "after"):
-            raise ValueError("free_move must be before or after")
-        out["free_move"] = raw["free_move"]
+    for key in ("free_move", "axle_move"):  # a slot in a free session / Axle event moves before it (keeps its end) or after
+        if key in raw:
+            if raw[key] not in ("before", "after"):
+                raise ValueError(f"{key} must be before or after")
+            out[key] = raw[key]
     if "plug_auto" in raw:  # the car plugged in sensor plugs in (off: kept, but does nothing)
         out["plug_auto"] = bool(raw["plug_auto"])
     if "plug_ready" in raw:  # the car plugged in sensor adds a charge to the schedule
@@ -306,7 +307,7 @@ def default_settings() -> dict:
         "free_on": False, "free_entity": "", "free_move": "before",
         # Axle Energy's events (its sensors): off; export events are saving sessions, import ones
         # (use more) free electricity sessions if that's on
-        "axle_on": False, "axle_export": True, "axle_import": False,
+        "axle_on": False, "axle_export": True, "axle_import": False, "axle_move": "before",
         # Notifications when the schedule changes: off, and where to (a notify service)
         "notify_on": False, "notify_service": "",
         "notify_supplier": False,  # ...and when your supplier sends something new
@@ -315,7 +316,7 @@ def default_settings() -> dict:
         "read_only": False,  # nothing plugs in or unplugs by itself (shown, logged, not done)
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
         "auto_sched_on": False, "auto_show_rates": False, "auto_show_highs": True, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",
-        # Populate schedule (Automations tab): best charging times per weekday from a power sensor's history
+        # Populate schedule from load (Automations tab): best charging times per weekday from a power sensor's history
         "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 12, "populate_auto": False,
         # Your supplier: empty / None = found automatically
         "supplier_entity": "", "ready_entity": "", "daily_limit_h": None, "ready_from": "", "ready_to": "",

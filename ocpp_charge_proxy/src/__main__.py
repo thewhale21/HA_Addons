@@ -36,7 +36,7 @@ SAVING_TICK_S = 30  # and the schedule checked against it this often
 HAND_SOURCES = ("web page", "Home Assistant", "charge now", "charge now cancelled")
 AUTO_READ_S = 120  # the automatic schedule's rates are read this often
 AUTO_TICK_S = 15  # and it's checked (planned again if they or the schedule changed) this often
-POPULATE_TICK_S = 300  # Populate schedule › Update automatically: how often it looks whether it's due
+POPULATE_TICK_S = 300  # Populate schedule from load › Update automatically: how often it looks whether it's due
 POPULATE_HOUR = 12  # ...once a day from this hour (local): charging's usually over by midday
 POPULATE_RETRY_S = 3600  # ...and after it couldn't, tries again this long after
 AUTO_WAIT_SUPPLIER_S = 180  # after a start, how long it waits for the supplier's integration before planning without it
@@ -422,7 +422,7 @@ async def run() -> None:
                     plug_hours = float(s.get("saving_plug_hours") or 2) if s.get("saving_plug") and on["saving"] else None
                     if automation.sync_saving_sessions(both, bool(s.get("saving_block")), ha_link.ready_times,
                                                        cap, sc.get("provider") or "your supplier", plug_hours, unread,
-                                                       s.get("free_move") or "before"):
+                                                       s.get("free_move") or "before", s.get("axle_move") or "before"):
                         automation.publish(shared_state)
             except Exception:
                 logger.warning("Saving sessions cycle failed", exc_info=True)
@@ -492,7 +492,7 @@ async def run() -> None:
                 logger.warning("Automatic schedule cycle failed", exc_info=True)
             await asyncio.sleep(AUTO_TICK_S)
     async def populate_loop() -> None:
-        """Populate schedule › Update automatically: once a day from POPULATE_HOUR (and straight
+        """Populate schedule from load › Update automatically: once a day from POPULATE_HOUR (and straight
         away when it's turned on or its sensor, weeks or slots change) the plan is worked out
         again and made your schedule, if it changed. Never while a slot or charge is going: it
         waits for it to end."""
@@ -516,14 +516,14 @@ async def run() -> None:
                             ok, text, failed_at = True, result_text(res), 0.0
                         except Exception as err:
                             ok, text, failed_at = False, str(err) or type(err).__name__, time.monotonic()
-                        logger.info("Populate schedule (updated automatically): %s", text)
+                        logger.info("Populate schedule from load (updated automatically): %s", text)
                         automation.populate_last = {"date": now.date().isoformat() if ok else last.get("date"),
                                                     "at": now.isoformat(timespec="seconds"), "ok": ok, "text": text,
                                                     "key": key if ok else last.get("key")}
                         automation._save()
                         automation.publish(shared_state)
             except Exception:
-                logger.warning("Populate schedule cycle failed", exc_info=True)
+                logger.warning("Populate schedule from load cycle failed", exc_info=True)
             await asyncio.sleep(POPULATE_TICK_S)
     # A Charge now button pressed in HA: an automation can't answer "are you
     # sure?", so it goes ahead over the daily limit, as auto plug-in does

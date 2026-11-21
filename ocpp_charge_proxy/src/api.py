@@ -607,7 +607,7 @@ async def handle_populate_plan(request: web.Request) -> web.Response:
     try:
         plan = await _populate_calc(request, _smart(request))
     except Exception as err:
-        logger.debug("Populate schedule plan failed", exc_info=True)
+        logger.debug("Populate schedule from load plan failed", exc_info=True)
         return web.json_response({"ok": False, "message": str(err) or "Couldn't calculate the plan"})
     return web.json_response(plan, dumps=_dumps)
 
@@ -626,7 +626,7 @@ async def handle_populate_apply(request: web.Request) -> web.Response:
     except (ValueError, TypeError) as err:
         return _error(str(err) or "Couldn't add it to the schedule", 400)
     except Exception as err:
-        logger.debug("Populate schedule failed", exc_info=True)
+        logger.debug("Populate schedule from load failed", exc_info=True)
         return _error(str(err) or "Couldn't add it to the schedule", 400)
     automation.publish(request.app["shared_state"])
     return web.json_response({"status": "ok", **result, **automation.snapshot()}, dumps=_dumps)

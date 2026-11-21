@@ -405,8 +405,10 @@ def test_free_sessions_settings_and_reading():
     assert s["free_on"] and s["free_entity"] == "calendar.x"
     assert validate_settings({})["free_on"] is False  # (off until turned on)
     assert validate_settings({})["free_move"] == "before" and validate_settings({"free_move": "after"})["free_move"] == "after"
-    with pytest.raises(ValueError):
-        validate_settings({"free_move": "during"})
+    assert validate_settings({})["axle_move"] == "before" and validate_settings({"axle_move": "after"})["axle_move"] == "after"
+    for bad in ({"free_move": "during"}, {"axle_move": "x"}):
+        with pytest.raises(ValueError):
+            validate_settings(bad)
     with pytest.raises(ValueError):
         validate_settings({"free_entity": "sensor.x"})
     link, _ = _link()
