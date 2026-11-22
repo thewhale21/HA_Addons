@@ -82,10 +82,13 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         out["auto_plug_soc"] = soc
     if "auto_plug_ready" in raw:
         out["auto_plug_ready"] = bool(raw["auto_plug_ready"])
-    if "trim_from" in raw:  # over the daily limit, a charge takes its time from the start or end of later slots
-        if raw["trim_from"] not in ("start", "end"):
-            raise ValueError("trim_from must be start or end")
-        out["trim_from"] = raw["trim_from"]
+    # over the daily limit, a charge takes its time from the start or end of later slots: auto plug-in
+    # (and Charge now), and the car plugged in sensor's own
+    for key in ("trim_from", "plug_trim_from"):
+        if key in raw:
+            if raw[key] not in ("start", "end"):
+                raise ValueError(f"{key} must be start or end")
+            out[key] = raw[key]
     for key in ("free_move",):  # a slot in a free electricity session moves before it (keeps its end) or after
         if key in raw:
             if raw[key] not in ("before", "after"):
@@ -310,6 +313,7 @@ def default_settings() -> dict:
         "trim_from": "start",  # over the daily limit: a charge takes time from the start ("end": the end) of the next slot
         "plug_auto": True,  # the car plugged in sensor plugs in (on, as before there was a switch)
         "plug_ready": False, "plug_hours": DEFAULT_AUTO_PLUG_HOURS,
+        "plug_trim_from": "start",  # ... and the car plugged in sensor's charge, its own (Automations › Car plugged in)
         # Saving sessions: off; the calendar is found automatically unless picked
         "saving_on": False, "saving_entity": "", "saving_block": True,
         "saving_plug": False, "saving_plug_hours": DEFAULT_SAVING_PLUG_HOURS,
@@ -504,6 +508,9 @@ class HaLink:
 
     def _load(self) -> None:
         def use(data: dict) -> None:
+            if isinstance(data, dict) and "plug_trim_from" not in data and data.get("trim_from") in ("start", "end"):
+                # (before 2.106.0 the car plugged in sensor used auto plug-in's: the same to start with)
+                data = {**data, "plug_trim_from": data["trim_from"]}
             if isinstance(data, dict) and "axle_on" not in data:
                 # (before 2.101.0 Axle Energy's events came with the saving sessions: on with them)
                 data = {**data, "axle_on": bool(data.get("saving_on"))}

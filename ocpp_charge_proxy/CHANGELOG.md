@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.106.0 — Over the daily limit for the car plugged in sensor
+
+- **Feature:** Automations › Car plugged in › **Over the daily limit**:
+  when the car's charge takes a day over your supplier's limit, the time
+  comes off the start of the next slot or its end, as auto plug-in's
+  option, but its own. It's the same as auto plug-in's until you change it
+  (the car plugged in sensor used that one before).
+
 ## 2.105.1 — Planner and free session fixes
 
 - **Fix:** Where it earns the most, planning again after an off-peak time

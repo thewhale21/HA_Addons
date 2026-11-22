@@ -814,7 +814,7 @@
             <span class="ctl"><input type="number" id="sim-auto-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours"> h</span>
           </div>
           <div class="row" id="sim-trim-row">
-            <div class="grow">Over the daily limit<div class="note" style="margin:0">Where the time comes from when a charge takes a day over <span class="supn" data-f="your supplier">your supplier</span>'s daily limit: the start of the next slot (it starts later) or its end (it ends earlier). Charge now and the car plugged in sensor use it too.</div></div>
+            <div class="grow">Over the daily limit<div class="note" style="margin:0">Where the time comes from when a charge takes a day over <span class="supn" data-f="your supplier">your supplier</span>'s daily limit: the start of the next slot (it starts later) or its end (it ends earlier). Charge now uses it too; the car plugged in sensor has its own (Car plugged in, below).</div></div>
             <div class="seg" id="sim-trim" role="group" aria-label="Over the daily limit, take the time from"><button data-trim="start">Start of the next slot</button><button data-trim="end">End of it</button></div>
           </div>
           <div class="note" id="sim-auto-cap" hidden style="margin:0"></div>
@@ -834,6 +834,10 @@
           <div class="row" id="plug-hours-row">
             <div class="grow">Charge for<div class="note" style="margin:0">Hours from plugging in (30-minute steps)</div></div>
             <span class="ctl"><input type="number" id="plug-hours" min="0.5" max="12" step="0.5" aria-label="Charge for hours when plugged in"> h</span>
+          </div>
+          <div class="row" id="plug-trim-row">
+            <div class="grow">Over the daily limit<div class="note" style="margin:0">Where the time comes from when the car's charge takes a day over <span class="supn" data-f="your supplier">your supplier</span>'s daily limit: the start of the next slot (it starts later) or its end (it ends earlier).</div></div>
+            <div class="seg" id="plug-trim" role="group" aria-label="Car plugged in, over the daily limit, take the time from"><button data-trim="start">Start of the next slot</button><button data-trim="end">End of it</button></div>
           </div>
           <div class="note" id="plug-cap" hidden style="margin:0"></div>
           <dl class="kv" id="sim-plug" style="margin-top:14px"></dl>
@@ -2864,6 +2868,8 @@ function drawPickers() {
   $('plug-ready').checked = !!sim.edit.plug_ready;
   if (document.activeElement !== $('plug-hours')) $('plug-hours').value = sim.edit.plug_hours ?? 3;
   $('plug-hours-row').hidden = !sim.edit.plug_ready;
+  $('plug-trim-row').hidden = !sim.edit.plug_ready;
+  $('plug-trim').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.trim === (sim.edit.plug_trim_from || 'start')));
   $('save-on').checked = !!sim.edit.saving_on;
   $('save-block').checked = sim.edit.saving_block !== false;
   $('save-plug').checked = !!sim.edit.saving_plug;
@@ -3131,6 +3137,10 @@ $('sim-trim').addEventListener('click', (e) => {
   saveSensors({trim_from: t}, t === 'end' ? 'Over the daily limit: the time comes off the end of the next slot' : 'Over the daily limit: the time comes off the start of the next slot');
 });
 $('plug-hours').addEventListener('change', chargeHours('plug_hours'));
+$('plug-trim').addEventListener('click', (e) => {
+  const t = e.target.dataset.trim; if (!t || t === (sim.edit.plug_trim_from || 'start')) return;
+  saveSensors({plug_trim_from: t}, t === 'end' ? 'Car plugged in, over the daily limit: the time comes off the end of the next slot' : 'Car plugged in, over the daily limit: the time comes off the start of the next slot');
+});
 // Automations › Automatic schedule: what it planned (from auto.data), and its settings
 function drawAutoSched() {
   const on = !!(sim.edit && sim.edit.auto_sched_on);
@@ -3387,6 +3397,7 @@ $('plug-auto').addEventListener('change', (e) => saveSensors({plug_auto: e.targe
   e.target.checked ? 'Car plugged in on: it plugs in when the sensor turns on' : 'Car plugged in off: the sensor is kept, but doesn\'t plug in'));
 $('plug-ready').addEventListener('change', (e) => {
   $('plug-hours-row').hidden = !e.target.checked;
+  $('plug-trim-row').hidden = !e.target.checked;
   saveSensors({plug_ready: e.target.checked}, e.target.checked ? 'A charge is added when the car is plugged in' : 'Nothing is added when the car is plugged in');
 });
 $('sim-auto-soc').addEventListener('change', (e) => {

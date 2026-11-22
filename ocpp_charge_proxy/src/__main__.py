@@ -22,7 +22,7 @@ from src.app_settings import AppSettings
 from src.config import load_config, starting_current_amps
 from src.gui_data import GuiSources, Health, PowerHistory, sample_loop
 from src.ha_history import ChartHistory
-from src.automation import AUTO_SOURCE, CHARGE_NOW_SOURCE, Automation, charge_shown, auto_plug_charge, automation_loop, SLOT_LEAD_MIN
+from src.automation import AUTO_SOURCE, CAR_PLUGGED_SOURCE, CHARGE_NOW_SOURCE, Automation, charge_shown, auto_plug_charge, automation_loop, SLOT_LEAD_MIN
 from src.ha_link import HaLink
 from src import auto_schedule, log_filters, log_notify, migrate, schedule_notify, suppliers
 from src.persistence import Persistence
@@ -313,7 +313,8 @@ async def run() -> None:
     async def plan_charge(hours: float, source: str = AUTO_SOURCE, dry_run: bool = False) -> dict:
         sc = ha_link.smart_charging()
         automation.limit_reset = sc.get("limit_reset")  # e.g. Octopus: 12:00
-        automation.trim_from = ha_link.settings.get("trim_from") or "start"  # (Automations › Auto plug-in)
+        # (Automations › Auto plug-in, also for Charge now; the car plugged in sensor has its own)
+        automation.trim_from = ha_link.settings.get("plug_trim_from" if source == CAR_PLUGGED_SOURCE else "trim_from") or "start"
         plan = await auto_plug_charge(
             automation, hours,
             set_ready_time=ready_time_guarded if sc.get("found") else None,

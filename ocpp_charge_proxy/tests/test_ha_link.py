@@ -438,3 +438,16 @@ def test_free_sessions_settings_and_reading():
 
     link.all_states = none
     assert _run(link.read_free_sessions()) is None and "Power Up" in link.free_info["error"]
+
+
+def test_the_car_plugged_in_sensor_has_its_own_over_the_limit(tmp_path):
+    """Its own setting, the same as auto plug-in's to start with (it used that before 2.106.0)."""
+    import json
+    assert validate_settings({})["plug_trim_from"] == "start"
+    assert validate_settings({"plug_trim_from": "end"})["plug_trim_from"] == "end"
+    with pytest.raises(ValueError):
+        validate_settings({"plug_trim_from": "middle"})
+    (tmp_path / "sensors.json").write_text(json.dumps({"trim_from": "end"}))
+    assert _link(tmp_path)[0].settings["plug_trim_from"] == "end"
+    (tmp_path / "sensors.json").write_text(json.dumps({"trim_from": "end", "plug_trim_from": "start"}))
+    assert _link(tmp_path)[0].settings["plug_trim_from"] == "start"
