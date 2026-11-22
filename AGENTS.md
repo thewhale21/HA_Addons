@@ -13,6 +13,9 @@ These apply to any AI coding agent or assistant working in this repository
    version, new or changed behaviour or settings, a decision the owner
    made or turned down, a new limitation, an idea offered but not built,
    or a change to the owner's setup), update it and bump its
-   "Last updated" line. Keep it a summary, not a changelog.
+   "Last updated" line. Keep it a summary, not a changelog. Its add-on
+   table must show each add-on's current version: GitHub checks this on
+   every push (`.github/workflows/handover.yaml`; locally
+   `python .github/scripts/check_handover.py`).
 4. **Never write credentials** (API keys, tokens, passwords) into code, the
    repository, logs or pages.

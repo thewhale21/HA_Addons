@@ -1,0 +1,25 @@
+name: Handover notes
+
+# HANDOVER.md must list every add-on at its current version, so it's updated with each release,
+# whichever agent or person makes it (see AGENTS.md)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  check:
+    name: HANDOVER.md is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code from GitHub
+        uses: actions/checkout@v6.0.2
+
+      - name: Check HANDOVER.md
+        run: python3 .github/scripts/check_handover.py

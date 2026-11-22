@@ -17,7 +17,9 @@ top). The owner only runs them inside Home Assistant.
   what they turned down), a new limitation, an idea offered but not built,
   or changes to the owner's setup. Bump its "Last updated" line. Keep it
   a summary, not a changelog. This applies to every agent and tool working
-  here (see `AGENTS.md`).
+  here (see `AGENTS.md`). Its add-on table must show every add-on's
+  current version: `python .github/scripts/check_handover.py` checks, and
+  so does GitHub on each push.
 - Tests: `cd <addon> && python -m pytest tests/`.
 - New add-ons start from `addon_template/` with
   `python scripts/new_addon.py <folder> "<Name>" "<description>"`.
