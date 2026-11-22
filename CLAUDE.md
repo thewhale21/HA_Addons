@@ -17,3 +17,23 @@ top). The owner only runs them inside Home Assistant.
 - **OCPP Charge Proxy:** changes go to this repo only. The separate
   `ocpp_charge_proxy` repository (its old home) isn't updated any more
   unless the owner says so.
+
+## Picking this up
+
+Read `HANDOVER.md` first: the owner's setup (Octopus IOG, Sigenergy,
+Predbat, the OCPP proxy as a virtual charger), what each add-on does,
+recent decisions, known limitations and open ideas.
+
+- **Give the push command as one paste-ready PowerShell line:**
+  `cd C:\Users\Matthew\VScodeRepo\HA_Addons; git push origin main <tags>`.
+- **Never write credentials** (API keys, tokens) into code, the repo, logs
+  or pages; add-ons take them from their options.
+- **Writing style** for pages, DOCS.md, changelogs and log lines: plain
+  British English, short sentences, "you/your", examples with real times.
+  Match what's there.
+- **OCPP Charge Proxy:** bump `AUTO_PLAN_VERSION` in `src/automation.py`
+  whenever the automatic schedule's planning rules change. Add a test for
+  each fix that fails on the old code. The page (`src/static/index.html`)
+  has no tests: check its scripts parse and look at it in a browser.
+- When the owner asks a question ("question, not an ask"), answer it
+  without changing code.
