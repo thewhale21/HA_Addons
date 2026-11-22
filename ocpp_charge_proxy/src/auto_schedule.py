@@ -348,7 +348,7 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
          own: Optional[Callable[[object], int]] = None, copies: bool = True,
          mode: str = "cheapest", highs=(), charge_cap: Optional[int] = None,
          discharge_cap: Optional[int] = None, fills: list = (),
-         look_back: Optional[datetime.timedelta] = None) -> dict:
+         look_back: Optional[datetime.timedelta] = None, ran: Optional[list] = None) -> dict:
     """The automatic schedule: {"charge": [(a, b)], "offpeak": [(a, b)], "notes": [...], "known": [(a, b)],
     "top_ups": [start]} (top_ups: half hours charged inside a high export run, discharge_cap).
 
@@ -360,7 +360,8 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     - mode "cheapest": the day's half hours that exporting pays least in.
     - mode "value": where it earns the most (best_value): the half hours whose charge the battery
       then exports for the most, less the charging (the cheapest import price), the battery taken
-      as empty `look_back` ago (default VALUE_LOOK_BACK; its charge isn't read), filled since by what's been plugged in and
+      as empty `look_back` ago (default VALUE_LOOK_BACK; its charge isn't read), charged since where it
+      was plugged in (`ran`: what really ran; else `busy` and `plugged`), filled since by what's been plugged in and
       emptied where the export rates since paid most, and charging for nothing of ours in an off-peak
       time (from the import rates, or `fills`: yours, and free electricity sessions), as the
       battery does then; charge_cap / discharge_cap: how long a full charge takes and how
@@ -368,7 +369,8 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
       What it doesn't need goes where exporting pays least.
     - mode "before": first straight before each run of the high export half hours (`highs`: their
       starts, e.g. each day's highest, marked), as long as the run, as far as there's room (back
-      to the run before, or now), the dearest runs first; then straight after each run, as long
+      to the run before, or now; not for a run straight after an off-peak time or `fills`, when
+      the battery's full from it), the dearest runs first; then straight after each run, as long
       as it (up to the next run), with what's left; the rest of the day's half hours then where
       exporting pays least (never in a high one). charge_cap: the most half hours of each charge
       before or after a run (the charge time needed), else the run's length. discharge_cap: how
@@ -422,8 +424,11 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         halves = sorted(t for t in price if earliest - back <= t)
         # (charging for nothing of ours: plugged in for something else, or an off-peak time or a free
         # electricity session, when the battery charges cheaply or for free anyway)
-        fill = off + list(fills)
-        forced = {t: _hits(t, fill) or _hits(t, list(busy) + list(plugged)) for t in halves}
+        # (the off-peak times since it looks back too: offpeak() only gives the ones still to end, so
+        # the one that ended at 05:30 would be missed by a plan made at 06:00)
+        fill = offpeak(imp, earliest - back) + list(fills)
+        been = list(busy) + list(plugged) if ran is None else list(ran)  # (what's been plugged in, before now)
+        forced = {t: _hits(t, fill) or _hits(t, list(busy) + list(plugged) if t >= earliest else been) for t in halves}
         free = {t: t >= earliest and not _hits(t, nope) for t in halves}
         picked, earned = best_value(halves, price, cost, free, forced, day_of, need, full, dis)
         _, alone = best_value(halves, price, cost, free, forced, day_of, {}, full, dis)
@@ -448,6 +453,9 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     if mode == "before":
         runs = _windows(highs)
         short = 0
+        # (where the battery charges anyway: an off-peak time, yours or from the import rates, or a free
+        # electricity session; a run straight after one starts full, so nothing's charged for it before it)
+        filled = offpeak(imp, earliest - datetime.timedelta(days=1)) + list(fills)
 
         def length(a, b) -> int:
             """How many half hours to charge before (or after) the run from a to b: as long as it, at most
@@ -467,6 +475,9 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
             floor = max([earliest] + [y for _, y in runs if y <= a])
             t = a - HH
             while got < want and t >= floor:
+                if _hits(t, filled):
+                    got = want  # (full from the off-peak time or free session before it)
+                    break
                 if t not in highs and take(t):
                     got += 1
                 t -= HH
@@ -480,7 +491,10 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
                 # (how full it starts: the charging straight before it, its own or anything else plugged
                 # in then, e.g. your slot, or what's been when it's under way)
                 got, t = 0, a - HH
-                while got < full and (t in charges or _hits(t, plugged)):
+                while got < full and (t in charges or _hits(t, plugged) or _hits(t, filled)):
+                    if _hits(t, filled):
+                        got = full  # (full from an off-peak time or free session)
+                        break
                     got, t = got + 1, t - HH
                 # (in a 'charge'th of a full battery's worth of export: as full as its charge before made it)
                 units = min(full * discharge_cap, got * discharge_cap)

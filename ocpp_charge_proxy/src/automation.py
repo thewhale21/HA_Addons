@@ -119,7 +119,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 11
+AUTO_PLAN_VERSION = 12
 # (a change from a page that was behind, on a time the add-on has since moved)
 _MOVED = "The schedule changed just before that (the automatic schedule planned again): have a look and try again"
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
@@ -2765,7 +2765,12 @@ class Automation:
         res = planner.plan(imp, plan_exp, now, blocks, cuts, cap_min if fixed else None, per, used, busy=first, fits=fits, fills=fills,
                            plugged=plugged, own=lambda d: window_minutes(done, d, day_end(d)), copies=False,
                            mode=mode, highs=[_parse_iso(x) for x in highs], charge_cap=how["charge_cap"], discharge_cap=how["discharge_cap"],
-                           look_back=datetime.timedelta(hours=self.look_back_h))
+                           look_back=datetime.timedelta(hours=self.look_back_h),
+                           # (what's really been plugged in, for how full the battery is: with the schedule off,
+                           # your slots didn't run, only the charges that run anyway)
+                           ran=self.windows(None if self.schedule_enabled else
+                                            [e for e in without_fallbacks(self.entries) if e.get("source") in AUTO_SOURCES],
+                                            now))
         notes += res["notes"]
         charge = [(a, b) for a, b in res["charge"] if b > now]
         self._apply_auto(charge, changes)
@@ -2827,7 +2832,8 @@ class Automation:
         Predbat copy of the day before, nor a day all at one price), from yesterday on. And the
         high export half hours (Automations › Automatic schedule › High export half hours a day):
         each day's `high` highest export rates (the limit's day, e.g. 12:00 to 12:00, else
-        midnight to midnight; all of it, gone or to come), marked on the schedule only: charging
+        midnight to midnight; all of it, gone or to come), of those above the day's lowest (none on
+        a day all at one price), marked on the schedule only: charging
         isn't kept out of them. Returns whether either changed."""
         from src import auto_schedule as planner
         now = self._now()
@@ -2852,8 +2858,12 @@ class Automation:
         high = max(0, min(int(high or 0), planner.MAX_BLOCKS))
         # (a day whose start isn't known, e.g. just after a restart in the morning, has gone partly
         # unseen: its highest can't be told, so none of it is marked)
+        # Only half hours that pay more than the day's lowest (by more than planner.CHEAP_WITHIN_P) can
+        # be high: a day all at one price has none, and fewer than `high` above the rest aren't made up
+        # with ones at the day's usual price (e.g. a morning peak of 4 half hours with 6 asked for)
         picked = sorted(x for d, halves in days.items() if min(h[0] for h in halves) <= d
-                        for x in sorted(halves, key=lambda x: (-x[2], x[0]))[:high])
+                        for x in sorted((h for h in halves if h[2] > min(y[2] for y in halves) + planner.CHEAP_WITHIN_P),
+                                        key=lambda x: (-x[2], x[0]))[:high])
         highs = [[_iso_local(a), _iso_local(b), p] + ([True] if a in est else []) for a, b, p in picked if b > lo]
         if rates == self.export_rates and highs == self.high_rates:
             return False
@@ -3342,14 +3352,16 @@ class Automation:
         return due
 
     def block_starts_due(self) -> list:
-        """The weekly off-peak times that have started since the last look
-        (within CATCH_UP_S): [start]. The first look after a restart finds none."""
+        """The weekly off-peak times and free electricity sessions (off-peak times too) that have
+        started since the last look (within CATCH_UP_S): [start]. The first look after a restart
+        finds none."""
         now = self._now()
         prev, self._block_check = self._block_check, now
         if prev is None or now <= prev:
             return []
         prev = max(prev, now - datetime.timedelta(seconds=CATCH_UP_S))
-        return [a for a, _ in self.block_windows(prev.date(), 2, sessions=False) if prev < a <= now]
+        free = [_parse_iso(r["start"]) for r in self.saving_sessions if is_free(r)]
+        return sorted(a for a in [w for w, _ in self.block_windows(prev.date(), 2, sessions=False)] + free if prev < a <= now)
 
     def last_event(self, at: datetime.datetime) -> Optional[tuple[datetime.datetime, dict]]:
         """The schedule's most recent enabled time at or before `at` (within a week)."""

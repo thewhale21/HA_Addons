@@ -187,7 +187,9 @@ one-line summary; click it to see it all.
   gets a charge straight before it, as long as the run (e.g. high exports
   16:00–19:00: it charges 13:00–16:00), so the battery's full for them. It
   goes back as far as it needs to in free half hours, but not past the run
-  before or now; the dearest runs get theirs first. Then, with what's left,
+  before or now, and not past an off-peak time or free electricity session:
+  the battery's full from that (so a morning peak straight after the
+  overnight off-peak gets nothing before it); the dearest runs get theirs first. Then, with what's left,
   a charge straight after each run, as long as it again (not past the next
   run). The rest of the day's charging half hours then go where exporting
   pays least (never in a high export half hour), so all of them are used,
@@ -251,7 +253,9 @@ one-line summary; click it to see it all.
   Charge time needed is then how long a full charge takes (empty: the same
   as the discharge time).
 - **High export half hours a day** (a number, 0 for none): each limit
-  day's highest export rates, as many half hours as you set, marked in orange
+  day's highest export rates, as many half hours as you set (only ones that
+  pay more than the day's lowest: none on a flat rate, and fewer if only a
+  few stand out), marked in orange
   along the bottom of each day on the schedule (and listed in the plan). Only
   marked: the charging isn't kept out of them. The rates it's seen are
   remembered for 2 days, so in the morning the limit day from 12:00
@@ -480,7 +484,8 @@ entities). It's read every 5 minutes, up to 8 days ahead.
 - The automatic schedule plans its charging around the sessions: its half
   hours go in the next best time, whichever way your slots move.
 - Auto plug-in, the car plugged in sensor and Charge now are planned
-  around them, as for a saving session.
+  around them, as for a saving session. Plugged in by hand (or from Home
+  Assistant) as a session starts, it unplugs, as at an off-peak time.
 - Nothing is added before a session (the saving sessions' **Plug in
   before a session** is for those only), and it works with the
   **Saving sessions** card on or off.

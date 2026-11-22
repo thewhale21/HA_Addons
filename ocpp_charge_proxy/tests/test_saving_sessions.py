@@ -590,3 +590,16 @@ def test_free_sessions_in_the_schedule_notifications():
     r = [{"start": "2026-10-05T18:00:00+00:00", "end": "2026-10-05T19:00:00+00:00", "kind": "free"},
          {"start": "2026-10-06T18:00:00+00:00", "end": "2026-10-06T19:00:00+00:00"}]
     assert causes([], r, False) == {datetime.date(2026, 10, 5): "free electricity session 18:00–19:00"}
+
+
+def test_plugged_in_by_hand_it_unplugs_as_a_free_session_starts():
+    """As at the start of an off-peak time (block_starts_due): nothing charges in a free session."""
+    a, clock = _automation()
+    a.sync_saving_sessions([_free(5, 13, 14)], block=True)
+    assert a.block_starts_due() == []  # (the first look)
+    clock.dt = _at(5, 12, 59)
+    assert a.block_starts_due() == []
+    clock.dt = _at(5, 13) + datetime.timedelta(seconds=15)
+    assert a.block_starts_due() == [_at(5, 13)]
+    clock.dt = _at(5, 13, 1)
+    assert a.block_starts_due() == []

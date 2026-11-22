@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.105.1 — Planner and free session fixes
+
+- **Fix:** Where it earns the most, planning again after an off-peak time
+  had ended (e.g. at 06:00 after 23:30–05:30), no longer forgot that the
+  off-peak time had filled the battery when it looked back, and so added a
+  charge it didn't need (e.g. straight before a 07:00 high export).
+- **Fix:** looking back, your slots counted as having charged the battery
+  even with the schedule off, when they don't plug in. Only what really
+  ran counts now (with the schedule off: auto plug-in, Charge now, the car
+  plugged in sensor and the automatic schedule's own blocks).
+- **Fix:** plugged in by hand (or from Home Assistant) as a free
+  electricity session starts, it now unplugs, as at the start of an
+  off-peak time.
+- **Fix:** High export half hours a day marked half hours at the day's
+  usual price when fewer than that stood out (e.g. a 2-hour morning peak
+  with 3 hours asked for marked 2 more at random), and some on a flat
+  export rate. Only half hours that pay more than the day's lowest are
+  marked now.
+- **Fix:** Before the high exports charged for a high export straight
+  after an off-peak time (e.g. a 06:00 morning peak) the evening before,
+  reaching back past the off-peak time, when the battery's full from it.
+  Nothing's charged before such a run now (the same after a free
+  electricity session). Planned again after the update.
+
 ## 2.105.0 — Where it earns the most: looks back for how full the battery is
 
 - **Improvement:** **Where it earns the most** no longer takes your

@@ -1378,3 +1378,62 @@ def test_look_back_planned_again_when_changed():
     assert not a.sync_auto_schedule([], user_exp(), 4, cap_min=360, mode="value")
     a.look_back_h = 2.0
     assert a.sync_auto_schedule([], user_exp(), 4, cap_min=360, mode="value")
+
+
+def test_an_off_peak_time_just_ended_still_fills_the_battery_when_it_looks_back():
+    """Planned at 06:10, after the 23:30-05:30 off-peak time: it's still counted as having filled the
+    battery (it used to be left out once it had ended), so the 07:00 high export needs no charge before
+    it, as when planned at 05:00."""
+    night = {"23:00": 16.91, "23:30": 17.24, "00:00": 17.53, "00:30": 18.32, "01:00": 17.88, "01:30": 16.19,
+             "02:00": 16.35, "02:30": 14.76, "03:00": 16.06, "03:30": 15.77, "04:00": 15.75, "04:30": 15.11,
+             "05:00": 15.54, "05:30": 15.05, "06:00": 15.03, "06:30": 15.03, "07:00": 40.0, "07:30": 15.53,
+             "08:00": 15.67, "08:30": 17.17, "09:00": 16.85, "09:30": 18.04, "10:00": 17.77, "10:30": 17.62,
+             "11:00": 16.86}
+    exp = []
+    for k, p in night.items():
+        h, m = map(int, k.split(":"))
+        d = 0 if h >= 12 else 1
+        exp.append((at(h, m, d), at(h, m + 30, d), p, False))
+    imp, day = iog_import(3), (lambda t: 0)
+    early = A.plan(imp, exp, at(5, 0, 1), 1, mode="value", charge_cap=2, discharge_cap=4, day_of=day)
+    later = A.plan(imp, exp, at(6, 10, 1), 1, mode="value", charge_cap=2, discharge_cap=4, day_of=day)
+    assert brief(early["charge"]) == brief(later["charge"]) == [("09:00", "09:30")]
+
+
+def test_the_look_back_doesnt_count_your_slots_with_the_schedule_off():
+    """With the schedule off your 15:00-16:30 slot didn't plug in, so it didn't charge the battery: from
+    empty, the half hour goes straight before the 17:30 high export (as with no slot). On, it ran: after it."""
+    out = {}
+    for enabled in (False, True):
+        a, _ = _auto(at(16, 40))
+        a.limit_reset = "12:00"
+        a.set_schedule(enabled=enabled, entries=[{"time": "15:00", "action": "plug", "days": WEEK},
+                                                 {"time": "16:30", "action": "unplug", "days": WEEK}])
+        a.sync_auto_schedule([], user_exp(), 1, cap_min=360, mode="value", charge_cap=2, discharge_cap=3)
+        out[enabled] = [c[0][11:16] for c in a.auto_plan["charge"] if c[0][:10] == "2026-11-03"]
+    assert out == {False: ["17:00"], True: ["18:30"]}
+
+
+def test_high_exports_arent_marked_at_the_days_usual_price():
+    """A flat export rate has no high half hours, and a morning peak of 2 hours with 3 hours asked for
+    marks just the peak (not 2 more half hours at the usual price, picked at random)."""
+    flat = [(at(0, 30 * k), at(0, 30 * (k + 1)), 15.0, False) for k in range(96)]
+    a, _ = _auto(at(12, 5))
+    a.limit_reset = "12:00"
+    a.set_export_rates(flat, {}, 6)
+    assert a.high_rates == []
+    peak = [(t, e, 33.0 if (t.hour == 6 or t.hour == 7) else 13.0, f) for t, e, _, f in flat]
+    b, _ = _auto(at(12, 5))
+    b.limit_reset = "12:00"
+    b.set_export_rates(peak, {}, 6)
+    assert sorted({h[0][11:16] for h in b.high_rates}) == ["06:00", "06:30", "07:00", "07:30"]
+
+
+def test_before_the_high_exports_doesnt_charge_for_a_run_straight_after_the_off_peak():
+    """A 06:00-08:00 morning peak straight after the 23:30-05:30 off-peak time: the battery's full from
+    it, so nothing's charged for it before (it used to reach back past the off-peak time to 22:30)."""
+    exp = [(at(0, 30 * k), at(0, 30 * (k + 1)), 33.0 if (at(0, 30 * k).hour in (6, 7)) else 13.0, False) for k in range(96)]
+    highs = [t for t, _, p, _ in exp if p > 30 and t.day == at(0, 0, 1).day]
+    p = A.plan(iog_import(3), exp, at(12, 5), 6, mode="before", highs=highs, charge_cap=3, discharge_cap=3,
+               day_of=lambda t: (t - datetime.timedelta(hours=12)).date())
+    assert not any(a < at(5, 30, 1) and a >= at(20) for a, _ in p["charge"])  # (nothing the evening before for it)
