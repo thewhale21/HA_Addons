@@ -79,3 +79,16 @@ def test_running_states_match_however_the_integration_writes_them():
     assert not _in("preparing_comm", lists["discharging_states"])
     assert _in("solar_surplus", lists["energy_mode_states"]) and _in("fast_charging", lists["fast_mode_states"])
     assert not _in("idle", lists["plugged_states"])
+
+
+def test_charge_or_discharge_only_is_kept_with_a_point(tmp_path):
+    """While the schedule has it charge (or discharge) only, its points say so, for the chart's strip;
+    otherwise they're as before (5 values), and old saved points still load."""
+    h = SocHistory(str(tmp_path))
+    h.add(1000.0, 50, 80, 20, "charge", "charge")
+    h.add(1000.0 + STEP_S + 1, 51, 80, 20, "idle", None)
+    h.add(1000.0 + 2 * (STEP_S + 1), 52, 80, 20, "discharge", "discharge")
+    h.add(1000.0 + 3 * (STEP_S + 1), 52, 80, 20, "idle", "both")  # (anything else: left off)
+    assert [p[5:] for p in h.points] == [["charge"], [], ["discharge"], []]
+    h.save()
+    assert SocHistory(str(tmp_path)).points == h.points

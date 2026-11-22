@@ -98,7 +98,8 @@ class Runner:
                 # the charger reads it: left out of the chart, so it doesn't jump from that
                 stale = self.manager.soc_before_plug_in and i.plugged_in
                 self.soc_history.add(now, None if stale else self.manager.soc, i.high, i.low,
-                                     soc_state(i.active, i.discharging, i.running_state, i.plugged_in, i.alarm))
+                                     soc_state(i.active, i.discharging, i.running_state, i.plugged_in, i.alarm),
+                                     getattr(i, "only", None))  # (charge or discharge only, from the schedule)
             while self.manager.alarms:  # a charger alarm: say so, whatever the notification settings for starts and stops
                 try:
                     await self.notify("EVDC: charger alarm", self.manager.alarms.pop(0))

@@ -5,7 +5,7 @@ subscription. `CLAUDE.md` has the working rules; this file has the
 background: what each add-on does, how the owner uses them, what was
 decided and why, and what's still open.
 
-**Last updated:** 22 Nov 2026 (ocpp_charge_proxy 2.107.0).
+**Last updated:** 22 Nov 2026 (sigenergy_evdc_soc_range_manager 0.43.0).
 
 **Keep this file current.** Whoever changes the repository (any AI agent
 or person) updates this file in the same commit when the change affects
@@ -62,7 +62,7 @@ anything below, and bumps the "Last updated" line.
 |---|---|---|
 | `ocpp_charge_proxy` | 2.107.0 | The main one: below. |
 | `octopus_charge_pack` | 0.10.8 | Octopus API helpers; 0.10.8 drops old `device_id`/`poll_seconds` options via the Supervisor API (`POST http://supervisor/addons/self/options`). |
-| `sigenergy_evdc_soc_range_manager` | 0.42.1 | "SigEnergy DC Charger": keeps the EVDC car between limits on a weekly schedule. Limits are named **Maximum charge** and **Keep at least**; an entry can be Maximum charge / Keep at least / Both / Charge only / Discharge only (one-way entries stay within the limits); entries may overlap; start == end means 24 hours; the week view has three lanes (one-way entries in the middle). 99 tests. |
+| `sigenergy_evdc_soc_range_manager` | 0.43.0 | "SigEnergy DC Charger": keeps the EVDC car between limits on a weekly schedule. Limits are named **Maximum charge** and **Keep at least**; an entry can be Maximum charge / Keep at least / Both / Charge only / Discharge only (one-way entries stay within the limits); entries may overlap; start == end means 24 hours; the week view has three lanes (one-way entries in the middle). The Overview's Car SoC chart shows charge/discharge only as a coloured strip along the bottom (0.43.0; points in `soc_history.json` carry a 6th value, "charge"/"discharge", only then). 100 tests (test_api needs pytest-asyncio). |
 | `tigo_solar` | 0.7.0 | Tigo panel data: roof view (reclaimed in brackets), drag-to-select chart, quick-select per string, per-panel estimates every minute (system power shared by interpolated reading shares), backfill of real 15-minute per-panel readings via Tigo's `lastvalue` (`resourceId=lastValue-{date}-{pin|reclaimedPower}-{HH:MM}`, about 2 requests per slot, 3 s apart; trusted after 3 answers within 35%/30 W of system power, off after 3 misses), fixed scale, hover tooltip, reclaimed %, "By the time of day" and "Through the year" heatmap / 3D surface with Month/Year and 3D zoom. 22 tests. |
 | `heat_loss_calculator`, `predbat_dashboard`, `stellantis_ev_stats` | 0.7.1, 0.3.2, 0.3.2 | Not worked on recently. |
 | `addon_template` | 0.1.7 | Start new add-ons with `python scripts/new_addon.py`. |

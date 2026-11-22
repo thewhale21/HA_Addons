@@ -21,7 +21,9 @@ SAVE_EVERY_S = 600
 class SocHistory:
     def __init__(self, data_dir: Optional[str] = None) -> None:
         self._path = os.path.join(data_dir, "soc_history.json") if data_dir else None
-        self.points: list[list] = []  # [ts, soc, high, low, state]: state "charge", "discharge", "idle", "unplugged" or "alarm"
+        # [ts, soc, high, low, state(, only)]: state "charge", "discharge", "idle", "unplugged" or "alarm";
+        # only "charge" or "discharge" while the schedule had it work that way only (left off otherwise)
+        self.points: list[list] = []
         self.backfilled = False
         self.alarms_fixed = False  # points from before alarms were recognised (0.13.0) relabelled
         self._saved_at = 0.0
@@ -33,7 +35,7 @@ class SocHistory:
         try:
             with open(self._path, encoding="utf-8") as f:
                 data = json.load(f)
-            self.points = [p for p in data.get("points") or [] if isinstance(p, list) and len(p) == 5]
+            self.points = [p for p in data.get("points") or [] if isinstance(p, list) and len(p) in (5, 6)]
             self.backfilled = bool(data.get("backfilled"))
             self.alarms_fixed = bool(data.get("alarms_fixed"))
         except FileNotFoundError:
@@ -54,8 +56,9 @@ class SocHistory:
         except Exception:
             logger.warning("Could not save the SoC history", exc_info=True)
 
-    def add(self, now: float, soc: Optional[float], high: Optional[float], low: Optional[float], state: str) -> None:
-        point = [round(now, 1), soc, high, low, state]
+    def add(self, now: float, soc: Optional[float], high: Optional[float], low: Optional[float], state: str,
+            only: Optional[str] = None) -> None:
+        point = [round(now, 1), soc, high, low, state] + ([only] if only in ("charge", "discharge") else [])
         last = self.points[-1] if self.points else None
         if last is not None and last[1:] == point[1:] and now - last[0] < STEP_S:
             return

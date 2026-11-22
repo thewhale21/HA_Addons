@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.43.0 — Charge and discharge only on the Car SoC chart
+
+- **Feature:** the Overview's **Car SoC** chart shows when the schedule had
+  the charger work one way only: a strip along the bottom in the charging
+  colour for **Charge only** and the discharging colour for **Discharge
+  only**, in the key and in the hover details, as the limits are shown.
+  Recorded from this version on.
+
 ## 0.42.1 — Charge and discharge only as entries of their own
 
 - **Change:** in the schedule editor an entry is now one of **Maximum

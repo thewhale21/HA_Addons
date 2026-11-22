@@ -334,6 +334,7 @@
   .socchart .soc { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; }
   .socchart .lim { fill: none; stroke: var(--text2); stroke-width: 1.2; stroke-dasharray: 5 3; opacity: .9; }
   .socchart .shade { opacity: .16; }
+  .socchart .only { opacity: .85; }
   .socchart .cross { stroke: var(--text2); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
   .socchart .ev { stroke-width: 1.5; }
   .legend i.ln-lim { display: inline-block; width: 14px; height: 0; border-top: 1.5px dashed var(--text2); vertical-align: middle; margin-right: 5px; }
@@ -560,9 +561,10 @@
     <div class="card">
       <h2>Car SoC<span class="spacer"></span><span class="seg" role="group" aria-label="Period" id="sc-hours"><button data-h="1" aria-pressed="false">1h</button><button data-h="3" aria-pressed="false">3h</button><button data-h="6" aria-pressed="false">6h</button><button data-h="12" aria-pressed="false">12h</button><button data-h="24" aria-pressed="true">24h</button><button data-h="48" aria-pressed="false">48h</button></span></h2>
       <div class="chart-box"><button class="btn small zoom-reset" id="sc-reset" hidden title="Back to the period picked">Reset zoom</button>
-      <div class="chart socchart" id="o-socchart" role="img" aria-label="The car's SoC over time, with the limits and the starts and stops"></div></div>
+      <div class="chart socchart" id="o-socchart" role="img" aria-label="The car's SoC over time, with the limits, charge or discharge only, and the starts and stops"></div></div>
       <div class="legend">
         <span><i class="ln-soc"></i>SoC</span><span><i class="ln-lim"></i>Limits</span>
+        <span><b class="band" style="background:var(--s-charge);height:4px;opacity:.85"></b>Charge only</span><span><b class="band" style="background:var(--s-dis);height:4px;opacity:.85"></b>Discharge only</span>
         <span><b class="band" style="background:var(--s-charge);opacity:.3"></b>Charging</span><span><b class="band" style="background:var(--s-dis);opacity:.3"></b>Discharging</span><span><b class="band" style="background:repeating-linear-gradient(135deg, var(--text2) 0 2px, transparent 2px 4px);opacity:.5"></b>Unplugged</span><span><b class="band" style="background:var(--err);opacity:.3"></b>Charger alarm</span>
         <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:var(--ok)"/></svg> Started</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1H9L5 9Z" style="fill:var(--text2)"/></svg> Stopped</span>
         <span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 1L9 9H1Z" style="fill:none;stroke:var(--text2);stroke-width:1.5"/></svg> Would (watch only)</span><span><svg width="10" height="10" viewBox="0 0 10 10"><path d="M5 0L10 5L5 10L0 5Z" style="fill:var(--warn)"/></svg> Dropped out</span><span><svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="3.5" style="fill:none;stroke:var(--text2);stroke-dasharray:2 1.5"/></svg> Started or stopped elsewhere</span><span style="margin-left:auto">Drag or scroll to zoom · double-click to reset</span>
@@ -1748,6 +1750,15 @@ function drawSocChart() {
     hiPath += `M${X(a)},${Y(p[2])} H${X(b)} `; loPath += `M${X(a)},${Y(p[3])} H${X(b)} `;
   }
   svg += `<path class="lim" d="${hiPath}"/><path class="lim" d="${loPath}"/>`;
+  // Charge only / discharge only (the schedule): a strip along the bottom, in its colour
+  const onlyRuns = [];
+  for (const [a, b, p] of spans) {
+    const o = p[5] || null, last = onlyRuns[onlyRuns.length - 1];
+    if (!o) continue;
+    if (last && last[2] === o && Math.abs(last[1] - a) < 1) last[1] = b; else onlyRuns.push([a, b, o]);
+  }
+  for (const [a, b, o] of onlyRuns)
+    svg += `<rect class="only" x="${X(a)}" y="${P.t + ph - 6}" width="${Math.max(1, X(b) - X(a))}" height="6" style="fill:${o === 'charge' ? 'var(--s-charge)' : 'var(--s-dis)'}"/>`;
   // The SoC line
   let line = '', pen = false;
   for (const [a, b, p] of spans) {
@@ -1811,6 +1822,7 @@ function drawSocChart() {
     cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('visibility', 'visible');
     tip.innerHTML = `<b>${dateTime(new Date(t * 1000).toISOString())}</b><br>Car ${p[1] == null ? '—' : num(p[1], 0) + '%'} · ${STATE[p[4]] || p[4]}`
       + (p[2] != null ? `<br>Limits ${num(p[3], 0)}–${num(p[2], 0)}%` : '')
+      + (p[5] ? `<br>${p[5] === 'charge' ? 'Charge only' : 'Discharge only'} (schedule)` : '')
       + near.map((e) => `<br>${WHAT(e)} ${new Date(e.t * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'})}`).join('');
     tip.hidden = false;
     const bx = box.getBoundingClientRect();
