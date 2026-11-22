@@ -11,6 +11,13 @@ top). The owner only runs them inside Home Assistant.
   (e.g. `ocpp_charge_proxy-2.39.2`). The owner pushes; give them the push
   command with every tag not yet pushed (`git push origin main <tags>`).
 - Update the add-on's `DOCS.md` when behaviour changes.
+- **Update `HANDOVER.md` in the same commit** as any change that alters
+  what someone picking this up should know: a new add-on or version, new
+  or changed behaviour or settings, a decision the owner made (including
+  what they turned down), a new limitation, an idea offered but not built,
+  or changes to the owner's setup. Bump its "Last updated" line. Keep it
+  a summary, not a changelog. This applies to every agent and tool working
+  here (see `AGENTS.md`).
 - Tests: `cd <addon> && python -m pytest tests/`.
 - New add-ons start from `addon_template/` with
   `python scripts/new_addon.py <folder> "<Name>" "<description>"`.

@@ -3,7 +3,13 @@
 Context for picking this repository up in a new Claude session or
 subscription. `CLAUDE.md` has the working rules; this file has the
 background: what each add-on does, how the owner uses them, what was
-decided and why, and what's still open. Written 22 Nov 2026.
+decided and why, and what's still open.
+
+**Last updated:** 22 Nov 2026 (ocpp_charge_proxy 2.107.0).
+
+**Keep this file current.** Whoever changes the repository (any AI agent
+or person) updates this file in the same commit when the change affects
+anything below, and bumps the "Last updated" line.
 
 ## The owner and how they work
 
