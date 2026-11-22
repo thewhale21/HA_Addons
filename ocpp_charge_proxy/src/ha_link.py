@@ -91,8 +91,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
             out[key] = raw[key]
     for key in ("free_move",):  # a slot in a free electricity session moves before it (keeps its end) or after
         if key in raw:
-            if raw[key] not in ("before", "after"):
-                raise ValueError(f"{key} must be before or after")
+            if raw[key] not in ("before", "after", "bank"):
+                raise ValueError(f"{key} must be before, after or bank")
             out[key] = raw[key]
     if "plug_auto" in raw:  # the car plugged in sensor plugs in (off: kept, but does nothing)
         out["plug_auto"] = bool(raw["plug_auto"])

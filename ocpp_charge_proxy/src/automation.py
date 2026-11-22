@@ -428,7 +428,7 @@ def timezone_name() -> str:
 
 
 
-FREE_MOVES = ("before", "after")
+FREE_MOVES = ("before", "after", "bank")
   # where a slot in a free electricity session goes
 
 def kind_of(r: dict) -> str:
@@ -1092,13 +1092,13 @@ class Automation:
         the free electricity sessions always: [(a, b)]."""
         return [(_parse_iso(r["start"]), _parse_iso(r["end"])) for r in self.saving_sessions if self._blocks(r)]
 
-    def _move_after(self, r: dict) -> Optional[bool]:
-        """Whether a slot in session `r` moves after it (keeping its start) rather than before
-        (keeping its end): a free electricity session (Axle Energy's import events too) as
-        free_move says. None: a saving session (Axle's export events too), which always moves before."""
-        if is_free(r):
-            return self.free_move == "after"
-        return None
+    def _free_mode(self, r: dict) -> Optional[str]:
+        """How a slot in session `r` gives way: a free electricity session (Axle Energy's import events
+        too) as free_move says: "before" it (keeping its end), "after" it (keeping its start) or "bank"
+        (the session's time just taken out of it: it charges in the session anyway, and the time's left
+        free in the daily limit; the automatic schedule plans as it always does). None: a saving session
+        (Axle's export events too), which always moves before."""
+        return self.free_move if is_free(r) else None
 
     def _blocks(self, r: dict) -> bool:
         """Whether session `r` is an off-peak time: a free electricity session, or a saving
@@ -1894,11 +1894,11 @@ class Automation:
         for attr, value, name in (("free_move", free_move, "Free electricity sessions"),):
             if value in FREE_MOVES and value != getattr(self, attr):
                 # (the slots the sessions it's for still to come moved, moved again the other way)
-                was = [r for r in keep if self._move_after(r) is not None]
-                before = {r["id"]: self._move_after(r) for r in was}
+                was = [r for r in keep if self._free_mode(r) is not None]
+                before = {r["id"]: self._free_mode(r) for r in was}
                 setattr(self, attr, value)
                 for r in keep:
-                    if before.get(r["id"]) is not None and self._move_after(r) != before[r["id"]] \
+                    if before.get(r["id"]) is not None and self._free_mode(r) != before[r["id"]] \
                             and _parse_iso(r["end"]) > now and (r["changes"]["skips"] or r["changes"]["added"]):
                         self._undo_session(r)
                 logger.info("%s: slots in them now move %s them", name, value)
@@ -2161,9 +2161,16 @@ class Automation:
             # Keep its end, starting earlier; if that would start in the past (or
             # it's running), keep its start and carry on after its end instead
             # (a free electricity session with "after": it keeps its start and carries on after instead)
-            move_after = bool(self._move_after(r))
-            segs = [] if running or move_after else self._place_back(hit["end"], needed, cuts, soon)
-            later_end = sum((y - x for x, y in segs), datetime.timedelta(0)) < needed
+            mode = self._free_mode(r)
+            move_after = mode == "after"
+            banked = mode == "bank"
+            if banked:
+                # (the session's time taken out of it, nothing moved: it charges in the session anyway)
+                segs = [(x, y) for x, y in minus([(c if running else hit["start"], hit["end"])], [(sa, sb)]) if y > x]
+                later_end = False
+            else:
+                segs = [] if running or move_after else self._place_back(hit["end"], needed, cuts, soon)
+                later_end = sum((y - x for x, y in segs), datetime.timedelta(0)) < needed
             if later_end:
                 # as soon as it can: the next half hour (or its own start, if sooner); "after": its start
                 first = c if running else max(hit["start"], soon) if move_after else \
@@ -2215,6 +2222,7 @@ class Automation:
                 parts[-1] = (parts[-1][0], after["end"])
             span = ", ".join(f"{x.strftime('%H:%M')}–{y.strftime('%H:%M')}" for x, y in parts)
             note = (f"the {hit['start'].strftime('%H:%M')}–{hit['end'].strftime('%H:%M')} slot is now {span}"
+                    + (" (the session's time banked: it charges in the session anyway)" if banked else "")
                     + (" (joined with the slot before)" if earlier is not None else "")
                     + (" (joined with the next slot)" if after is not None else "")
                     + ((" (ends later: it had begun)" if running else

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.107.0 — Bank a free electricity session's time
+
+- **Feature:** Free electricity sessions › Your slots in a session: **Bank
+  it**, as well as Before and After. Nothing's moved: the session's time is
+  just taken out of a slot that runs into it, as the car charges in the
+  session anyway, and that time's left free in your supplier's daily limit
+  (e.g. a 1-hour session: 5 hours plugged in that day, not 6). The
+  automatic schedule plans as it always does, in the next best half hours.
+  Axle Energy's import events follow it too.
+
 ## 2.106.0 — Over the daily limit for the car plugged in sensor
 
 - **Feature:** Automations › Car plugged in › **Over the daily limit**:

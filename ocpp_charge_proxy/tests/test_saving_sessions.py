@@ -603,3 +603,32 @@ def test_plugged_in_by_hand_it_unplugs_as_a_free_session_starts():
     assert a.block_starts_due() == [_at(5, 13)]
     clock.dt = _at(5, 13, 1)
     assert a.block_starts_due() == []
+
+
+def test_a_slot_in_a_free_session_can_bank_its_time():
+    """Bank it: the session's hour is taken out of the slot and nothing moves (it charges in the session
+    anyway), so the day has an hour less plugged in, free in the daily limit."""
+    a, _ = _automation()  # (12:00)
+    a.set_schedule(enabled=True, entries=[{"time": "14:30", "action": "plug"}, {"time": "17:00", "action": "unplug"}])
+    a.sync_saving_sessions([_free(5, 15, 16)], block=True, free_move="bank")
+    assert _windows(a)[:2] == [("05 14:30", "05 15:00"), ("05 16:00", "05 17:00")]
+    assert "banked" in a.saving_sessions[0]["notes"][0]
+    # a slot inside it altogether: gone for the day
+    b, _ = _automation()
+    b.set_schedule(enabled=True, entries=[{"time": "15:00", "action": "plug"}, {"time": "16:00", "action": "unplug"}])
+    b.sync_saving_sessions([_free(5, 15, 16)], block=True, free_move="bank")
+    assert not any(w[0].startswith("05") for w in _windows(b))
+    # changed to Before: moved instead; the session gone: as it was
+    a.sync_saving_sessions([_free(5, 15, 16)], block=True, free_move="before")
+    assert _windows(a)[:2] == [("05 13:30", "05 15:00"), ("05 16:00", "05 17:00")]
+    a.sync_saving_sessions([], block=True)
+    assert _windows(a)[0] == ("05 14:30", "05 17:00")
+
+
+def test_banked_while_the_slot_is_going():
+    a, clock = _automation(start=_at(5, 14, 0))
+    a.set_schedule(enabled=True, entries=[{"time": "14:30", "action": "plug"}, {"time": "17:00", "action": "unplug"}])
+    clock.dt = _at(5, 15, 10)
+    a.sync_saving_sessions([_free(5, 15, 16)], block=True, free_move="bank")
+    w = [(x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in a.windows() if y > _at(5, 14)]
+    assert w[:2] == [("14:30", "15:11"), ("16:00", "17:00")]  # (unplugs now, back after it, same end)

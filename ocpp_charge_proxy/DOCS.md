@@ -481,10 +481,16 @@ entities). It's read every 5 minutes, up to 8 days ahead.
     later instead.
   - **After**: it keeps its start time and ends that much later
     (12:00–13:00 and 14:00–16:00), stopping at an off-peak time.
+  - **Bank it**: nothing moves; the session's time is just taken out of
+    the slot (12:00–13:00 and 14:00–15:00), as the car charges in the
+    session anyway. That time is left free in your supplier's daily limit
+    (e.g. 5 hours plugged in of Octopus's 6). A slot already going unplugs
+    for the session and carries on after it to its usual end.
 
   Changing it moves the slots for the sessions still to come again.
 - The automatic schedule plans its charging around the sessions: its half
-  hours go in the next best time, whichever way your slots move.
+  hours go in the next best time, whichever way your slots move (banked
+  too: it plans as it always does).
 - Auto plug-in, the car plugged in sensor and Charge now are planned
   around them, as for a saving session. Plugged in by hand (or from Home
   Assistant) as a session starts, it unplugs, as at an off-peak time.
