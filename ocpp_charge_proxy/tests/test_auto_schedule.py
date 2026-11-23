@@ -632,8 +632,8 @@ def _cheap_from(lo, hi):
 def test_a_block_longer_than_the_limit_is_split_where_it_resets():
     """With the ready time and Octopus's 6 hours from 12:00: its 09:00-15:30 (6½ hours, across
     12:00) unplugs and plugs back in at 12:00, as your slots are, so the supplier sees two
-    charges (ready times 12:00 and 15:30). 10:00-14:00 (within the limit) stays one charge.
-    Turned off, the split goes with it."""
+    charges (ready times 12:00 and 15:30). 10:00-14:00 (within the limit) is split too (since
+    2.108.0: as one, Octopus plans it all in the day it starts). Turned off, the split goes with it."""
     a, _ = _auto(at(9))
     a.limit_reset = "12:00"
     a.set_schedule(enabled=True, ready_time=True, entries=[], daily_cap_min=360)
@@ -647,7 +647,7 @@ def test_a_block_longer_than_the_limit_is_split_where_it_resets():
     b.limit_reset = "12:00"
     b.set_schedule(enabled=True, ready_time=True, entries=[], daily_cap_min=360)
     b.sync_auto_schedule([], _cheap_from((10,), (14,)), 4, cap_min=360)
-    assert _wins(b) == [("10:00", "14:00")] and b.next_unplug(at(10, 5)) == at(14)
+    assert _wins(b) == [("10:00", "12:00"), ("12:00", "14:00")] and b.next_unplug(at(10, 5)) == at(12)
 
 
 def test_a_block_joined_to_your_slot_is_split_too():

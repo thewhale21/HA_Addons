@@ -286,11 +286,13 @@ one-line summary; click it to see it all.
   skipped that you un-skip is yours: it runs, and the plan works around it
   rather than skipping it again.
 - **Across the limit's reset:** with Force schedule on supplier, a block of
-  its (on its own, or joined to one of your slots) that's longer than the
-  daily limit across its reset time (Octopus: 12:00) is split there, as your
-  slots are: it unplugs and plugs straight back in, so the supplier sees a
-  charge either side, each with its own ready time. One within the limit
-  (e.g. 10:30–14:00) stays one charge.
+  its (on its own, or joined to one of your slots) across the daily limit's
+  reset time (Octopus: 12:00) is split there, as your slots are, however
+  long it is: it unplugs and plugs straight back in, so the supplier sees a
+  charge either side, each with its own ready time (e.g. 11:00–12:30:
+  11:00–12:00 ready at 12:00, then 12:00–12:30 ready at 12:30). As one
+  charge, Octopus plans it all in the day it starts, so with an hour left
+  that day it would only charge an hour of it.
 - **What comes first:** auto plug-in, the car plugged in sensor, Charge now
   and saving sessions (the slots they move and the charge before them): it
   plans around them, and they take from its half hours only where the day
@@ -678,8 +680,8 @@ Turning the card off puts back anything its events changed.
   12:00–18:00) unplug straight away (without waiting for your supplier) and
   plug back in after the re-plug **Unplugged for** time, so each is its own
   charge with its own ready time (12:00, then 18:00): 6 hours each side.
-  With Force schedule on supplier on and a reset time, a slot longer than
-  the daily limit across the reset time (e.g. 08:00–18:00) is split there
+  With Force schedule on supplier on and a reset time, a slot across the
+  reset time (e.g. 11:00–12:30, or 08:00–18:00) is split there
   when it's saved, into two slots that work this way; so is a charge from
   auto plug-in, the car plugged in sensor or Charge now (including one
   joined with a scheduled slot).

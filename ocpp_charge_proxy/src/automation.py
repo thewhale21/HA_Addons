@@ -119,7 +119,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 12
+AUTO_PLAN_VERSION = 13
 # (a change from a page that was behind, on a time the add-on has since moved)
 _MOVED = "The schedule changed just before that (the automatic schedule planned again): have a look and try again"
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
@@ -856,8 +856,8 @@ class Automation:
         if guards_off:
             daily_cap_min = None
         if daily_cap_min and (self.ready_time if ready_time is None else bool(ready_time)):
-            # A slot across the limit's reset time (Octopus: 12:00) that's longer
-            # than the limit is split there: two charges, each with its own ready time
+            # A slot across the limit's reset time (Octopus: 12:00) is split there: two
+            # charges, each with its own ready time
             splits = self._reset_splits(run_new(new_entries), new_skips, daily_cap_min)
             if splits:
                 new_entries = new_entries + splits
@@ -1171,10 +1171,13 @@ class Automation:
 
     def _reset_splits(self, entries: list, skips: list, cap_min: int, one_off: bool = False,
                       until: Optional[datetime.datetime] = None) -> list:
-        """Entries that split each coming slot longer than `cap_min` where the
-        daily limit resets (it unplugs and plugs straight back in there: see
-        due()), so the supplier sees a charge either side. Weekly for weekly
-        slots, one-offs otherwise (or with `one_off`). Only with a reset time."""
+        """Entries that split each coming slot across the daily limit's reset time
+        where it resets (it unplugs and plugs straight back in there: see due()),
+        so the supplier sees a charge either side, each with its own ready time:
+        however long the slot (one within the limit too: as one, the supplier
+        plans it all in the day it starts, e.g. only an hour of 11:00-12:30 when
+        that day has an hour left). Weekly for weekly slots, one-offs otherwise
+        (or with `one_off`). Only with a reset time (and a cap: the caller's)."""
         fixed, loc = _fixed(self.limit_reset), self._localize
         if not fixed or not cap_min:
             return []
@@ -1184,8 +1187,6 @@ class Automation:
         for s in self._stretches(now.date() - datetime.timedelta(days=1), self._horizon_days(entries) + 1,
                                  entries, skips):
             if s["end"] <= now or (until is not None and s["start"] > until):
-                continue
-            if (s["end"] - s["start"]).total_seconds() / 60 <= cap_min:
                 continue
             r = limit_end(period_start(s["start"], fixed, loc), fixed, loc)
             while r < s["end"]:
@@ -1764,8 +1765,8 @@ class Automation:
                     after, left_over, near = best[1], best[2], best[3]
         # (the daily limit above is counted as if joined; with the schedule off, only car slots join)
         added, skips, combined, slot_end, moved = build(cuts, None if self.schedule_enabled else car_slots)
-        # Longer than the limit across its reset time (e.g. 08:00-18:00 with
-        # Octopus's 12:00): split there, a fresh charge with its own ready time
+        # Across the limit's reset time (e.g. 11:00-12:30 with Octopus's 12:00):
+        # split there, a fresh charge with its own ready time
         splits = self._reset_splits(active + without_fallbacks(added), skips, cap_min, one_off=True, until=slot_end) if cap_min else []
         added += splits
         owned = self._skip_owners(None)  # (one something else made: this needs it too)
@@ -3084,8 +3085,8 @@ class Automation:
         changes["skips"] += [k for k in self._claim_skips(inside, changes) if k not in changes["skips"]]
 
     def _auto_reset_splits(self, cap_min: int, changes: dict) -> None:
-        """Its blocks (on their own, or joined to a slot) longer than the daily limit across its
-        reset time (e.g. Octopus's 12:00) are split there, as your slots are: it unplugs and plugs
+        """Its blocks (on their own, or joined to a slot) across the daily limit's reset time
+        (e.g. Octopus's 12:00) are split there, as your slots are: it unplugs and plugs
         straight back in, so the supplier sees a charge either side, each with its own ready time."""
         now = self._now()
         ents = self._active_entries()

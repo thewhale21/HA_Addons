@@ -1323,7 +1323,8 @@ def test_limit_reset_trims_only_within_the_limit_day():
     a, clock = _sat_slots(("18:00", "22:00"), start=_at(10))
     a.limit_reset = "12:00"
     out = a.plan_auto_plug(180, cap_min=360)
-    assert out["moved"] is None and _today_windows(a, clock) == [("10:00", "13:00"), ("18:00", "22:00")]
+    # (split at 12:00, where the limit resets: two charges, ready at 12:00 and 13:00)
+    assert out["moved"] is None and _today_windows(a, clock) == [("10:00", "12:00"), ("12:00", "13:00"), ("18:00", "22:00")]
     b, clock_b = _sat_slots(("18:00", "22:00"), start=_at(10))  # rolling: 7 h, the slot loses 1 h
     assert "19:00" in b.plan_auto_plug(180, cap_min=360)["moved"]
 
@@ -1705,14 +1706,15 @@ def test_charge_across_the_reset_is_split_there():
     # Deleting the charge takes the split with it
     a.set_schedule(entries=[])
     assert a.entries == []
-    # Not with a rolling limit, nor a charge within the limit
+    # Not with a rolling limit; a charge within the limit is split too (since 2.108.0)
     b, clock_b = _automation(start=_at(8))
     b.plan_auto_plug(720, cap_min=360)
     assert _pairs(b, day) == [("08:00", "14:00")]
     c, clock_c = _automation(start=_at(10))
     c.limit_reset = "12:00"
     c.plan_auto_plug(180, cap_min=360)  # 10-13: 3 h
-    assert _pairs(c, day) == [("10:00", "13:00")]
+    assert _pairs(c, day) == [("10:00", "12:00"), ("12:00", "13:00")]
+    assert c.next_unplug(clock_c.now()).strftime("%H:%M") == "12:00"
 
 
 def test_charge_joining_a_slot_across_the_reset_is_split():
@@ -2395,3 +2397,24 @@ def test_off_peak_start_leaves_the_schedules_waiting_unplug():
     assert calls == [] and a.unplug_at is not None  # waiting for the supplier
     _, calls = run(False)
     assert calls == [("unplug", "off-peak time")]
+
+
+def test_the_users_11_00_to_12_30_is_split_at_12_00():
+    """Octopus scheduled only an hour of 11:00-12:30 (one charge, ready at 12:30, planned in the day before
+    its 12:00 reset): split there, 11:00-12:00 (ready 12:00) and 12:00-12:30 (ready 12:30). A saved slot
+    too, and the automatic schedule's block."""
+    a, clock = _automation(start=_at(8))
+    a.limit_reset = "12:00"
+    every = list(range(7))
+    a.set_schedule(entries=[{"time": "11:00", "action": "plug", "days": every},
+                            {"time": "12:30", "action": "unplug", "days": every}], enabled=True, ready_time=True, daily_cap_min=360)
+    day = clock.now().date()
+    assert _pairs(a, day) == [("11:00", "12:00"), ("12:00", "12:30")]
+    clock.dt = _at(11, 5)
+    assert a.next_unplug(clock.now()).strftime("%H:%M") == "12:00"
+    # without the ready time (Force schedule on supplier off): left as it is
+    b, clock_b = _automation(start=_at(8))
+    b.limit_reset = "12:00"
+    b.set_schedule(entries=[{"time": "11:00", "action": "plug", "days": every},
+                            {"time": "12:30", "action": "unplug", "days": every}], enabled=True, daily_cap_min=360)
+    assert _pairs(b, day) == [("11:00", "12:30")]

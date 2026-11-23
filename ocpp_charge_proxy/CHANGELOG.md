@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.108.0 — Every slot across the 12:00 reset is split there
+
+- **Fix:** with Force schedule on supplier on, a slot across your
+  supplier's daily limit reset (Octopus: 12:00) is now split there however
+  long it is, not only when it's longer than the limit: e.g. 11:00–12:30
+  becomes 11:00–12:00 (ready at 12:00) and 12:00–12:30 (ready at 12:30). As
+  one charge, Octopus planned it all in the day it started, so with an hour
+  of that day's 6 left it only charged an hour of it. The automatic
+  schedule, auto plug-in, the car plugged in sensor and Charge now split
+  the same way; the automatic schedule plans again after the update. A
+  weekly slot of your own across 12:00 is split when you next save the
+  schedule.
+
 ## 2.107.0 — Bank a free electricity session's time
 
 - **Feature:** Free electricity sessions › Your slots in a session: **Bank
