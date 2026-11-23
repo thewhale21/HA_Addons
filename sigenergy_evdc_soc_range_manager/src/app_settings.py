@@ -45,7 +45,9 @@ DEFAULTS = {
     **RATE_DEFAULTS,
     **STATS_DEFAULTS,
     "observe_only": False,  # decide and log, but don't press the buttons
-    "notify_service": "",  # e.g. notify.mobile_app_phone: told when it starts or stops the charger
+    "notify_service": "",  # e.g. notify.mobile_app_phone: where notifications go
+    # what's sent there (src/log_notify.py): "info" (starts and stops too), "warning", "error" or "none"
+    "notify_level": "info",
     "dropout_alert": 0,  # ...and when the car stops discharging by itself this many times in a day (0: never)
     **{k: list(v) for k, v in LIST_DEFAULTS.items()},
 }
@@ -101,6 +103,12 @@ class AppSettings:
             if name and not name[7:].replace("_", "a").isalnum():
                 raise ValueError("The notify service looks like notify.mobile_app_your_phone")
             out["notify_service"] = name
+        if "notify_level" in body:
+            from src.log_notify import LEVELS as NOTIFY_LEVELS
+            level = str(body["notify_level"] or "").lower()
+            if level not in NOTIFY_LEVELS:
+                raise ValueError("notify_level must be none, error, warning or info")
+            out["notify_level"] = level
         for key in LISTS:
             if key in body:
                 value = body[key]

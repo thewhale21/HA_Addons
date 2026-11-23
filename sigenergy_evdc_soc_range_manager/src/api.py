@@ -65,6 +65,8 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app.router.add_get("/api/stats", handle_stats)
     # Settings made on the web page (src/app_settings.py)
     app.router.add_get("/api/settings", handle_get_settings)
+    app.router.add_get("/api/notify_services", handle_notify_services)
+    app.router.add_post("/api/notify_test", handle_notify_test)
     app.router.add_post("/api/settings", handle_set_settings)
     # Diagnostics › Debug
     app.router.add_get("/api/debug/info", handle_debug_info)
@@ -357,6 +359,29 @@ async def handle_stats(request: web.Request) -> web.Response:
 
 
 # --- Settings made on the web page (src/app_settings.py) --------------------------
+
+
+async def handle_notify_services(request: web.Request) -> web.Response:
+    """Home Assistant's notify services, for the notify service box's suggestions."""
+    link = request.app.get("ha_link")
+    try:
+        result = await link.query({"type": "get_services"}) if link is not None else {}
+    except Exception as err:
+        return web.json_response({"services": [], "error": str(err) or type(err).__name__})
+    names = sorted((result or {}).get("notify") or {})
+    return web.json_response({"services": [f"notify.{n}" for n in names if n != "send_message"]})
+
+
+async def handle_notify_test(request: web.Request) -> web.Response:
+    """Send a test notification to the notify service set."""
+    runner, settings = request.app.get("runner"), request.app["app_settings"]
+    if runner is None or settings is None or not settings.data.get("notify_service"):
+        return _bad_request("Set the notify service first")
+    try:
+        await runner.notify("EVDC: test", "Notifications from the SigEnergy DC Charger add-on reach you here.", force=True)
+    except Exception as err:
+        return web.json_response({"status": "error", "message": str(err) or type(err).__name__}, status=502)
+    return web.json_response({"ok": True})
 
 
 async def handle_get_settings(request: web.Request) -> web.Response:

@@ -179,7 +179,8 @@ maximum rate, today's kWh in and out, and the car's capacity and health. **Start
 | House retry wait | 1800 s | After that, the longest before it's started for the house above the high limit again (sooner once the house stops needing power and needs it again) |
 | Between button presses | 60 s | At least this long before pressing the same button again |
 | Watch only | off | Decide and log, but don't press anything |
-| Notify service | none | e.g. `notify.mobile_app_your_phone`: told on every start and stop |
+| Notify service | none | e.g. `notify.mobile_app_your_phone`, suggested from Home Assistant's notify services as you type; **Test** sends one |
+| What to send | Everything | **Everything** (each start and stop too), **Warnings and errors** (the dropout alert, charger alarms and warnings or errors in the add-on's log), **Errors only** (charger alarms and errors in the log) or **None**. Log problems a few seconds apart come in one notification, the same one at most once an hour, with anything like a password or token hidden |
 | Battery rates | 8 and 12.5 kW, 95%, 4.5 kW home, 8 kW car | See [Battery rates](#battery-rates) |
 
 **Advanced** has the words the charger uses for its running states (which
@@ -391,7 +392,7 @@ elsewhere" or "Stopped elsewhere". It keeps the last 500.
 **Charger alarms.** When the charger's running state is an alarm
 (`Alarm` or `Fault`: an error with the charger), the add-on leaves the charger alone
 until it clears. The status and the health dot say so, the History notes
-when it started and cleared, your notify service (if set) is told, the
+when it started and cleared, your notify service (if set, and What to send isn't None) is told, the
 Car SoC chart shades it red, and `binary_sensor.sigen_dc_charger_charger_alarm`
 turns on (and `binary_sensor.sigen_dc_charger_plugged_in` reads off). Which
 states count is under Settings › Advanced.

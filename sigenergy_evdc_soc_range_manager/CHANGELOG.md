@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.44.0 — Choose which notifications you get
+
+- **Feature:** Settings › Watch only and notifications › **What to send**:
+  **Everything** (as until now: each start and stop of the charger too),
+  **Warnings and errors**, **Errors only** or **None**.
+- **Feature:** warnings and errors in the add-on's log are sent too (with
+  Everything or Warnings and errors; errors only with Errors only): lines a
+  few seconds apart in one notification, the same one at most once an hour,
+  anything like a password or token hidden.
+- **Improvement:** the **Notify service** box suggests Home Assistant's
+  notify services as you type, and **Test** sends a test notification.
+
 ## 0.43.0 — Charge and discharge only on the Car SoC chart
 
 - **Feature:** the Overview's **Car SoC** chart shows when the schedule had

@@ -17,7 +17,7 @@ from typing import Optional
 
 from aiohttp import web
 
-from src import log_filters
+from src import log_filters, log_notify
 from src.api import create_api_app
 from src.app_settings import AppSettings
 from src.config import load_config
@@ -61,9 +61,11 @@ class Runner:
         domain = entity_id.split(".", 1)[0]
         await self.link.call_service(domain, "press", target={"entity_id": entity_id})
 
-    async def notify(self, title: str, message: str) -> None:
+    async def notify(self, title: str, message: str, level: str = "info", force: bool = False) -> None:
+        """Send a notification, if the notify level asks for one of `level` ("info": a start or stop,
+        "warning", "error"; `force`: the test button)."""
         service = self.settings.data.get("notify_service") or ""
-        if service:
+        if service and (force or log_notify.wanted(self.settings.data.get("notify_level", "info"), level)):
             stamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
             await self.link.call_service("notify", service.split(".", 1)[1],
                                          data={"title": title, "message": f"{stamp} - {message}"})
@@ -102,7 +104,7 @@ class Runner:
                                      getattr(i, "only", None))  # (charge or discharge only, from the schedule)
             while self.manager.alarms:  # a charger alarm: say so, whatever the notification settings for starts and stops
                 try:
-                    await self.notify("EVDC: charger alarm", self.manager.alarms.pop(0))
+                    await self.notify("EVDC: charger alarm", self.manager.alarms.pop(0), "error")
                 except Exception as err:
                     logger.warning("Couldn't send the notification: %s", err)
             if now - self._brief_at >= STATS_BRIEF_S:
@@ -128,7 +130,7 @@ class Runner:
         if alert and today >= alert:
             try:
                 await self.notify("V2X: car keeps stopping discharging",
-                                  f"The car has stopped discharging by itself {today} times today.")
+                                  f"The car has stopped discharging by itself {today} times today.", "warning")
             except Exception as err:
                 logger.warning("Couldn't send the notification: %s", err)
 
@@ -242,6 +244,9 @@ class Runner:
 async def run() -> None:
     logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
     log_filters.install()
+    # Warnings and errors in the log, sent as notifications as the notify level says
+    notifier = log_notify.LogNotifier()
+    logging.getLogger().addHandler(log_notify.LogNotifyHandler(notifier, time.time))
     log_buffer = install_log_buffer(LOG_FORMAT)
     data_dir: Optional[str] = DATA_DIR if os.path.isdir(DATA_DIR) else None
 
@@ -329,7 +334,20 @@ async def run() -> None:
         except NotImplementedError:  # Windows, when run by hand
             pass
 
-    tasks = [asyncio.create_task(link.run()), asyncio.create_task(runner.run())]
+    async def log_notify_loop() -> None:
+        """The log's warnings and errors, gathered a few seconds, sent (src/log_notify.py)."""
+        while True:
+            await asyncio.sleep(2)
+            try:
+                due = notifier.due(time.time(), settings.data.get("notify_level", "info"))
+                if due and settings.data.get("notify_service"):
+                    await runner.notify(*due, level="error")  # (already picked by the level)
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                logger.debug("Couldn't send the log's problems as a notification: %s", err)
+
+    tasks = [asyncio.create_task(link.run()), asyncio.create_task(runner.run()), asyncio.create_task(log_notify_loop())]
     try:
         await stop.wait()
         logger.info("Stopping")

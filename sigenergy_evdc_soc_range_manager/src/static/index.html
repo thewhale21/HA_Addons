@@ -708,9 +708,14 @@
           <label class="switch"><input type="checkbox" id="s-observe" aria-label="Watch only"><span></span></label>
         </div>
         <div class="row">
-          <div class="grow">Notify service<div class="note" style="margin:0">Told each time it starts or stops the charger, e.g. <code>notify.mobile_app_your_phone</code>. Empty: no notifications.</div></div>
+          <div class="grow">Notify service<div class="note" style="margin:0">Where notifications go, e.g. your phone's <code>notify.mobile_app_your_phone</code>: pick one of Home Assistant's from the list, or type it. Empty: no notifications.</div></div>
         </div>
-        <div class="row" style="margin-top:6px"><input type="search" id="s-notify" placeholder="notify.mobile_app_…" style="width:100%"></div>
+        <div class="row" style="margin-top:6px"><input type="search" id="s-notify" list="s-notify-list" placeholder="notify.mobile_app_…" style="width:100%" autocomplete="off"><datalist id="s-notify-list"></datalist>
+          <button class="btn small" id="s-notify-test" title="Send a test notification">Test</button></div>
+        <div class="row">
+          <div class="grow">What to send<div class="note" style="margin:0"><b>Everything</b>: each start and stop of the charger too. <b>Warnings and errors</b>: the dropout alert, charger alarms and problems in the add-on's log. <b>Errors only</b>: charger alarms and errors in the log. <details class="more"><summary>More</summary><div>Problems in the log: lines a few seconds apart come in one notification, and the same one isn't sent again for an hour, so one that keeps coming back doesn't flood your phone. Anything that looks like a password or token is hidden.</div></details></div></div>
+          <div class="seg" role="group" aria-label="What to send" id="s-notify-level"><button data-l="info">Everything</button><button data-l="warning">Warnings and errors</button><button data-l="error">Errors only</button><button data-l="none">None</button></div>
+        </div>
         <div class="row">
           <div class="grow">Dropout alert<div class="note" style="margin:0">Also tell me when the car stops discharging by itself this many times in a day. 0: never.</div></div>
           <span class="field"><input type="number" data-setting="dropout_alert" id="s-dropout" min="0" max="50" step="1"><span class="unit">a day</span></span>
@@ -2288,6 +2293,12 @@ async function refreshAppSettings() {
   $('s-observe').checked = !!appSettings.observe_only;
   if (document.activeElement !== $('s-dropout')) $('s-dropout').value = appSettings.dropout_alert ?? 0;
   if (document.activeElement !== $('s-notify')) $('s-notify').value = appSettings.notify_service || '';
+  $('s-notify-level').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.l === (appSettings.notify_level || 'info')));
+  if (!refreshAppSettings.services) {  // (Home Assistant's notify services, once: the box's suggestions)
+    refreshAppSettings.services = true;
+    api('notify_services').then((d) => { $('s-notify-list').innerHTML = (d.services || []).map((s) => `<option value="${esc(s)}"></option>`).join(''); })
+      .catch(() => { refreshAppSettings.services = false; });
+  }
 }
 async function saveSetting(patch, msg) {
   try {
@@ -2306,6 +2317,14 @@ $('s-observe').addEventListener('change', (ev) => saveSetting({observe_only: ev.
   ev.target.checked ? 'Watch only: buttons won\'t be pressed' : 'Live: it presses the buttons'));
 $('s-flip').addEventListener('change', (ev) => saveSetting({flip_inverter_power: ev.target.checked}));
 $('s-notify').addEventListener('change', (ev) => saveSetting({notify_service: ev.target.value.trim()}));
+$('s-notify-level').addEventListener('click', (ev) => {
+  const l = ev.target.dataset.l; if (!l || l === (appSettings.notify_level || 'info')) return;
+  saveSetting({notify_level: l}, {info: 'Notifications: everything, starts and stops too', warning: 'Notifications: warnings and errors',
+    error: 'Notifications: errors only', none: 'Notifications: none'}[l]);
+});
+$('s-notify-test').addEventListener('click', async () => {
+  try { await api('notify_test', {method: 'POST'}); toast('Test notification sent'); } catch (e) { toast('Not sent: ' + e.message); }
+});
 
 // ---------- Statistics ----------
 // Charts: one series each (no legend: the card's label names it), a hover
@@ -2665,7 +2684,7 @@ function setupRows() {
     {t: 'Appearance', id: 'appearance', icon: 'palette', sum: () => segOn('c-theme')},
     {t: 'Timing and levels', id: 'timing', icon: 'clock', sum: () => fieldsLine('s-tuning', 3)},
     {t: 'Watch only and notifications', id: 'watch', icon: 'bell', sum: () => (chk('s-observe') ? '<span class="chip warn">Watch only</span>' : '')
-      + esc((val('s-notify') ? `Notifies ${val('s-notify')}` : 'No notifications') + (Number(val('s-dropout')) ? ` · alert after ${val("s-dropout")} dropouts a day` : ''))},
+      + esc((val('s-notify') && ((appSettings || {}).notify_level || 'info') !== 'none' ? `Notifies ${val('s-notify')} (${{info: 'everything', warning: 'warnings and errors', error: 'errors only'}[(appSettings || {}).notify_level || 'info']})` : 'No notifications') + (Number(val('s-dropout')) ? ` · alert after ${val("s-dropout")} dropouts a day` : ''))},
     {t: 'Battery rates', id: 'rates', icon: 'battery', sum: () => fieldsLine('s-rates', 3)},
     {t: 'Statistics', id: 'stats', icon: 'chart', sum: () => fieldsLine('s-stats', 3) + (chk('s-flip') ? ' · inverter power flipped' : '')},
   ]);
