@@ -629,8 +629,8 @@ class Automation:
                          "override_guards": self.override_guards, "blocks": self.blocks},
             "replug": self.replug,
             "saving": {"block": self.saving_block, "free_move": self.free_move, "sessions": self.saving_sessions},
-            # (not its table for the Debug tab: worked out again with each plan)
-            "auto": {k: v for k, v in self.auto_plan.items() if k != "table"} if self.auto_plan else self.auto_plan,
+            # (with its table, for the page: a restart doesn't plan again when nothing's changed)
+            "auto": self.auto_plan,
             "rates_seen": self._rates_seen_saved(),
             "populate_last": self.populate_last,
             "auto_history": self.auto_history,
@@ -2811,7 +2811,7 @@ class Automation:
         charge_all = sorted(done + charge)
         self.auto_plan["charge"] = [[_iso_local(a), _iso_local(b)] for a, b in charge_all]
         self.auto_plan["key"] = self._schedule_key()
-        self.auto_plan["fit"] = fit  # (the wholesale prices' fit, for the Debug tab)
+        self.auto_plan["fit"] = fit  # (the wholesale prices' fit, for the plan's table)
         self.auto_plan["table"] = self._plan_table(now, imp, known_exp, est, fit, cuts, fills, first, plugged, charge_all, res, highs)
         if not self._previewing:
             self._log_auto_plan(blocks, cap_min, provider, charge, res, notes, per, day_end, fixed)

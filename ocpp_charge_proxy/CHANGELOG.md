@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.112.1 — The plan's table after a restart
+
+- **Fix:** the plan's table said "No plan yet" after the add-on restarted,
+  until something changed and it planned again: the table is now saved
+  with the plan.
+- **Fix:** an "Unclosed client session" error in the log as the add-on
+  stopped (the connection used for the wholesale prices is now closed).
+
 ## 2.112.0 — The plan as a table, on the card
 
 - **Change:** Automations › Automatic schedule › **Plan** is now the plan

@@ -1439,9 +1439,9 @@ def test_before_the_high_exports_doesnt_charge_for_a_run_straight_after_the_off_
     assert not any(a < at(5, 30, 1) and a >= at(20) for a, _ in p["charge"])  # (nothing the evening before for it)
 
 
-def test_the_plan_as_a_table_for_the_debug_tab():
+def test_the_plan_as_a_table():
     """Half hour by half hour: rates (known or estimated), high exports, off-peak, what's plugged in and,
-    with Where it earns the most, the battery as it plans it. Not saved with the plan."""
+    with Where it earns the most, the battery as it plans it."""
     a, _ = _auto(at(12, 25))
     a.limit_reset = "12:00"
     a.high_rates = [[at(17, 30).isoformat(), at(18).isoformat(), 41.9]]  # (marked: set_export_rates)
@@ -1454,10 +1454,23 @@ def test_the_plan_as_a_table_for_the_debug_tab():
     assert any(r[8] == "export" and r[7] is not None for r in t["rows"])
     assert any("off-peak (import rates)" in r[5] for r in t["rows"])
     assert all(0 <= r[7] <= 100 for r in t["rows"] if r[7] is not None)
-    # (the table isn't written to automation.json: it's made again with each plan)
-    saved = {}
-    a._save = lambda: saved.update({"auto": {k: v for k, v in a.auto_plan.items() if k != "table"}})
     assert "table" in a.auto_plan
+
+
+def test_the_plan_table_is_kept_over_a_restart(tmp_path):
+    """The table is saved with the plan: after a restart with nothing changed (so no new plan), the page
+    still has it, rather than "No plan yet"."""
+    path = str(tmp_path)
+    clock = Clock(at(12, 25))
+    mk = lambda: Automation(path, ReplugOptions(), now=clock.now, clock=clock.epoch,  # noqa: E731
+                            localize=lambda naive: naive.replace(tzinfo=TZ))
+    a = mk()
+    a.estimate_ahead = False
+    a.limit_reset = "12:00"
+    a.sync_auto_schedule(iog_import(2), user_exp(), 6, cap_min=360, mode="value", charge_cap=2, discharge_cap=3)
+    rows = a.plan_table()["rows"]
+    assert rows
+    assert mk().plan_table()["rows"] == rows
 
 
 def test_plan_again_now():

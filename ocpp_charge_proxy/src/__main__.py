@@ -439,81 +439,86 @@ async def run() -> None:
         from src.future_rates import FutureRates
         future = FutureRates()  # (tomorrow's export rates estimated from the wholesale prices)
         web_session = None
-        while True:
-            try:
-                s = ha_link.settings
-                on = bool(s.get("auto_sched_on"))
-                if not on and automation.clear_auto_schedule():
-                    automation.publish(shared_state)
-                # (the rates are read on or off: off, the page shows what it would do)
-                wanted = (s.get("auto_import_entity"), s.get("auto_export_entity"))
-                asked, automation.replan_asked = automation.replan_asked, False  # (Plan again: rates read again too)
-                if asked or wanted != last_settings or time.monotonic() - last_read >= AUTO_READ_S:
-                    states = await ha_link.all_states()
-                    if ha_down:
-                        logger.info("Automatic schedule: Home Assistant answering again")
-                        ha_down = False
-                    if states:
-                        found = auto_schedule.find_rate_entities(states)
-                        pick = lambda key, kind: (auto_schedule.entities_for(s[key], states) if s.get(key)
-                                                  else found[kind])
-                        ids = {"import": pick("auto_import_entity", "import"), "export": pick("auto_export_entity", "export")}
-                        by_id = {st.get("entity_id"): st for st in states}
-                        imp = auto_schedule.merge(*(auto_schedule.parse_rates(by_id.get(e)) for e in ids["import"]))
-                        exp = auto_schedule.merge(*(auto_schedule.parse_rates(by_id.get(e)) for e in ids["export"]))
-                        info = {**ids, "source": None if (s.get("auto_import_entity") or s.get("auto_export_entity"))
-                                else found["source"]}
-                        last_read, last_settings = time.monotonic(), wanted
-                sc = ha_link.smart_charging()
-                if not sc.get("found") and time.monotonic() - started < AUTO_WAIT_SUPPLIER_S:
-                    # (just started: not planned until your supplier's integration, and with it
-                    # its daily limit, is found, or it's clear there isn't one)
-                    await asyncio.sleep(AUTO_TICK_S)
-                    continue
-                automation.limit_reset = sc.get("limit_reset")
-                # Your supplier's daily limit always applies to it (each limit day, e.g.
-                # 12:00 to 12:00), whether or not Force schedule on supplier is on
-                cap = sc.get("limit_min") if not automation.override_guards else None
-                # Tomorrow's day-ahead wholesale prices (Automations › Automatic schedule › Tomorrow's rates
-                # from): its estimate of the export rates not out yet, rather than a copy of today's
+        try:
+            while True:
                 try:
-                    if web_session is None and s.get("auto_future_url"):
-                        web_session = aiohttp.ClientSession()
-                    if web_session is not None:
-                        await future.refresh(s.get("auto_future_url") or None, datetime.datetime.now().astimezone(), web_session)
-                except Exception as err:  # (never the rates from Home Assistant: those go on)
-                    logger.debug("Tomorrow's rates: %s", err)
-                automation.wholesale = future.prices
-                automation.future_status = dict(future.status)
-                # (shown on the schedule, on or off; the high export half hours for Before the high exports,
-                # and for Where it earns the most, where they're only marked)
-                rates_changed = automation.set_export_rates(
-                    exp, info, int(s.get("auto_high_blocks") or 0) if s.get("auto_sched_mode") in ("before", "value") else 0)
-                # (Where it earns the most: how far back it looks for how full the battery is)
-                automation.look_back_h = float(s.get("auto_look_back_h", 6.0) if s.get("auto_look_back_h") is not None else 6.0)
-                plan = automation.sync_auto_schedule if on else automation.preview_auto_schedule
-                if plan(imp, exp, int(s.get("auto_sched_blocks") or 12), cap,
-                        sc.get("provider") or "your supplier", info,
-                        s.get("auto_sched_mode") if s.get("auto_sched_mode") in ("before", "value") else "cheapest",
-                        # (the charge time needed: the most of each charge before or after a high export, in half hours)
-                        int(round(s["auto_charge_need_h"] * 2)) if s.get("auto_charge_need_h") else None,
-                        # (the discharge time needed: how long a full battery exports for, in half hours)
-                        int(round(s["auto_discharge_need_h"] * 2)) if s.get("auto_discharge_need_h") else None) or rates_changed:
-                    automation.publish(shared_state)
-            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-                # Home Assistant not answering (e.g. restarting: 502 Bad Gateway): one line, once
-                # until it's back, not a traceback every 15 s
-                if not ha_down:
-                    logger.warning("Automatic schedule: couldn't read the rates from Home Assistant (%s), "
-                                   "e.g. while it restarts: trying again", _http_error(err))
-                ha_down = True
-            except Exception:
-                logger.warning("Automatic schedule cycle failed", exc_info=True)
-            # (Plan again pressed: straight away, not at the next tick)
-            for _ in range(int(AUTO_TICK_S * 4)):
-                if automation.replan_asked:
-                    break
-                await asyncio.sleep(0.25)
+                    s = ha_link.settings
+                    on = bool(s.get("auto_sched_on"))
+                    if not on and automation.clear_auto_schedule():
+                        automation.publish(shared_state)
+                    # (the rates are read on or off: off, the page shows what it would do)
+                    wanted = (s.get("auto_import_entity"), s.get("auto_export_entity"))
+                    asked, automation.replan_asked = automation.replan_asked, False  # (Plan again: rates read again too)
+                    if asked or wanted != last_settings or time.monotonic() - last_read >= AUTO_READ_S:
+                        states = await ha_link.all_states()
+                        if ha_down:
+                            logger.info("Automatic schedule: Home Assistant answering again")
+                            ha_down = False
+                        if states:
+                            found = auto_schedule.find_rate_entities(states)
+                            pick = lambda key, kind: (auto_schedule.entities_for(s[key], states) if s.get(key)
+                                                      else found[kind])
+                            ids = {"import": pick("auto_import_entity", "import"), "export": pick("auto_export_entity", "export")}
+                            by_id = {st.get("entity_id"): st for st in states}
+                            imp = auto_schedule.merge(*(auto_schedule.parse_rates(by_id.get(e)) for e in ids["import"]))
+                            exp = auto_schedule.merge(*(auto_schedule.parse_rates(by_id.get(e)) for e in ids["export"]))
+                            info = {**ids, "source": None if (s.get("auto_import_entity") or s.get("auto_export_entity"))
+                                    else found["source"]}
+                            last_read, last_settings = time.monotonic(), wanted
+                    sc = ha_link.smart_charging()
+                    if not sc.get("found") and time.monotonic() - started < AUTO_WAIT_SUPPLIER_S:
+                        # (just started: not planned until your supplier's integration, and with it
+                        # its daily limit, is found, or it's clear there isn't one)
+                        await asyncio.sleep(AUTO_TICK_S)
+                        continue
+                    automation.limit_reset = sc.get("limit_reset")
+                    # Your supplier's daily limit always applies to it (each limit day, e.g.
+                    # 12:00 to 12:00), whether or not Force schedule on supplier is on
+                    cap = sc.get("limit_min") if not automation.override_guards else None
+                    # Tomorrow's day-ahead wholesale prices (Automations › Automatic schedule › Tomorrow's rates
+                    # from): its estimate of the export rates not out yet, rather than a copy of today's
+                    try:
+                        if web_session is None and s.get("auto_future_url"):
+                            web_session = aiohttp.ClientSession()
+                        if web_session is not None:
+                            await future.refresh(s.get("auto_future_url") or None, datetime.datetime.now().astimezone(), web_session)
+                    except Exception as err:  # (never the rates from Home Assistant: those go on)
+                        logger.debug("Tomorrow's rates: %s", err)
+                    automation.wholesale = future.prices
+                    automation.future_status = dict(future.status)
+                    # (shown on the schedule, on or off; the high export half hours for Before the high exports,
+                    # and for Where it earns the most, where they're only marked)
+                    rates_changed = automation.set_export_rates(
+                        exp, info, int(s.get("auto_high_blocks") or 0) if s.get("auto_sched_mode") in ("before", "value") else 0)
+                    # (Where it earns the most: how far back it looks for how full the battery is)
+                    automation.look_back_h = float(s.get("auto_look_back_h", 6.0) if s.get("auto_look_back_h") is not None else 6.0)
+                    plan = automation.sync_auto_schedule if on else automation.preview_auto_schedule
+                    if plan(imp, exp, int(s.get("auto_sched_blocks") or 12), cap,
+                            sc.get("provider") or "your supplier", info,
+                            s.get("auto_sched_mode") if s.get("auto_sched_mode") in ("before", "value") else "cheapest",
+                            # (the charge time needed: the most of each charge before or after a high export, in half hours)
+                            int(round(s["auto_charge_need_h"] * 2)) if s.get("auto_charge_need_h") else None,
+                            # (the discharge time needed: how long a full battery exports for, in half hours)
+                            int(round(s["auto_discharge_need_h"] * 2)) if s.get("auto_discharge_need_h") else None) or rates_changed:
+                        automation.publish(shared_state)
+                except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                    # Home Assistant not answering (e.g. restarting: 502 Bad Gateway): one line, once
+                    # until it's back, not a traceback every 15 s
+                    if not ha_down:
+                        logger.warning("Automatic schedule: couldn't read the rates from Home Assistant (%s), "
+                                       "e.g. while it restarts: trying again", _http_error(err))
+                    ha_down = True
+                except Exception:
+                    logger.warning("Automatic schedule cycle failed", exc_info=True)
+                # (Plan again pressed: straight away, not at the next tick)
+                for _ in range(int(AUTO_TICK_S * 4)):
+                    if automation.replan_asked:
+                        break
+                    await asyncio.sleep(0.25)
+        finally:
+            # (closed as the add-on stops, rather than left for asyncio to complain about)
+            if web_session is not None:
+                await web_session.close()
     async def populate_loop() -> None:
         """Populate schedule from load › Update automatically: once a day from POPULATE_HOUR (and straight
         away when it's turned on or its sensor, weeks or slots change) the plan is worked out
