@@ -63,7 +63,7 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         raise ValueError("Send a JSON object")
     out = dict(current or default_settings())
     for key in ("power_entity", "soc_entity", "plug_entity", "auto_plug_entity", "voltage_entity", "populate_power_entity",
-                "auto_load_entity"):
+                "auto_load_entity", "auto_battery_entity"):
         if key in raw:
             value = (raw[key] or "").strip() if isinstance(raw[key], (str, type(None))) else None
             if value is None:
@@ -357,6 +357,7 @@ def default_settings() -> dict:
         # Where it earns the most: the house's use (a power sensor), the battery's size, and whether
         # the house's use comes out of the battery in the plan (else just a cost while it's empty)
         "auto_load_entity": "", "auto_battery_kwh": None, "auto_load_drain": False,
+        "auto_battery_entity": "",  # (the battery's size from a sensor: used over auto_battery_kwh while it reads)
         # Populate schedule from load (Automations tab): best charging times per weekday from a power sensor's history
         "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 12, "populate_auto": False,
         # Your supplier: empty / None = found automatically

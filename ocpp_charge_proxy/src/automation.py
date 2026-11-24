@@ -503,6 +503,7 @@ class Automation:
         self.battery_kwh: Optional[float] = None
         self.load_drain = False
         self.load_status: dict = {}  # (how reading the house load went, for the page)
+        self.battery_status: dict = {}  # (the battery's size: {"kwh", "from": "sensor" / "typed", "error"}, for the page)
         self.export_rates: list = []  # the export rates known, [[start, end, p/kWh]] (for the page, on or off)
         self._rates_seen: list = []  # (the export rates seen, 2 days, for the high ones; saved)
         self._rates_seen_was: list = []  # (as last saved)
@@ -3730,7 +3731,8 @@ class Automation:
                 "saving_block": self.saving_block,
                 "auto_plan": self.auto_snapshot(),
                 "future_rates": self.future_status,
-                "house_load": self.load_status,  # (the house's average use, for Where it earns the most)  # (the wholesale prices for tomorrow's estimate: how reading them went)
+                "house_load": self.load_status,  # (the house's average use, for Where it earns the most)
+                "battery_size": self.battery_status,  # (the wholesale prices for tomorrow's estimate: how reading them went)
                 "auto_preview": self.auto_preview if self.auto_plan is None else None,
                 "export_rates": self.export_rates,
                 "high_rates": self.high_rates,

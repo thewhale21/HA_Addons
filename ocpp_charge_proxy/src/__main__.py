@@ -441,6 +441,7 @@ async def run() -> None:
         web_session = None
         from src import house_load
         load_read = (None, 0.0)  # (the house load sensor read, and when: monotonic)
+        size_read = (None, 0.0, None)  # (the battery size sensor read, when, and its kWh)
         try:
             while True:
                 try:
@@ -503,7 +504,21 @@ async def run() -> None:
                             logger.info("House load: %s averages %.2f kW over the last %d days", ent, st["kw"], st["days"])
                         else:
                             logger.warning("House load: %s not used: %s", ent, st.get("error"))
-                    automation.battery_kwh = s.get("auto_battery_kwh")
+                    # The battery's size: from its sensor while that reads, else the size typed in
+                    # (read every 5 minutes, and straight away when the sensor changes: HA's states are a big read)
+                    typed, bent = s.get("auto_battery_kwh"), s.get("auto_battery_entity") or ""
+                    if bent and (size_read[0] != bent or time.monotonic() - size_read[1] > 300):
+                        size = None
+                        try:
+                            size = house_load.battery_kwh(next((x for x in await ha_link.all_states()
+                                                                if x.get("entity_id") == bent), None))
+                        except Exception as err:
+                            logger.debug("Battery size from %s: %s", bent, err)
+                        size_read = (bent, time.monotonic(), size)
+                    size = size_read[2] if bent else None
+                    automation.battery_kwh = size or typed
+                    automation.battery_status = {"kwh": size or typed, "from": "sensor" if size else "typed" if typed else None,
+                                                 **({"error": f"{bent} has no size in kWh just now"} if bent and not size else {})}
                     automation.load_drain = bool(s.get("auto_load_drain"))
                     automation.future_status = dict(future.status)
                     # (shown on the schedule, on or off; the high export half hours for Before the high exports,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.115.0 — Battery size from a sensor
+
+- **Feature:** Automatic schedule › **Battery size** can come from a sensor
+  (kWh or Wh) as well as being typed in. While the sensor reads, its value
+  is used; if it's unknown, the size typed in. The card says which.
+
 ## 2.114.0 — The house's use in Where it earns the most
 
 - **Feature:** Automations › Automatic schedule (Where it earns the most):

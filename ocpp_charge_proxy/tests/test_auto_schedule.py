@@ -1591,3 +1591,11 @@ def test_the_house_load_in_the_plan_and_its_table():
     rows = {r[0][11:16]: r for r in a.plan_table()["rows"] if r[0][:10] == "2026-11-03"}
     assert rows["13:30"][7] == 96 and rows["13:30"][8] == "hold"  # (0.25 kWh of the 10 kWh battery)
     assert rows["22:00"][9] == 7.5  # (empty: 0.25 kWh at 30p on the grid)
+
+
+def test_battery_size_from_a_sensor():
+    """kWh as it is, Wh to kWh, no unit taken as kWh; unknown, 0 or not a number: none (the size typed is used)."""
+    from src.house_load import battery_kwh
+    st = lambda v, u=None: {"state": v, "attributes": {"unit_of_measurement": u} if u else {}}  # noqa: E731
+    assert battery_kwh(st("16.1", "kWh")) == 16.1 and battery_kwh(st("9000", "Wh")) == 9.0 and battery_kwh(st("8")) == 8.0
+    assert battery_kwh(st("unavailable", "kWh")) is None and battery_kwh(st("0", "kWh")) is None and battery_kwh(None) is None

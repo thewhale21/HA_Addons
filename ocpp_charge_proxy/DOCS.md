@@ -235,7 +235,9 @@ one-line summary; click it to see it all.
   that's taken off what the plan earns. So it charges to keep the battery
   from running empty where that pays (e.g. 0.5 kW at 35.6p is about 9p a
   half hour), and exports a little less where keeping some back saves more.
-  The plan's table gets a **House p** column (what the house costs on the
+  The battery's size can be typed in or come from a sensor (kWh or Wh,
+  read every 5 minutes); while the sensor reads, it's used, else the size
+  typed in. The plan's table gets a **House p** column (what the house costs on the
   grid then) and the Notes the total. Without the battery's size it isn't
   used.
 - **House use comes off the battery** (off by default): off, the house's

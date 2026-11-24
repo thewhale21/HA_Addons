@@ -40,6 +40,20 @@ def profile(rows: list, scale: float, tz: Optional[datetime.tzinfo] = None) -> O
     return [round(hours[i // 2], 3) for i in range(48)]
 
 
+def battery_kwh(state: Optional[dict]) -> Optional[float]:
+    """A battery size sensor's value in kWh (its unit Wh, kWh or MWh; none: kWh), or None (unknown,
+    not a number, or not above 0)."""
+    if not state:
+        return None
+    try:
+        v = float(state.get("state"))
+    except (TypeError, ValueError):
+        return None
+    unit = str((state.get("attributes") or {}).get("unit_of_measurement") or "kWh").strip().lower()
+    v *= {"wh": 0.001, "mwh": 1000.0}.get(unit, 1.0)
+    return round(v, 3) if v > 0 else None
+
+
 async def read(ha_link, entity_id: str, now: datetime.datetime, days: int = DAYS) -> tuple:
     """(profile or None, status for the page: {"entity", "at", "kw" (the day's average), "error"})."""
     status = {"entity": entity_id, "at": now.isoformat(timespec="seconds")}
