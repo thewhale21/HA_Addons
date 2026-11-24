@@ -1458,3 +1458,20 @@ def test_the_plan_as_a_table_for_the_debug_tab():
     saved = {}
     a._save = lambda: saved.update({"auto": {k: v for k, v in a.auto_plan.items() if k != "table"}})
     assert "table" in a.auto_plan
+
+
+def test_plan_again_now():
+    """Plan again (the page's button): planned again with nothing changed; with one of its blocks going,
+    not under it, but at its end (when it's said)."""
+    a, clock = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    assert a.sync_auto_schedule([], user_exp(), 4, cap_min=360)
+    assert not a.sync_auto_schedule([], user_exp(), 4, cap_min=360)  # (nothing changed)
+    assert a.request_replan() is None and a.replan_asked
+    assert a.sync_auto_schedule([], user_exp(), 4, cap_min=360)  # (planned again)
+    x, y = (A._when(v) for v in a.auto_plan["charge"][0])
+    clock.dt = x + datetime.timedelta(minutes=5)  # (its first block going)
+    assert a.request_replan() == y
+    assert not a.sync_auto_schedule([], user_exp(), 4, cap_min=360)
+    clock.dt = y + datetime.timedelta(minutes=1)
+    assert a.sync_auto_schedule([], user_exp(), 4, cap_min=360)  # (then, as it ends)

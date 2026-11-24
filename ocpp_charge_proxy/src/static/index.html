@@ -965,6 +965,10 @@
               <div class="grow">Show high exports on the schedule<div class="note" style="margin:0">The high export half hours (High export half hours a day) in orange along the bottom of each day. Off: still marked and planned around, just not drawn.</div></div>
               <label class="switch"><input type="checkbox" id="as-highs" aria-label="Show high exports on the schedule"><span></span></label>
             </div>
+            <div class="row" style="margin-top:12px">
+              <div class="grow">Plan again<div class="note" style="margin:0">Reads the rates and plans again now, as if something had changed. Not while one of its charging blocks is going: then as soon as it ends.</div></div>
+              <button class="btn small" id="as-replan">Plan again now</button>
+            </div>
             <details class="fold" id="as-plan" style="margin-top:12px"><summary id="as-sum">Plan</summary><dl class="kv" id="as-info" style="margin-top:8px"></dl></details>
           </div>
         </div>
@@ -3276,6 +3280,15 @@ $('d-plan').addEventListener('toggle', () => { if ($('d-plan').open) refreshPlan
 $('d-plan-refresh').addEventListener('click', refreshPlanTable);
 $('d-plan-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText($('d-plan-text').textContent); toast('Plan copied'); } catch (e) { toast('Couldn\'t copy: select the text instead'); }
+});
+$('as-replan').addEventListener('click', async () => {
+  const b = $('as-replan'); b.disabled = true;
+  try {
+    const r = await api('auto_replan', {method: 'POST'});
+    toast(r.waits_until ? `One of its charging blocks is going: it plans again when that ends, at ${hm(r.waits_until)}` : 'Planning again…');
+    [2500, 8000].forEach((ms) => setTimeout(() => { refreshAutomation(true); if ($('d-plan') && $('d-plan').open) refreshPlanTable(); }, ms));
+  } catch (e) { toast('Couldn\'t: ' + e.message); }
+  setTimeout(() => { b.disabled = false; }, 3000);
 });
 $('as-future-url').addEventListener('change', (e) => {
   const v = e.target.value.trim();

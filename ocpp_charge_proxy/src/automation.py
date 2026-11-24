@@ -494,6 +494,7 @@ class Automation:
         # (... or from the day-ahead wholesale prices, where there are some: src/future_rates.py, set by
         # src/__main__.py; [(start, end, p/kWh)])
         self.wholesale: list = []
+        self.replan_asked = False  # (Plan again pressed: src/__main__.py reads the rates and plans straight away)
         self.future_status: dict = {}  # (how reading them went, for the page)
         self.export_rates: list = []  # the export rates known, [[start, end, p/kWh]] (for the page, on or off)
         self._rates_seen: list = []  # (the export rates seen, 2 days, for the high ones; saved)
@@ -3168,6 +3169,27 @@ class Automation:
         if splits:
             self.entries = self.entries + splits
             changes["added"] += [e["id"] for e in splits]
+
+    def auto_going(self, now: Optional[datetime.datetime] = None) -> Optional[datetime.datetime]:
+        """The end of the automatic schedule's block (or time it moved) going now, if one is: it isn't
+        planned again until then. None: none going."""
+        now = now or self._now()
+        cur = self.auto_plan or {}
+        for a, b in (cur.get("charge") or []) + ((cur.get("changes") or {}).get("moved") or []):
+            if _parse_iso(a) <= now < _parse_iso(b):
+                return _parse_iso(b)
+        return None
+
+    def request_replan(self) -> Optional[datetime.datetime]:
+        """Plan again now (Automations › Automatic schedule › Plan again), as if something had changed:
+        the rates are read again too (src/__main__.py). Returns when it will, if one of its blocks is
+        going (not changed under it: at its end), else None (straight away)."""
+        if self.auto_plan is not None:
+            self.auto_plan["key"] = None
+        self._preview_key = None
+        self.replan_asked = True
+        logger.info("Automatic schedule: plan again asked for on the page")
+        return self.auto_going()
 
     def plan_table(self) -> dict:
         """For the Debug tab: the plan (or, while it's off, what it would do) half hour by half hour."""

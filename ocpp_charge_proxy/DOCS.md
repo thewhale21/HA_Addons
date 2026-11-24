@@ -271,6 +271,10 @@ one-line summary; click it to see it all.
   bottom of each day. Off, they're not drawn (or in the legend), but they're
   still marked, listed in the plan and, with Before the high exports,
   planned around.
+- **Plan again now** (a button on the card): reads the rates and plans
+  again straight away, as if something had changed. While one of its
+  charging blocks is going it isn't changed under it: it plans again as
+  that block ends (the page says when).
 - **Tomorrow, before its rates are out:** until the export rates for
   tomorrow are published (Octopus: about 16:00), tomorrow is planned on an
   estimate, exactly as if known (your slots there give way too), so the limit

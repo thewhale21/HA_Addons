@@ -447,7 +447,8 @@ async def run() -> None:
                     automation.publish(shared_state)
                 # (the rates are read on or off: off, the page shows what it would do)
                 wanted = (s.get("auto_import_entity"), s.get("auto_export_entity"))
-                if wanted != last_settings or time.monotonic() - last_read >= AUTO_READ_S:
+                asked, automation.replan_asked = automation.replan_asked, False  # (Plan again: rates read again too)
+                if asked or wanted != last_settings or time.monotonic() - last_read >= AUTO_READ_S:
                     states = await ha_link.all_states()
                     if ha_down:
                         logger.info("Automatic schedule: Home Assistant answering again")
@@ -508,7 +509,11 @@ async def run() -> None:
                 ha_down = True
             except Exception:
                 logger.warning("Automatic schedule cycle failed", exc_info=True)
-            await asyncio.sleep(AUTO_TICK_S)
+            # (Plan again pressed: straight away, not at the next tick)
+            for _ in range(int(AUTO_TICK_S * 4)):
+                if automation.replan_asked:
+                    break
+                await asyncio.sleep(0.25)
     async def populate_loop() -> None:
         """Populate schedule from load › Update automatically: once a day from POPULATE_HOUR (and straight
         away when it's turned on or its sensor, weeks or slots change) the plan is worked out

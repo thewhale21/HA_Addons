@@ -92,6 +92,7 @@ def create_api_app(
     # Schedule and auto re-plug
     app.router.add_get("/api/automation", handle_automation)
     app.router.add_get("/api/auto_table", handle_auto_table)
+    app.router.add_post("/api/auto_replan", handle_auto_replan)
     app.router.add_get("/api/automation/populate_plan", handle_populate_plan)
     app.router.add_post("/api/automation/populate_apply", handle_populate_apply)
     app.router.add_post("/api/automation/schedule", handle_schedule)
@@ -499,6 +500,16 @@ async def handle_auto_table(request: web.Request) -> web.Response:
     if automation is None:
         return web.json_response({"on": False, "rows": []})
     return web.json_response(automation.plan_table(), dumps=_dumps)
+
+
+async def handle_auto_replan(request: web.Request) -> web.Response:
+    """Automations › Automatic schedule › Plan again: read the rates and plan again now (or, with one
+    of its blocks going, when it ends: {"waits_until": iso})."""
+    automation = request.app["automation"]
+    if automation is None:
+        return _gui_unavailable()
+    until = automation.request_replan()
+    return web.json_response({"status": "ok", "waits_until": until.isoformat() if until else None})
 
 
 async def handle_automation(request: web.Request) -> web.Response:

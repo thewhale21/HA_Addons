@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.111.0 — Plan again now
+
+- **Feature:** Automations › Automatic schedule › **Plan again now**:
+  reads the rates and plans again straight away, as if something had
+  changed. With one of its charging blocks going, it plans again as that
+  ends (the page says when), as before.
+
 ## 2.110.0 — The plan as a table on the Debug tab
 
 - **Feature:** Diagnostics › Debug › **The automatic schedule's plan, as a
