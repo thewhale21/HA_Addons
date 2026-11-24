@@ -371,7 +371,8 @@ VALUE_LOOK_BACK = datetime.timedelta(hours=6)
 
 def best_value(halves: list, price: dict, cost: float, can_charge: dict, forced: dict,
                day_of: Callable, need: dict, charge: int, discharge: int, trace: bool = False,
-               dear: Optional[set] = None) -> tuple:
+               dear: Optional[set] = None, house: Optional[dict] = None, unit_kwh: Optional[float] = None,
+               drain: bool = False) -> tuple:
     """Where to charge (the half hours in `halves`, in order) so the battery earns the most: each
     day (day_of) at most need[day] charges, only where `can_charge`. The battery as a number of
     units, full at charge * discharge: a half hour's charge adds `discharge` of them (no more than
@@ -384,15 +385,40 @@ def best_value(halves: list, price: dict, cost: float, can_charge: dict, forced:
     dear: the half hours where an empty battery would leave the house on the grid at its dearer
     import rate (not an off-peak time): of the plans that earn the most, the one with the fewest
     of them empty (e.g. charging 10:00 rather than 11:00, for the same exports).
-    Returns (the half hours to charge in, what it earns: p per unit, after the charging); with
-    `trace`, a third: what it does each half hour, [(start, "charge" / "export" / "hold" / "fills")]
-    (fills: plugged in for something else, or an off-peak time or free session)."""
-    cap = charge * discharge
-    unit_cost = cost / ROUND_TRIP
+    house: {half hour: (kWh the house uses in it, its import p/kWh)}, with unit_kwh (the battery's
+    kWh for each unit): the house on the grid in a `dear` half hour the battery's empty for is a
+    cost, taken off what it earns. drain: the house's use comes out of the battery too (first,
+    before any export), in every half hour it isn't charging or filling; what it can't cover is
+    the cost. Without drain the battery isn't touched by it: just the cost while it's empty.
+    Returns (the half hours to charge in, what it earns: p per unit, after the charging and the
+    house's cost); with `trace`, a third: what it does each half hour, [(start, "charge" / "export" /
+    "hold" / "fills", % full after it, p the house spends on the grid at the dearer rate)] (fills:
+    plugged in for something else, or an off-peak time or free session)."""
+    dear = dear or set()
+    costed = bool(house) and bool(unit_kwh)
+    drain = drain and costed
+    r = 4 if drain else 1  # (in quarter units with the house's use taken off: finer steps)
+    cap = charge * discharge * r
+    add_u, take_u = discharge * r, charge * r
+    unit_cost = cost / ROUND_TRIP / r
+    use_u = {t: max(0, int(round(house[t][0] / unit_kwh * r))) for t in halves if t in house} if drain else {}
+
+    def grid(t, lvl):
+        """(the house's cost on the grid in t, as score, and in p; units it takes from the battery)."""
+        if not costed or t not in house:
+            return 0.0, 0.0, 0
+        kwh, imp = house[t]
+        if drain:
+            took = min(lvl, use_u.get(t, 0))
+            short = max(0.0, kwh - took / r * unit_kwh)
+        else:
+            took, short = 0, kwh if lvl == 0 else 0.0
+        pence = short * imp if t in dear else 0.0
+        return pence / unit_kwh, pence, took
+
     # state (level, charges this day, charging the half hour before) -> (score, path)
     # score: (earned, -half hours empty, -charges, -separate charges): more earned, then empty for less
     # of the time the import's dear, then fewer charges, then joined-up ones
-    dear = dear or set()
     best = {(0, 0, False): ((0.0, 0, 0, 0), ())}
     day = None
     for t in halves:
@@ -406,33 +432,39 @@ def best_value(halves: list, price: dict, cost: float, can_charge: dict, forced:
                     merged[k] = v
             best = merged
         most = need.get(d, 0)
-        p = price.get(t, 0.0)
+        p = price.get(t, 0.0) / r
         nxt = {}
 
         def put(k, sc, path):
             if k not in nxt or sc > nxt[k][0]:
                 nxt[k] = (sc, path)
 
+        def step(act, lvl, gp=0.0):
+            return ((t, act, round(100 * lvl / cap), round(gp, 2)),) if trace else ()
+
         for (lvl, used, was), (sc, path) in best.items():
             if forced.get(t):
-                put((min(cap, lvl + discharge), used, False), sc, path + (((t, "fills"),) if trace else ()))
+                n = min(cap, lvl + add_u)
+                put((n, used, False), sc, path + step("fills", n))
                 continue
-            held = (sc[0], sc[1] - 1, sc[2], sc[3]) if lvl == 0 and t in dear else sc
-            put((lvl, used, False), held, path + (((t, "hold"),) if trace else ()))  # (held)
-            if lvl > 0 and p > 0:
-                x = min(lvl, charge)
-                put((lvl - x, used, False), (round(sc[0] + p * x, 6), sc[1], sc[2], sc[3]), path + (((t, "export"),) if trace else ()))
+            g, gp, took = grid(t, lvl)
+            left = lvl - took
+            held = (round(sc[0] - g, 6), sc[1] - (1 if lvl == 0 and t in dear else 0), sc[2], sc[3])
+            put((left, used, False), held, path + step("hold", left, gp))  # (held)
+            if left > 0 and p > 0:
+                x = min(left, take_u)
+                put((left - x, used, False), (round(sc[0] - g + p * x, 6), sc[1], sc[2], sc[3]), path + step("export", left - x, gp))
             if can_charge.get(t) and used < most and lvl < cap:
-                add = min(discharge, cap - lvl)
-                put((lvl + add, used + 1, True),
-                    (round(sc[0] - unit_cost * add, 6), sc[1], sc[2] - 1, sc[3] - (0 if was else 1)),
-                    path + (((t, "charge"),) if trace else (t,)))
+                n = min(cap, lvl + add_u)
+                put((n, used + 1, True),
+                    (round(sc[0] - unit_cost * (n - lvl), 6), sc[1], sc[2] - 1, sc[3] - (0 if was else 1)),
+                    path + (step("charge", n) if trace else (t,)))
         best = nxt
     if not best:
         return ([], 0.0, []) if trace else ([], 0.0)
     sc, path = max(best.values(), key=lambda v: v[0])
     if trace:
-        return [t for t, act in path if act == "charge"], sc[0], list(path)
+        return [x[0] for x in path if x[1] == "charge"], sc[0], list(path)
     return list(path), sc[0]
 
 
@@ -448,7 +480,9 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
          own: Optional[Callable[[object], int]] = None, copies: bool = True,
          mode: str = "cheapest", highs=(), charge_cap: Optional[int] = None,
          discharge_cap: Optional[int] = None, fills: list = (),
-         look_back: Optional[datetime.timedelta] = None, ran: Optional[list] = None) -> dict:
+         look_back: Optional[datetime.timedelta] = None, ran: Optional[list] = None,
+         house_kw: Optional[Callable[[datetime.datetime], Optional[float]]] = None,
+         battery_kwh: Optional[float] = None, drain: bool = False) -> dict:
     """The automatic schedule: {"charge": [(a, b)], "offpeak": [(a, b)], "notes": [...], "known": [(a, b)],
     "top_ups": [start]} (top_ups: half hours charged inside a high export run, discharge_cap).
 
@@ -466,7 +500,10 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
       time (from the import rates, or `fills`: yours, and free electricity sessions), as the
       battery does then; charge_cap / discharge_cap: how long a full charge takes and how
       long a full battery exports for, in half hours (VALUE_CHARGE_HH / VALUE_EXPORT_HH if not set).
-      What it doesn't need goes where exporting pays least.
+      What it doesn't need goes where exporting pays least. house_kw (a half hour -> the house's
+      average use, kW) with battery_kwh (the battery's size): the house on the grid at the dearer
+      import rate while the battery's empty is a cost (best_value's house); drain: the house's use
+      comes out of the battery too.
     - mode "before": first straight before each run of the high export half hours (`highs`: their
       starts, e.g. each day's highest, marked), as long as the run, as far as there's room (back
       to the run before, or now; not for a run straight after an off-peak time or `fills`, when
@@ -533,16 +570,22 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         free = {t: t >= earliest and not _hits(t, nope) for t in halves}
         # (where running empty leaves the house on the dearer import rate: still to come, not an off-peak time)
         dear = {t for t in halves if t >= earliest and not forced[t]}
-        picked, earned, acts = best_value(halves, price, cost, free, forced, day_of, need, full, dis, trace=True, dear=dear)
-        # (how full the battery is, as it plans it: for the Debug tab's table)
-        lvl, cap_u = 0, full * dis
-        for t, act in acts:
-            if act in ("charge", "fills"):
-                lvl = min(cap_u, lvl + dis)
-            elif act == "export":
-                lvl -= min(lvl, full)
-            battery.append((t, round(100 * lvl / cap_u), act))
-        _, alone = best_value(halves, price, cost, free, forced, day_of, {}, full, dis)
+        # (the house's average use and the import rate then, with the battery's size: what it costs on
+        # the grid while the battery's empty)
+        house, unit_kwh = {}, None
+        if house_kw and battery_kwh:
+            unit_kwh = float(battery_kwh) / (full * dis)
+            imp_at = {a: p for a, _, p, _ in imp}
+            for t in halves:
+                kw = house_kw(t)
+                if kw is not None and t in imp_at:
+                    house[t] = (max(0.0, kw) / 2, imp_at[t])
+        extra = {"dear": dear, "house": house, "unit_kwh": unit_kwh, "drain": drain}
+        picked, earned, acts = best_value(halves, price, cost, free, forced, day_of, need, full, dis, trace=True, **extra)
+        # (how full the battery is, as it plans it, and the house on the grid at the dearer rate: for the
+        # plan's table)
+        battery = [(t, pct, act, gp) for t, act, pct, gp in acts]
+        _, alone = best_value(halves, price, cost, free, forced, day_of, {}, full, dis, **extra)
         done = [t for t in picked if take(t)]
         if not (charge_cap and discharge_cap):
             notes.append("Charge time needed and discharge time needed not both set: planned as if a full charge "
@@ -552,9 +595,17 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
             looked = f"and by what's been plugged in the last {back.total_seconds() / 3600:g} hours, " if back else ""
             notes.append(f"Where it earns the most: {len(done) * 30} min of charging at {cost:g}p, exported for about "
                          f"{(earned - alone) / cap:.0f}p more for each kWh of your battery than without it "
-                         f"(by the export rates alone, the battery charged in off-peak times and free electricity sessions "
-                         f"{looked}not counting what the house uses, with "
+                         f"(by the export rates{', less the house on the grid at the dearer rate while it is empty' if house else ' alone'}, "
+                         f"the battery charged in off-peak times and free electricity sessions "
+                         f"{looked}{'with the house using it too' if house and drain else 'not counting what the house uses' if not house else 'the house not taking it down'}, with "
                          f"{round((1 - ROUND_TRIP) * 100)}% lost charging and discharging)")
+        if house:
+            gone = [(t, gp) for t, _, _, gp in battery if gp > 0]
+            if gone:
+                notes.append(f"The house on the grid at the dearer rate while the battery's empty: {len(gone) * 30} min, "
+                             f"about {sum(gp for _, gp in gone):.0f}p (from its average use)")
+        elif house_kw and not battery_kwh:
+            notes.append("House load sensor set but not the battery's size: what the house costs while the battery's empty isn't counted")
         spare = sum(v for v in need.values() if v > 0)
         if spare:
             notes.append(f"{spare * 30} min of charging the battery couldn't use (full, or no export after it "

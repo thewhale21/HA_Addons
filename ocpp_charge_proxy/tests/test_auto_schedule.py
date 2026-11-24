@@ -1533,4 +1533,61 @@ def test_where_it_earns_the_most_keeps_the_battery_from_running_empty_for_nothin
     picked, earned2, acts = A.best_value(halves, price, 7.0, can, forced, day, {D.date(): 1}, 1, 1, trace=True,
                                          dear=set(halves[2:]))
     assert earned2 == earned and picked == [at(10)]
-    assert [a for _, a in acts] == ["fills", "export", "charge", "hold", "hold", "export"]
+    assert [x[1] for x in acts] == ["fills", "export", "charge", "hold", "hold", "export"]
+
+
+def test_the_house_costs_while_the_battery_is_empty():
+    """With the house's use (1 kW, 0.5 kWh a half hour, at 35p) and the battery's size: a half hour the battery's
+    empty in costs 17.5p, so charging an hour earlier to cover it is worth it even when the exports alone say
+    it isn't (and without the house it doesn't). Off: the battery % isn't touched by the house; on: it is."""
+    halves = [at(9, 30 * k) for k in range(6)]  # (09:00 to 11:30)
+    price = {at(9, 30): 25.0, at(11, 30): 30.0}
+    can = {t: t >= at(10) for t in halves}
+    forced = {at(9): True}
+    day = lambda t: t.date()  # noqa: E731
+    house = {t: (0.5, 35.0) for t in halves}
+    kw = dict(dear=set(halves[2:]), house=house, unit_kwh=5.0)  # (a 5 kWh battery, in 1 unit)
+    picked, earned, acts = A.best_value(halves, price, 7.0, can, forced, day, {D.date(): 1}, 1, 1, trace=True, **kw)
+    assert picked == [at(10)] and [x[3] for x in acts] == [0, 0, 0, 0, 0, 0]  # (never empty when it costs)
+    # (two charges allowed, one empty half hour to cover: what it earns takes the house's cost off)
+    _, e2, acts2 = A.best_value(halves, {at(11, 30): 30.0}, 7.0, can, forced, day, {D.date(): 1}, 1, 1, trace=True, **kw)
+    assert [x[2] for x in acts2][:2] == [100, 100]  # (no drain: the battery % isn't touched by the house)
+    picked, _, acts = A.best_value(halves, price, 7.0, can, forced, day, {D.date(): 1}, 1, 1, trace=True, drain=True, **kw)
+    pct = {t: x[2] for t, x in zip(halves, acts)}
+    assert pct[at(9)] == 100 and pct[at(9, 30)] < 100  # (the house took some, then it exported)
+    assert sum(x[3] for x in acts) >= 0
+
+
+def test_house_load_profile_from_hourly_statistics():
+    """The house's average for each hour of the day, both half hours the same; hours with none get the mean."""
+    from src import house_load
+    base = int(D.timestamp())
+    rows = [{"start": base + 3600 * h, "mean": 400.0 if h == 18 else 200.0} for h in range(24) if h != 3]
+    prof = house_load.profile(rows, 0.001, datetime.timezone.utc)
+    assert len(prof) == 48 and prof[36] == prof[37] == 0.4 and prof[0] == 0.2
+    assert abs(prof[6] - (200 * 22 + 400) / 23 / 1000) < 0.001  # (03:00: no rows, the mean)
+    assert house_load.profile(rows[:5], 1.0) is None
+
+
+def test_the_house_load_in_the_plan_and_its_table():
+    """Where it earns the most with the house's average use and the battery's size: the table has what the
+    house costs on the grid at the dearer rate while the battery's empty, and a change to them plans again."""
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    a.house_profile, a.battery_kwh = [0.5] * 48, 10.0
+    args = (iog_import(2), user_exp(), 6)
+    kw = dict(cap_min=360, mode="value", charge_cap=2, discharge_cap=3)
+    assert a.sync_auto_schedule(*args, **kw)
+    t = a.plan_table()
+    assert t["house"]["battery_kwh"] == 10.0 and not t["house"]["drain"]
+    empty = lambda rows: [r[0][11:16] for r in rows if r[7] == 0 and r[8] == "hold"]  # noqa: E731
+    b, _ = _auto(at(12, 25))
+    b.limit_reset = "12:00"
+    b.sync_auto_schedule(*args, **kw)
+    assert empty(b.plan_table()["rows"]) and not empty(t["rows"])  # (21:30-23:30 empty without the house; with it, kept some)
+    assert not a.sync_auto_schedule(*args, **kw)
+    a.load_drain = True
+    assert a.sync_auto_schedule(*args, **kw)  # (planned again: now the house's use comes off the battery)
+    rows = {r[0][11:16]: r for r in a.plan_table()["rows"] if r[0][:10] == "2026-11-03"}
+    assert rows["13:30"][7] == 96 and rows["13:30"][8] == "hold"  # (0.25 kWh of the 10 kWh battery)
+    assert rows["22:00"][9] == 7.5  # (empty: 0.25 kWh at 30p on the grid)

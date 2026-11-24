@@ -225,7 +225,25 @@ one-line summary; click it to see it all.
   off-peak times (when the house would be on the grid at the dearer
   rate): e.g. charging at 10:00 rather than 11:00 for the same exports,
   so it isn't empty 10:00–11:00. It never gives up any of what it earns to
-  do so. The Notes say what the plan earns for each kWh of
+  do so.
+- **House load sensor** (Where it earns the most; a power sensor, W or kW)
+  with **Battery size** (its usable kWh): the house's average use for each
+  hour of the day, over the last 7 days of Home Assistant's long-term
+  statistics (read every 6 hours, and when you change the sensor; the card
+  shows the average). Each half hour the plan has the battery empty, outside
+  off-peak times, the house is on the grid at the import rate then, and
+  that's taken off what the plan earns. So it charges to keep the battery
+  from running empty where that pays (e.g. 0.5 kW at 35.6p is about 9p a
+  half hour), and exports a little less where keeping some back saves more.
+  The plan's table gets a **House p** column (what the house costs on the
+  grid then) and the Notes the total. Without the battery's size it isn't
+  used.
+- **House use comes off the battery** (off by default): off, the house's
+  use is only that cost while the battery's empty, and the battery % in the
+  plan isn't changed by it. On, the plan also takes the house's average use
+  off the battery each half hour it isn't charging or in an off-peak time
+  (before any export), so it empties sooner, and what it can't cover is
+  the cost. The Notes say what the plan earns for each kWh of
   your battery, by the export rates alone (what the house uses isn't
   counted). E.g. Axle's 121p 19:00–20:00 with 27p from 16:00: it charges
   straight before 19:00 and not in it, and tops up between the 27p half

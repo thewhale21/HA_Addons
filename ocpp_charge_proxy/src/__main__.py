@@ -439,6 +439,8 @@ async def run() -> None:
         from src.future_rates import FutureRates
         future = FutureRates()  # (tomorrow's export rates estimated from the wholesale prices)
         web_session = None
+        from src import house_load
+        load_read = (None, 0.0)  # (the house load sensor read, and when: monotonic)
         try:
             while True:
                 try:
@@ -485,6 +487,24 @@ async def run() -> None:
                     except Exception as err:  # (never the rates from Home Assistant: those go on)
                         logger.debug("Tomorrow's rates: %s", err)
                     automation.wholesale = future.prices
+                    # The house's average use (Where it earns the most › House load sensor): read every few
+                    # hours, and straight away when the sensor changes
+                    ent = s.get("auto_load_entity") or ""
+                    if not ent:
+                        automation.house_profile, automation.load_status, load_read = None, {}, (None, 0.0)
+                    elif ha_link.available and (load_read[0] != ent or time.monotonic() - load_read[1] > house_load.REFRESH_S):
+                        load_read = (ent, time.monotonic())
+                        try:
+                            prof, st = await house_load.read(ha_link, ent, datetime.datetime.now().astimezone())
+                        except Exception as err:
+                            prof, st = None, {"entity": ent, "error": str(err) or type(err).__name__}
+                        automation.house_profile, automation.load_status = prof, st
+                        if prof:
+                            logger.info("House load: %s averages %.2f kW over the last %d days", ent, st["kw"], st["days"])
+                        else:
+                            logger.warning("House load: %s not used: %s", ent, st.get("error"))
+                    automation.battery_kwh = s.get("auto_battery_kwh")
+                    automation.load_drain = bool(s.get("auto_load_drain"))
                     automation.future_status = dict(future.status)
                     # (shown on the schedule, on or off; the high export half hours for Before the high exports,
                     # and for Where it earns the most, where they're only marked)

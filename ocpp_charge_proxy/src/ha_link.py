@@ -62,7 +62,8 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
     if not isinstance(raw, dict):
         raise ValueError("Send a JSON object")
     out = dict(current or default_settings())
-    for key in ("power_entity", "soc_entity", "plug_entity", "auto_plug_entity", "voltage_entity", "populate_power_entity"):
+    for key in ("power_entity", "soc_entity", "plug_entity", "auto_plug_entity", "voltage_entity", "populate_power_entity",
+                "auto_load_entity"):
         if key in raw:
             value = (raw[key] or "").strip() if isinstance(raw[key], (str, type(None))) else None
             if value is None:
@@ -138,6 +139,21 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         out["auto_sched_on"] = bool(raw["auto_sched_on"])
     if "auto_show_rates" in raw:
         out["auto_show_rates"] = bool(raw["auto_show_rates"])
+    if "auto_load_drain" in raw:  # Where it earns the most: the house's use taken off the battery in the plan
+        out["auto_load_drain"] = bool(raw["auto_load_drain"])
+    if "auto_battery_kwh" in raw:  # Where it earns the most: the battery's size, for what the house costs
+        if raw["auto_battery_kwh"] in (None, ""):
+            out["auto_battery_kwh"] = None
+        else:
+            try:
+                if isinstance(raw["auto_battery_kwh"], bool):
+                    raise TypeError
+                kwh = float(raw["auto_battery_kwh"])
+            except (TypeError, ValueError):
+                raise ValueError("auto_battery_kwh must be a number of kWh") from None
+            if not 0.5 <= kwh <= 500:
+                raise ValueError("The battery's size is 0.5 to 500 kWh")
+            out["auto_battery_kwh"] = kwh
     if "auto_show_highs" in raw:  # the high export half hours drawn on the schedule (marked either way)
         out["auto_show_highs"] = bool(raw["auto_show_highs"])
     if "auto_sched_mode" in raw:  # charge where exporting pays least, before the high export times, or where it earns the most
@@ -336,7 +352,11 @@ def default_settings() -> dict:
         "read_only": False,  # nothing plugs in or unplugs by itself (shown, logged, not done)
         # The automatic schedule: off; half hours of charging; rates entities ("": found automatically)
         "auto_sched_on": False, "auto_show_rates": False, "auto_show_highs": True, "auto_high_blocks": 0, "auto_charge_need_h": None, "auto_discharge_need_h": None, "auto_sched_mode": "cheapest", "auto_look_back_h": 6.0,
-        "auto_future_url": FUTURE_URL,  # (empty: tomorrow's estimated as a copy of today's) "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",
+        "auto_future_url": FUTURE_URL,  # (empty: tomorrow's estimated as a copy of today's)
+        "auto_sched_blocks": 12, "auto_import_entity": "", "auto_export_entity": "",
+        # Where it earns the most: the house's use (a power sensor), the battery's size, and whether
+        # the house's use comes out of the battery in the plan (else just a cost while it's empty)
+        "auto_load_entity": "", "auto_battery_kwh": None, "auto_load_drain": False,
         # Populate schedule from load (Automations tab): best charging times per weekday from a power sensor's history
         "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 12, "populate_auto": False,
         # Your supplier: empty / None = found automatically

@@ -120,7 +120,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 15
+AUTO_PLAN_VERSION = 16
 # (a change from a page that was behind, on a time the add-on has since moved)
 _MOVED = "The schedule changed just before that (the automatic schedule planned again): have a look and try again"
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
@@ -496,6 +496,13 @@ class Automation:
         self.wholesale: list = []
         self.replan_asked = False  # (Plan again pressed: src/__main__.py reads the rates and plans straight away)
         self.future_status: dict = {}  # (how reading them went, for the page)
+        # Where it earns the most: the house's average use, kW, for each half hour of the day (48, from
+        # midnight; src/house_load.py, set by src/__main__.py), the battery's size (kWh) and whether the
+        # house's use comes out of the battery in the plan (else it's only a cost while it's empty)
+        self.house_profile: Optional[list] = None
+        self.battery_kwh: Optional[float] = None
+        self.load_drain = False
+        self.load_status: dict = {}  # (how reading the house load went, for the page)
         self.export_rates: list = []  # the export rates known, [[start, end, p/kWh]] (for the page, on or off)
         self._rates_seen: list = []  # (the export rates seen, 2 days, for the high ones; saved)
         self._rates_seen_was: list = []  # (as last saved)
@@ -2662,6 +2669,7 @@ class Automation:
                "charge_cap": charge_cap if mode in ("before", "value") else None,
                "discharge_cap": discharge_cap if mode in ("before", "value") else None,
                "look_back": self.look_back_h if mode == "value" else None,
+               "house": self._house_key() if mode == "value" else None,
                # (the estimate: planned again when it changes, e.g. tomorrow's wholesale prices come)
                "est": hashlib.md5(repr([(a.isoformat(), p) for a, _, p, _ in est]).encode()).hexdigest()[:12]}
         if cur and cur.get("key") == self._schedule_key() and same_rates and cur.get("v") == AUTO_PLAN_VERSION \
@@ -2793,6 +2801,8 @@ class Automation:
                            plugged=plugged, own=lambda d: window_minutes(done, d, day_end(d)), copies=False,
                            mode=mode, highs=[_parse_iso(x) for x in highs], charge_cap=how["charge_cap"], discharge_cap=how["discharge_cap"],
                            look_back=datetime.timedelta(hours=self.look_back_h),
+                           house_kw=self._house_kw() if mode == "value" else None, battery_kwh=self.battery_kwh,
+                           drain=self.load_drain,
                            # (what's really been plugged in, for how full the battery is: with the schedule off,
                            # your slots didn't run, only the charges that run anyway)
                            ran=self.windows(None if self.schedule_enabled else
@@ -2842,7 +2852,9 @@ class Automation:
         """The plan, half hour by half hour, for the page (Automations › Automatic schedule › Plan):
         [start, export p, "known" / "copy" / "wholesale", import p, smart charging
         adjusted, [tags], plugged in ("auto" its own, "car", "yours", ""), battery % (Where it earns the
-        most: as it plans it) or None, what the battery does ("charge", "export", "hold", "fills") or None].
+        most: as it plans it) or None, what the battery does ("charge", "export", "hold", "fills") or None,
+        p the house spends on the grid at the dearer rate while the battery's empty (a house load sensor
+        and the battery's size set) or None].
         From the look-back (or the half hour going) to the end of the rates."""
         from src import auto_schedule as planner
         HH = planner.HH
@@ -2850,7 +2862,7 @@ class Automation:
         wholesale_at = lambda t: any(a <= t < b for a, b, _ in self.wholesale)  # noqa: E731
         exp.update({a: (p, "wholesale" if fit and wholesale_at(a) else "copy") for a, _, p, _ in est})
         imps = {a: (p, adj) for a, _, p, adj in imp}
-        batt = {t: (lvl, act) for t, lvl, act in res.get("battery") or []}
+        batt = {t: (lvl, act, gp) for t, lvl, act, gp in res.get("battery") or []}
         start = min([now.replace(minute=now.minute // 30 * 30, second=0, microsecond=0)] + list(batt))
         end = max(exp, default=start) + HH
         high = {_parse_iso(h[0]) for h in self.high_rates if _parse_iso(h[0])}
@@ -2872,9 +2884,24 @@ class Automation:
             e, src = exp.get(t, (None, ""))
             i, adj = imps.get(t, (None, False))
             b = batt.get(t)
-            rows.append([_iso_local(t), e, src, i, bool(adj), tags, plug, b[0] if b else None, b[1] if b else None])
+            rows.append([_iso_local(t), e, src, i, bool(adj), tags, plug, b[0] if b else None, b[1] if b else None,
+                         b[2] if b and b[2] else None])
             t += HH
         return rows
+
+    def _house_kw(self):
+        """The house's average use (kW) in the half hour from t (local time), or None: no profile."""
+        prof = self.house_profile
+        if not prof or len(prof) != 48:
+            return None
+        return lambda t: prof[t.hour * 2 + t.minute // 30]
+
+    def _house_key(self) -> Optional[list]:
+        """What the house load adds to the plan, to plan again when it changes (to 0.05 kW: not on every
+        small change in the average)."""
+        if not self.house_profile:
+            return None
+        return [[round(x * 20) / 20 for x in self.house_profile], self.battery_kwh, bool(self.load_drain)]
 
     def _estimate(self, known_exp: list, now: datetime.datetime) -> tuple:
         """The export rates not out yet: from the day-ahead wholesale prices where there are some
@@ -2962,7 +2989,7 @@ class Automation:
         now = self._now()
         key = repr((blocks, cap_min, self.limit_reset, self._schedule_key(), self.override_guards, mode, self.high_rates,
                     self.wholesale,
-                    self._copies(info), self.ready_time, charge_cap, discharge_cap, self.look_back_h,
+                    self._copies(info), self.ready_time, charge_cap, discharge_cap, self.look_back_h, self._house_key(),
                     [(a.isoformat(), p) for a, b, p, _ in exp if b > now],
                     [(a.isoformat(), p, adj) for a, b, p, adj in imp if b > now],
                     now.replace(minute=now.minute // 30 * 30, second=0, microsecond=0).isoformat()))
@@ -2979,7 +3006,7 @@ class Automation:
             self.sync_auto_schedule(imp, exp, blocks, cap_min, provider, info, mode, charge_cap, discharge_cap)
             p = self.auto_plan or {}
             preview = {k: p.get(k) for k in ("blocks", "charge", "offpeak", "notes", "rates_until", "info", "top_ups", "table", "mode",
-                                              "fit", "limit", "charge_cap", "discharge_cap", "look_back")}
+                                              "fit", "limit", "charge_cap", "discharge_cap", "look_back", "house")}
             preview |= {"gave_way": p.get("gave_way") or [], "planned_at": _iso_local(now)}
         finally:
             logger.disabled = was
@@ -3202,7 +3229,9 @@ class Automation:
         return {"on": self.auto_plan is not None, "rows": p.get("table") or [], "mode": p.get("mode"),
                 "fit": p.get("fit"), "planned_at": p.get("planned_at"), "notes": p.get("notes") or [],
                 "charge_cap": p.get("charge_cap"), "discharge_cap": p.get("discharge_cap"),
-                "look_back": p.get("look_back"), "blocks": p.get("blocks"), "limit": p.get("limit")}
+                "look_back": p.get("look_back"), "blocks": p.get("blocks"), "limit": p.get("limit"),
+                "house": {"kw": self.load_status.get("kw"), "battery_kwh": self.battery_kwh, "drain": self.load_drain}
+                if p.get("house") else None}
 
     def auto_snapshot(self) -> Optional[dict]:
         if not self.auto_plan:
@@ -3700,7 +3729,8 @@ class Automation:
                 "saving_past": self.saving_past,  # (from the calendar: the Sessions tab's week)
                 "saving_block": self.saving_block,
                 "auto_plan": self.auto_snapshot(),
-                "future_rates": self.future_status,  # (the wholesale prices for tomorrow's estimate: how reading them went)
+                "future_rates": self.future_status,
+                "house_load": self.load_status,  # (the house's average use, for Where it earns the most)  # (the wholesale prices for tomorrow's estimate: how reading them went)
                 "auto_preview": self.auto_preview if self.auto_plan is None else None,
                 "export_rates": self.export_rates,
                 "high_rates": self.high_rates,

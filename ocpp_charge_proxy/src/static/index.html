@@ -945,6 +945,16 @@
               <div class="grow">Look back<div class="note" style="margin:0">How far back it looks for how full your battery is when it plans: empty this long before, filled by what's been plugged in since (and off-peak times and free electricity sessions) and emptied where exporting paid most. 0: taken as empty when it plans.</div></div>
               <span class="ctl"><input type="number" id="as-lookback" min="0" max="24" step="0.5" aria-label="Look back (hours)"> h</span>
             </div>
+            <div class="row as-value-only" hidden><div class="grow">House load sensor<div class="note" style="margin:0">Your house's power use (W or kW). Its average for each hour of the day over the last 7 days (read every 6 hours) is what the house costs on the grid at the dearer import rate while the plan has the battery empty, so it charges where that's avoided as long as it's worth it. Needs the battery's size. <span id="as-load-st"></span></div></div></div>
+            <div class="row as-value-only" hidden style="margin-top:6px"><span class="picker" data-key="auto_load_entity" data-domain="sensor" data-class="power" data-units="W,kW,MW" data-none="None"></span></div>
+            <div class="row as-value-only" hidden>
+              <div class="grow">Battery size<div class="note" style="margin:0">Its usable kWh, to weigh the house's use against it.</div></div>
+              <span class="ctl"><input type="number" id="as-batt-kwh" min="0.5" max="500" step="0.1" aria-label="Battery size (kWh)"> kWh</span>
+            </div>
+            <div class="row as-value-only" hidden>
+              <div class="grow">House use comes off the battery<div class="note" style="margin:0">Off: the house's use is only a cost while the plan has the battery empty; the battery % isn't changed by it. On: the plan also takes the house's average use off the battery each half hour it isn't charging (before any export), so it empties sooner.</div></div>
+              <label class="switch"><input type="checkbox" id="as-drain" aria-label="House use comes off the battery"><span></span></label>
+            </div>
             <div class="row">
               <div class="grow">Tomorrow's rates from<div class="note" style="margin:0">Until your supplier publishes tomorrow's export rates (Octopus: about 16:00), they're worked out from the day-ahead wholesale prices at this address (Nord Pool's UK auction, out about 10:00), as today's rates compare with today's wholesale prices. DATE is the day. Empty: a copy of today's rates instead. <details class="more"><summary>More</summary><div>Read for today and tomorrow, and looked for again every 15 minutes until tomorrow's are out. The fit (e.g. about 0.9 × wholesale, plus a little extra 16:00–19:00) is in the plan's Notes. If the address stops working, the Rates row below says so and tomorrow's are a copy of today's until it's fixed.</div></details></div></div>
             </div>
@@ -2905,6 +2915,8 @@ function drawPickers() {
   if (document.activeElement !== $('as-cneed')) $('as-cneed').value = sim.edit.auto_charge_need_h ?? '';
   if (document.activeElement !== $('as-dneed')) $('as-dneed').value = sim.edit.auto_discharge_need_h ?? '';
   if (document.activeElement !== $('as-lookback')) $('as-lookback').value = sim.edit.auto_look_back_h ?? 6;
+  if (document.activeElement !== $('as-batt-kwh')) $('as-batt-kwh').value = sim.edit.auto_battery_kwh ?? '';
+  $('as-drain').checked = !!sim.edit.auto_load_drain;
   if (document.activeElement !== $('as-future-url')) $('as-future-url').value = sim.edit.auto_future_url ?? '';
   if (document.activeElement !== $('pop-weeks')) $('pop-weeks').value = sim.edit.populate_weeks ?? 4;
   if (document.activeElement !== $('pop-slots')) $('pop-slots').value = sim.edit.populate_slots ?? 12;
@@ -3166,6 +3178,10 @@ function drawAutoSched() {
   $('as-sum').textContent = !p ? 'Plan' : (on ? 'Plan' : 'Plan if it were on') + ': '
     + (mins(p.charge) ? `${hmDur(Math.round(mins(p.charge) / 30) * 1800)} of charging to come` : 'no charging to come')
     + ((p.gave_way || []).length ? `, ${p.gave_way.length} of your slots ${on ? 'changed' : 'would change'}` : '');
+  { const st = (sch && sch.house_load) || {};
+    $('as-load-st').innerHTML = !(sim.edit && sim.edit.auto_load_entity) ? '' : st.kw != null
+      ? `<b>Average ${num(st.kw, 2)} kW</b> over the last ${st.days} days${sim.edit.auto_battery_kwh ? '' : ' <span style="color:var(--warn)">(set the battery size to use it)</span>'}.`
+      : st.error ? `<span style="color:var(--warn)">Not used: ${esc(st.error)}.</span>` : 'Reading it…'; }
   if (!p) { $('as-info').innerHTML = ''; $('as-table').textContent = on ? 'Planning…' : 'Off: reading the rates…'; return; }
   const span = (w) => `${dateTime(w[0])}–${hm(w[1])}`;
   const info = p.info || {};
@@ -3248,22 +3264,26 @@ async function refreshPlanTable() {
   head.push(`${d.on ? 'Planned' : 'Off: what it would plan'}${d.planned_at ? ' at ' + t(d.planned_at) : ''} · ${MODE[d.mode] || d.mode || '—'} · ${d.blocks ?? '—'} half hours a day`);
   if (d.limit && d.limit[1]) head.push(`Daily limit: ${d.limit[1] / 60} h${d.limit[0] ? ' from ' + d.limit[0] : ''}`);
   if (d.mode !== 'cheapest') head.push(`Charge time needed: ${d.charge_cap ? d.charge_cap * 30 + ' min' : '—'} · discharge time needed: ${d.discharge_cap ? d.discharge_cap * 30 + ' min' : '—'}` + (d.mode === 'value' ? ` · look back: ${d.look_back ?? '—'} h` : ''));
+  if (d.house) head.push(`House: ${d.house.kw != null ? d.house.kw.toFixed(2) + ' kW on average' : 'its average use'} · battery ${d.house.battery_kwh ?? '—'} kWh · ${d.house.drain ? 'its use comes off the battery' : 'its use only a cost while the battery\'s empty'}`);
   if (d.fit) head.push(`Wholesale fit: export ≈ ${d.fit.a.toFixed(2)} × wholesale ${d.fit.b >= 0 ? '+' : ''}${d.fit.b.toFixed(1)}p${d.fit.c ? `, ${d.fit.c >= 0 ? '+' : ''}${d.fit.c.toFixed(1)}p 16:00–19:00` : ''} (from ${d.fit.n} half hours)`);
   const rows = d.rows || [];
   if (!rows.length) { $('as-table').textContent = head.join('\n') + '\n\nNo plan yet (no export rates read, or it hasn\'t planned since the add-on started).'; return; }
-  const cols = ['Time', 'Export p', 'Rate', 'Import p', 'Plugged in', 'Battery', 'Does', 'Notes'];
-  const W = [10, 8, 10, 9, 11, 7, 7, 0];
+  const house = rows.some((r) => r[9] != null);
+  const cols = ['Time', 'Export p', 'Rate', 'Import p', 'Plugged in', 'Battery', 'Does', ...(house ? ['House p'] : []), 'Notes'];
+  const W = [10, 8, 10, 9, 11, 7, 7, ...(house ? [7] : []), 0];
+  const RIGHT = new Set([1, 3, 5, ...(house ? [7] : [])]);
   const PLUG = {auto: 'its own', car: 'car charge', yours: 'your slot', '': ''};
   const SRC = {known: 'known', copy: 'est (copy)', wholesale: 'est (whsl)', '': '—'};
   const DOES = {charge: 'charge', export: 'export', hold: 'hold', fills: 'fills'};
-  const line = (v) => v.map((x, i) => W[i] ? pad(x, W[i], i === 1 || i === 3 || i === 5) : x).join('  ').trimEnd();
+  const line = (v) => v.map((x, i) => W[i] ? pad(x, W[i], RIGHT.has(i)) : x).join('  ').trimEnd();
   const out = [...head, '', line(cols), line(W.map((w) => '-'.repeat(w || 5)))];
   for (const r of rows) {
-    const [iso, e, src, i, adj, tags, plug, batt, act] = r;
+    const [iso, e, src, i, adj, tags, plug, batt, act, grid] = r;
     out.push(line([t(iso), e == null ? '—' : e.toFixed(2), SRC[src] ?? src, i == null ? '—' : i.toFixed(2) + (adj ? '*' : ''),
-      PLUG[plug] ?? plug, batt == null ? '' : batt + '%', DOES[act] || '', (tags || []).join(', ')]));
+      PLUG[plug] ?? plug, batt == null ? '' : batt + '%', DOES[act] || '', ...(house ? [grid == null ? '' : grid.toFixed(1)] : []), (tags || []).join(', ')]));
   }
-  out.push('', '* import rate made cheap by a smart charging slot · est (copy): the day before\'s · est (whsl): from the wholesale prices · fills: the battery charges anyway (plugged in for something else, an off-peak time or a free session)');
+  out.push('', '* import rate made cheap by a smart charging slot · est (copy): the day before\'s · est (whsl): from the wholesale prices · fills: the battery charges anyway (plugged in for something else, an off-peak time or a free session)'
+    + (house ? ' · House p: what the house costs on the grid at the dearer rate while the battery\'s empty (its average use)' : ''));
   if ((d.notes || []).length) out.push('', 'Notes:', ...d.notes.map((n) => '- ' + n));
   $('as-table').textContent = out.join('\n');
 }
@@ -3296,6 +3316,16 @@ $('as-high').addEventListener('change', (e) => {
   const n = Number(e.target.value);
   if (!Number.isInteger(n) || n < 0 || n > 48) { toast('0 to 48 half hours'); refreshSimulation(true); return; }
   saveSensors({auto_high_blocks: n}, n ? `The ${hmDur(n * 1800)} a day with the highest export rates are marked` : 'High export half hours not marked')
+    .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
+});
+$('as-batt-kwh').addEventListener('change', (e) => {
+  const raw = e.target.value.trim(), kwh = raw === '' ? null : Number(raw);
+  if (kwh !== null && (!Number.isFinite(kwh) || kwh < 0.5 || kwh > 500)) { toast('0.5 to 500 kWh'); refreshSimulation(true); return; }
+  saveSensors({auto_battery_kwh: kwh}, kwh ? `Battery size: ${kwh} kWh` : 'Battery size cleared: the house\'s use isn\'t counted')
+    .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
+});
+$('as-drain').addEventListener('change', (e) => {
+  saveSensors({auto_load_drain: e.target.checked}, e.target.checked ? 'The house\'s use comes off the battery in the plan' : 'The house\'s use is only a cost while the battery\'s empty')
     .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
 });
 $('as-highs').addEventListener('change', (e) => {

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.114.0 — The house's use in Where it earns the most
+
+- **Feature:** Automations › Automatic schedule (Where it earns the most):
+  **House load sensor** and **Battery size**. The house's average use for
+  each hour of the day (the last 7 days) makes each half hour the plan has
+  the battery empty, outside off-peak times, cost what the house would pay
+  on the grid then, so it keeps the battery from running empty where that
+  pays. The plan's table has a House p column, and the Notes the total.
+- **Feature:** **House use comes off the battery** (off by default): on,
+  the plan also takes the house's average use off the battery; off, the
+  battery % isn't changed by it, it's only the cost.
+- **Fix:** the defaults for the automatic schedule's half hours a day and
+  its import and export rates sensors had dropped out of the settings
+  (since 2.109.0); back.
+
 ## 2.113.0 — Where it earns the most: empty for less of the time
 
 - **Improvement:** Where it earns the most: of the plans that earn the
