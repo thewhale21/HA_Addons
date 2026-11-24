@@ -945,6 +945,10 @@
               <div class="grow">Look back<div class="note" style="margin:0">How far back it looks for how full your battery is when it plans: empty this long before, filled by what's been plugged in since (and off-peak times and free electricity sessions) and emptied where exporting paid most. 0: taken as empty when it plans.</div></div>
               <span class="ctl"><input type="number" id="as-lookback" min="0" max="24" step="0.5" aria-label="Look back (hours)"> h</span>
             </div>
+            <div class="row">
+              <div class="grow">Tomorrow's rates from<div class="note" style="margin:0">Until your supplier publishes tomorrow's export rates (Octopus: about 16:00), they're worked out from the day-ahead wholesale prices at this address (Nord Pool's UK auction, out about 10:00), as today's rates compare with today's wholesale prices. DATE is the day. Empty: a copy of today's rates instead. <details class="more"><summary>More</summary><div>Read for today and tomorrow, and looked for again every 15 minutes until tomorrow's are out. The fit (e.g. about 0.9 × wholesale, plus a little extra 16:00–19:00) is in the plan's Notes. If the address stops working, the Rates row below says so and tomorrow's are a copy of today's until it's fixed.</div></details></div></div>
+            </div>
+            <div class="row" style="margin-top:6px"><input type="text" id="as-future-url" placeholder="Empty: a copy of today's rates" style="width:100%" aria-label="Tomorrow's rates from (wholesale prices URL)"></div>
             <div class="row as-before as-value" hidden>
               <div class="grow">High export half hours a day<div class="note" style="margin:0">The day's highest export rates, marked in orange on the schedule. Before the high exports: the charging goes around them. Where it earns the most: only marked, to see them (it uses every export rate either way). 0: none.</div></div>
               <span class="ctl"><input type="number" id="as-high" min="0" max="48" step="1" aria-label="High export half hours a day"> × 30 min</span>
@@ -2893,6 +2897,7 @@ function drawPickers() {
   if (document.activeElement !== $('as-cneed')) $('as-cneed').value = sim.edit.auto_charge_need_h ?? '';
   if (document.activeElement !== $('as-dneed')) $('as-dneed').value = sim.edit.auto_discharge_need_h ?? '';
   if (document.activeElement !== $('as-lookback')) $('as-lookback').value = sim.edit.auto_look_back_h ?? 6;
+  if (document.activeElement !== $('as-future-url')) $('as-future-url').value = sim.edit.auto_future_url ?? '';
   if (document.activeElement !== $('pop-weeks')) $('pop-weeks').value = sim.edit.populate_weeks ?? 4;
   if (document.activeElement !== $('pop-slots')) $('pop-slots').value = sim.edit.populate_slots ?? 12;
   $('pop-auto').checked = !!sim.edit.populate_auto;
@@ -3168,7 +3173,10 @@ function drawAutoSched() {
       return h.length ? mergeRuns(h).map((w) => `${span(w)} <span class="muted">(up to ${num(w[2], 1)}p)</span>`).join('<br>') : '<span class="muted">None marked</span>'; })()]] : []),
     ['Off-peak', (p.offpeak || []).length ? p.offpeak.map(span).join('<br>') : '<span class="muted">None (no cheaper import times)</span>'],
     ...(notes.length ? [['Notes', notes.map((n) => `<div class="sub" style="color:var(--warn)">${esc(n)}</div>`).join('')]] : []),
-    ['Rates', `${info.source ? esc(info.source) + ' · ' : ''}known until ${p.rates_until ? dateTime(p.rates_until) : '—'}<div class="sub">Import: ${src(info.import)}</div><div class="sub">Export: ${src(info.export)}</div>`],
+    ['Rates', `${info.source ? esc(info.source) + ' · ' : ''}known until ${p.rates_until ? dateTime(p.rates_until) : '—'}<div class="sub">Import: ${src(info.import)}</div><div class="sub">Export: ${src(info.export)}</div>`
+      + (() => { const f = (sch && sch.future_rates) || {}; if (!f.url) return '<div class="sub">Tomorrow\'s before they\'re out: a copy of today\'s</div>';
+          const days = Object.entries(f.days || {}).filter(([, n]) => n).map(([d]) => new Date(d + 'T12:00').toLocaleDateString([], {weekday: 'short'}));
+          return `<div class="sub">Wholesale prices: ${days.length ? 'read for ' + esc(days.join(' and ')) : 'none yet'}${f.error ? ` <span style="color:var(--warn)">(${esc(f.error)})</span>` : ''}</div>`; })()],
     [on ? 'Planned' : 'Worked out', p.planned_at ? dateTime(p.planned_at) : '—'],
   ]);
 }
@@ -3225,6 +3233,12 @@ $('as-mode').addEventListener('click', (e) => {
     saveSensors({[key]: h || null}, h ? `${name}: ${hmDur(h * 3600)}` : `${name}: none`)
       .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
   });
+});
+$('as-future-url').addEventListener('change', (e) => {
+  const v = e.target.value.trim();
+  if (v && (!/^https?:\/\/\S+$/.test(v) || !v.includes('DATE'))) { toast('The address must start https:// and have DATE in it, for the day'); refreshSimulation(true); return; }
+  saveSensors({auto_future_url: v}, v ? 'Tomorrow\'s rates: worked out from the wholesale prices' : 'Tomorrow\'s rates: a copy of today\'s')
+    .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
 });
 $('as-lookback').addEventListener('change', (e) => {
   const h = Number(e.target.value.trim() === '' ? 6 : e.target.value);

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import inspect
 import logging
 import os
@@ -435,6 +436,9 @@ async def run() -> None:
         last_read, last_settings, imp, exp, info = 0.0, None, [], [], {}
         started = time.monotonic()
         ha_down = False
+        from src.future_rates import FutureRates
+        future = FutureRates()  # (tomorrow's export rates estimated from the wholesale prices)
+        web_session = None
         while True:
             try:
                 s = ha_link.settings
@@ -469,6 +473,17 @@ async def run() -> None:
                 # Your supplier's daily limit always applies to it (each limit day, e.g.
                 # 12:00 to 12:00), whether or not Force schedule on supplier is on
                 cap = sc.get("limit_min") if not automation.override_guards else None
+                # Tomorrow's day-ahead wholesale prices (Automations › Automatic schedule › Tomorrow's rates
+                # from): its estimate of the export rates not out yet, rather than a copy of today's
+                try:
+                    if web_session is None and s.get("auto_future_url"):
+                        web_session = aiohttp.ClientSession()
+                    if web_session is not None:
+                        await future.refresh(s.get("auto_future_url") or None, datetime.datetime.now().astimezone(), web_session)
+                except Exception as err:  # (never the rates from Home Assistant: those go on)
+                    logger.debug("Tomorrow's rates: %s", err)
+                automation.wholesale = future.prices
+                automation.future_status = dict(future.status)
                 # (shown on the schedule, on or off; the high export half hours for Before the high exports,
                 # and for Where it earns the most, where they're only marked)
                 rates_changed = automation.set_export_rates(

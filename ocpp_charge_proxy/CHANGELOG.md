@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.109.0 — Tomorrow's rates from the wholesale prices
+
+- **Feature:** until tomorrow's export rates are out (Octopus: about
+  16:00), the automatic schedule plans tomorrow on an estimate from the
+  day-ahead wholesale prices (Nord Pool's UK auction, out about 10:00),
+  not on a copy of today's: turned into export rates the way today's real
+  rates compare with today's wholesale prices (the fit's in the Notes). It
+  plans again when they come, and on the real rates when they're out.
+  Automations › Automatic schedule › **Tomorrow's rates from** sets the
+  address (DATE for the day; empty: a copy of today's, as before), and the
+  plan's Rates row says whether they've been read.
+
 ## 2.108.0 — Every slot across the 12:00 reset is split there
 
 - **Fix:** with Force schedule on supplier on, a slot across your

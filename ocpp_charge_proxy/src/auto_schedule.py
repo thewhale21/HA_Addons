@@ -223,6 +223,80 @@ def estimate(rates: list, until: datetime.datetime) -> list:
     return out
 
 
+def fit_wholesale(rates: list, wholesale: list) -> Optional[dict]:
+    """How the export rates known compare with the wholesale prices for the same half hours
+    (future_rates): {"a", "b", "c", "n"}: rate = a * wholesale + b, + c from 16:00 to 19:00 (local:
+    Agile's peak), by least squares over the half hours both have. None if there are too few (under
+    12), or the fit's off (a outside 0.2 to 3)."""
+    def price_at(t):
+        return next((p for a, b, p in wholesale if a <= t < b), None)
+
+    pts = []
+    for t, _, p, adj in rates:
+        w = price_at(t)
+        if w is not None and not adj:
+            pts.append((w, 1.0 if 16 <= t.hour < 19 else 0.0, p))
+    if len(pts) < 12:
+        return None
+    peak = any(z for _, z, _ in pts) and not all(z for _, z, _ in pts)
+
+    def solve(cols):
+        # normal equations (X'X) beta = X'y, by Gaussian elimination
+        k = len(cols[0])
+        m = [[sum(r[i] * r[j] for r in cols) for j in range(k)] + [sum(r[i] * y for r, (_, _, y) in zip(cols, pts))]
+             for i in range(k)]
+        for i in range(k):
+            piv = max(range(i, k), key=lambda r: abs(m[r][i]))
+            if abs(m[piv][i]) < 1e-9:
+                return None
+            m[i], m[piv] = m[piv], m[i]
+            for r in range(k):
+                if r != i:
+                    f = m[r][i] / m[i][i]
+                    m[r] = [x - f * y for x, y in zip(m[r], m[i])]
+        return [m[i][k] / m[i][i] for i in range(k)]
+
+    beta = solve([(w, 1.0, z) for w, z, _ in pts]) if peak else None
+    if beta is None:
+        beta = solve([(w, 1.0) for w, _, _ in pts])
+        if beta is None:
+            return None
+        beta.append(0.0)
+    a, b, c = beta
+    if not 0.2 <= a <= 3:
+        return None
+    return {"a": round(a, 4), "b": round(b, 3), "c": round(c, 3), "n": len(pts)}
+
+
+def estimate_wholesale(rates: list, wholesale: list, until: datetime.datetime) -> tuple:
+    """As estimate(), but from the day-ahead wholesale prices (future_rates) where there are some,
+    turned into export rates as the known ones compare with them (fit_wholesale); the rest (none
+    published yet) a copy of the day before as estimate() does. Returns (the estimate, the fit or
+    None, how many half hours came from the wholesale prices)."""
+    fit = fit_wholesale(rates, wholesale) if wholesale else None
+    by = {r[0]: r for r in rates}
+    if not by:
+        return [], fit, 0
+    out, used = [], 0
+    t = max(by) + HH
+    day = datetime.timedelta(days=1)
+    while t < until:
+        w = next((p for a, b, p in wholesale if a <= t < b), None) if fit else None
+        if w is not None:
+            p = round(fit["a"] * w + fit["b"] + (fit["c"] if 16 <= t.hour < 19 else 0.0), 2)
+            out.append((t, t + HH, p, False))
+            used += 1
+        else:
+            src = by.get(t - day) or by.get(t - 2 * day)
+            if not src:
+                t += HH
+                continue
+            out.append((t, t + HH, src[2], src[3]))
+        by[t] = out[-1]
+        t += HH
+    return out, fit, used
+
+
 def _windows(halves) -> list:
     """Half hour starts -> windows [(a, b)] of back to back ones."""
     out = []

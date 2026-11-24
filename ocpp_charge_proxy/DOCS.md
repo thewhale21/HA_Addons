@@ -273,9 +273,20 @@ one-line summary; click it to see it all.
   planned around.
 - **Tomorrow, before its rates are out:** until the export rates for
   tomorrow are published (Octopus: about 16:00), tomorrow is planned on an
-  estimate, the day before's rates, exactly as if known (your slots there give
-  way too), so the limit day from 12:00 today can use tomorrow morning. It
-  plans again on the real rates when they come. The Notes say when part of
+  estimate, exactly as if known (your slots there give way too), so the limit
+  day from 12:00 today can use tomorrow morning. The estimate comes from the
+  **day-ahead wholesale prices** (**Tomorrow's rates from**: Nord Pool's UK
+  auction by default, published about 10:00 for the next day), turned into
+  export rates the way today's real rates compare with today's wholesale
+  prices (a straight-line fit, with any extra 16:00–19:00: e.g. "about 0.90 ×
+  wholesale +1.0p, +5.0p 16:00–19:00", in the Notes). They're read for today
+  and tomorrow, and looked for every 15 minutes until tomorrow's are out.
+  Without them (the address empty, not working, or tomorrow's not out yet),
+  or if today's rates don't follow them (e.g. a fixed export rate), it's the
+  day before's rates instead. It plans again when tomorrow's wholesale prices
+  come, and on the real rates when they're out. The address is a setting
+  (with DATE for the day) in case Nord Pool changes it; the plan's Rates row
+  says whether they've been read. The Notes say when part of
   the plan is an estimate, and on the schedule the estimated export rates and
   high export marks are faded.
 - **Your slots give way** where the rates are known or estimated (skipped,

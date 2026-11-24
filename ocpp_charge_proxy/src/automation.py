@@ -75,6 +75,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import datetime
+import hashlib
 import logging
 import math
 import os
@@ -490,6 +491,10 @@ class Automation:
         self.auto_plan: Optional[dict] = None
         self.auto_preview: Optional[dict] = None  # (while it's off: what it would do, for the page)
         self.estimate_ahead = True  # (the export rates not out yet estimated from the day before's: see estimate())
+        # (... or from the day-ahead wholesale prices, where there are some: src/future_rates.py, set by
+        # src/__main__.py; [(start, end, p/kWh)])
+        self.wholesale: list = []
+        self.future_status: dict = {}  # (how reading them went, for the page)
         self.export_rates: list = []  # the export rates known, [[start, end, p/kWh]] (for the page, on or off)
         self._rates_seen: list = []  # (the export rates seen, 2 days, for the high ones; saved)
         self._rates_seen_was: list = []  # (as last saved)
@@ -2637,8 +2642,9 @@ class Automation:
         imp, exp = self._rates_local(imp), self._rates_local(exp)
         copies = self._copies(info)
         known_exp = planner.known_only(exp, copies)
-        # (tomorrow's not out yet: planned on today's as an estimate, and again when they are)
-        est = planner.estimate(known_exp, self._estimate_until(now))
+        # (tomorrow's not out yet: planned on an estimate, from the wholesale prices or today's, and again
+        # when they are)
+        est, fit, from_wholesale = self._estimate(known_exp, now)
         plan_exp = known_exp + est
         future = {("e", a.isoformat()): p for a, b, p, _ in exp if b > now}
         future.update({("i", a.isoformat()): p for a, b, p, adj in imp if b > now and not adj})
@@ -2653,7 +2659,9 @@ class Automation:
         how = {"mode": mode, "copies": copies, "ready": self.ready_time,  # (what else it's planned with)
                "charge_cap": charge_cap if mode in ("before", "value") else None,
                "discharge_cap": discharge_cap if mode in ("before", "value") else None,
-               "look_back": self.look_back_h if mode == "value" else None}
+               "look_back": self.look_back_h if mode == "value" else None,
+               # (the estimate: planned again when it changes, e.g. tomorrow's wholesale prices come)
+               "est": hashlib.md5(repr([(a.isoformat(), p) for a, _, p, _ in est]).encode()).hexdigest()[:12]}
         if cur and cur.get("key") == self._schedule_key() and same_rates and cur.get("v") == AUTO_PLAN_VERSION \
                 and cur.get("limit") == limit and all(cur.get(k) == v for k, v in how.items()) \
                 and [h for h in cur.get("highs") or [] if _parse_iso(h) + planner.HH > now] == highs:
@@ -2764,7 +2772,15 @@ class Automation:
                     if window_minutes(merged, a0, a0 + length) > cap_min:
                         return False
                 return True
-        if est:
+        if est and from_wholesale:
+            w0 = next(a for a, _, p, _ in est if a not in {x[0] for x in known_exp})
+            peak = f", {fit['c']:+.1f}p 16:00–19:00" if fit["c"] else ""
+            notes.append(f"From {w0.strftime('%a %H:%M')}, planned on an estimate: the export rates for then aren't out yet "
+                         f"(Octopus: about 16:00), so they're worked out from the day-ahead wholesale prices "
+                         f"({from_wholesale // 2}h of them), as today's compare with them (about {fit['a']:.2f} × "
+                         f"wholesale {fit['b']:+.1f}p{peak}), and it plans again when the real ones are out"
+                         + ("; the rest from the day before's" if from_wholesale < len(est) else ""))
+        elif est:
             notes.append(f"From {est[0][0].strftime('%a %H:%M')}, planned on an estimate: the export rates for then "
                          "aren't out yet (Octopus: about 16:00), so the day before's are used, and it plans again when they are")
         # (where the battery charges anyway, for "where it earns the most": your off-peak times and
@@ -2818,6 +2834,16 @@ class Automation:
                     return wall.replace(tzinfo=datetime.timezone(off))
         return t.astimezone(self._now().tzinfo)
 
+    def _estimate(self, known_exp: list, now: datetime.datetime) -> tuple:
+        """The export rates not out yet: from the day-ahead wholesale prices where there are some
+        (fitted to the known ones), else a copy of the day before's. (estimate, fit or None, how many
+        half hours came from the wholesale prices)."""
+        from src import auto_schedule as planner
+        until = self._estimate_until(now)
+        if self.wholesale:
+            return planner.estimate_wholesale(known_exp, self.wholesale, until)
+        return planner.estimate(known_exp, until), None, 0
+
     def _estimate_until(self, now: datetime.datetime) -> datetime.datetime:
         """How far ahead the export rates are estimated while they aren't out: to the end of tomorrow
         (estimate_ahead False: not at all)."""
@@ -2848,9 +2874,10 @@ class Automation:
         now = self._now()
         lo = now - datetime.timedelta(days=1)
         known4 = planner.known_only(self._rates_local(exp), self._copies(info))
-        est = {a for a, _, _, _ in planner.estimate(known4, self._estimate_until(now))}
+        est4 = self._estimate(known4, now)[0]
+        est = {a for a, _, _, _ in est4}
         known = [(a, b, p) for a, b, p, _ in known4]
-        both = known + [(a, b, p) for a, b, p, _ in planner.estimate(known4, self._estimate_until(now))]
+        both = known + [(a, b, p) for a, b, p, _ in est4]
         # ([start, end, p/kWh] and, for an estimate (tomorrow's not out yet: today's), True)
         rates = [[_iso_local(a), _iso_local(b), p] + ([True] if a in est else []) for a, b, p in both if b > lo]
         # (the rates seen are remembered for 2 days: by the morning, Home Assistant has only today's,
@@ -2892,6 +2919,7 @@ class Automation:
             return changed
         now = self._now()
         key = repr((blocks, cap_min, self.limit_reset, self._schedule_key(), self.override_guards, mode, self.high_rates,
+                    self.wholesale,
                     self._copies(info), self.ready_time, charge_cap, discharge_cap, self.look_back_h,
                     [(a.isoformat(), p) for a, b, p, _ in exp if b > now],
                     [(a.isoformat(), p, adj) for a, b, p, adj in imp if b > now],
@@ -3600,6 +3628,7 @@ class Automation:
                 "saving_past": self.saving_past,  # (from the calendar: the Sessions tab's week)
                 "saving_block": self.saving_block,
                 "auto_plan": self.auto_snapshot(),
+                "future_rates": self.future_status,  # (the wholesale prices for tomorrow's estimate: how reading them went)
                 "auto_preview": self.auto_preview if self.auto_plan is None else None,
                 "export_rates": self.export_rates,
                 "high_rates": self.high_rates,
