@@ -1599,3 +1599,14 @@ def test_battery_size_from_a_sensor():
     st = lambda v, u=None: {"state": v, "attributes": {"unit_of_measurement": u} if u else {}}  # noqa: E731
     assert battery_kwh(st("16.1", "kWh")) == 16.1 and battery_kwh(st("9000", "Wh")) == 9.0 and battery_kwh(st("8")) == 8.0
     assert battery_kwh(st("unavailable", "kWh")) is None and battery_kwh(st("0", "kWh")) is None and battery_kwh(None) is None
+
+
+def test_house_use_typed_in_without_a_sensor():
+    """The sensor's average while it can be used; else the average typed in, the same all day (with the
+    sensor's problem kept to show); else none."""
+    from src.house_load import choose
+    prof = [0.3] * 47 + [0.5]
+    assert choose(prof, {"kw": 0.31}, 0.4) == (prof, {"kw": 0.31, "from": "sensor"})
+    p, st = choose(None, {"error": "not enough history yet"}, 0.4)
+    assert p == [0.4] * 48 and st == {"error": "not enough history yet", "kw": 0.4, "from": "typed"}
+    assert choose(None, {}, None) == (None, {})

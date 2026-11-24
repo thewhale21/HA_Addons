@@ -40,6 +40,17 @@ def profile(rows: list, scale: float, tz: Optional[datetime.tzinfo] = None) -> O
     return [round(hours[i // 2], 3) for i in range(48)]
 
 
+def choose(sensor_profile: Optional[list], sensor_status: dict, typed_kw: Optional[float]) -> tuple:
+    """(profile, status) to plan with: the sensor's while it can be used, else the average typed in
+    (the same every half hour; the sensor's error kept, to show), else none."""
+    if sensor_profile:
+        return sensor_profile, {**sensor_status, "from": "sensor"}
+    if typed_kw:
+        return [float(typed_kw)] * 48, {**({"error": sensor_status["error"]} if sensor_status.get("error") else {}),
+                                        "kw": float(typed_kw), "from": "typed"}
+    return None, dict(sensor_status or {})
+
+
 def battery_kwh(state: Optional[dict]) -> Optional[float]:
     """A battery size sensor's value in kWh (its unit Wh, kWh or MWh; none: kWh), or None (unknown,
     not a number, or not above 0)."""

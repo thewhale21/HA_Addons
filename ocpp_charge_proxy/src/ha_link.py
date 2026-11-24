@@ -141,6 +141,19 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         out["auto_show_rates"] = bool(raw["auto_show_rates"])
     if "auto_load_drain" in raw:  # Where it earns the most: the house's use taken off the battery in the plan
         out["auto_load_drain"] = bool(raw["auto_load_drain"])
+    if "auto_load_kw" in raw:  # Where it earns the most: the house's average use typed in (no sensor)
+        if raw["auto_load_kw"] in (None, ""):
+            out["auto_load_kw"] = None
+        else:
+            try:
+                if isinstance(raw["auto_load_kw"], bool):
+                    raise TypeError
+                kw = float(raw["auto_load_kw"])
+            except (TypeError, ValueError):
+                raise ValueError("auto_load_kw must be a number of kW") from None
+            if not 0 <= kw <= 30:
+                raise ValueError("The house's average use is 0 to 30 kW")
+            out["auto_load_kw"] = kw or None
     if "auto_battery_kwh" in raw:  # Where it earns the most: the battery's size, for what the house costs
         if raw["auto_battery_kwh"] in (None, ""):
             out["auto_battery_kwh"] = None
@@ -357,7 +370,7 @@ def default_settings() -> dict:
         # Where it earns the most: the house's use (a power sensor), the battery's size, and whether
         # the house's use comes out of the battery in the plan (else just a cost while it's empty)
         "auto_load_entity": "", "auto_battery_kwh": None, "auto_load_drain": False,
-        "auto_battery_entity": "",  # (the battery's size from a sensor: used over auto_battery_kwh while it reads)
+        "auto_battery_entity": "", "auto_load_kw": None,  # (the house's average use typed in, kW: without a sensor)  # (the battery's size from a sensor: used over auto_battery_kwh while it reads)
         # Populate schedule from load (Automations tab): best charging times per weekday from a power sensor's history
         "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 12, "populate_auto": False,
         # Your supplier: empty / None = found automatically

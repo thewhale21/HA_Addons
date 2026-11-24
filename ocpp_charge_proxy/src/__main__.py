@@ -440,7 +440,7 @@ async def run() -> None:
         future = FutureRates()  # (tomorrow's export rates estimated from the wholesale prices)
         web_session = None
         from src import house_load
-        load_read = (None, 0.0)  # (the house load sensor read, and when: monotonic)
+        load_read = (None, 0.0, None, {})  # (the house load sensor read, when (monotonic), its profile and status)
         size_read = (None, 0.0, None)  # (the battery size sensor read, when, and its kWh)
         try:
             while True:
@@ -490,20 +490,21 @@ async def run() -> None:
                     automation.wholesale = future.prices
                     # The house's average use (Where it earns the most › House load sensor): read every few
                     # hours, and straight away when the sensor changes
+                    # (or, without a sensor or while it can't be used, the average typed in: the same all day)
                     ent = s.get("auto_load_entity") or ""
                     if not ent:
-                        automation.house_profile, automation.load_status, load_read = None, {}, (None, 0.0)
+                        load_read = (None, 0.0, None, {})
                     elif ha_link.available and (load_read[0] != ent or time.monotonic() - load_read[1] > house_load.REFRESH_S):
-                        load_read = (ent, time.monotonic())
                         try:
                             prof, st = await house_load.read(ha_link, ent, datetime.datetime.now().astimezone())
                         except Exception as err:
                             prof, st = None, {"entity": ent, "error": str(err) or type(err).__name__}
-                        automation.house_profile, automation.load_status = prof, st
+                        load_read = (ent, time.monotonic(), prof, st)
                         if prof:
                             logger.info("House load: %s averages %.2f kW over the last %d days", ent, st["kw"], st["days"])
                         else:
                             logger.warning("House load: %s not used: %s", ent, st.get("error"))
+                    automation.house_profile, automation.load_status = house_load.choose(load_read[2], load_read[3], s.get("auto_load_kw"))
                     # The battery's size: from its sensor while that reads, else the size typed in
                     # (read every 5 minutes, and straight away when the sensor changes: HA's states are a big read)
                     typed, bent = s.get("auto_battery_kwh"), s.get("auto_battery_entity") or ""

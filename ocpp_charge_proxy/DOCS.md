@@ -235,6 +235,9 @@ one-line summary; click it to see it all.
   that's taken off what the plan earns. So it charges to keep the battery
   from running empty where that pays (e.g. 0.5 kW at 35.6p is about 9p a
   half hour), and exports a little less where keeping some back saves more.
+  **Average house use** (kW): without a house load sensor, or while it
+  can't be used, the average you type in is used instead, the same every
+  half hour (e.g. 0.4 kW for 9.6 kWh a day).
   The battery's size can be typed in or come from a sensor (kWh or Wh,
   read every 5 minutes); while the sensor reads, it's used, else the size
   typed in. The plan's table gets a **House p** column (what the house costs on the

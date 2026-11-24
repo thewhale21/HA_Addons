@@ -946,7 +946,11 @@
               <span class="ctl"><input type="number" id="as-lookback" min="0" max="24" step="0.5" aria-label="Look back (hours)"> h</span>
             </div>
             <div class="row as-value-only" hidden><div class="grow">House load sensor<div class="note" style="margin:0">Your house's power use (W or kW). Its average for each hour of the day over the last 7 days (read every 6 hours) is what the house costs on the grid at the dearer import rate while the plan has the battery empty, so it charges where that's avoided as long as it's worth it. Needs the battery's size. <span id="as-load-st"></span></div></div></div>
-            <div class="row as-value-only" hidden style="margin-top:6px"><span class="picker" data-key="auto_load_entity" data-domain="sensor" data-class="power" data-units="W,kW,MW" data-none="None"></span></div>
+            <div class="row as-value-only" hidden style="margin-top:6px"><span class="picker" data-key="auto_load_entity" data-domain="sensor" data-class="power" data-units="W,kW,MW" data-none="None: the average typed below"></span></div>
+            <div class="row as-value-only" hidden>
+              <div class="grow">Average house use<div class="note" style="margin:0">Without a house load sensor (or while it can't be used): what your house uses in an average hour, in kW (e.g. 0.4 for 9.6 kWh a day), the same all day. Empty: none.</div></div>
+              <span class="ctl"><input type="number" id="as-load-kw" min="0" max="30" step="0.05" aria-label="Average house use (kW)"> kW</span>
+            </div>
             <div class="row as-value-only" hidden>
               <div class="grow">Battery size<div class="note" style="margin:0">Its usable kWh, to weigh the house's use against it: from a sensor (below) while it reads, else the size typed here. <span id="as-batt-st"></span></div></div>
               <span class="ctl"><input type="number" id="as-batt-kwh" min="0.5" max="500" step="0.1" aria-label="Battery size (kWh)"> kWh</span>
@@ -2918,6 +2922,7 @@ function drawPickers() {
   if (document.activeElement !== $('as-lookback')) $('as-lookback').value = sim.edit.auto_look_back_h ?? 6;
   if (document.activeElement !== $('as-batt-kwh')) $('as-batt-kwh').value = sim.edit.auto_battery_kwh ?? '';
   $('as-drain').checked = !!sim.edit.auto_load_drain;
+  if (document.activeElement !== $('as-load-kw')) $('as-load-kw').value = sim.edit.auto_load_kw ?? '';
   if (document.activeElement !== $('as-future-url')) $('as-future-url').value = sim.edit.auto_future_url ?? '';
   if (document.activeElement !== $('pop-weeks')) $('pop-weeks').value = sim.edit.populate_weeks ?? 4;
   if (document.activeElement !== $('pop-slots')) $('pop-slots').value = sim.edit.populate_slots ?? 12;
@@ -3180,9 +3185,11 @@ function drawAutoSched() {
     + (mins(p.charge) ? `${hmDur(Math.round(mins(p.charge) / 30) * 1800)} of charging to come` : 'no charging to come')
     + ((p.gave_way || []).length ? `, ${p.gave_way.length} of your slots ${on ? 'changed' : 'would change'}` : '');
   { const st = (sch && sch.house_load) || {};
-    $('as-load-st').innerHTML = !(sim.edit && sim.edit.auto_load_entity) ? '' : st.kw != null
-      ? `<b>Average ${num(st.kw, 2)} kW</b> over the last ${st.days} days${((sch && sch.battery_size) || {}).kwh ? '' : ' <span style="color:var(--warn)">(set the battery size to use it)</span>'}.`
-      : st.error ? `<span style="color:var(--warn)">Not used: ${esc(st.error)}.</span>` : 'Reading it…';
+    const noSize = ((sch && sch.battery_size) || {}).kwh ? '' : ' <span style="color:var(--warn)">(set the battery size to use it)</span>';
+    const sensorErr = st.error ? `<span style="color:var(--warn)">Sensor not used: ${esc(st.error)}.</span> ` : '';
+    $('as-load-st').innerHTML = st.from === 'sensor' ? `<b>Average ${num(st.kw, 2)} kW</b> over the last ${st.days} days${noSize}.`
+      : st.from === 'typed' ? `${sensorErr}<b>${num(st.kw, 2)} kW</b> all day, as typed below${noSize}.`
+      : sensorErr || (sim.edit && sim.edit.auto_load_entity ? 'Reading it…' : '');
     const b = (sch && sch.battery_size) || {};
     $('as-batt-st').innerHTML = b.kwh ? `<b>${num(b.kwh, 1)} kWh</b> ${b.from === 'sensor' ? 'from the sensor' : 'as typed'}` : '';
     if (b.error) $('as-batt-st').innerHTML += ` <span style="color:var(--warn)">(${esc(b.error)}${b.kwh ? ': the size typed is used' : ''})</span>`; }
@@ -3326,6 +3333,12 @@ $('as-batt-kwh').addEventListener('change', (e) => {
   const raw = e.target.value.trim(), kwh = raw === '' ? null : Number(raw);
   if (kwh !== null && (!Number.isFinite(kwh) || kwh < 0.5 || kwh > 500)) { toast('0.5 to 500 kWh'); refreshSimulation(true); return; }
   saveSensors({auto_battery_kwh: kwh}, kwh ? `Battery size: ${kwh} kWh` : 'Battery size cleared: the house\'s use isn\'t counted')
+    .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
+});
+$('as-load-kw').addEventListener('change', (e) => {
+  const raw = e.target.value.trim(), kw = raw === '' ? null : Number(raw);
+  if (kw !== null && (!Number.isFinite(kw) || kw < 0 || kw > 30)) { toast('0 to 30 kW'); refreshSimulation(true); return; }
+  saveSensors({auto_load_kw: kw || null}, kw ? `Average house use: ${kw} kW` : 'Average house use cleared')
     .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
 });
 $('as-drain').addEventListener('change', (e) => {

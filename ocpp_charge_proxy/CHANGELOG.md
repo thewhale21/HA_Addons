@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.116.0 — Average house use typed in
+
+- **Feature:** Automatic schedule › **Average house use** (kW): for anyone
+  without a house load sensor, the house's average use typed in, the same
+  all day, in place of the sensor's. Also used while the sensor can't be
+  (e.g. not enough history yet); the card says which is in use.
+
 ## 2.115.0 — Battery size from a sensor
 
 - **Feature:** Automatic schedule › **Battery size** can come from a sensor
