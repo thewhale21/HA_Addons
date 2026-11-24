@@ -628,7 +628,8 @@ class Automation:
                          "override_guards": self.override_guards, "blocks": self.blocks},
             "replug": self.replug,
             "saving": {"block": self.saving_block, "free_move": self.free_move, "sessions": self.saving_sessions},
-            "auto": self.auto_plan,
+            # (not its table for the Debug tab: worked out again with each plan)
+            "auto": {k: v for k, v in self.auto_plan.items() if k != "table"} if self.auto_plan else self.auto_plan,
             "rates_seen": self._rates_seen_saved(),
             "populate_last": self.populate_last,
             "auto_history": self.auto_history,
@@ -2809,6 +2810,8 @@ class Automation:
         charge_all = sorted(done + charge)
         self.auto_plan["charge"] = [[_iso_local(a), _iso_local(b)] for a, b in charge_all]
         self.auto_plan["key"] = self._schedule_key()
+        self.auto_plan["fit"] = fit  # (the wholesale prices' fit, for the Debug tab)
+        self.auto_plan["table"] = self._plan_table(now, imp, known_exp, est, fit, cuts, fills, first, plugged, charge_all, res, highs)
         if not self._previewing:
             self._log_auto_plan(blocks, cap_min, provider, charge, res, notes, per, day_end, fixed)
         self._save()
@@ -2833,6 +2836,39 @@ class Automation:
                 if x.utcoffset() == off and x.replace(tzinfo=None, fold=0) == wall:
                     return wall.replace(tzinfo=datetime.timezone(off))
         return t.astimezone(self._now().tzinfo)
+
+    def _plan_table(self, now, imp, known_exp, est, fit, cuts, fills, first, plugged, charge, res, highs) -> list:
+        """The plan, half hour by half hour, for the Debug tab (Diagnostics › Debug › The automatic
+        schedule's plan): [start, export p, "known" / "copy" / "wholesale", import p, smart charging
+        adjusted, [tags], plugged in ("auto" its own, "car", "yours", ""), battery % (Where it earns the
+        most: as it plans it) or None, what the battery does ("charge", "export", "hold", "fills") or None].
+        From the look-back (or the half hour going) to the end of the rates."""
+        from src import auto_schedule as planner
+        HH = planner.HH
+        exp = {a: (p, "known") for a, _, p, _ in known_exp}
+        wholesale_at = lambda t: any(a <= t < b for a, b, _ in self.wholesale)  # noqa: E731
+        exp.update({a: (p, "wholesale" if fit and wholesale_at(a) else "copy") for a, _, p, _ in est})
+        imps = {a: (p, adj) for a, _, p, adj in imp}
+        batt = {t: (lvl, act) for t, lvl, act in res.get("battery") or []}
+        start = min([now.replace(minute=now.minute // 30 * 30, second=0, microsecond=0)] + list(batt))
+        end = max(exp, default=start) + HH
+        high = {_parse_iso(h[0]) for h in self.high_rates if _parse_iso(h[0])}
+        user_off = self.block_windows(start.date() - datetime.timedelta(days=1), 4, sessions=False)
+        auto_off = [(a, b) for a, b in res.get("offpeak") or []]
+        sessions = [(_parse_iso(r["start"]), _parse_iso(r["end"]), session_name(r)) for r in self.saving_sessions]
+        hits = lambda t, wins: any(a < t + HH and b > t for a, b in wins)  # noqa: E731
+        rows, t = [], start
+        while t < end and len(rows) < 200:
+            tags = (["high export"] if t in high else []) + (["off-peak (yours)"] if hits(t, user_off) else []) \
+                + (["off-peak (import rates)"] if hits(t, auto_off) else []) \
+                + [n.lower() for a, b, n in sessions if a < t + HH and b > t] + (["past"] if t + HH <= now else [])
+            plug = "auto" if hits(t, charge) else "car" if hits(t, first) else "yours" if hits(t, plugged) else ""
+            e, src = exp.get(t, (None, ""))
+            i, adj = imps.get(t, (None, False))
+            b = batt.get(t)
+            rows.append([_iso_local(t), e, src, i, bool(adj), tags, plug, b[0] if b else None, b[1] if b else None])
+            t += HH
+        return rows
 
     def _estimate(self, known_exp: list, now: datetime.datetime) -> tuple:
         """The export rates not out yet: from the day-ahead wholesale prices where there are some
@@ -2936,7 +2972,8 @@ class Automation:
             self.auto_plan = None
             self.sync_auto_schedule(imp, exp, blocks, cap_min, provider, info, mode, charge_cap, discharge_cap)
             p = self.auto_plan or {}
-            preview = {k: p.get(k) for k in ("blocks", "charge", "offpeak", "notes", "rates_until", "info", "top_ups")}
+            preview = {k: p.get(k) for k in ("blocks", "charge", "offpeak", "notes", "rates_until", "info", "top_ups", "table", "mode",
+                                              "fit", "limit", "charge_cap", "discharge_cap", "look_back")}
             preview |= {"gave_way": p.get("gave_way") or [], "planned_at": _iso_local(now)}
         finally:
             logger.disabled = was
@@ -3131,6 +3168,14 @@ class Automation:
         if splits:
             self.entries = self.entries + splits
             changes["added"] += [e["id"] for e in splits]
+
+    def plan_table(self) -> dict:
+        """For the Debug tab: the plan (or, while it's off, what it would do) half hour by half hour."""
+        p = self.auto_plan if self.auto_plan is not None else (self.auto_preview or {})
+        return {"on": self.auto_plan is not None, "rows": p.get("table") or [], "mode": p.get("mode"),
+                "fit": p.get("fit"), "planned_at": p.get("planned_at"), "notes": p.get("notes") or [],
+                "charge_cap": p.get("charge_cap"), "discharge_cap": p.get("discharge_cap"),
+                "look_back": p.get("look_back"), "blocks": p.get("blocks"), "limit": p.get("limit")}
 
     def auto_snapshot(self) -> Optional[dict]:
         if not self.auto_plan:

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.110.0 — The plan as a table on the Debug tab
+
+- **Feature:** Diagnostics › Debug › **The automatic schedule's plan, as a
+  table**: half hour by half hour, the export and import rates it planned
+  on (known or estimated, and how), high exports, off-peak times and
+  sessions, what's plugged in and, with Where it earns the most, how full
+  it takes the battery to be and what it does, with what it planned with
+  above and its Notes below. A Copy button for sharing.
+
 ## 2.109.0 — Tomorrow's rates from the wholesale prices
 
 - **Feature:** until tomorrow's export rates are out (Octopus: about

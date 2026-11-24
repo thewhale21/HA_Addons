@@ -91,6 +91,7 @@ def create_api_app(
     app.router.add_get("/api/version", handle_version)
     # Schedule and auto re-plug
     app.router.add_get("/api/automation", handle_automation)
+    app.router.add_get("/api/auto_table", handle_auto_table)
     app.router.add_get("/api/automation/populate_plan", handle_populate_plan)
     app.router.add_post("/api/automation/populate_apply", handle_populate_apply)
     app.router.add_post("/api/automation/schedule", handle_schedule)
@@ -490,6 +491,14 @@ def _dumps(data) -> str:
 
 
 # --- Schedule and auto re-plug ----------------------------------------------
+
+
+async def handle_auto_table(request: web.Request) -> web.Response:
+    """Diagnostics › Debug › The automatic schedule's plan: half hour by half hour."""
+    automation = request.app["automation"]
+    if automation is None:
+        return web.json_response({"on": False, "rows": []})
+    return web.json_response(automation.plan_table(), dumps=_dumps)
 
 
 async def handle_automation(request: web.Request) -> web.Response:

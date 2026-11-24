@@ -1270,6 +1270,18 @@ follows your Home Assistant theme. Settings save as soon as you change them.
       restarts, and the last 300 OCPP messages both ways, kept across
       restarts (with a marker where the add-on restarted), with a filter,
       full JSON on click and a Copy button for sharing.
+    - **The automatic schedule's plan, as a table** (open it to see it):
+      half hour by half hour from the look back (or now) to the end of the
+      rates, as a text table with a Copy button: the export rate (known, or
+      estimated from the wholesale prices or as a copy of the day before's),
+      the import rate (* where a smart charging slot made it cheap), high
+      exports, off-peak times and sessions, what's plugged in (its own
+      charging, a car charge or your slot) and, with Where it earns the
+      most, how full it takes the battery to be and what it does (charge,
+      export, hold, or fills: charged anyway). Above it, what it planned
+      with (mode, half hours a day, the daily limit, charge and discharge
+      times, look back, the wholesale fit), and its Notes below. While it's
+      off, what it would plan.
     - **Diagnostics bundle:** one JSON file with the state, schedule,
       sessions, supplier's plan and settings, health, recent messages, log
       lines and options (password and most of the chargepoint ID hidden).

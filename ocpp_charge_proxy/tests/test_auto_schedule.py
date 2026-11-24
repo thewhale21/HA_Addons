@@ -1437,3 +1437,24 @@ def test_before_the_high_exports_doesnt_charge_for_a_run_straight_after_the_off_
     p = A.plan(iog_import(3), exp, at(12, 5), 6, mode="before", highs=highs, charge_cap=3, discharge_cap=3,
                day_of=lambda t: (t - datetime.timedelta(hours=12)).date())
     assert not any(a < at(5, 30, 1) and a >= at(20) for a, _ in p["charge"])  # (nothing the evening before for it)
+
+
+def test_the_plan_as_a_table_for_the_debug_tab():
+    """Half hour by half hour: rates (known or estimated), high exports, off-peak, what's plugged in and,
+    with Where it earns the most, the battery as it plans it. Not saved with the plan."""
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    a.high_rates = [[at(17, 30).isoformat(), at(18).isoformat(), 41.9]]  # (marked: set_export_rates)
+    a.sync_auto_schedule(iog_import(2), user_exp(), 6, cap_min=360, mode="value", charge_cap=2, discharge_cap=3)
+    t = a.plan_table()
+    assert t["on"] and t["mode"] == "value" and t["rows"]
+    rows = {r[0][11:16]: r for r in t["rows"] if r[0][:10] == "2026-11-03"}
+    assert rows["17:30"][1] == 41.90 and rows["17:30"][2] == "known" and "high export" in rows["17:30"][5]
+    assert any(r[6] == "auto" and r[8] == "charge" for r in t["rows"])
+    assert any(r[8] == "export" and r[7] is not None for r in t["rows"])
+    assert any("off-peak (import rates)" in r[5] for r in t["rows"])
+    assert all(0 <= r[7] <= 100 for r in t["rows"] if r[7] is not None)
+    # (the table isn't written to automation.json: it's made again with each plan)
+    saved = {}
+    a._save = lambda: saved.update({"auto": {k: v for k, v in a.auto_plan.items() if k != "table"}})
+    assert "table" in a.auto_plan

@@ -5,7 +5,7 @@ subscription. `CLAUDE.md` has the working rules; this file has the
 background: what each add-on does, how the owner uses them, what was
 decided and why, and what's still open.
 
-**Last updated:** 24 Nov 2026 (ocpp_charge_proxy 2.109.0).
+**Last updated:** 24 Nov 2026 (ocpp_charge_proxy 2.110.0).
 
 **Keep this file current.** Whoever changes the repository (any AI agent
 or person) updates this file in the same commit when the change affects
@@ -60,7 +60,7 @@ anything below, and bumps the "Last updated" line.
 
 | Folder | Version | Notes |
 |---|---|---|
-| `ocpp_charge_proxy` | 2.109.0 | The main one: below. |
+| `ocpp_charge_proxy` | 2.110.0 | The main one: below. |
 | `octopus_charge_pack` | 0.10.8 | Octopus API helpers; 0.10.8 drops old `device_id`/`poll_seconds` options via the Supervisor API (`POST http://supervisor/addons/self/options`). |
 | `sigenergy_evdc_soc_range_manager` | 0.44.0 | "SigEnergy DC Charger": keeps the EVDC car between limits on a weekly schedule. Limits are named **Maximum charge** and **Keep at least**; an entry can be Maximum charge / Keep at least / Both / Charge only / Discharge only (one-way entries stay within the limits); entries may overlap; start == end means 24 hours; the week view has three lanes (one-way entries in the middle). The Overview's Car SoC chart shows charge/discharge only as a coloured strip along the bottom (0.43.0; points in `soc_history.json` carry a 6th value, "charge"/"discharge", only then). Notifications (0.44.0): the notify service box suggests HA's notify services (`/api/notify_services`) with a Test button; **What to send** (`notify_level`: info = everything incl. starts/stops, warning, error, none; default info); warnings/errors in its log are sent too (`src/log_notify.py`, ported from OCPP's). about 105 tests (test_api needs pytest-asyncio; one notify test needs aiohttp). |
 | `tigo_solar` | 0.7.0 | Tigo panel data: roof view (reclaimed in brackets), drag-to-select chart, quick-select per string, per-panel estimates every minute (system power shared by interpolated reading shares), backfill of real 15-minute per-panel readings via Tigo's `lastvalue` (`resourceId=lastValue-{date}-{pin|reclaimedPower}-{HH:MM}`, about 2 requests per slot, 3 s apart; trusted after 3 answers within 35%/30 W of system power, off after 3 misses), fixed scale, hover tooltip, reclaimed %, "By the time of day" and "Through the year" heatmap / 3D surface with Month/Year and 3D zoom. 22 tests. |
@@ -125,6 +125,7 @@ anything below, and bumps the "Last updated" line.
   setting covers auto plug-in and Charge now; the car plugged in sensor has
   its own (2.106, `plug_trim_from`).
 - **Populate schedule** was renamed **Populate schedule from load**.
+- **The plan as a table** (2.110): Diagnostics › Debug has a fold-out text table of the automatic schedule's plan, half hour by half hour (`Automation._plan_table`, kept in `auto_plan["table"]` but not saved to automation.json; `GET /api/auto_table`). Battery % and actions come from `best_value(..., trace=True)` (value mode only).
 - **Tomorrow's rates from the wholesale prices** (2.109): until Octopus publishes tomorrow's export rates (~16:00), the automatic schedule estimates them from Nord Pool's N2EX UK day-ahead prices (~10:00; `src/future_rates.py`, setting `auto_future_url`, default the same URL as Predbat's `futurerate_url`, DATE = day; empty = copy of today's). `auto_schedule.fit_wholesale` fits today's real export rates to today's wholesale (a × wholesale + b, + c 16:00–19:00; needs 12+ half hours, a in 0.2–3), `estimate_wholesale` applies it; falls back to a copy. On the owner's real 22 Nov data the fit was within ~0.5p on average. The estimate is hashed into the plan key (`how["est"]`), so new wholesale prices trigger a replan. Import rates (IOG) are still copied.
 - **Splits at the 12:00 reset** (2.108): with Force schedule on supplier, every slot across the limit's reset is split there (unplug and plug back in, each part with its own ready time), not only slots longer than 6 h. As one charge, Octopus planned it all in the day it started (the owner lost 30 min of 11:00–12:30 when that day had 1 h left).
 

@@ -356,7 +356,7 @@ VALUE_LOOK_BACK = datetime.timedelta(hours=6)
 
 
 def best_value(halves: list, price: dict, cost: float, can_charge: dict, forced: dict,
-               day_of: Callable, need: dict, charge: int, discharge: int) -> tuple:
+               day_of: Callable, need: dict, charge: int, discharge: int, trace: bool = False) -> tuple:
     """Where to charge (the half hours in `halves`, in order) so the battery earns the most: each
     day (day_of) at most need[day] charges, only where `can_charge`. The battery as a number of
     units, full at charge * discharge: a half hour's charge adds `discharge` of them (no more than
@@ -366,7 +366,9 @@ def best_value(halves: list, price: dict, cost: float, can_charge: dict, forced:
     so the battery's size doesn't: they're a share of it. The battery starts empty (its charge
     isn't read: taking it as empty keeps the plan the same from one look to the next, and never
     counts on charge that may not be there, e.g. after the house has used it).
-    Returns (the half hours to charge in, what it earns: p per unit, after the charging)."""
+    Returns (the half hours to charge in, what it earns: p per unit, after the charging); with
+    `trace`, a third: what it does each half hour, [(start, "charge" / "export" / "hold" / "fills")]
+    (fills: plugged in for something else, or an off-peak time or free session)."""
     cap = charge * discharge
     unit_cost = cost / ROUND_TRIP
     # state (level, charges this day, charging the half hour before) -> (score, path)
@@ -393,20 +395,23 @@ def best_value(halves: list, price: dict, cost: float, can_charge: dict, forced:
 
         for (lvl, used, was), (sc, path) in best.items():
             if forced.get(t):
-                put((min(cap, lvl + discharge), used, False), sc, path)
+                put((min(cap, lvl + discharge), used, False), sc, path + (((t, "fills"),) if trace else ()))
                 continue
-            put((lvl, used, False), sc, path)  # (held)
+            put((lvl, used, False), sc, path + (((t, "hold"),) if trace else ()))  # (held)
             if lvl > 0 and p > 0:
                 x = min(lvl, charge)
-                put((lvl - x, used, False), (round(sc[0] + p * x, 6), sc[1], sc[2]), path)
+                put((lvl - x, used, False), (round(sc[0] + p * x, 6), sc[1], sc[2]), path + (((t, "export"),) if trace else ()))
             if can_charge.get(t) and used < most and lvl < cap:
                 add = min(discharge, cap - lvl)
                 put((lvl + add, used + 1, True),
-                    (round(sc[0] - unit_cost * add, 6), sc[1] - 1, sc[2] - (0 if was else 1)), path + (t,))
+                    (round(sc[0] - unit_cost * add, 6), sc[1] - 1, sc[2] - (0 if was else 1)),
+                    path + (((t, "charge"),) if trace else (t,)))
         best = nxt
     if not best:
-        return [], 0.0
+        return ([], 0.0, []) if trace else ([], 0.0)
     sc, path = max(best.values(), key=lambda v: v[0])
+    if trace:
+        return [t for t, act in path if act == "charge"], sc[0], list(path)
     return list(path), sc[0]
 
 
@@ -486,6 +491,7 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         return True
 
     asked = dict(need)
+    battery = []  # ("value": [(start, % full after it, what it does)])
     if mode == "value":
         # Where it earns the most: the half hours whose charge the battery then exports for the most,
         # less what the charge costs (the cheapest import price: what a smart charging slot charges)
@@ -504,7 +510,15 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         been = list(busy) + list(plugged) if ran is None else list(ran)  # (what's been plugged in, before now)
         forced = {t: _hits(t, fill) or _hits(t, list(busy) + list(plugged) if t >= earliest else been) for t in halves}
         free = {t: t >= earliest and not _hits(t, nope) for t in halves}
-        picked, earned = best_value(halves, price, cost, free, forced, day_of, need, full, dis)
+        picked, earned, acts = best_value(halves, price, cost, free, forced, day_of, need, full, dis, trace=True)
+        # (how full the battery is, as it plans it: for the Debug tab's table)
+        lvl, cap_u = 0, full * dis
+        for t, act in acts:
+            if act in ("charge", "fills"):
+                lvl = min(cap_u, lvl + dis)
+            elif act == "export":
+                lvl -= min(lvl, full)
+            battery.append((t, round(100 * lvl / cap_u), act))
         _, alone = best_value(halves, price, cost, free, forced, day_of, {}, full, dis)
         done = [t for t in picked if take(t)]
         if not (charge_cap and discharge_cap):
@@ -625,4 +639,4 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
     if blocks and not future:
         notes.append("Nothing planned: " + ("no export rates known" if not price else "no export half hours still to come"))
     return {"charge": _windows(charges), "offpeak": off, "notes": notes, "known": [(a, a + HH) for a in future],
-            "top_ups": sorted(top_ups)}
+            "top_ups": sorted(top_ups), "battery": battery}

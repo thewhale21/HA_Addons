@@ -1148,6 +1148,14 @@
       <div class="msgs" id="m-list"></div>
       <div class="note"><span id="m-count">0</span> shown · newest at the top · the last 300 frames are kept, across restarts. ↑ sent, ↓ received.</div>
     </div>
+    <div class="card">
+      <details id="d-plan">
+        <summary style="cursor:pointer;font-weight:500">The automatic schedule's plan, as a table</summary>
+        <div class="note" style="margin:8px 0">Half hour by half hour, what it planned on: the export rates (known, or estimated: from the wholesale prices or a copy of the day before's), the import rates, which are high exports, off-peak times and sessions, what's plugged in (its own charging, a car charge or your slot) and, with Where it earns the most, how full it takes the battery to be and what it does. From the look back (or now) to the end of the rates. While it's off, what it would do.</div>
+        <div class="msg-tools"><button class="btn small" id="d-plan-refresh">Refresh</button><button class="btn small" id="d-plan-copy">Copy</button></div>
+        <pre id="d-plan-text" style="font-size:12px;line-height:1.45;overflow-x:auto;white-space:pre;margin-top:8px">Open to see it.</pre>
+      </details>
+    </div>
     <div class="section-title">Tools</div>
     <div class="masonry">
     <div class="card">
@@ -3234,6 +3242,41 @@ $('as-mode').addEventListener('click', (e) => {
       .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
   });
 });
+// Diagnostics › Debug › The automatic schedule's plan, as a text table
+async function refreshPlanTable() {
+  let d;
+  try { d = await api('auto_table'); } catch (e) { $('d-plan-text').textContent = 'Couldn\'t read it: ' + e.message; return; }
+  const MODE = {cheapest: 'Where exporting pays least', before: 'Before the high exports', value: 'Where it earns the most'};
+  const pad = (v, n, right) => { v = String(v ?? ''); return right ? v.padStart(n) : v.padEnd(n); };
+  const t = (iso) => { const x = new Date(iso); return x.toLocaleDateString([], {weekday: 'short'}) + ' ' + x.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}); };
+  const head = [];
+  head.push(`${d.on ? 'Planned' : 'Off: what it would plan'}${d.planned_at ? ' at ' + t(d.planned_at) : ''} · ${MODE[d.mode] || d.mode || '—'} · ${d.blocks ?? '—'} half hours a day`);
+  if (d.limit && d.limit[1]) head.push(`Daily limit: ${d.limit[1] / 60} h${d.limit[0] ? ' from ' + d.limit[0] : ''}`);
+  if (d.mode !== 'cheapest') head.push(`Charge time needed: ${d.charge_cap ? d.charge_cap * 30 + ' min' : '—'} · discharge time needed: ${d.discharge_cap ? d.discharge_cap * 30 + ' min' : '—'}` + (d.mode === 'value' ? ` · look back: ${d.look_back ?? '—'} h` : ''));
+  if (d.fit) head.push(`Wholesale fit: export ≈ ${d.fit.a.toFixed(2)} × wholesale ${d.fit.b >= 0 ? '+' : ''}${d.fit.b.toFixed(1)}p${d.fit.c ? `, ${d.fit.c >= 0 ? '+' : ''}${d.fit.c.toFixed(1)}p 16:00–19:00` : ''} (from ${d.fit.n} half hours)`);
+  const rows = d.rows || [];
+  if (!rows.length) { $('d-plan-text').textContent = head.join('\n') + '\n\nNo plan yet (no export rates read, or it hasn\'t planned since the add-on started).'; return; }
+  const cols = ['Time', 'Export p', 'Rate', 'Import p', 'Plugged in', 'Battery', 'Does', 'Notes'];
+  const W = [10, 8, 10, 9, 11, 7, 7, 0];
+  const PLUG = {auto: 'its own', car: 'car charge', yours: 'your slot', '': ''};
+  const SRC = {known: 'known', copy: 'est (copy)', wholesale: 'est (whsl)', '': '—'};
+  const DOES = {charge: 'charge', export: 'export', hold: 'hold', fills: 'fills'};
+  const line = (v) => v.map((x, i) => W[i] ? pad(x, W[i], i === 1 || i === 3 || i === 5) : x).join('  ').trimEnd();
+  const out = [...head, '', line(cols), line(W.map((w) => '-'.repeat(w || 5)))];
+  for (const r of rows) {
+    const [iso, e, src, i, adj, tags, plug, batt, act] = r;
+    out.push(line([t(iso), e == null ? '—' : e.toFixed(2), SRC[src] ?? src, i == null ? '—' : i.toFixed(2) + (adj ? '*' : ''),
+      PLUG[plug] ?? plug, batt == null ? '' : batt + '%', DOES[act] || '', (tags || []).join(', ')]));
+  }
+  out.push('', '* import rate made cheap by a smart charging slot · est (copy): the day before\'s · est (whsl): from the wholesale prices · fills: the battery charges anyway (plugged in for something else, an off-peak time or a free session)');
+  if ((d.notes || []).length) out.push('', 'Notes:', ...d.notes.map((n) => '- ' + n));
+  $('d-plan-text').textContent = out.join('\n');
+}
+$('d-plan').addEventListener('toggle', () => { if ($('d-plan').open) refreshPlanTable(); });
+$('d-plan-refresh').addEventListener('click', refreshPlanTable);
+$('d-plan-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('d-plan-text').textContent); toast('Plan copied'); } catch (e) { toast('Couldn\'t copy: select the text instead'); }
+});
 $('as-future-url').addEventListener('change', (e) => {
   const v = e.target.value.trim();
   if (v && (!/^https?:\/\/\S+$/.test(v) || !v.includes('DATE'))) { toast('The address must start https:// and have DATE in it, for the day'); refreshSimulation(true); return; }
@@ -5260,7 +5303,7 @@ function refreshTab(full) {
   if (!['automation', 'settings', 'health'].includes(activeTab)) refreshReadOnly();
   if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); refreshSmart(full); refreshNext(); }
   else if (activeTab === 'sessions') refreshSessions();
-  else if (activeTab === 'debug') { refreshSmart(false); refreshDebug(); refreshMessages(); }  // the supplier's name; logs
+  else if (activeTab === 'debug') { refreshSmart(false); refreshDebug(); refreshMessages(); if ($('d-plan').open) refreshPlanTable(); }  // the supplier's name; logs
   else if (activeTab === 'automation') { refreshAutomation(false); refreshSimulation(false); }
   else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); refreshSmart(false); if (full) refreshAppSettings(); }
   else if (activeTab === 'health') { refreshHealth(); refreshSimulation(false); refreshProvider(); }
