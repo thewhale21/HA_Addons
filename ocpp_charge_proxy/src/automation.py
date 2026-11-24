@@ -120,7 +120,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 13
+AUTO_PLAN_VERSION = 14
 # (a change from a page that was behind, on a time the add-on has since moved)
 _MOVED = "The schedule changed just before that (the automatic schedule planned again): have a look and try again"
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
@@ -2883,8 +2883,8 @@ class Automation:
         from src import auto_schedule as planner
         until = self._estimate_until(now)
         if self.wholesale:
-            return planner.estimate_wholesale(known_exp, self.wholesale, until)
-        return planner.estimate(known_exp, until), None, 0
+            return planner.estimate_wholesale(known_exp, self.wholesale, until, self._rates_seen)
+        return planner.estimate(known_exp, until, self._rates_seen), None, 0
 
     def _estimate_until(self, now: datetime.datetime) -> datetime.datetime:
         """How far ahead the export rates are estimated while they aren't out: to the end of tomorrow

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.112.2 — No gap in the estimate at 23:00
+
+- **Fix:** tomorrow's estimated export rates started at midnight, leaving
+  23:00–00:00 with no rate (Octopus's rates run 23:00 to 23:00, but Home
+  Assistant's for today start at midnight, so there was nothing a day
+  before to copy). That half hour pair is now yesterday's 23:00–00:00 as
+  it was seen then, or else 22:30's. Planned again on updating.
+
 ## 2.112.1 — The plan's table after a restart
 
 - **Fix:** the plan's table said "No plan yet" after the add-on restarted,

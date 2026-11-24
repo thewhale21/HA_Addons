@@ -299,7 +299,9 @@ one-line summary; click it to see it all.
   and tomorrow, and looked for every 15 minutes until tomorrow's are out.
   Without them (the address empty, not working, or tomorrow's not out yet),
   or if today's rates don't follow them (e.g. a fixed export rate), it's the
-  day before's rates instead. It plans again when tomorrow's wholesale prices
+  day before's rates instead (for 23:00–00:00, which Home Assistant's
+  rates for today don't go back to, yesterday's as it saw them, else
+  22:30's). It plans again when tomorrow's wholesale prices
   come, and on the real rates when they're out. The address is a setting
   (with DATE for the day) in case Nord Pool changes it; the plan's Rates row
   says whether they've been read. The Notes say when part of

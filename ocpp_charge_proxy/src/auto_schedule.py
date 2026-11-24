@@ -203,19 +203,33 @@ def known_only(rates: list, copies: bool = True) -> list:
     return rates
 
 
-def estimate(rates: list, until: datetime.datetime) -> list:
+def _copy_of(t, by, seen):
+    """The half hour `t`'s estimate as a copy: the same half hour a day earlier (or two), from the
+    rates known or, failing those, the ones seen before (e.g. yesterday's 23:00, gone from Home
+    Assistant's by the morning); failing both, the half hour before's (so there's never a gap, e.g.
+    23:00 to 00:00 when the rates known run from midnight to 23:00)."""
+    day = datetime.timedelta(days=1)
+    for back in (day, 2 * day):
+        src = by.get(t - back) or seen.get(t - back)
+        if src:
+            return src
+    return by.get(t - HH)
+
+
+def estimate(rates: list, until: datetime.datetime, seen: Optional[list] = None) -> list:
     """Until the rates after the last known half hour are out (Octopus: tomorrow's, at about 16:00),
     an estimate of them up to `until`: each half hour at the price of the same half hour a day
     earlier (today's), [(start, end, p, adjusted)]: planned on as if known, and planned again when
-    the real ones come."""
+    the real ones come. seen: [(start, end, p)] rates seen before, to copy from where the known ones
+    don't go back far enough."""
     by = {r[0]: r for r in rates}
     if not by:
         return []
+    old = {a: (a, b, p, False) for a, b, p in seen or []}
     out = []
     t = max(by) + HH
-    day = datetime.timedelta(days=1)
     while t < until:
-        src = by.get(t - day) or by.get(t - 2 * day)
+        src = _copy_of(t, by, old)
         if src:
             out.append((t, t + HH, src[2], src[3]))
             by[t] = out[-1]
@@ -268,7 +282,7 @@ def fit_wholesale(rates: list, wholesale: list) -> Optional[dict]:
     return {"a": round(a, 4), "b": round(b, 3), "c": round(c, 3), "n": len(pts)}
 
 
-def estimate_wholesale(rates: list, wholesale: list, until: datetime.datetime) -> tuple:
+def estimate_wholesale(rates: list, wholesale: list, until: datetime.datetime, seen: Optional[list] = None) -> tuple:
     """As estimate(), but from the day-ahead wholesale prices (future_rates) where there are some,
     turned into export rates as the known ones compare with them (fit_wholesale); the rest (none
     published yet) a copy of the day before as estimate() does. Returns (the estimate, the fit or
@@ -277,9 +291,9 @@ def estimate_wholesale(rates: list, wholesale: list, until: datetime.datetime) -
     by = {r[0]: r for r in rates}
     if not by:
         return [], fit, 0
+    old = {a: (a, b, p, False) for a, b, p in seen or []}
     out, used = [], 0
     t = max(by) + HH
-    day = datetime.timedelta(days=1)
     while t < until:
         w = next((p for a, b, p in wholesale if a <= t < b), None) if fit else None
         if w is not None:
@@ -287,7 +301,7 @@ def estimate_wholesale(rates: list, wholesale: list, until: datetime.datetime) -
             out.append((t, t + HH, p, False))
             used += 1
         else:
-            src = by.get(t - day) or by.get(t - 2 * day)
+            src = _copy_of(t, by, old)
             if not src:
                 t += HH
                 continue

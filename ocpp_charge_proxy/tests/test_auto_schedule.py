@@ -1503,3 +1503,19 @@ def test_the_plan_table_shows_your_slots_skipped():
     for hh in ("15:00", "15:30", "16:00"):
         assert "your slot, skipped" in rows[hh][5] and rows[hh][6] != "yours"
     assert not any("your slot" in tag for tag in rows["14:30"][5])
+
+
+def test_the_estimate_has_no_gap_from_23_00():
+    """Octopus's export rates run 23:00 to 23:00, but Home Assistant's from midnight: with today's known
+    from 00:00 to 23:00, 23:00-00:00 used to have no estimate (nothing a day before to copy). Now it's
+    yesterday's 23:00-00:00 as seen then, else the half hour before's."""
+    known = [(at(0, 30 * k), at(0, 30 * (k + 1)), 10.0 + k / 10, False) for k in range(46)]  # (00:00 to 23:00)
+    until = at(0, 0, 2)
+    est = {a: p for a, _, p, _ in A.estimate(known, until)}
+    assert est[at(23)] == est[at(23, 30)] == known[-1][2]  # (the half hour before's)
+    assert est[at(0, 0, 1)] == 10.0 and len(est) == 2 + 48
+    seen = [(at(23, 0, -1), at(23, 30, -1), 15.5), (at(23, 30, -1), at(0, 0), 14.5)]
+    est = {a: p for a, _, p, _ in A.estimate(known, until, seen)}
+    assert (est[at(23)], est[at(23, 30)]) == (15.5, 14.5)
+    est, _, _ = A.estimate_wholesale(known, [], until, seen)
+    assert {a: p for a, _, p, _ in est}[at(23)] == 15.5
