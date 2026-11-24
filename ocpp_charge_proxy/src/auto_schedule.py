@@ -370,7 +370,8 @@ VALUE_LOOK_BACK = datetime.timedelta(hours=6)
 
 
 def best_value(halves: list, price: dict, cost: float, can_charge: dict, forced: dict,
-               day_of: Callable, need: dict, charge: int, discharge: int, trace: bool = False) -> tuple:
+               day_of: Callable, need: dict, charge: int, discharge: int, trace: bool = False,
+               dear: Optional[set] = None) -> tuple:
     """Where to charge (the half hours in `halves`, in order) so the battery earns the most: each
     day (day_of) at most need[day] charges, only where `can_charge`. The battery as a number of
     units, full at charge * discharge: a half hour's charge adds `discharge` of them (no more than
@@ -380,14 +381,19 @@ def best_value(halves: list, price: dict, cost: float, can_charge: dict, forced:
     so the battery's size doesn't: they're a share of it. The battery starts empty (its charge
     isn't read: taking it as empty keeps the plan the same from one look to the next, and never
     counts on charge that may not be there, e.g. after the house has used it).
+    dear: the half hours where an empty battery would leave the house on the grid at its dearer
+    import rate (not an off-peak time): of the plans that earn the most, the one with the fewest
+    of them empty (e.g. charging 10:00 rather than 11:00, for the same exports).
     Returns (the half hours to charge in, what it earns: p per unit, after the charging); with
     `trace`, a third: what it does each half hour, [(start, "charge" / "export" / "hold" / "fills")]
     (fills: plugged in for something else, or an off-peak time or free session)."""
     cap = charge * discharge
     unit_cost = cost / ROUND_TRIP
     # state (level, charges this day, charging the half hour before) -> (score, path)
-    # score: (earned, -charges, -separate charges): more earned, then fewer charges, then joined-up ones
-    best = {(0, 0, False): ((0.0, 0, 0), ())}
+    # score: (earned, -half hours empty, -charges, -separate charges): more earned, then empty for less
+    # of the time the import's dear, then fewer charges, then joined-up ones
+    dear = dear or set()
+    best = {(0, 0, False): ((0.0, 0, 0, 0), ())}
     day = None
     for t in halves:
         d = day_of(t)
@@ -411,14 +417,15 @@ def best_value(halves: list, price: dict, cost: float, can_charge: dict, forced:
             if forced.get(t):
                 put((min(cap, lvl + discharge), used, False), sc, path + (((t, "fills"),) if trace else ()))
                 continue
-            put((lvl, used, False), sc, path + (((t, "hold"),) if trace else ()))  # (held)
+            held = (sc[0], sc[1] - 1, sc[2], sc[3]) if lvl == 0 and t in dear else sc
+            put((lvl, used, False), held, path + (((t, "hold"),) if trace else ()))  # (held)
             if lvl > 0 and p > 0:
                 x = min(lvl, charge)
-                put((lvl - x, used, False), (round(sc[0] + p * x, 6), sc[1], sc[2]), path + (((t, "export"),) if trace else ()))
+                put((lvl - x, used, False), (round(sc[0] + p * x, 6), sc[1], sc[2], sc[3]), path + (((t, "export"),) if trace else ()))
             if can_charge.get(t) and used < most and lvl < cap:
                 add = min(discharge, cap - lvl)
                 put((lvl + add, used + 1, True),
-                    (round(sc[0] - unit_cost * add, 6), sc[1] - 1, sc[2] - (0 if was else 1)),
+                    (round(sc[0] - unit_cost * add, 6), sc[1], sc[2] - 1, sc[3] - (0 if was else 1)),
                     path + (((t, "charge"),) if trace else (t,)))
         best = nxt
     if not best:
@@ -524,7 +531,9 @@ def plan(imp: list, exp: list, now: datetime.datetime, blocks: int, cuts: list =
         been = list(busy) + list(plugged) if ran is None else list(ran)  # (what's been plugged in, before now)
         forced = {t: _hits(t, fill) or _hits(t, list(busy) + list(plugged) if t >= earliest else been) for t in halves}
         free = {t: t >= earliest and not _hits(t, nope) for t in halves}
-        picked, earned, acts = best_value(halves, price, cost, free, forced, day_of, need, full, dis, trace=True)
+        # (where running empty leaves the house on the dearer import rate: still to come, not an off-peak time)
+        dear = {t for t in halves if t >= earliest and not forced[t]}
+        picked, earned, acts = best_value(halves, price, cost, free, forced, day_of, need, full, dis, trace=True, dear=dear)
         # (how full the battery is, as it plans it: for the Debug tab's table)
         lvl, cap_u = 0, full * dis
         for t, act in acts:

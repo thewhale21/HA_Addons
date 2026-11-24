@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.113.0 — Where it earns the most: empty for less of the time
+
+- **Improvement:** Where it earns the most: of the plans that earn the
+  same, it now takes the one that leaves the battery empty for the fewest
+  half hours outside off-peak times (when the house would be on the grid
+  at the dearer rate). E.g. charging at 10:00 rather than 11:00 for the
+  same exports, so it isn't empty 10:00–11:00. What it earns is unchanged.
+  Planned again on updating.
+
 ## 2.112.2 — No gap in the estimate at 23:00
 
 - **Fix:** tomorrow's estimated export rates started at midnight, leaving

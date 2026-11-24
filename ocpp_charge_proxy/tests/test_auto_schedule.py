@@ -1519,3 +1519,18 @@ def test_the_estimate_has_no_gap_from_23_00():
     assert (est[at(23)], est[at(23, 30)]) == (15.5, 14.5)
     est, _, _ = A.estimate_wholesale(known, [], until, seen)
     assert {a: p for a, _, p, _ in est}[at(23)] == 15.5
+
+
+def test_where_it_earns_the_most_keeps_the_battery_from_running_empty_for_nothing():
+    """Two plans that earn the same: charge at 10:00 or at 11:00 for the 11:30 export. Charging at
+    11:00 leaves the battery empty 10:00-11:00, with the house on the dearer import rate: at 10:00 it isn't."""
+    halves = [at(9, 30 * k) for k in range(6)]  # (09:00 to 11:30)
+    price = {at(9, 30): 25.0, at(11, 30): 30.0}  # (nothing to earn exporting 10:00-11:00)
+    can = {t: t >= at(10) for t in halves}
+    forced = {at(9): True}  # (full from something else at 09:00)
+    day = lambda t: t.date()  # noqa: E731
+    plain, earned = A.best_value(halves, price, 7.0, can, forced, day, {D.date(): 1}, 1, 1)
+    picked, earned2, acts = A.best_value(halves, price, 7.0, can, forced, day, {D.date(): 1}, 1, 1, trace=True,
+                                         dear=set(halves[2:]))
+    assert earned2 == earned and picked == [at(10)]
+    assert [a for _, a in acts] == ["fills", "export", "charge", "hold", "hold", "export"]

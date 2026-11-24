@@ -220,7 +220,12 @@ one-line summary; click it to see it all.
   couldn't use (it'd be full, or nothing after it pays for it) goes where
   exporting pays least, so all the day's half hours are still used; it
   keeps out of off-peak times and saving sessions (Axle Energy events too)
-  as the other modes do. The Notes say what the plan earns for each kWh of
+  as the other modes do. Where two plans earn the same, it takes the one
+  that leaves the battery **empty for the fewest half hours** outside
+  off-peak times (when the house would be on the grid at the dearer
+  rate): e.g. charging at 10:00 rather than 11:00 for the same exports,
+  so it isn't empty 10:00–11:00. It never gives up any of what it earns to
+  do so. The Notes say what the plan earns for each kWh of
   your battery, by the export rates alone (what the house uses isn't
   counted). E.g. Axle's 121p 19:00–20:00 with 27p from 16:00: it charges
   straight before 19:00 and not in it, and tops up between the 27p half
