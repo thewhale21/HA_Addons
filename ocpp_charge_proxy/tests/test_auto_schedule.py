@@ -1475,3 +1475,18 @@ def test_plan_again_now():
     assert not a.sync_auto_schedule([], user_exp(), 4, cap_min=360)
     clock.dt = y + datetime.timedelta(minutes=1)
     assert a.sync_auto_schedule([], user_exp(), 4, cap_min=360)  # (then, as it ends)
+
+
+def test_the_plan_table_shows_your_slots_skipped():
+    """Your 15:00-16:30 slot, where the export rates are known, gives way to the automatic schedule: in the
+    plan's table its half hours say so (and aren't shown as your slot plugged in)."""
+    a, _ = _auto(at(12, 25))
+    a.limit_reset = "12:00"
+    a.set_schedule(enabled=True, entries=[{"time": "15:00", "action": "plug", "days": WEEK},
+                                          {"time": "16:30", "action": "unplug", "days": WEEK}])
+    a.sync_auto_schedule(iog_import(2), user_exp(), 6, cap_min=360, mode="value", charge_cap=2, discharge_cap=3)
+    assert any("skipped" in g for g in a.auto_plan["gave_way"])
+    rows = {r[0][11:16]: r for r in a.plan_table()["rows"] if r[0][:10] == "2026-11-03"}
+    for hh in ("15:00", "15:30", "16:00"):
+        assert "your slot, skipped" in rows[hh][5] and rows[hh][6] != "yours"
+    assert not any("your slot" in tag for tag in rows["14:30"][5])

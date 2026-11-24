@@ -271,6 +271,18 @@ one-line summary; click it to see it all.
   bottom of each day. Off, they're not drawn (or in the legend), but they're
   still marked, listed in the plan and, with Before the high exports,
   planned around.
+- **Plan** (fold it open): the plan as a text table, half hour by half
+  hour from the look back (or now) to the end of the rates, with a Copy
+  button: the export rate (known, or estimated from the wholesale prices or
+  as a copy of the day before's), the import rate (* where a smart charging
+  slot made it cheap), high exports, off-peak times and sessions, **your
+  slots that were skipped** (by it, a session or you), what's plugged in
+  (its own charging, a car charge or your slot) and, with Where it earns
+  the most, how full it takes the battery to be and what it does (charge,
+  export, hold, or fills: charged anyway). Above it, what it planned with
+  (mode, half hours a day, the daily limit, charge and discharge times,
+  look back, the wholesale fit); its Notes below, then where the rates
+  came from and when it planned. While it's off, what it would plan.
 - **Plan again now** (a button on the card): reads the rates and plans
   again straight away, as if something had changed. While one of its
   charging blocks is going it isn't changed under it: it plans again as
@@ -297,7 +309,8 @@ one-line summary; click it to see it all.
   or shortened), and stay where they aren't (they count towards the daily
   limit). A slot joined to Charge
   now, auto plug-in or the car plugged in sensor stays as it is. Turning it
-  off puts them back; the card's Your slots row says what changed. A slot it
+  off puts them back; the Plan's table marks the half hours of your slots
+  that were skipped ("your slot, skipped"). A slot it
   skipped that you un-skip is yours: it runs, and the plan works around it
   rather than skipping it again.
 - **Across the limit's reset:** with Force schedule on supplier, a block of
@@ -1274,18 +1287,6 @@ follows your Home Assistant theme. Settings save as soon as you change them.
       restarts, and the last 300 OCPP messages both ways, kept across
       restarts (with a marker where the add-on restarted), with a filter,
       full JSON on click and a Copy button for sharing.
-    - **The automatic schedule's plan, as a table** (open it to see it):
-      half hour by half hour from the look back (or now) to the end of the
-      rates, as a text table with a Copy button: the export rate (known, or
-      estimated from the wholesale prices or as a copy of the day before's),
-      the import rate (* where a smart charging slot made it cheap), high
-      exports, off-peak times and sessions, what's plugged in (its own
-      charging, a car charge or your slot) and, with Where it earns the
-      most, how full it takes the battery to be and what it does (charge,
-      export, hold, or fills: charged anyway). Above it, what it planned
-      with (mode, half hours a day, the daily limit, charge and discharge
-      times, look back, the wholesale fit), and its Notes below. While it's
-      off, what it would plan.
     - **Diagnostics bundle:** one JSON file with the state, schedule,
       sessions, supplier's plan and settings, health, recent messages, log
       lines and options (password and most of the chargepoint ID hidden).

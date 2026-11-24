@@ -2839,8 +2839,8 @@ class Automation:
         return t.astimezone(self._now().tzinfo)
 
     def _plan_table(self, now, imp, known_exp, est, fit, cuts, fills, first, plugged, charge, res, highs) -> list:
-        """The plan, half hour by half hour, for the Debug tab (Diagnostics › Debug › The automatic
-        schedule's plan): [start, export p, "known" / "copy" / "wholesale", import p, smart charging
+        """The plan, half hour by half hour, for the page (Automations › Automatic schedule › Plan):
+        [start, export p, "known" / "copy" / "wholesale", import p, smart charging
         adjusted, [tags], plugged in ("auto" its own, "car", "yours", ""), battery % (Where it earns the
         most: as it plans it) or None, what the battery does ("charge", "export", "hold", "fills") or None].
         From the look-back (or the half hour going) to the end of the rates."""
@@ -2858,12 +2858,17 @@ class Automation:
         auto_off = [(a, b) for a, b in res.get("offpeak") or []]
         sessions = [(_parse_iso(r["start"]), _parse_iso(r["end"]), session_name(r)) for r in self.saving_sessions]
         hits = lambda t, wins: any(a < t + HH and b > t for a, b in wins)  # noqa: E731
+        # (your slots as you set them, none skipped: where they don't plug in, they were skipped, by the
+        # automatic schedule, a session or you)
+        set_by_you = self.windows([e for e in self.entries if not e.get("source")], now, skips=[])
         rows, t = [], start
         while t < end and len(rows) < 200:
             tags = (["high export"] if t in high else []) + (["off-peak (yours)"] if hits(t, user_off) else []) \
                 + (["off-peak (import rates)"] if hits(t, auto_off) else []) \
                 + [n.lower() for a, b, n in sessions if a < t + HH and b > t] + (["past"] if t + HH <= now else [])
             plug = "auto" if hits(t, charge) else "car" if hits(t, first) else "yours" if hits(t, plugged) else ""
+            if hits(t, set_by_you) and not hits(t, plugged):
+                tags.append("your slot, skipped" if self.schedule_enabled else "your slot (your slots paused)")
             e, src = exp.get(t, (None, ""))
             i, adj = imps.get(t, (None, False))
             b = batt.get(t)
@@ -3192,7 +3197,7 @@ class Automation:
         return self.auto_going()
 
     def plan_table(self) -> dict:
-        """For the Debug tab: the plan (or, while it's off, what it would do) half hour by half hour."""
+        """For the page (Automatic schedule › Plan): the plan (or, while it's off, what it would do) half hour by half hour."""
         p = self.auto_plan if self.auto_plan is not None else (self.auto_preview or {})
         return {"on": self.auto_plan is not None, "rows": p.get("table") or [], "mode": p.get("mode"),
                 "fit": p.get("fit"), "planned_at": p.get("planned_at"), "notes": p.get("notes") or [],

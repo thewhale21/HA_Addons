@@ -969,7 +969,11 @@
               <div class="grow">Plan again<div class="note" style="margin:0">Reads the rates and plans again now, as if something had changed. Not while one of its charging blocks is going: then as soon as it ends.</div></div>
               <button class="btn small" id="as-replan">Plan again now</button>
             </div>
-            <details class="fold" id="as-plan" style="margin-top:12px"><summary id="as-sum">Plan</summary><dl class="kv" id="as-info" style="margin-top:8px"></dl></details>
+            <details class="fold" id="as-plan" style="margin-top:12px"><summary id="as-sum">Plan</summary>
+              <div class="note" style="margin:8px 0">Half hour by half hour, from the look back (or now) to the end of the rates: the export rates (known, or estimated: from the wholesale prices or a copy of the day before's), the import rates, high exports, off-peak times and sessions, your slots that were skipped, what's plugged in (its own charging, a car charge or your slot) and, with Where it earns the most, how full it takes the battery to be and what it does. While it's off, what it would do.</div>
+              <div class="msg-tools"><button class="btn small" id="as-table-copy">Copy</button></div>
+              <pre id="as-table" style="font-size:12px;line-height:1.45;overflow-x:auto;white-space:pre;margin-top:8px">Reading it…</pre>
+              <dl class="kv" id="as-info" style="margin-top:8px"></dl></details>
           </div>
         </div>
         <div class="card">
@@ -1151,14 +1155,6 @@
       </div>
       <div class="msgs" id="m-list"></div>
       <div class="note"><span id="m-count">0</span> shown · newest at the top · the last 300 frames are kept, across restarts. ↑ sent, ↓ received.</div>
-    </div>
-    <div class="card">
-      <details id="d-plan">
-        <summary style="cursor:pointer;font-weight:500">The automatic schedule's plan, as a table</summary>
-        <div class="note" style="margin:8px 0">Half hour by half hour, what it planned on: the export rates (known, or estimated: from the wholesale prices or a copy of the day before's), the import rates, which are high exports, off-peak times and sessions, what's plugged in (its own charging, a car charge or your slot) and, with Where it earns the most, how full it takes the battery to be and what it does. From the look back (or now) to the end of the rates. While it's off, what it would do.</div>
-        <div class="msg-tools"><button class="btn small" id="d-plan-refresh">Refresh</button><button class="btn small" id="d-plan-copy">Copy</button></div>
-        <pre id="d-plan-text" style="font-size:12px;line-height:1.45;overflow-x:auto;white-space:pre;margin-top:8px">Open to see it.</pre>
-      </details>
     </div>
     <div class="section-title">Tools</div>
     <div class="masonry">
@@ -3170,21 +3166,13 @@ function drawAutoSched() {
   $('as-sum').textContent = !p ? 'Plan' : (on ? 'Plan' : 'Plan if it were on') + ': '
     + (mins(p.charge) ? `${hmDur(Math.round(mins(p.charge) / 30) * 1800)} of charging to come` : 'no charging to come')
     + ((p.gave_way || []).length ? `, ${p.gave_way.length} of your slots ${on ? 'changed' : 'would change'}` : '');
-  if (!p) { $('as-info').innerHTML = kv([['Plan', `<span class="muted">${on ? 'Planning…' : 'Off: reading the rates…'}</span>`]]); return; }
+  if (!p) { $('as-info').innerHTML = ''; $('as-table').textContent = on ? 'Planning…' : 'Off: reading the rates…'; return; }
   const span = (w) => `${dateTime(w[0])}–${hm(w[1])}`;
   const info = p.info || {};
   const src = (ids) => (ids || []).length ? ids.map((x) => `<code>${esc(x)}</code>`).join('<br>') : '<span class="chip warn">None found</span>';
-  const gave = p.gave_way || [];
-  // (your slots that give way have their own row: not in the notes again)
-  const notes = (p.notes || []).filter((n) => !n.startsWith('Your slots, where the export rates are known'));
+  // (the table, half hour by half hour: read again when it's planned again, or a minute on)
+  if ($('as-plan').open && (p.planned_at !== planTableAt || Date.now() - planTableRead > 60000)) refreshPlanTable();
   $('as-info').innerHTML = kv([
-    ...(on ? [] : [['Plan', '<span class="muted">Off. If it were turned on, it would do this:</span>']]),
-    [on ? 'Charging' : 'Charge', (p.charge || []).length ? p.charge.map(span).join('<br>') : '<span class="muted">None planned</span>'],
-    ['Your slots', gave.length ? gave.map((g) => esc(g)).join('<br>') : '<span class="muted">None (none where the export rates are known)</span>'],
-    ...(sim.edit && ['before', 'value'].includes(sim.edit.auto_sched_mode) ? [['High export', (() => { const h = ((sch && sch.high_rates) || []).filter((w) => new Date(w[1]) > Date.now());
-      return h.length ? mergeRuns(h).map((w) => `${span(w)} <span class="muted">(up to ${num(w[2], 1)}p)</span>`).join('<br>') : '<span class="muted">None marked</span>'; })()]] : []),
-    ['Off-peak', (p.offpeak || []).length ? p.offpeak.map(span).join('<br>') : '<span class="muted">None (no cheaper import times)</span>'],
-    ...(notes.length ? [['Notes', notes.map((n) => `<div class="sub" style="color:var(--warn)">${esc(n)}</div>`).join('')]] : []),
     ['Rates', `${info.source ? esc(info.source) + ' · ' : ''}known until ${p.rates_until ? dateTime(p.rates_until) : '—'}<div class="sub">Import: ${src(info.import)}</div><div class="sub">Export: ${src(info.export)}</div>`
       + (() => { const f = (sch && sch.future_rates) || {}; if (!f.url) return '<div class="sub">Tomorrow\'s before they\'re out: a copy of today\'s</div>';
           const days = Object.entries(f.days || {}).filter(([, n]) => n).map(([d]) => new Date(d + 'T12:00').toLocaleDateString([], {weekday: 'short'}));
@@ -3246,10 +3234,13 @@ $('as-mode').addEventListener('click', (e) => {
       .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
   });
 });
-// Diagnostics › Debug › The automatic schedule's plan, as a text table
+// Automatic schedule › Plan: half hour by half hour, as a text table
+var planTableAt = null, planTableRead = 0;
 async function refreshPlanTable() {
   let d;
-  try { d = await api('auto_table'); } catch (e) { $('d-plan-text').textContent = 'Couldn\'t read it: ' + e.message; return; }
+  planTableRead = Date.now();
+  try { d = await api('auto_table'); } catch (e) { $('as-table').textContent = 'Couldn\'t read it: ' + e.message; return; }
+  planTableAt = d.planned_at;
   const MODE = {cheapest: 'Where exporting pays least', before: 'Before the high exports', value: 'Where it earns the most'};
   const pad = (v, n, right) => { v = String(v ?? ''); return right ? v.padStart(n) : v.padEnd(n); };
   const t = (iso) => { const x = new Date(iso); return x.toLocaleDateString([], {weekday: 'short'}) + ' ' + x.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}); };
@@ -3259,7 +3250,7 @@ async function refreshPlanTable() {
   if (d.mode !== 'cheapest') head.push(`Charge time needed: ${d.charge_cap ? d.charge_cap * 30 + ' min' : '—'} · discharge time needed: ${d.discharge_cap ? d.discharge_cap * 30 + ' min' : '—'}` + (d.mode === 'value' ? ` · look back: ${d.look_back ?? '—'} h` : ''));
   if (d.fit) head.push(`Wholesale fit: export ≈ ${d.fit.a.toFixed(2)} × wholesale ${d.fit.b >= 0 ? '+' : ''}${d.fit.b.toFixed(1)}p${d.fit.c ? `, ${d.fit.c >= 0 ? '+' : ''}${d.fit.c.toFixed(1)}p 16:00–19:00` : ''} (from ${d.fit.n} half hours)`);
   const rows = d.rows || [];
-  if (!rows.length) { $('d-plan-text').textContent = head.join('\n') + '\n\nNo plan yet (no export rates read, or it hasn\'t planned since the add-on started).'; return; }
+  if (!rows.length) { $('as-table').textContent = head.join('\n') + '\n\nNo plan yet (no export rates read, or it hasn\'t planned since the add-on started).'; return; }
   const cols = ['Time', 'Export p', 'Rate', 'Import p', 'Plugged in', 'Battery', 'Does', 'Notes'];
   const W = [10, 8, 10, 9, 11, 7, 7, 0];
   const PLUG = {auto: 'its own', car: 'car charge', yours: 'your slot', '': ''};
@@ -3274,19 +3265,18 @@ async function refreshPlanTable() {
   }
   out.push('', '* import rate made cheap by a smart charging slot · est (copy): the day before\'s · est (whsl): from the wholesale prices · fills: the battery charges anyway (plugged in for something else, an off-peak time or a free session)');
   if ((d.notes || []).length) out.push('', 'Notes:', ...d.notes.map((n) => '- ' + n));
-  $('d-plan-text').textContent = out.join('\n');
+  $('as-table').textContent = out.join('\n');
 }
-$('d-plan').addEventListener('toggle', () => { if ($('d-plan').open) refreshPlanTable(); });
-$('d-plan-refresh').addEventListener('click', refreshPlanTable);
-$('d-plan-copy').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText($('d-plan-text').textContent); toast('Plan copied'); } catch (e) { toast('Couldn\'t copy: select the text instead'); }
+$('as-plan').addEventListener('toggle', () => { if ($('as-plan').open) refreshPlanTable(); });
+$('as-table-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('as-table').textContent); toast('Plan copied'); } catch (e) { toast('Couldn\'t copy: select the text instead'); }
 });
 $('as-replan').addEventListener('click', async () => {
   const b = $('as-replan'); b.disabled = true;
   try {
     const r = await api('auto_replan', {method: 'POST'});
     toast(r.waits_until ? `One of its charging blocks is going: it plans again when that ends, at ${hm(r.waits_until)}` : 'Planning again…');
-    [2500, 8000].forEach((ms) => setTimeout(() => { refreshAutomation(true); if ($('d-plan') && $('d-plan').open) refreshPlanTable(); }, ms));
+    [2500, 8000].forEach((ms) => setTimeout(() => { refreshAutomation(true); if ($('as-plan').open) refreshPlanTable(); }, ms));
   } catch (e) { toast('Couldn\'t: ' + e.message); }
   setTimeout(() => { b.disabled = false; }, 3000);
 });
@@ -5316,7 +5306,7 @@ function refreshTab(full) {
   if (!['automation', 'settings', 'health'].includes(activeTab)) refreshReadOnly();
   if (activeTab === 'overview') { refreshSessionCard(); refreshHistory(full && !chart.samples.length); refreshSmart(full); refreshNext(); }
   else if (activeTab === 'sessions') refreshSessions();
-  else if (activeTab === 'debug') { refreshSmart(false); refreshDebug(); refreshMessages(); if ($('d-plan').open) refreshPlanTable(); }  // the supplier's name; logs
+  else if (activeTab === 'debug') { refreshSmart(false); refreshDebug(); refreshMessages(); }  // the supplier's name; logs
   else if (activeTab === 'automation') { refreshAutomation(false); refreshSimulation(false); }
   else if (activeTab === 'settings') { refreshAutomation(false); refreshSimulation(false); refreshSmart(false); if (full) refreshAppSettings(); }
   else if (activeTab === 'health') { refreshHealth(); refreshSimulation(false); refreshProvider(); }

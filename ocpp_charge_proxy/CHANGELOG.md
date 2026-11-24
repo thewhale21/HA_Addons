@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.112.0 — The plan as a table, on the card
+
+- **Change:** Automations › Automatic schedule › **Plan** is now the plan
+  as a table, half hour by half hour (moved from Diagnostics › Debug). It
+  replaces the Charging, Your slots, High export and Off-peak lists; the
+  rates' sources and when it planned stay below it.
+- **Feature:** the table marks the half hours of **your slots that were
+  skipped** ("your slot, skipped"; "your slots paused" with the schedule
+  off).
+
 ## 2.111.0 — Plan again now
 
 - **Feature:** Automations › Automatic schedule › **Plan again now**:
