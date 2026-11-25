@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.120.1 — The plan's table after coming back to the page
+
+- **Fix:** coming back to the add-on's page with the plan's table open,
+  the table could be replaced by "Off: reading the rates…" for up to a
+  minute: the schedule came in before the settings, so for a moment it
+  looked as if the automatic schedule was off. It now waits for both, and
+  reads the table again as soon as there's a plan.
+
 ## 2.120.0 — A tidier Automatic schedule card
 
 - **Improvement:** the Automatic schedule card is laid out in sections:

@@ -3203,7 +3203,10 @@ $('plug-trim').addEventListener('click', (e) => {
 });
 // Automations › Automatic schedule: what it planned (from auto.data), and its settings
 function drawAutoSched() {
-  const on = !!(sim.edit && sim.edit.auto_sched_on);
+  // (only once both the settings and the schedule are in: just after the page opens one comes before
+  // the other, and with the settings not yet in it would look off, and say so over the plan's table)
+  if (!sim.edit || !auto.data) return;
+  const on = !!sim.edit.auto_sched_on;
   $('as-body').hidden = false;  // (its settings stay in view, on or off)
   const sch = auto.data && auto.data.schedule;
   asSummaries(sch);
@@ -3223,7 +3226,7 @@ function drawAutoSched() {
     const b = (sch && sch.battery_size) || {};
     $('as-batt-st').innerHTML = b.kwh ? `<b>${num(b.kwh, 1)} kWh</b> ${b.from === 'sensor' ? 'from the sensor' : 'as typed'}` : '';
     if (b.error) $('as-batt-st').innerHTML += ` <span style="color:var(--warn)">(${esc(b.error)}${b.kwh ? ': the size typed is used' : ''})</span>`; }
-  if (!p) { $('as-info').innerHTML = ''; $('as-table').textContent = on ? 'Planning…' : 'Off: reading the rates…'; return; }
+  if (!p) { planTableAt = null; $('as-info').innerHTML = ''; $('as-table').textContent = on ? 'Planning…' : 'Off: reading the rates…'; return; }
   const span = (w) => `${dateTime(w[0])}–${hm(w[1])}`;
   const info = p.info || {};
   const src = (ids) => (ids || []).length ? ids.map((x) => `<code>${esc(x)}</code>`).join('<br>') : '<span class="chip warn">None found</span>';
