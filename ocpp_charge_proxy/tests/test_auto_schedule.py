@@ -1610,3 +1610,22 @@ def test_house_use_typed_in_without_a_sensor():
     p, st = choose(None, {"error": "not enough history yet"}, 0.4)
     assert p == [0.4] * 48 and st == {"error": "not enough history yet", "kw": 0.4, "from": "typed"}
     assert choose(None, {}, None) == (None, {})
+
+
+def test_axle_export_events_pay_their_bonus_in_the_plan():
+    """An Axle Energy export event 19:00-20:00: the plan's export rate there has the bonus (100p, or as set)
+    on top, so the battery's kept full for it; a saving session from elsewhere doesn't; 0: none."""
+    def run(supplier, bonus=100.0):
+        a, _ = _auto(at(12, 25))
+        a.limit_reset = "12:00"
+        a.axle_bonus_p = bonus
+        a.saving_sessions = [{"id": "ax", "start": at(19).isoformat(), "end": at(20).isoformat(), "changes": {},
+                              "supplier": supplier}]
+        a.sync_auto_schedule(iog_import(2), user_exp(), 6, cap_min=360, mode="value", charge_cap=2, discharge_cap=3)
+        return {r[0][11:16]: r for r in a.plan_table()["rows"] if r[0][:10] == "2026-11-03"}
+    plain = {t: r[1] for t, r in run("Octopus Energy").items()}
+    axle = run("Axle Energy")
+    assert axle["19:00"][1] == round(plain["19:00"] + 100, 2) and axle["19:30"][1] == round(plain["19:30"] + 100, 2)
+    assert axle["20:00"][1] == plain["20:00"] and axle["18:30"][1] == plain["18:30"]
+    assert axle["19:00"][8] == axle["19:30"][8] == "export"  # (exports all through it)
+    assert run("Axle Energy", 0)["19:00"][1] == plain["19:00"]

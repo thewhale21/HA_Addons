@@ -521,6 +521,7 @@ async def run() -> None:
                     automation.battery_status = {"kwh": size or typed, "from": "sensor" if size else "typed" if typed else None,
                                                  **({"error": f"{bent} has no size in kWh just now"} if bent and not size else {})}
                     automation.load_drain = bool(s.get("auto_load_drain"))
+                    automation.axle_bonus_p = float(s.get("auto_axle_bonus_p", 100.0) if s.get("auto_axle_bonus_p") is not None else 100.0)
                     automation.future_status = dict(future.status)
                     # (shown on the schedule, on or off; the high export half hours for Before the high exports,
                     # and for Where it earns the most, where they're only marked)

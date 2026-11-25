@@ -299,6 +299,13 @@ one-line summary; click it to see it all.
   bottom of each day. Off, they're not drawn (or in the legend), but they're
   still marked, listed in the plan and, with Before the high exports,
   planned around.
+- **Axle export event bonus** (p/kWh, 100 by default): what Axle Energy
+  pays on top of your export rate for exporting in one of its export
+  events. The plan adds it to the export rates in those half hours (it
+  never charges in them: they're saving sessions), so it keeps the battery
+  full for them; the plan's table shows the rate with it added. Only
+  Axle's export events, not a saving session from your supplier. 0: not
+  counted.
 - **Plan** (fold it open): the plan as a text table, half hour by half
   hour from the look back (or now) to the end of the rates, with a Copy
   button: the export rate (known, or estimated from the wholesale prices or

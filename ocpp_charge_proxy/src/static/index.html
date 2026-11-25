@@ -964,6 +964,10 @@
               <div class="grow">Tomorrow's rates from<div class="note" style="margin:0">Until your supplier publishes tomorrow's export rates (Octopus: about 16:00), they're worked out from the day-ahead wholesale prices at this address (Nord Pool's UK auction, out about 10:00), as today's rates compare with today's wholesale prices. DATE is the day. Empty: a copy of today's rates instead. <details class="more"><summary>More</summary><div>Read for today and tomorrow, and looked for again every 15 minutes until tomorrow's are out. The fit (e.g. about 0.9 × wholesale, plus a little extra 16:00–19:00) is in the plan's Notes. If the address stops working, the Rates row below says so and tomorrow's are a copy of today's until it's fixed.</div></details></div></div>
             </div>
             <div class="row" style="margin-top:6px"><input type="text" id="as-future-url" placeholder="Empty: a copy of today's rates" style="width:100%" aria-label="Tomorrow's rates from (wholesale prices URL)"></div>
+            <div class="row">
+              <div class="grow">Axle export event bonus<div class="note" style="margin:0">What Axle Energy pays on top of your export rate for exporting during one of its export events, in p/kWh. Added to the export rates the plan uses in those half hours (it doesn't charge in them: they're saving sessions), so it keeps the battery full for them. 0: not counted.</div></div>
+              <span class="ctl"><input type="number" id="as-axle" min="0" max="1000" step="1" aria-label="Axle export event bonus (p/kWh)"> p</span>
+            </div>
             <div class="row as-before as-value" hidden>
               <div class="grow">High export half hours a day<div class="note" style="margin:0">The day's highest export rates, marked in orange on the schedule. Before the high exports: the charging goes around them. Where it earns the most: only marked, to see them (it uses every export rate either way). 0: none.</div></div>
               <span class="ctl"><input type="number" id="as-high" min="0" max="48" step="1" aria-label="High export half hours a day"> × 30 min</span>
@@ -2923,6 +2927,7 @@ function drawPickers() {
   if (document.activeElement !== $('as-batt-kwh')) $('as-batt-kwh').value = sim.edit.auto_battery_kwh ?? '';
   $('as-drain').checked = !!sim.edit.auto_load_drain;
   if (document.activeElement !== $('as-load-kw')) $('as-load-kw').value = sim.edit.auto_load_kw ?? '';
+  if (document.activeElement !== $('as-axle')) $('as-axle').value = sim.edit.auto_axle_bonus_p ?? 100;
   if (document.activeElement !== $('as-future-url')) $('as-future-url').value = sim.edit.auto_future_url ?? '';
   if (document.activeElement !== $('pop-weeks')) $('pop-weeks').value = sim.edit.populate_weeks ?? 4;
   if (document.activeElement !== $('pop-slots')) $('pop-slots').value = sim.edit.populate_slots ?? 12;
@@ -3315,6 +3320,12 @@ $('as-future-url').addEventListener('change', (e) => {
   const v = e.target.value.trim();
   if (v && (!/^https?:\/\/\S+$/.test(v) || !v.includes('DATE'))) { toast('The address must start https:// and have DATE in it, for the day'); refreshSimulation(true); return; }
   saveSensors({auto_future_url: v}, v ? 'Tomorrow\'s rates: worked out from the wholesale prices' : 'Tomorrow\'s rates: a copy of today\'s')
+    .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
+});
+$('as-axle').addEventListener('change', (e) => {
+  const p = Number(e.target.value.trim() === '' ? 100 : e.target.value);
+  if (!Number.isFinite(p) || p < 0 || p > 1000) { toast('0 to 1000p'); refreshSimulation(true); return; }
+  saveSensors({auto_axle_bonus_p: p}, p ? `Axle export events: ${p}p on top of the export rate` : 'Axle export events: no bonus counted')
     .then(() => [3000, 16000].forEach((ms) => setTimeout(() => refreshAutomation(true), ms)));
 });
 $('as-lookback').addEventListener('change', (e) => {

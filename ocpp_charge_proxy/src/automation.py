@@ -120,7 +120,7 @@ AUTO_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURC
 # Charges that come before the automatic schedule: it plans around them, never takes time from them
 FIRST_SOURCES = (AUTO_SOURCE, CHARGE_NOW_SOURCE, CAR_PLUGGED_SOURCE, SAVING_SOURCE)
 # The automatic schedule's rules: a plan made by older ones is made again (e.g. after an update)
-AUTO_PLAN_VERSION = 16
+AUTO_PLAN_VERSION = 17
 # (a change from a page that was behind, on a time the add-on has since moved)
 _MOVED = "The schedule changed just before that (the automatic schedule planned again): have a look and try again"
 SOURCE_NAMES = {AUTO_SOURCE: "Auto plug-in charge", CHARGE_NOW_SOURCE: "Charge now",
@@ -505,6 +505,7 @@ class Automation:
         self.battery_kwh: Optional[float] = None
         self.load_drain = False
         self.load_status: dict = {}  # (how reading the house load went, for the page)
+        self.axle_bonus_p = 100.0  # (an Axle Energy export event's extra on the export rate, p/kWh, for the planner)
         self.battery_status: dict = {}  # (the battery's size: {"kwh", "from": "sensor" / "typed", "error"}, for the page)
         self.export_rates: list = []  # the export rates known, [[start, end, p/kWh]] (for the page, on or off)
         self._rates_seen: list = []  # (the export rates seen, 2 days, for the high ones; saved)
@@ -2661,6 +2662,9 @@ class Automation:
         # (tomorrow's not out yet: planned on an estimate, from the wholesale prices or today's, and again
         # when they are)
         est, fit, from_wholesale = self._estimate(known_exp, now)
+        # (Axle Energy's export events pay their bonus on top of the export rate: after the estimate,
+        # so tomorrow's copy of today isn't given today's event)
+        known_exp, est = self._with_axle(known_exp), self._with_axle(est)
         plan_exp = known_exp + est
         future = {("e", a.isoformat()): p for a, b, p, _ in exp if b > now}
         future.update({("i", a.isoformat()): p for a, b, p, adj in imp if b > now and not adj})
@@ -2677,6 +2681,7 @@ class Automation:
                "discharge_cap": discharge_cap if mode in ("before", "value") else None,
                "look_back": self.look_back_h if mode == "value" else None,
                "house": self._house_key() if mode == "value" else None,
+               "axle": [self.axle_bonus_p, [[_iso_local(a), _iso_local(b)] for a, b in self._axle_windows()]],
                # (the estimate: planned again when it changes, e.g. tomorrow's wholesale prices come)
                "est": hashlib.md5(repr([(a.isoformat(), p) for a, _, p, _ in est]).encode()).hexdigest()[:12]}
         if cur and cur.get("key") == self._schedule_key() and same_rates and cur.get("v") == AUTO_PLAN_VERSION \
@@ -2896,6 +2901,21 @@ class Automation:
             t += HH
         return rows
 
+    def _axle_windows(self) -> list:
+        """Axle Energy's export events found (saving sessions, not its import events): [(start, end)]."""
+        return sorted((_parse_iso(r["start"]), _parse_iso(r["end"])) for r in self.saving_sessions
+                      if str(r.get("supplier") or "").lower().startswith("axle") and not is_free(r))
+
+    def _with_axle(self, rates: list) -> list:
+        """The export rates [(start, end, p, adjusted)] with axle_bonus_p added in Axle Energy's export
+        events (what Axle pays for exporting then: Automations › Automatic schedule › Axle export
+        event bonus), so the planner sees what those half hours really earn."""
+        wins = self._axle_windows()
+        if not wins or not self.axle_bonus_p:
+            return rates
+        return [(a, b, round(p + self.axle_bonus_p, 2) if any(x < b and y > a for x, y in wins) else p, adj)
+                for a, b, p, adj in rates]
+
     def _house_kw(self):
         """The house's average use (kW) in the half hour from t (local time), or None: no profile."""
         prof = self.house_profile
@@ -2997,6 +3017,7 @@ class Automation:
         key = repr((blocks, cap_min, self.limit_reset, self._schedule_key(), self.override_guards, mode, self.high_rates,
                     self.wholesale,
                     self._copies(info), self.ready_time, charge_cap, discharge_cap, self.look_back_h, self._house_key(),
+                    self.axle_bonus_p, self._axle_windows(),
                     [(a.isoformat(), p) for a, b, p, _ in exp if b > now],
                     [(a.isoformat(), p, adj) for a, b, p, adj in imp if b > now],
                     now.replace(minute=now.minute // 30 * 30, second=0, microsecond=0).isoformat()))

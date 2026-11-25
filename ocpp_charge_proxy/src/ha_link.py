@@ -141,6 +141,16 @@ def validate_settings(raw: dict, current: Optional[dict] = None) -> dict:
         out["auto_show_rates"] = bool(raw["auto_show_rates"])
     if "auto_load_drain" in raw:  # Where it earns the most: the house's use taken off the battery in the plan
         out["auto_load_drain"] = bool(raw["auto_load_drain"])
+    if "auto_axle_bonus_p" in raw:  # the automatic schedule: what Axle pays on top for exporting in its events
+        try:
+            if isinstance(raw["auto_axle_bonus_p"], bool) or raw["auto_axle_bonus_p"] in (None, ""):
+                raise TypeError
+            p = float(raw["auto_axle_bonus_p"])
+        except (TypeError, ValueError):
+            raise ValueError("auto_axle_bonus_p must be a number of pence") from None
+        if not 0 <= p <= 1000:
+            raise ValueError("The Axle export event bonus is 0 to 1000p")
+        out["auto_axle_bonus_p"] = p
     if "auto_load_kw" in raw:  # Where it earns the most: the house's average use typed in (no sensor)
         if raw["auto_load_kw"] in (None, ""):
             out["auto_load_kw"] = None
@@ -370,7 +380,8 @@ def default_settings() -> dict:
         # Where it earns the most: the house's use (a power sensor), the battery's size, and whether
         # the house's use comes out of the battery in the plan (else just a cost while it's empty)
         "auto_load_entity": "", "auto_battery_kwh": None, "auto_load_drain": False,
-        "auto_battery_entity": "", "auto_load_kw": None,  # (the house's average use typed in, kW: without a sensor)  # (the battery's size from a sensor: used over auto_battery_kwh while it reads)
+        "auto_battery_entity": "", "auto_load_kw": None,
+        "auto_axle_bonus_p": 100.0,  # (Axle Energy's export events: p/kWh on top of the export rate, for the planner)  # (the house's average use typed in, kW: without a sensor)  # (the battery's size from a sensor: used over auto_battery_kwh while it reads)
         # Populate schedule from load (Automations tab): best charging times per weekday from a power sensor's history
         "populate_power_entity": "", "populate_weeks": 4, "populate_slots": 12, "populate_auto": False,
         # Your supplier: empty / None = found automatically

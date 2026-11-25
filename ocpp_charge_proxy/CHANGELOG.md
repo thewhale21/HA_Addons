@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.119.0 — Axle export events pay their bonus in the plan
+
+- **Feature:** Automatic schedule › **Axle export event bonus** (100p/kWh
+  by default): added to the export rate in Axle Energy's export events
+  when planning, so the battery's kept full for them. The plan's table
+  shows the rate with it added. 0: not counted.
+
 ## 2.118.0 — Unplugs for a slot ended early
 
 - **Feature:** a change that ends the slot going (its end moved to before
