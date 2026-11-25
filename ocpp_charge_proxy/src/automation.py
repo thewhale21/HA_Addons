@@ -470,6 +470,7 @@ class Automation:
         self.schedule_enabled = False
         self.turned_on = False  # the schedule was just turned on (automation_loop takes it)
         self.turned_off = False  # ... or off, while it had the car plugged in
+        self.started_now = False  # a slot you changed has started already (automation_loop plugs in for it)
         self.entries: list[dict] = []
         self.skips: list[dict] = []  # [{"entry_id", "date"}]: times skipped once
         self.ready_time = False  # set the supplier's ready time at scheduled plug-ins
@@ -676,6 +677,7 @@ class Automation:
         override_guards = None if override_guards is None else _flag(override_guards, "override_guards", False)
         # (put back as it was if turning the schedule on is refused, below)
         undo = (copy.deepcopy(self.entries), list(self.skips), copy.deepcopy(self.blocks))
+        was_in = self.in_plug_window()  # (a slot going before the change: see _note_started)
         wait = None if unplug_wait_s is None else self._valid_wait(unplug_wait_s)
         if start_delay is not None:
             if not isinstance(start_delay, dict):
@@ -910,6 +912,7 @@ class Automation:
         if pre_gone:
             self._auto_mend(was_end)
         self._prune()
+        turned_on = False
         if enabled is not None:
             turned_on = bool(enabled) and not self.schedule_enabled
             # Turned off while the schedule has it plugged in: the loop unplugs, unless a car slot
@@ -936,6 +939,8 @@ class Automation:
                             self.schedule_enabled = False
                             raise
                 self.turned_on = True  # the loop plugs in if it's inside a slot now (see automation_loop)
+        if not turned_on:  # (turned on: the loop plugs in for a slot going, turned_on)
+            self._note_started(was_in)
         if ready_time is not None:
             self.ready_time = bool(ready_time)
         if wait is not None:
@@ -3293,6 +3298,7 @@ class Automation:
         day over it is refused, as when saving the schedule (unless allow_over)."""
         if not isinstance(times, list) or not times:
             raise ValueError("Say which times to skip")
+        was_in = self.in_plug_window()  # (a slot going before the change: see _note_started)
         keys = []
         for t in times:
             if not isinstance(t, dict):
@@ -3334,8 +3340,33 @@ class Automation:
         # A charge joined to a slot you've skipped (e.g. auto plug-in while your slot ran) ends at
         # its own unplug again, or it'd run on with the slot's end skipped
         self._rejoin_charges()
+        if not skip:
+            self._note_started(was_in)
         self._prune()
         self._save()
+
+    def _note_started(self, was_in: Optional[datetime.datetime]) -> None:
+        """After you change the schedule: a slot that now has the car plugged in, which it didn't
+        before (its plug-in moved to before now, a slot added that's already started, or one going
+        now un-skipped), is plugged in for straight away (automation_loop, as when the schedule's
+        turned on inside a slot), and the automatic schedule leaves it to run (as one you
+        un-skipped). Not for a change to a slot already going (e.g. its end moved), so one you
+        unplugged by hand stays unplugged."""
+        if not self.schedule_enabled:
+            return
+        now = self._now()
+        since = self.in_plug_window(now)
+        if since is None or since == was_in:
+            return
+        self.started_now = True
+        logger.info("Schedule: the change has the car plugged in from %s, already started", since.strftime("%a %H:%M"))
+        last = self.last_event(now)
+        if last and last[1]["action"] == "plug" and self.auto_plan is not None:
+            key = {"entry_id": last[1]["id"], "date": last[0].date().isoformat()}
+            yours = self.auto_plan.setdefault("yours", [])
+            if key not in yours:
+                yours.append(key)
+            self.auto_plan["key"] = None  # (planned again around it)
 
     def _yours_unskipped(self, keys: list) -> None:
         """Times you un-skipped yourself: no longer anything else's skip (or one taken out would
@@ -3885,6 +3916,16 @@ async def automation_loop(
                     if not shared_state.plugged_in:
                         logger.info("Schedule turned on inside a plug-in (since %s): plugging in", since.strftime("%a %H:%M"))
                         await plug(source="schedule")
+                    if automation.ready_time and set_ready_time is not None:
+                        await apply_ready_time(automation, set_ready_time)
+            if automation.started_now:
+                # You changed the schedule so a slot has already started (its plug-in moved to before
+                # now, or it was un-skipped while going): plugged in now, not at its next plug-in
+                automation.started_now = False
+                since = automation.in_plug_window()
+                if since is not None and not shared_state.plugged_in:
+                    logger.info("Schedule: a slot you changed started at %s: plugging in now", since.strftime("%a %H:%M"))
+                    await plug(source="schedule")
                     if automation.ready_time and set_ready_time is not None:
                         await apply_ready_time(automation, set_ready_time)
             if automation.turned_off:

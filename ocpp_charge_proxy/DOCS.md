@@ -687,6 +687,14 @@ Turning the card off puts back anything its events changed.
   plug in 23:30 and unplug 07:00, and Plugged In is off, it plugs in
   straight away (and with Force schedule on supplier, sets the ready time
   once Home Assistant is connected). It never unplugs at start-up.
+- **A slot you move so it's already started:** change the schedule so a
+  slot's plug-in is before now (e.g. at 17:06, the 18:00–22:00 slot moved
+  to start at 17:00), add a slot that's already started, or un-skip one
+  that's going, and it plugs in straight away (with Force schedule on
+  supplier, setting the ready time to the slot's end). The automatic
+  schedule then leaves that slot to run, as one you un-skipped. A change to
+  a slot that's already going (e.g. its end moved) doesn't plug in, so one
+  you unplugged by hand stays unplugged.
 - **Force schedule on supplier** (**Automations** tab, off by default):
   when the schedule plugs in, the add-on sets your supplier's smart
   charging ready-by time to the schedule's next unplug, for example plug in

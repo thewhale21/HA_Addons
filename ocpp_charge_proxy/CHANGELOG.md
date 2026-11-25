@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.117.0 — Plugs in for a slot moved to have started
+
+- **Feature:** a slot you change so it's already started (its plug-in moved
+  to before now, added already started, or un-skipped while going) plugs
+  in straight away, instead of waiting for its next plug-in. The automatic
+  schedule then leaves it to run. A change to a slot already going (e.g.
+  its end) doesn't plug in, so one unplugged by hand stays unplugged.
+
 ## 2.116.0 — Average house use typed in
 
 - **Feature:** Automatic schedule › **Average house use** (kW): for anyone

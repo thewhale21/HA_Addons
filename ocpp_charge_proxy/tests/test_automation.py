@@ -2418,3 +2418,62 @@ def test_the_users_11_00_to_12_30_is_split_at_12_00():
     b.set_schedule(entries=[{"time": "11:00", "action": "plug", "days": every},
                             {"time": "12:30", "action": "unplug", "days": every}], enabled=True, daily_cap_min=360)
     assert _pairs(b, day) == [("11:00", "12:30")]
+
+
+def test_a_slot_moved_to_have_started_already_plugs_in():
+    """At 17:06, the 18:00-22:00 slot's plug-in moved to 17:00: it's started already, so it plugs in now
+    (not next week). A change to the slot going (its end) doesn't, so one unplugged by hand stays so.
+    Un-skipping a slot that's going plugs in too."""
+    wk = list(range(7))
+    a, clock = _sched_18_22(_at(17, 6))
+    assert not a.started_now
+    a.set_schedule(entries=[{"time": "17:00", "action": "plug", "days": wk}, {"time": "22:00", "action": "unplug", "days": wk}])
+    assert a.started_now and a.in_plug_window().strftime("%H:%M") == "17:00"
+    a.started_now = False
+    a.set_schedule(entries=[{"time": "17:00", "action": "plug", "days": wk}, {"time": "23:00", "action": "unplug", "days": wk}])
+    assert not a.started_now  # (the same slot going, its end moved)
+    # (moved to start later than now: nothing yet)
+    b, _ = _sched_18_22(_at(17, 6))
+    b.set_schedule(entries=[{"time": "17:30", "action": "plug", "days": wk}, {"time": "22:00", "action": "unplug", "days": wk}])
+    assert not b.started_now
+    # (un-skipped while going)
+    c, _ = _sched_18_22(_at(19))
+    plug = next(e for e in c.entries if e["action"] == "plug")
+    unplug = next(e for e in c.entries if e["action"] == "unplug")
+    day = _at(19).date().isoformat()
+    c.set_skips([{"entry_id": plug["id"], "date": day}, {"entry_id": unplug["id"], "date": day}], True)
+    assert c.in_plug_window() is None and not c.started_now
+    c.set_skips([{"entry_id": plug["id"], "date": day}, {"entry_id": unplug["id"], "date": day}], False)
+    assert c.started_now
+    # (the schedule off: nothing)
+    d, _ = _sched_18_22(_at(17, 6), enabled=False)
+    d.set_schedule(entries=[{"time": "17:00", "action": "plug", "days": wk}, {"time": "22:00", "action": "unplug", "days": wk}])
+    assert not d.started_now
+
+
+def test_the_loop_plugs_in_for_a_slot_moved_to_have_started():
+    from src.automation import automation_loop
+    from src.shared_state import SharedState
+    wk = list(range(7))
+    a, clock = _sched_18_22(_at(17, 6))
+    state = SharedState(plugged_in=False)
+    calls = []
+
+    async def plug(source=None):
+        calls.append(("plug", source))
+        state.plugged_in = True
+
+    async def unplug(source=None):
+        calls.append(("unplug", source))
+        state.plugged_in = False
+
+    async def run():
+        task = asyncio.ensure_future(automation_loop(a, state, plug, unplug, tick_s=0.01))
+        await asyncio.sleep(0.05)
+        a.set_schedule(entries=[{"time": "17:00", "action": "plug", "days": wk}, {"time": "22:00", "action": "unplug", "days": wk}])
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(run())
+    assert calls == [("plug", "schedule")] and not a.started_now
