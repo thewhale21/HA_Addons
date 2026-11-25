@@ -471,6 +471,7 @@ class Automation:
         self.turned_on = False  # the schedule was just turned on (automation_loop takes it)
         self.turned_off = False  # ... or off, while it had the car plugged in
         self.started_now = False  # a slot you changed has started already (automation_loop plugs in for it)
+        self.ended_now = False  # ... or the slot going has ended (automation_loop unplugs)
         self.entries: list[dict] = []
         self.skips: list[dict] = []  # [{"entry_id", "date"}]: times skipped once
         self.ready_time = False  # set the supplier's ready time at scheduled plug-ins
@@ -3340,13 +3341,13 @@ class Automation:
         # A charge joined to a slot you've skipped (e.g. auto plug-in while your slot ran) ends at
         # its own unplug again, or it'd run on with the slot's end skipped
         self._rejoin_charges()
-        if not skip:
-            self._note_started(was_in)
+        self._note_started(was_in)
         self._prune()
         self._save()
 
     def _note_started(self, was_in: Optional[datetime.datetime]) -> None:
-        """After you change the schedule: a slot that now has the car plugged in, which it didn't
+        """After you change the schedule: the slot going ended by it (ended_now: the loop unplugs). Or
+        a slot that now has the car plugged in, which it didn't
         before (its plug-in moved to before now, a slot added that's already started, or one going
         now un-skipped), is plugged in for straight away (automation_loop, as when the schedule's
         turned on inside a slot), and the automatic schedule leaves it to run (as one you
@@ -3356,6 +3357,13 @@ class Automation:
             return
         now = self._now()
         since = self.in_plug_window(now)
+        if since is None and was_in is not None:
+            # The slot going has ended with the change (its end moved to before now, it was skipped
+            # or deleted): unplugged now, not left plugged in to the next unplug (automation_loop;
+            # a charge going carries on to its own end)
+            self.ended_now = True
+            logger.info("Schedule: the change ends the slot from %s, going now", was_in.strftime("%a %H:%M"))
+            return
         if since is None or since == was_in:
             return
         self.started_now = True
@@ -3928,6 +3936,14 @@ async def automation_loop(
                     await plug(source="schedule")
                     if automation.ready_time and set_ready_time is not None:
                         await apply_ready_time(automation, set_ready_time)
+            if automation.ended_now:
+                # You changed the schedule so the slot going has ended (its end moved to before now,
+                # skipped, deleted): unplugged now, unless a charge is going (on to its own end)
+                automation.ended_now = False
+                if shared_state.plugged_in and automation.in_plug_window() is None and automation.in_charge_window() is None:
+                    logger.info("Schedule: the slot going was ended by a change: unplugging now")
+                    automation.unplug_at = None
+                    await unplug(source="schedule")
             if automation.turned_off:
                 # The schedule was turned off while it had the car plugged in: unplugged, unless
                 # a car slot is going now (separated from the slot it joined: on to its own end)

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.118.0 — Unplugs for a slot ended early
+
+- **Feature:** a change that ends the slot going (its end moved to before
+  now, or the slot skipped or deleted) unplugs straight away. Before, it
+  stayed plugged in to the next unplug in the schedule. A charge going
+  carries on to its own end.
+
 ## 2.117.0 — Plugs in for a slot moved to have started
 
 - **Feature:** a slot you change so it's already started (its plug-in moved

@@ -2370,6 +2370,7 @@ def test_off_peak_start_leaves_the_schedules_waiting_unplug():
                        blocks=[{"start": "23:30", "end": "05:30", "days": every}], unplug_wait_s=60)
         if not wait_for_supplier:
             a.set_schedule(entries=[])
+            a.ended_now = False  # (plugged in by hand: not the slot just deleted, which 2.118 unplugs at once)
         a.ready_time = True
         state = SharedState(plugged_in=True)
         state.transaction_id = 1
@@ -2477,3 +2478,48 @@ def test_the_loop_plugs_in_for_a_slot_moved_to_have_started():
 
     _run(run())
     assert calls == [("plug", "schedule")] and not a.started_now
+
+
+def test_a_slot_ended_by_a_change_unplugs():
+    """At 19:00 in the 18:00-22:00 slot: its end moved to 18:30 (before now), it unplugs now rather than
+    at the next slot's end. Skipping it does too. A charge going (Charge now) carries on to its own end;
+    a change that keeps it going (end moved later) doesn't unplug."""
+    from src.automation import automation_loop
+    from src.shared_state import SharedState
+    wk = list(range(7))
+    new = [{"time": "18:00", "action": "plug", "days": wk}, {"time": "18:30", "action": "unplug", "days": wk}]
+    a, _ = _sched_18_22(_at(19))
+    a.set_schedule(entries=[{"time": "18:00", "action": "plug", "days": wk}, {"time": "23:00", "action": "unplug", "days": wk}])
+    assert not a.ended_now
+    a.set_schedule(entries=new)
+    assert a.ended_now and not a.started_now
+    b, _ = _sched_18_22(_at(19))
+    plug = next(e for e in b.entries if e["action"] == "plug")
+    unplug = next(e for e in b.entries if e["action"] == "unplug")
+    day = _at(19).date().isoformat()
+    b.set_skips([{"entry_id": plug["id"], "date": day}, {"entry_id": unplug["id"], "date": day}], True)
+    assert b.ended_now
+    # (the loop: unplugs)
+    c, _ = _sched_18_22(_at(19))
+    state = SharedState(plugged_in=True)
+    calls = []
+
+    async def do_plug(source=None):
+        calls.append(("plug", source))
+        state.plugged_in = True
+
+    async def do_unplug(source=None):
+        calls.append(("unplug", source))
+        state.plugged_in = False
+
+    async def run():
+        task = asyncio.ensure_future(automation_loop(c, state, do_plug, do_unplug, tick_s=0.01))
+        await asyncio.sleep(0.05)
+        calls.clear()
+        c.set_schedule(entries=new)
+        await asyncio.sleep(0.05)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    _run(run())
+    assert calls == [("unplug", "schedule")] and not c.ended_now

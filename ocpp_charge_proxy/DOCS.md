@@ -695,6 +695,11 @@ Turning the card off puts back anything its events changed.
   schedule then leaves that slot to run, as one you un-skipped. A change to
   a slot that's already going (e.g. its end moved) doesn't plug in, so one
   you unplugged by hand stays unplugged.
+- **A slot you end early:** change the schedule so the slot that's going
+  has ended (its end moved to before now, or skipped or deleted) and it
+  unplugs straight away, rather than staying plugged in to the next unplug.
+  A charge going (auto plug-in, Charge now, the car plugged in sensor)
+  carries on to its own end, as when the schedule's turned off.
 - **Force schedule on supplier** (**Automations** tab, off by default):
   when the schedule plugs in, the add-on sets your supplier's smart
   charging ready-by time to the schedule's next unplug, for example plug in
