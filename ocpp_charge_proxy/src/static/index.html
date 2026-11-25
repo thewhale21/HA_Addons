@@ -584,6 +584,15 @@
   details.fold > summary { cursor: pointer; color: var(--primary); font-size: 13px; list-style: none; padding: 4px 0; }
   details.fold > summary::-webkit-details-marker { display: none; }
   details.fold > summary::before { content: '▸ '; } details.fold[open] > summary::before { content: '▾ '; }
+  /* Automatic schedule: its settings in sections, each with what's set in brief */
+  details.sec { border-top: 1px solid var(--divider); margin-top: 12px; }
+  details.sec > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 10px; padding: 10px 0 4px; }
+  details.sec > summary::-webkit-details-marker { display: none; }
+  details.sec > summary .t { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--text2); white-space: nowrap; }
+  details.sec > summary .s { flex: 1; min-width: 0; font-size: 12px; color: var(--text2); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  details.sec > summary::after { content: '▸'; color: var(--text2); font-size: 12px; } details.sec[open] > summary::after { content: '▾'; }
+  details.sec[open] > summary .s { visibility: hidden; }
+  .as-status { margin-top: 0; }
   .basic .bnr.ov .state { color: inherit; }
   /* A list of things (the automations, settings, diagnostics): a row each with a one-line
      summary, opened in place for the rest (its card's contents) */
@@ -923,76 +932,91 @@
           <h2>Automatic schedule<span class="spacer"></span>
             <label class="switch"><input type="checkbox" id="as-on" aria-label="Automatic schedule"><span></span></label>
           </h2>
-          <div class="note" style="margin:0 0 10px">Plans charging from your import and export rates: where exporting pays least, or before the high export times. <details class="more"><summary>More</summary><div>Each day (your supplier's limit day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) whose export rates are known gets as many half hours of charging as you ask for, in the free half hours still to come where exporting pays least (not an off-peak time or a saving session). Your own slots give way where the rates are known (skipped, or shortened), and stay where they aren't yet (e.g. tomorrow morning before tomorrow's rates are out), and come back when it's turned off. Its charging is added to the schedule as one-offs (cyan), joined to a slot they meet. Auto plug-in, the car plugged in sensor, Charge now and saving sessions (the slots they move and the charge before them) come first: it plans around them, and they count against its half hours only where the day would otherwise go over your supplier's daily limit, which it always keeps to. Its own charging earlier in the day counts towards them. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the number of half hours, the daily limit or the rest of the schedule change, but not while one of its blocks is going. Rates: Octopus Energy's and EDF Energy's (today's and tomorrow's) are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>), e.g. for E.ON Next; or pick any entity with a list of rates.</div></details></div>
+          <div class="note" style="margin:0 0 10px">Plans when to charge from your import and export rates, within your supplier's daily limit. <details class="more"><summary>More</summary><div>Each day (your supplier's limit day, e.g. 12:00 to 12:00 for Octopus, else midnight to midnight) whose export rates are known gets as many half hours of charging as you ask for, in the free half hours still to come (not an off-peak time or a saving session). Your own slots give way where the rates are known (skipped, or shortened), stay where they aren't yet, and come back when it's turned off. Its charging is added to the schedule as one-offs (cyan), joined to a slot they meet. Auto plug-in, the car plugged in sensor, Charge now and saving sessions come first: it plans around them, and they count against its half hours only where the day would otherwise go over your supplier's daily limit, which it always keeps to. The cheapest import half hours (an hour or more together, e.g. 23:30–05:30) are off-peak times: hatched, and nothing automatic plugs in then. Planned again when the rates, the settings or the rest of the schedule change, but not while one of its blocks is going.</div></details></div>
           <div id="as-body">
-            <div class="row">
-              <div class="grow">Charging half hours a day<div class="note" style="margin:0" id="as-n-note">Planned where exporting pays least</div></div>
-              <span class="ctl"><input type="number" id="as-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
+            <div class="row as-status">
+              <div class="grow" id="as-sum" style="font-weight:500">Plan</div>
+              <button class="btn small" id="as-replan" title="Reads the rates and plans again now. While one of its charging blocks is going: as soon as it ends.">Plan again now</button>
             </div>
-            <div class="row">
-              <div class="grow">Charge<div class="note" style="margin:0">Where exporting pays least: the cheapest export half hours of each day. Before the high exports: straight before each run of the high export half hours (below), as long as the run, so the battery's full for them, then straight after it, as long again; the rest of the charging half hours where exporting pays least. Where it earns the most: the half hours whose charge your battery then exports for the most, less the charging, from the charge and discharge times (below) and every export rate; the battery's taken as empty a while before it plans (Look back, below), then filled by what's been plugged in since and emptied where exporting paid most (its charge isn't read, so the plan doesn't change as it does), and as charging in off-peak times and free electricity sessions, as it does then.</div></div>
-            </div>
-            <div class="row" style="margin-top:6px"><div class="seg" id="as-mode" role="group" aria-label="Charge"><button data-mode="cheapest">Where exporting pays least</button><button data-mode="before">Before the high exports</button><button data-mode="value">Where it earns the most</button></div></div>
-            <div class="row as-before as-value" hidden>
-              <div class="grow">Charge time needed<div class="note" style="margin:0">How long a full charge of your battery takes (Where it earns the most: how much each half hour's charge adds; empty: 1 h). Before the high exports: the most each charge before, and after, a high export run is. Without a discharge time, each is as long as the run (at most this); with one, as long as it takes to charge for the run. Empty: as long as the run (with a discharge time: the same as it).</div></div>
-              <span class="ctl"><input type="number" id="as-cneed" min="0" max="12" step="0.5" placeholder="Run" aria-label="Charge time needed (hours)"> h</span>
-            </div>
-            <div class="row as-before as-value" hidden>
-              <div class="grow">Discharge time needed<div class="note" style="margin:0">How long a full battery exports for (Where it earns the most: how much each half hour's export takes; empty: 2 h). Before the high exports: a high export run longer than this gets a top-up charge inside it, where the battery then exports the most (charge time needed for a full charge, else the same as this). Empty: none.</div></div>
-              <span class="ctl"><input type="number" id="as-dneed" min="0" max="12" step="0.5" placeholder="—" aria-label="Discharge time needed (hours)"> h</span>
-            </div>
-            <div class="row as-value-only" hidden>
-              <div class="grow">Look back<div class="note" style="margin:0">How far back it looks for how full your battery is when it plans: empty this long before, filled by what's been plugged in since (and off-peak times and free electricity sessions) and emptied where exporting paid most. 0: taken as empty when it plans.</div></div>
-              <span class="ctl"><input type="number" id="as-lookback" min="0" max="24" step="0.5" aria-label="Look back (hours)"> h</span>
-            </div>
-            <div class="row as-value-only" hidden><div class="grow">House load sensor<div class="note" style="margin:0">Your house's power use (W or kW). Its average for each hour of the day over the last 7 days (read every 6 hours) is what the house costs on the grid at the dearer import rate while the plan has the battery empty, so it charges where that's avoided as long as it's worth it. Needs the battery's size. <span id="as-load-st"></span></div></div></div>
-            <div class="row as-value-only" hidden style="margin-top:6px"><span class="picker" data-key="auto_load_entity" data-domain="sensor" data-class="power" data-units="W,kW,MW" data-none="None: the average typed below"></span></div>
-            <div class="row as-value-only" hidden>
-              <div class="grow">Average house use<div class="note" style="margin:0">Without a house load sensor (or while it can't be used): what your house uses in an average hour, in kW (e.g. 0.4 for 9.6 kWh a day), the same all day. Empty: none.</div></div>
-              <span class="ctl"><input type="number" id="as-load-kw" min="0" max="30" step="0.05" aria-label="Average house use (kW)"> kW</span>
-            </div>
-            <div class="row as-value-only" hidden>
-              <div class="grow">Battery size<div class="note" style="margin:0">Its usable kWh, to weigh the house's use against it: from a sensor (below) while it reads, else the size typed here. <span id="as-batt-st"></span></div></div>
-              <span class="ctl"><input type="number" id="as-batt-kwh" min="0.5" max="500" step="0.1" aria-label="Battery size (kWh)"> kWh</span>
-            </div>
-            <div class="row as-value-only" hidden style="margin-top:6px"><span class="picker" data-key="auto_battery_entity" data-domain="sensor" data-class="energy_storage,energy" data-units="kWh,Wh" data-none="None: the size typed above"></span></div>
-            <div class="row as-value-only" hidden>
-              <div class="grow">House use comes off the battery<div class="note" style="margin:0">Off: the house's use is only a cost while the plan has the battery empty; the battery % isn't changed by it. On: the plan also takes the house's average use off the battery each half hour it isn't charging (before any export), so it empties sooner.</div></div>
-              <label class="switch"><input type="checkbox" id="as-drain" aria-label="House use comes off the battery"><span></span></label>
-            </div>
-            <div class="row">
-              <div class="grow">Tomorrow's rates from<div class="note" style="margin:0">Until your supplier publishes tomorrow's export rates (Octopus: about 16:00), they're worked out from the day-ahead wholesale prices at this address (Nord Pool's UK auction, out about 10:00), as today's rates compare with today's wholesale prices. DATE is the day. Empty: a copy of today's rates instead. <details class="more"><summary>More</summary><div>Read for today and tomorrow, and looked for again every 15 minutes until tomorrow's are out. The fit (e.g. about 0.9 × wholesale, plus a little extra 16:00–19:00) is in the plan's Notes. If the address stops working, the Rates row below says so and tomorrow's are a copy of today's until it's fixed.</div></details></div></div>
-            </div>
-            <div class="row" style="margin-top:6px"><input type="text" id="as-future-url" placeholder="Empty: a copy of today's rates" style="width:100%" aria-label="Tomorrow's rates from (wholesale prices URL)"></div>
-            <div class="row">
-              <div class="grow">Axle export event bonus<div class="note" style="margin:0">What Axle Energy pays on top of your export rate for exporting during one of its export events, in p/kWh. Added to the export rates the plan uses in those half hours (it doesn't charge in them: they're saving sessions), so it keeps the battery full for them. 0: not counted.</div></div>
-              <span class="ctl"><input type="number" id="as-axle" min="0" max="1000" step="1" aria-label="Axle export event bonus (p/kWh)"> p</span>
-            </div>
-            <div class="row as-before as-value" hidden>
-              <div class="grow">High export half hours a day<div class="note" style="margin:0">The day's highest export rates, marked in orange on the schedule. Before the high exports: the charging goes around them. Where it earns the most: only marked, to see them (it uses every export rate either way). 0: none.</div></div>
-              <span class="ctl"><input type="number" id="as-high" min="0" max="48" step="1" aria-label="High export half hours a day"> × 30 min</span>
-            </div>
-            <div class="row"><div class="grow">Import rates<div class="note" style="margin:0">For the off-peak times</div></div></div>
-            <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_import_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
-            <div class="row"><div class="grow">Export rates<div class="note" style="margin:0">Where exporting pays least</div></div></div>
-            <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_export_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
-            <div class="row">
-              <div class="grow">Show export rates on the schedule<div class="note" style="margin:0">Each half hour's export rate as a coloured line along the top of each day: green where it's lowest, red where it's highest. Shown whether the automatic schedule is on or off.</div></div>
-              <label class="switch"><input type="checkbox" id="as-rates" aria-label="Show export rates on the schedule"><span></span></label>
-            </div>
-            <div class="row">
-              <div class="grow">Show high exports on the schedule<div class="note" style="margin:0">The high export half hours (High export half hours a day) in orange along the bottom of each day. Off: still marked and planned around, just not drawn.</div></div>
-              <label class="switch"><input type="checkbox" id="as-highs" aria-label="Show high exports on the schedule"><span></span></label>
-            </div>
-            <div class="row" style="margin-top:12px">
-              <div class="grow">Plan again<div class="note" style="margin:0">Reads the rates and plans again now, as if something had changed. Not while one of its charging blocks is going: then as soon as it ends.</div></div>
-              <button class="btn small" id="as-replan">Plan again now</button>
-            </div>
-            <details class="fold" id="as-plan" style="margin-top:12px"><summary id="as-sum">Plan</summary>
-              <div class="note" style="margin:8px 0">Half hour by half hour, from the look back (or now) to the end of the rates: the export rates (known, or estimated: from the wholesale prices or a copy of the day before's), the import rates, high exports, off-peak times and sessions, your slots that were skipped, what's plugged in (its own charging, a car charge or your slot) and, with Where it earns the most, how full it takes the battery to be and what it does. While it's off, what it would do.</div>
+            <details class="fold" id="as-plan" style="margin-top:4px"><summary>The plan, half hour by half hour</summary>
+              <div class="note" style="margin:8px 0">From the look back (or now) to the end of the rates: the export rates (known, or estimated: from the wholesale prices or a copy of the day before's), the import rates, high exports, off-peak times and sessions, your slots that were skipped, what's plugged in and, with Where it earns the most, how full it takes the battery to be and what it does. While it's off, what it would do.</div>
               <div class="msg-tools"><button class="btn small" id="as-table-copy">Copy</button></div>
               <pre id="as-table" style="font-size:12px;line-height:1.45;overflow-x:auto;white-space:pre;margin-top:8px">Reading it…</pre>
               <dl class="kv" id="as-info" style="margin-top:8px"></dl></details>
+
+            <details class="sec" id="as-sec-charge" data-open="1"><summary><span class="t">Charging</span><span class="s" id="as-s-charge"></span></summary>
+              <div class="row">
+                <div class="grow">How much<div class="note" style="margin:0">Half hours of charging each day</div></div>
+                <span class="ctl"><input type="number" id="as-n" min="1" max="48" step="1" aria-label="Half hours of charging"> × 30 min</span>
+              </div>
+              <div class="row"><div class="grow">Where<div class="note" style="margin:0" id="as-n-note">Planned where exporting pays least</div></div></div>
+              <div class="row" style="margin-top:6px"><div class="seg" id="as-mode" role="group" aria-label="Charge"><button data-mode="cheapest">Where exporting pays least</button><button data-mode="before">Before the high exports</button><button data-mode="value">Where it earns the most</button></div></div>
+              <div class="note" style="margin:6px 0 0"><details class="more"><summary>How each works</summary><div><b>Where exporting pays least:</b> the cheapest export half hours of each day. <b>Before the high exports:</b> straight before each run of the high export half hours (Rates, below), as long as the run, so the battery's full for them, then straight after it; the rest where exporting pays least. <b>Where it earns the most:</b> the half hours whose charge your battery then exports for the most, less the charging, from the charge and discharge times (Battery, below) and every export rate. The battery's taken as empty a while before it plans (Look back), filled by what's been plugged in since and emptied where exporting paid most, and as charging in off-peak times and free electricity sessions.</div></details></div>
+            </details>
+
+            <details class="sec as-before as-value" id="as-sec-batt" hidden><summary><span class="t">Battery</span><span class="s" id="as-s-batt"></span></summary>
+              <div class="row">
+                <div class="grow">Charge time needed<div class="note" style="margin:0">How long a full charge takes <details class="more"><summary>More</summary><div> Where it earns the most: how much each half hour's charge adds (empty: 1 h). Before the high exports: the most each charge before, and after, a high export run is; without a discharge time, each is as long as the run (at most this), with one, as long as it takes to charge for the run. Empty: as long as the run.</div></details></div></div>
+                <span class="ctl"><input type="number" id="as-cneed" min="0" max="12" step="0.5" placeholder="Run" aria-label="Charge time needed (hours)"> h</span>
+              </div>
+              <div class="row">
+                <div class="grow">Discharge time needed<div class="note" style="margin:0">How long a full battery exports for <details class="more"><summary>More</summary><div> Where it earns the most: how much each half hour's export takes (empty: 2 h). Before the high exports: a high export run longer than this gets a top-up charge inside it. Empty: none.</div></details></div></div>
+                <span class="ctl"><input type="number" id="as-dneed" min="0" max="12" step="0.5" placeholder="—" aria-label="Discharge time needed (hours)"> h</span>
+              </div>
+              <div class="row as-value-only" hidden>
+                <div class="grow">Size<div class="note" style="margin:0">Usable kWh: from a sensor while it reads, else as typed. <span id="as-batt-st"></span></div></div>
+                <span class="ctl"><input type="number" id="as-batt-kwh" min="0.5" max="500" step="0.1" aria-label="Battery size (kWh)"> kWh</span>
+              </div>
+              <div class="row as-value-only" hidden><div class="grow">Size sensor<div class="note" style="margin:0">kWh or Wh</div></div></div>
+              <div class="row as-value-only" hidden style="margin-top:6px"><span class="picker" data-key="auto_battery_entity" data-domain="sensor" data-class="energy_storage,energy" data-units="kWh,Wh" data-none="No sensor: the size typed above"></span></div>
+              <div class="row as-value-only" hidden>
+                <div class="grow">Look back<div class="note" style="margin:0">How long ago it takes the battery as empty <details class="more"><summary>More</summary><div> Then filled by what's been plugged in since (and off-peak times and free electricity sessions) and emptied where exporting paid most. 0: empty when it plans.</div></details></div></div>
+                <span class="ctl"><input type="number" id="as-lookback" min="0" max="24" step="0.5" aria-label="Look back (hours)"> h</span>
+              </div>
+            </details>
+
+            <details class="sec as-value-only" id="as-sec-house" hidden><summary><span class="t">House use</span><span class="s" id="as-s-house"></span></summary>
+              <div class="note" style="margin:6px 0 8px">What the house costs on the grid at the dearer rate while the plan has the battery empty, so it keeps some charge back where that pays. Needs the battery's size. <span id="as-load-st"></span></div>
+              <div class="row"><div class="grow">House load sensor<div class="note" style="margin:0">W or kW: its average for each hour over the last 7 days</div></div></div>
+              <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_load_entity" data-domain="sensor" data-class="power" data-units="W,kW,MW" data-none="No sensor: the average typed below"></span></div>
+              <div class="row">
+                <div class="grow">Average use<div class="note" style="margin:0">Without a sensor: kW, the same all day (0.4 ≈ 9.6 kWh a day)</div></div>
+                <span class="ctl"><input type="number" id="as-load-kw" min="0" max="30" step="0.05" aria-label="Average house use (kW)"> kW</span>
+              </div>
+              <div class="row">
+                <div class="grow">Comes off the battery<div class="note" style="margin:0">Off: only a cost while it's empty. On: also taken off the battery %, so it empties sooner</div></div>
+                <label class="switch"><input type="checkbox" id="as-drain" aria-label="House use comes off the battery"><span></span></label>
+              </div>
+            </details>
+
+            <details class="sec" id="as-sec-rates"><summary><span class="t">Rates</span><span class="s" id="as-s-rates"></span></summary>
+              <div class="note" style="margin:6px 0 8px">Octopus Energy's and EDF Energy's are found automatically, else Predbat's (<code>predbat.rates</code>, <code>predbat.rates_export</code>); or pick any entity with a list of rates.</div>
+              <div class="row"><div class="grow">Import rates<div class="note" style="margin:0">For the off-peak times</div></div></div>
+              <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_import_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
+              <div class="row"><div class="grow">Export rates</div></div>
+              <div class="row" style="margin-top:6px"><span class="picker" data-key="auto_export_entity" data-domain="event,sensor,predbat" data-fit="rates" data-none="Found automatically"></span></div>
+              <div class="row"><div class="grow">Tomorrow's rates from<div class="note" style="margin:0">Before your supplier publishes them (Octopus: about 16:00): from the day-ahead wholesale prices at this address (DATE is the day). Empty: a copy of today's. <details class="more"><summary>More</summary><div> Nord Pool's UK auction, out about 10:00, turned into export rates as today's compare with today's wholesale prices. Looked for every 15 minutes until tomorrow's are out. The fit is in the plan's Notes; if the address stops working, the plan's Rates row says so.</div></details></div></div></div>
+              <div class="row" style="margin-top:6px"><input type="text" id="as-future-url" placeholder="Empty: a copy of today's rates" style="width:100%" aria-label="Tomorrow's rates from (wholesale prices URL)"></div>
+              <div class="row">
+                <div class="grow">Axle export event bonus<div class="note" style="margin:0">Paid on top of your export rate in Axle Energy's export events, p/kWh. 0: not counted</div></div>
+                <span class="ctl"><input type="number" id="as-axle" min="0" max="1000" step="1" aria-label="Axle export event bonus (p/kWh)"> p</span>
+              </div>
+              <div class="row as-before as-value" hidden>
+                <div class="grow">High export half hours a day<div class="note" style="margin:0">The day's highest export rates. Before the high exports charges around them; Where it earns the most only marks them. 0: none</div></div>
+                <span class="ctl"><input type="number" id="as-high" min="0" max="48" step="1" aria-label="High export half hours a day"> × 30 min</span>
+              </div>
+            </details>
+
+            <details class="sec" id="as-sec-show"><summary><span class="t">On the schedule</span><span class="s" id="as-s-show"></span></summary>
+              <div class="row">
+                <div class="grow">Export rates<div class="note" style="margin:0">A coloured line along the top of each day: green lowest, red highest. On or off</div></div>
+                <label class="switch"><input type="checkbox" id="as-rates" aria-label="Show export rates on the schedule"><span></span></label>
+              </div>
+              <div class="row">
+                <div class="grow">High exports<div class="note" style="margin:0">In orange along the bottom of each day (still marked when hidden)</div></div>
+                <label class="switch"><input type="checkbox" id="as-highs" aria-label="Show high exports on the schedule"><span></span></label>
+              </div>
+            </details>
           </div>
         </div>
         <div class="card">
@@ -3182,6 +3206,7 @@ function drawAutoSched() {
   const on = !!(sim.edit && sim.edit.auto_sched_on);
   $('as-body').hidden = false;  // (its settings stay in view, on or off)
   const sch = auto.data && auto.data.schedule;
+  asSummaries(sch);
   // (off: what it would do if it were turned on, worked out on the schedule as it is)
   const p = on ? sch && sch.auto_plan : sch && sch.auto_preview;
   // (folded away, the summary says what's in it; open or not is remembered on this device)
@@ -3212,6 +3237,34 @@ function drawAutoSched() {
     [on ? 'Planned' : 'Worked out', p.planned_at ? dateTime(p.planned_at) : '—'],
   ]);
 }
+// Automatic schedule's sections: each folded one says in brief what's set in it
+function asSummaries(sch) {
+  const e = sim.edit || {};
+  const MODE = {cheapest: 'where exporting pays least', before: 'before the high exports', value: 'where it earns the most'};
+  const mode = ['before', 'value'].includes(e.auto_sched_mode) ? e.auto_sched_mode : 'cheapest';
+  const set = (id, parts, none) => { $(id).textContent = parts.filter(Boolean).join(' · ') || none || ''; };
+  const h = (v) => (v ? hmDur(v * 3600) : null);
+  set('as-s-charge', [`${hmDur((e.auto_sched_blocks ?? 12) * 1800)} a day`, MODE[mode]]);
+  const b = (sch && sch.battery_size) || {};
+  set('as-s-batt', [e.auto_charge_need_h ? `${h(e.auto_charge_need_h)} to charge` : null,
+    e.auto_discharge_need_h ? `${h(e.auto_discharge_need_h)} to export` : null,
+    mode === 'value' && b.kwh ? `${num(b.kwh, 1)} kWh` : null], 'not set');
+  const st = (sch && sch.house_load) || {};
+  set('as-s-house', [st.kw != null ? `${num(st.kw, 2)} kW ${st.from === 'sensor' ? 'from the sensor' : 'typed'}` : null,
+    st.kw != null && !b.kwh ? 'needs the battery size' : null, st.kw != null && e.auto_load_drain ? 'off the battery' : null], 'not counted');
+  const axle = e.auto_axle_bonus_p ?? 100;
+  set('as-s-rates', [e.auto_import_entity || e.auto_export_entity ? 'chosen' : 'found automatically',
+    e.auto_future_url ? 'tomorrow from wholesale prices' : 'tomorrow: a copy of today',
+    axle ? `Axle +${axle}p` : null, mode !== 'cheapest' && e.auto_high_blocks ? `${e.auto_high_blocks} high a day` : null]);
+  set('as-s-show', [e.auto_show_rates ? 'export rates' : null, e.auto_show_highs !== false ? 'high exports' : null], 'nothing');
+}
+// (open or folded is remembered on this device; Charging open the first time)
+document.querySelectorAll('#as-body details.sec').forEach((d) => {
+  let open = d.dataset.open === '1';
+  try { const v = localStorage.getItem('ocpp-charge-proxy-' + d.id); if (v) open = v === 'open'; } catch (e) {}
+  d.open = open;
+  d.addEventListener('toggle', () => { try { localStorage.setItem('ocpp-charge-proxy-' + d.id, d.open ? 'open' : 'closed'); } catch (e) {} });
+});
 // [[a, b, p], ...] half hours -> back to back ones together, with the best price
 function mergeRuns(list) {
   const out = [];

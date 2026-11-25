@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.120.0 — A tidier Automatic schedule card
+
+- **Improvement:** the Automatic schedule card is laid out in sections:
+  the plan's summary and Plan again now at the top, with the table folded
+  under them, then Charging, Battery, House use, Rates and On the
+  schedule. Each section folds to a line saying what's set in it, and
+  remembers on each device whether it's open. The long notes are shorter,
+  with the detail behind "More".
+
 ## 2.119.0 — Axle export events pay their bonus in the plan
 
 - **Feature:** Automatic schedule › **Axle export event bonus** (100p/kWh
