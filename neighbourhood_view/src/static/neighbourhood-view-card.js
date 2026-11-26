@@ -10,7 +10,8 @@
 
   // ---------- colours ----------
   const C = {
-    ground: '#e3e9d6', sideA: '#dcaa6c', sideB: '#c99256',
+    ground: '#e3e9d6', turf: '#86bf5f', turfDark: '#5f9a43',
+    soil: '#a8703f', soilDark: '#7d5130', rock: '#8a7d6e', rockDark: '#625849',
     grass: '#a6d98a', wood: '#8bcb73', pitch: '#94d07e', water: '#8fc6ec', paved: '#cdd1d7',
     road: '#62666e', roadLine: '#f5f5f5', pave: '#d9dbdf', kerb: '#b9bdc4', path: '#f2ede1', pathEdge: '#d6cfbd',
     rail: '#b2aca2', railLine: '#6f6a63', railTie: '#8d877e',
@@ -37,7 +38,6 @@
     ['#3f8f3d', '#2b6b2b', '#62b058'], ['#8cc04e', '#6a9a37', '#b5dc7c']];
   const ELEV = 35 * Math.PI / 180;  // how high above the ground it's looked at from
   const SE = Math.sin(ELEV), CE = Math.cos(ELEV);
-  const BASE = 9;  // the board's thickness, m
   const PAVE = 2.8;  // the pavement each side of a street, m
 
   function view(rot) {
@@ -64,6 +64,47 @@
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   }
   const pick = (arr, r) => arr[Math.floor(r * arr.length) % arr.length];
+
+  /* The torn edge of the chunk: points every few metres round a rounded square, pulled in by a
+   * wavy, jagged amount with the odd bite out of it, anticlockwise: [x, y, how deep the earth goes
+   * there, how much of that is soil (the rest rock)]. The same for the same place. */
+  function outline(H, seed) {
+    const R = 34, step = 4, L = 2 * H - 2 * R, perim = 4 * L + 2 * Math.PI * R;
+    const ph = [1, 2, 3, 4].map((i) => rnd(seed, i, 30 + i) * 6.28);
+    // the rounded square's point and inward direction, s metres round it (anticlockwise from the bottom left)
+    const at = (s) => {
+      const seg = L + Math.PI * R / 2;
+      const k = Math.floor(s / seg) % 4, t = s - k * seg;
+      const c = [[-H + R, -H], [H, -H + R], [H - R, H], [-H, H - R]][k];  // where side k starts
+      const d = [[1, 0], [0, 1], [-1, 0], [0, -1]][k];
+      const inw = [-d[1], d[0]];  // (left of the way round: inwards)
+      if (t <= L) return [c[0] + d[0] * t, c[1] + d[1] * t, inw[0], inw[1]];
+      // the corner after side k: a quarter circle round its centre
+      const cx = c[0] + d[0] * L + inw[0] * R, cy = c[1] + d[1] * L + inw[1] * R;
+      const a0 = Math.atan2(-inw[1], -inw[0]), a = a0 + (t - L) / R;
+      return [cx + Math.cos(a) * R, cy + Math.sin(a) * R, -Math.cos(a), -Math.sin(a)];
+    };
+    const out = [];
+    for (let s = 0; s < perim - step / 2; s += step) {
+      const [x, y, nx, ny] = at(s);
+      const n = 0.5 + 0.24 * Math.sin(s / 43 + ph[0]) + 0.16 * Math.sin(s / 15 + ph[1]);
+      let inset = 1.5 + 13 * Math.pow(Math.max(0, n), 1.6) + 2.6 * rnd(s, seed, 35);  // (jagged)
+      const bite = Math.floor(s / 26);
+      if (rnd(bite, seed, 36) < 0.1) inset += 7 * Math.sin(Math.PI * (s - bite * 26) / 26);
+      const depth = 13 + 5 * Math.sin(s / 23 + ph[2]) + 7 * rnd(s, seed, 37);  // (a ragged underside)
+      out.push([x + nx * inset, y + ny * inset, depth, 0.45 + 0.2 * Math.sin(s / 29 + ph[3])]);
+    }
+    return out;
+  }
+
+  function insideRing(x, y, ring) {
+    let hit = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) hit = !hit;
+    }
+    return hit;
+  }
 
   // a colour between two (t 0..1)
   function mix(a, b, t) {
@@ -279,16 +320,31 @@
   function draw(scene, opts = {}) {
     const V = view(opts.rot || 0), H = scene.half || 250, home = scene.home || {};
     const out = [];
-    // the board: its sides (those facing the viewer), then its top
-    const sq = [[-H, -H], [H, -H], [H, H], [-H, H]];
-    for (let i = 0; i < 4; i++) {
-      const p = sq[i], q = sq[(i + 1) % 4];
-      const [ax, aw] = V.n(q[1] - p[1], -(q[0] - p[0]));
+    // the chunk of ground, torn out: its earth sides (those facing the viewer, back ones first),
+    // then its top, with a lip of turf
+    const edge = outline(H, (scene.lat || 0) * 1000 + (scene.lon || 0) * 7000);
+    const sides = [];
+    for (let i = 0; i < edge.length; i++) {
+      const p = edge[i], q = edge[(i + 1) % edge.length];
+      const [, aw] = V.n(q[1] - p[1], -(q[0] - p[0]));
       if (aw >= 0) continue;
-      out.push(poly([V.p(p[0], p[1], 0), V.p(q[0], q[1], 0), V.p(q[0], q[1], -BASE), V.p(p[0], p[1], -BASE)], ax < 0 ? C.sideA : C.sideB));
+      const t = shadeOf(V, q[1] - p[1], -(q[0] - p[0]));
+      const turf = 0.9, mid = (p[2] + q[2]) / 2;
+      const quad = (z0p, z0q, z1p, z1q, col) => poly([V.p(p[0], p[1], z0p), V.p(q[0], q[1], z0q), V.p(q[0], q[1], z1q), V.p(p[0], p[1], z1p)], col, ` stroke="${col}" stroke-width=".4" stroke-linejoin="round"`);
+      sides.push([V.d((p[0] + q[0]) / 2, (p[1] + q[1]) / 2),
+        quad(-turf, -turf, -p[2], -q[2], mix(C.rock, C.rockDark, t))
+        + quad(-turf, -turf, -p[2] * p[3], -q[2] * q[3], mix(C.soil, C.soilDark, t))
+        + quad(0, 0, -turf, -turf, mix(C.turf, C.turfDark, t))
+        + (mid > 10 && rnd(p[0], p[1], 21) < 0.35 ? (() => {
+          // a stone in the earth
+          const a = V.p((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, -mid * (0.55 + 0.35 * rnd(p[0], p[1], 23))), r = 0.6 + rnd(p[0], p[1], 22) * 1.2;
+          return `<ellipse cx="${f(a[0])}" cy="${f(a[1])}" rx="${f(r)}" ry="${f(r * 0.7)}" fill="${mix(C.rockDark, '#000000', 0.15)}"/>`;
+        })() : '')]);
     }
-    const topPts = sq.map(([x, y]) => V.p(x, y, 0));
-    out.push(poly(topPts, C.ground));
+    sides.sort((a, b) => b[0] - a[0]);
+    for (const sd of sides) out.push(sd[1]);
+    const topPts = edge.map(([x, y]) => V.p(x, y, 0));
+    out.push(poly(topPts, C.ground, ` stroke="${C.turf}" stroke-width="1.6" stroke-linejoin="round"`));
     // the ground: areas, water, roads, railways (kept to the board: a road's end doesn't stick out)
     const clip = 'nvclip' + Math.random().toString(36).slice(2, 8);
     out.push(`<clipPath id="${clip}"><polygon points="${pts(topPts)}"/></clipPath><g clip-path="url(#${clip})">`);
@@ -314,15 +370,18 @@
     // the buildings and trees, back to front
     const things = [];
     let pin = null;
+    // (only what's on the chunk: a building the torn edge cuts through isn't drawn)
+    const on = (x, y) => insideRing(x, y, edge);
     for (const b of scene.buildings || []) {
       const [cx, cy] = centroid(b.p), isHome = home.id != null && b.id === home.id;
+      if (!isHome && !b.p.every(([x, y]) => on(x, y))) continue;
       const d = building(V, b, isHome);
       if (isHome) pin = d.top;
       const attrs = opts.pick ? ` data-id="${b.id}" class="bld"` : '';
       things.push([V.d(cx, cy), `<g${attrs}>${d.svg}</g>`]);
     }
-    for (const t of scene.trees || []) things.push([V.d(t[0], t[1]), tree(V, t)]);
-    for (const c of scene.cars || []) things.push([V.d(c[0], c[1]), car(V, c)]);
+    for (const t of scene.trees || []) if (on(t[0], t[1])) things.push([V.d(t[0], t[1]), tree(V, t)]);
+    for (const c of scene.cars || []) if (on(c[0], c[1])) things.push([V.d(c[0], c[1]), car(V, c)]);
     things.sort((a, b) => b[0] - a[0]);
     for (const t of things) out.push(t[1]);
     // the pin over your home
@@ -339,7 +398,7 @@
     }
     // the box around it all (for the viewBox)
     const corners = [];
-    for (const [x, y] of sq) corners.push(V.p(x, y, 0), V.p(x, y, -BASE));
+    for (const [x, y, dp] of edge) corners.push(V.p(x, y, 0), V.p(x, y, -dp));
     const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]).concat([pin[1] - H * 0.2]);
     const m = H * 0.04, x0 = Math.min(...xs) - m, y0 = Math.min(...ys) - m, w = Math.max(...xs) - x0 + m, h = Math.max(...ys) - y0 + m * 2.2;
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1] - H * 0.06 / Math.pow(opts.zoom || 1, 0.9))}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" role="img" aria-label="The streets around your home">${out.join('')}</svg>`;

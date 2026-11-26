@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 — Torn out of the ground
+
+- **Improvement:** the map's edge is no longer a straight-sided board: the
+  square looks torn out of the ground, with a ragged, rounded edge, a lip
+  of turf, and soil and rock down its sides. Buildings, trees and cars the
+  edge would cut through aren't drawn.
+
 ## 0.2.0 — Like a video game town
 
 - **Improvement:** houses each get their own look: brick, render or stone

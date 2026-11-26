@@ -43,6 +43,10 @@ trees it has, drawn like a video game's town:
 - **Cars** parked along the kerbs, in different colours (not near
   junctions).
 
+- **The edge:** the square looks torn out of the ground, with a ragged
+  edge, a lip of turf, and soil and rock (with the odd stone) down its
+  sides. Buildings the torn edge would cut through aren't drawn.
+
 What's made up (each house's colours, the trees and cars added, the
 storeys where none are known) is the same every time, so nothing moves
 about between visits. Your house is drawn in blue.
