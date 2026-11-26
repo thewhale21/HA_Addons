@@ -590,13 +590,16 @@
     for (const r of streets) {
       for (let i = 0; i < r.p.length - 1; i++) {
         const [ax, ay] = r.p[i], [bx, by] = r.p[i + 1], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 6));
+        // (with the street's way on the screen, so a bridge can leave along it)
+        const sa = V.p(ax, ay, 0), sb = V.p(bx, by, 0), sl = Math.hypot(sb[0] - sa[0], sb[1] - sa[1]) || 1;
+        const ddx = (sb[0] - sa[0]) / sl, ddy = (sb[1] - sa[1]) / sl;
         for (let k = 0; k <= n; k++) {
           const x = ax + (bx - ax) * k / n, y = ay + (by - ay) * k / n;
-          if (insideRing(x, y, edge)) ends.push(V.p(x, y, 0));
+          if (insideRing(x, y, edge)) ends.push(V.p(x, y, 0).concat([ddx, ddy]));
         }
       }
     }
-    if (!ends.length) for (const [x, y] of edge) ends.push(V.p(x * 0.97, y * 0.97, 0));
+    if (!ends.length) for (const [x, y] of edge) ends.push(V.p(x * 0.97, y * 0.97, 0).concat([0, 0]));
     // (at night, with someone home: a warm glow on the ground round your house)
     if (opts.isHome && CTX.night && CTX.homeLit && people.length) {
       const g = V.p(home.x || 0, home.y || 0, 0);
@@ -690,43 +693,53 @@
     return out;
   }
 
-  /* A bridge from a on your map to b on another's (screen points, at ground level), sa and sb
-   * their scales: a road deck between pavements, on a stone span, with railings. */
+  /* A bridge from a on your map to b on another's (screen points at ground level, with their
+   * street's way on the screen [x, y, dx, dy]), sa and sb their scales: an S-shaped road that
+   * leaves each map along its street and arches gently over the gap, in the roads' own colours,
+   * with a slim side and low rails so it doesn't shout. */
   function bridge(a, b, sa, sb, night) {
     const col = (c) => (night ? mix(c, '#0b1736', 0.6) : c);
-    const dx = b[0] - a[0], dy = b[1] - a[1], gl = Math.hypot(dx, dy / SE) || 1;
-    // (across the bridge, flat on the ground, per metre; + is the far side when it points up the screen)
-    let px = (dy / SE) / gl, py = (-dx * SE) / gl;
-    if (py > 0) { px = -px; py = -py; }
-    const W = 5.5, at = (p, s, k) => [p[0] + px * W * s * k, p[1] + py * W * s * k];
-    const af = at(a, sa, 1), bf = at(b, sb, 1), an = at(a, sa, -1), bn = at(b, sb, -1);
-    const down = (p, s, m) => [p[0], p[1] + m * CE * s];
-    const out = [];
-    // the span under the deck (its near face), with an arch cut out
-    out.push(poly([an, bn, down(bn, sb, 3.2), down(an, sa, 3.2)], col('#9c8f7f'), ` stroke="${col('#7f7366')}" stroke-width=".5" stroke-linejoin="round"`));
-    const n = 24, arch = [];
-    for (let i = 0; i <= n; i++) {
-      const t = 0.08 + 0.84 * i / n, s = sa + (sb - sa) * t, p = [an[0] + (bn[0] - an[0]) * t, an[1] + (bn[1] - an[1]) * t];
-      arch.push(down(p, s, 3.2 - 2.2 * Math.sin(Math.PI * (t - 0.08) / 0.84)));
+    const cx = b[0] - a[0], cy = b[1] - a[1], dist = Math.hypot(cx, cy) || 1, ux = cx / dist, uy = cy / dist;
+    // (each end's way out: along its street, towards the other end, eased a little towards it)
+    const way = (p, tx, ty) => {
+      let dx = p[2] || 0, dy = p[3] || 0;
+      if (dx * tx + dy * ty < 0) { dx = -dx; dy = -dy; }
+      dx = dx * 0.7 + tx * 0.3; dy = dy * 0.7 + ty * 0.3;
+      const l = Math.hypot(dx, dy) || 1;
+      return [dx / l, dy / l];
+    };
+    const ta = way(a, ux, uy), tb = way(b, -ux, -uy), k = dist * 0.45;
+    const P1 = [a[0] + ta[0] * k, a[1] + ta[1] * k], P2 = [b[0] + tb[0] * k, b[1] + tb[1] * k];
+    const N = 36, mid = [], L = [], R = [], Ld = [], Rd = [], Lr = [], Rr = [];
+    const W = 3.6, rise = 2.6, thick = 1.3, rail = 0.9;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, u = 1 - t, s = sa + (sb - sa) * t;
+      const x = u * u * u * a[0] + 3 * u * u * t * P1[0] + 3 * u * t * t * P2[0] + t * t * t * b[0];
+      const y0 = u * u * u * a[1] + 3 * u * u * t * P1[1] + 3 * u * t * t * P2[1] + t * t * t * b[1];
+      const dx = 3 * u * u * (P1[0] - a[0]) + 6 * u * t * (P2[0] - P1[0]) + 3 * t * t * (b[0] - P2[0]);
+      const dy = 3 * u * u * (P1[1] - a[1]) + 6 * u * t * (P2[1] - P1[1]) + 3 * t * t * (b[1] - P2[1]);
+      // (across it, flat on the ground, a metre long at this scale)
+      const gl = Math.hypot(dx, dy / SE) || 1, px = (dy / SE) / gl * s, py = (-dx * SE) / gl * s;
+      const y = y0 - rise * Math.sin(Math.PI * t) * CE * s;
+      mid.push([x, y]);
+      L.push([x + px * W, y + py * W]); R.push([x - px * W, y - py * W]);
+      Ld.push([x + px * W, y + py * W + thick * CE * s]); Rd.push([x - px * W, y - py * W + thick * CE * s]);
+      Lr.push([x + px * W, y + py * W - rail * CE * s]); Rr.push([x - px * W, y - py * W - rail * CE * s]);
     }
-    out.push(`<polyline points="${pts(arch)}" fill="none" stroke="${col('#6f6458')}" stroke-width=".7" stroke-linejoin="round"/>`);
-    // the deck: pavements, road, its line
-    out.push(poly([af, bf, bn, an], col(C.kerb)));
-    const ri = (p, s, k) => at(p, s, k * 0.62);
-    out.push(poly([ri(a, sa, 1), ri(b, sb, 1), ri(b, sb, -1), ri(a, sa, -1)], col(C.road)));
-    out.push(`<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="${col(C.roadLine)}" stroke-width=".35" stroke-dasharray="2.5 3"/>`);
-    // railings: posts and a top rail, far side then near
-    for (const [p, q] of [[af, bf], [an, bn]]) {
-      const posts = Math.max(2, Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]) / 4)), tops = [];
-      let s = '';
-      for (let i = 0; i <= posts; i++) {
-        const t = i / posts, sc = sa + (sb - sa) * t, x = p[0] + (q[0] - p[0]) * t, y = p[1] + (q[1] - p[1]) * t, top = y - 1.3 * CE * sc;
-        s += `<line x1="${f(x)}" y1="${f(y)}" x2="${f(x)}" y2="${f(top)}" stroke="${col('#7a6a58')}" stroke-width=".45"/>`;
-        tops.push([x, top]);
-      }
-      out.push(s + `<polyline points="${pts(tops)}" fill="none" stroke="${col('#efe8da')}" stroke-width=".6" stroke-linecap="round"/>`);
-    }
-    return `<g class="nvbridge">${out.join('')}</g>`;
+    const side = (top, down) => poly(top.concat(down.slice().reverse()), col('#8c8173'));
+    const inner = (k2) => mid.map(([x, y], i) => [x + (L[i][0] - x) * k2, y + (L[i][1] - y) * k2]).concat(mid.map(([x, y], i) => [x + (R[i][0] - x) * k2, y + (R[i][1] - y) * k2]).reverse());
+    return `<g class="nvbridge">`
+      // its slim sides (both: an S shows each in turn), then the deck: kerbs, the road, its line
+      + side(L, Ld) + side(R, Rd)
+      + poly(L.concat(R.slice().reverse()), col(C.kerb))
+      + poly(inner(0.72), col(C.road))
+      + `<polyline points="${pts(mid)}" fill="none" stroke="${col(C.roadLine)}" stroke-width=".3" stroke-dasharray="2.5 4" opacity=".85"/>`
+      // low rails
+      + `<polyline points="${pts(Lr)}" fill="none" stroke="${col('#f1ece2')}" stroke-width=".35" opacity=".8" stroke-linejoin="round"/>`
+      + `<polyline points="${pts(Rr)}" fill="none" stroke="${col('#f1ece2')}" stroke-width=".35" opacity=".8" stroke-linejoin="round"/>`
+      + Lr.filter((q, i) => i % 3 === 0).map((q, i) => `<line x1="${f(q[0])}" y1="${f(q[1])}" x2="${f(L[i * 3][0])}" y2="${f(L[i * 3][1])}" stroke="${col('#cfc6b6')}" stroke-width=".2"/>`).join('')
+      + Rr.filter((q, i) => i % 3 === 0).map((q, i) => `<line x1="${f(q[0])}" y1="${f(q[1])}" x2="${f(R[i * 3][0])}" y2="${f(R[i * 3][1])}" stroke="${col('#cfc6b6')}" stroke-width=".2"/>`).join('')
+      + '</g>';
   }
 
   /* The nearest pair of points between two sets (a bridge's ends): each cut to those nearest the
@@ -775,7 +788,7 @@
       groups.push(`<g class="nvisl" data-k="${esc(I.key)}" data-f="${f(dx + I.pin[0] * sc)} ${f(dy + I.pin[1] * sc)}" transform="translate(${f(dx)} ${f(dy)}) scale(${sc.toFixed(4)})">${I.svg}</g>`);
       boxes.push([tx, ty, tx + bw * sc, ty + bh * sc]);
       // a bridge from the nearest of your streets to the nearest of its
-      const ends = I.ends.map((p) => [dx + p[0] * sc, dy + p[1] * sc]);
+      const ends = I.ends.map((p) => [dx + p[0] * sc, dy + p[1] * sc, p[2], p[3]]);
       const pair = nearestPair(homeI.ends, ends, hc, [tx + bw * sc / 2, ty + bh * sc / 2]);
       if (pair) bridges.push(bridge(pair[0], pair[1], 1, sc, !!live.night));
     };

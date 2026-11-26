@@ -5,7 +5,7 @@ subscription. `CLAUDE.md` has the working rules; this file has the
 background: what each add-on does, how the owner uses them, what was
 decided and why, and what's still open.
 
-**Last updated:** 26 Nov 2026 (neighbourhood_view 0.10.0).
+**Last updated:** 26 Nov 2026 (neighbourhood_view 0.10.1).
 
 **Keep this file current.** Whoever changes the repository (any AI agent
 or person) updates this file in the same commit when the change affects
@@ -64,7 +64,7 @@ anything below, and bumps the "Last updated" line.
 | `octopus_charge_pack` | 0.10.8 | Octopus API helpers; 0.10.8 drops old `device_id`/`poll_seconds` options via the Supervisor API (`POST http://supervisor/addons/self/options`). |
 | `sigenergy_evdc_soc_range_manager` | 0.44.0 | "SigEnergy DC Charger": keeps the EVDC car between limits on a weekly schedule. Limits are named **Maximum charge** and **Keep at least**; an entry can be Maximum charge / Keep at least / Both / Charge only / Discharge only (one-way entries stay within the limits); entries may overlap; start == end means 24 hours; the week view has three lanes (one-way entries in the middle). The Overview's Car SoC chart shows charge/discharge only as a coloured strip along the bottom (0.43.0; points in `soc_history.json` carry a 6th value, "charge"/"discharge", only then). Notifications (0.44.0): the notify service box suggests HA's notify services (`/api/notify_services`) with a Test button; **What to send** (`notify_level`: info = everything incl. starts/stops, warning, error, none; default info); warnings/errors in its log are sent too (`src/log_notify.py`, ported from OCPP's). about 105 tests (test_api needs pytest-asyncio; one notify test needs aiohttp). |
 | `tigo_solar` | 0.7.0 | Tigo panel data: roof view (reclaimed in brackets), drag-to-select chart, quick-select per string, per-panel estimates every minute (system power shared by interpolated reading shares), backfill of real 15-minute per-panel readings via Tigo's `lastvalue` (`resourceId=lastValue-{date}-{pin|reclaimedPower}-{HH:MM}`, about 2 requests per slot, 3 s apart; trusted after 3 answers within 35%/30 W of system power, off after 3 misses), fixed scale, hover tooltip, reclaimed %, "By the time of day" and "Through the year" heatmap / 3D surface with Month/Year and 3D zoom. 22 tests. |
-| `neighbourhood_view` | 0.10.0 | New (26 Nov 2026): an isometric SVG drawing of the streets (150 m by default, a setting) around your home from OpenStreetMap (postcodes.io for the postcode, Overpass for buildings/roads/areas/trees and the house-number lookup), as the add-on's page and a dashboard card. See "Neighbourhood View" below. |
+| `neighbourhood_view` | 0.10.1 | New (26 Nov 2026): an isometric SVG drawing of the streets (150 m by default, a setting) around your home from OpenStreetMap (postcodes.io for the postcode, Overpass for buildings/roads/areas/trees and the house-number lookup), as the add-on's page and a dashboard card. See "Neighbourhood View" below. |
 | `heat_loss_calculator`, `predbat_dashboard`, `stellantis_ev_stats` | 0.7.1, 0.3.2, 0.3.2 | Not worked on recently. |
 | `addon_template` | 0.1.7 | Start new add-ons with `python scripts/new_addon.py`. |
 
@@ -233,6 +233,10 @@ quarter turns are allowed), about 250 m around, add-on and card together.
   overrides, for tests), AUTUMN/WINTER/BLOSSOM tree palettes (conifers stay green), duller ground
   in winter; `CTX.snow` (weather snowy / snowy-rainy) whitens roofs, ground, grass areas, verges
   and trees via `snowy()`.
+- 0.10.1 (owner: bridges stood out; make them S-shaped): `island().ends` carry the street's screen
+  direction [x, y, dx, dy]; `bridge()` is a cubic Bézier leaving each end along its street (70%
+  street, 30% towards the other end), arching 2.6 m, 3.6 m half-width, in kerb/road colours with
+  slim sides and low rails.
 - Ideas not done: road names, building colours from OSM tags, live overlays (e.g. the car, the
   battery).
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1 — Curvier, quieter bridges
+
+- **Improvement:** the bridges to other places are now a curving road (an S
+  where the streets don't line up) that leaves each map along its street
+  and arches gently over the gap. They're narrower, in the roads' own
+  colours, with a slim side and low rails, so they blend in.
 ## 0.10.0 — Seasons, snow, birds and zebra crossings
 
 - **Feature:** zebra crossings on each street just back from junctions.
