@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>try { if (localStorage.getItem('neighbourhood-view-theme') === 'basic') document.documentElement.classList.add('basic'); } catch (e) {}</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neighbourhood View</title>
+<style>
+  /* Colours follow the Home Assistant theme when the page is opened in the
+     HA sidebar (see applyHaTheme), otherwise light/dark from the browser. */
+  :root {
+    --bg: #fafafa; --card: #ffffff; --text: #212121; --text2: #727272;
+    --divider: rgba(0,0,0,0.12); --primary: #03a9f4; --on-primary: #fff;
+    --hover: rgba(0,0,0,0.04); --code: #f3f3f3;
+    --ok: #43a047; --warn: #f57c00; --err: #db4437; --info: #039be5; --violet: #8e24aa;
+    --radius: 12px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
+      --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
+      --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --text2: #9b9b9b;
+    --divider: rgba(225,225,225,0.12); --hover: rgba(255,255,255,0.05); --code: #262626;
+    --ok: #66bb6a; --warn: #ffa726; --err: #ef5350; --info: #42a5f5; --violet: #ba68c8;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.45 Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5; background: var(--bg);
+    border-bottom: 1px solid var(--divider);
+  }
+  .bar { max-width: 1100px; margin: 0 auto; padding: 12px 16px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .bar h1 { font-size: 20px; font-weight: 400; margin: 0; flex: 1; min-width: 180px; }
+  .live { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+  nav { max-width: 1100px; margin: 0 auto; padding: 0 8px; display: flex; overflow-x: auto; }
+  nav button {
+    background: none; border: 0; color: var(--text2); font: inherit; font-weight: 500;
+    padding: 12px 14px 10px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap;
+  }
+  nav button[aria-selected="true"] { color: var(--primary); border-bottom-color: var(--primary); }
+  nav button * { pointer-events: none; }
+  nav .ti { display: none; width: 22px; height: 22px; fill: currentColor; }
+  @media (max-width: 640px) {
+    nav { padding: 0; }
+    nav button { flex: 1 1 0; min-width: 0; padding: 8px 2px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+      font-size: 10.5px; font-weight: 500; }
+    nav button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    nav .ti { display: block; }
+    .bar { padding-bottom: 4px; }
+  }
+  /* Health status: a dot the size of the title, left of it */
+  .status-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; cursor: pointer;
+    width: 28px; height: 28px; padding: 0; margin-right: -4px; border: 0; border-radius: 50%; background: none; }
+  .status-btn:hover { background: var(--hover); }
+  .status-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .status-btn .dot { width: 16px; height: 16px; }
+  .status-btn .dot.ok { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); }
+  .status-btn .dot.warn { box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 25%, transparent); }
+  .status-btn .dot.err { box-shadow: 0 0 0 4px color-mix(in srgb, var(--err) 25%, transparent); }
+  .issues { margin: 0; padding-left: 18px; } .issues li { margin: 4px 0; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  section[hidden] { display: none; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .card {
+    background: var(--card); border-radius: var(--radius); padding: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--divider);
+    min-width: 0;
+  }
+  @media (min-width: 760px) { .span2 { grid-column: span 2; } }
+  .card h2 { font-size: 16px; font-weight: 500; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card h2 .seg, .card h2 label { font-size: 13px; font-weight: 400; }
+  .ctl { display: inline-flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
+  .card h2 .spacer { flex: 1; }
+  .stack { display: grid; gap: 16px; }
+  .label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
+  .big { font-size: 26px; font-weight: 400; margin-top: 2px; }
+  .sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .muted { color: var(--text2); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--text2); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.err { background: var(--err); } .dot.warn { background: var(--warn); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500; background: var(--hover); color: var(--text2); white-space: nowrap;
+  }
+  .chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.err { color: var(--err); } .chip.info { color: var(--info); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+  .kv dt { color: var(--text2); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .row + .row { margin-top: 14px; }
+  .row .grow { flex: 1; min-width: 120px; }
+  .row[hidden] { display: none; }
+  button.btn {
+    font: inherit; font-weight: 500; border-radius: 8px; padding: 6px 14px; cursor: pointer;
+    border: 1px solid var(--divider); background: var(--card); color: var(--primary);
+  }
+  button.btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  button.btn:disabled { opacity: .5; cursor: default; }
+  button.small { padding: 2px 10px; font-size: 12px; }
+  input[type="number"], input[type="search"], input[type="date"], .ctl input[type="text"], select {
+    font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 10px; min-width: 0;
+  }
+  input[type="number"] { width: 90px; }
+  .seg { display: inline-flex; border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+  .seg button { font: inherit; border: 0; background: none; color: var(--text); padding: 6px 11px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--divider); }
+  .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  details.more { display: inline; }
+  details.more > summary { display: inline; cursor: pointer; color: var(--primary); list-style: none; white-space: nowrap; }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more[open] > summary { display: none; }
+  details.more > div { display: inline; }
+  .subnav { max-width: 1100px; margin: 0 auto 4px; display: flex; gap: 8px; }
+  .subnav[hidden] { display: none; }
+  .subnav button { font: inherit; font-size: 13px; border: 1px solid var(--divider); background: none; color: var(--text2);
+    padding: 5px 12px; border-radius: 16px; cursor: pointer; }
+  .subnav button[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+  .section-title { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 -4px; }
+  .picker { display: block; width: 100%; min-width: 0; }
+  .picker select, .picker input { width: 100%; max-width: 100%; }
+  /* sensor pickers: type to filter */
+  .combo { position: relative; display: block; }
+  .combo input, .picker input[type="text"] { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--divider);
+    border-radius: 8px; padding: 6px 30px 6px 10px; box-sizing: border-box; text-overflow: ellipsis; }
+  .combo::after { content: ''; position: absolute; right: 12px; top: 50%; margin-top: -3px; pointer-events: none;
+    border: 5px solid transparent; border-top-color: var(--text2); border-bottom: 0; }
+  .combo-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; margin: 0; padding: 4px 0; list-style: none;
+    max-height: 280px; overflow-y: auto; background: var(--card); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25), 0 0 0 1px var(--divider); }
+  .combo-list li { padding: 6px 10px; cursor: pointer; overflow-wrap: anywhere; }
+  .combo-list li .sub { color: var(--text2); font-size: 12px; }
+  .combo-list li.active { background: var(--hover); box-shadow: inset 3px 0 0 var(--primary); }
+  .combo-list li.sel { font-weight: 600; }
+  .combo-list li.empty { color: var(--text2); cursor: default; }
+  .switch { position: relative; width: 44px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
+  .switch span { position: absolute; inset: 0; background: var(--divider); border-radius: 999px; transition: background .15s; }
+  .switch span::after {
+    content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s;
+  }
+  .switch input:checked + span { background: var(--primary); }
+  .switch input:checked + span::after { transform: translateX(20px); }
+  .note { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #323232; color: #fff;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10; }
+  .toast.show { opacity: 1; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--divider); vertical-align: top; }
+  th { font-weight: 500; color: var(--text2); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .table-wrap { overflow-x: auto; }
+  pre { margin: 0 0 8px; padding: 10px; background: var(--code); border-radius: 8px; overflow-x: auto; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; }
+  .empty { color: var(--text2); padding: 12px 0; }
+  .error-banner { background: var(--err); color: #fff; padding: 8px 16px; text-align: center; font-size: 13px; display: none; }
+  @media (max-width: 520px) {
+    .big { font-size: 22px; }
+  }
+  .logs { max-height: 60vh; overflow: auto; white-space: pre; }
+
+
+  /* ===== The overhaul: banners at the top of each tab, calmer cards, less to scan ===== */
+  :root { --hero2: #5c6bc0; }  /* the banners fade from --primary to this */
+  .card h2 { font-size: 15px; letter-spacing: .1px; }
+  .card > .note:first-of-type { line-height: 1.5; }
+  .stack { gap: 18px; }
+  .section-title { margin: 14px 2px -6px; }
+  /* Cards that sit side by side without stretching to each other's height */
+  .masonry { columns: 2 440px; column-gap: 16px; }
+  .masonry.three { columns: 3 320px; }
+  .masonry > .card { break-inside: avoid; margin: 0 0 16px; display: block; width: 100%; }
+  .masonry > .card:last-child { margin-bottom: 0; }
+  /* The banner */
+  .bnr { position: relative; isolation: isolate; color: #fff; border-radius: var(--radius); padding: 16px 20px 18px;
+    background: linear-gradient(120deg, var(--primary) 0%, color-mix(in srgb, var(--hero2) 82%, #000) 100%);
+    box-shadow: 0 4px 18px -6px color-mix(in srgb, var(--primary) 55%, transparent); }
+  .bnr::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit;
+    background: radial-gradient(circle at 92% -30%, rgba(255,255,255,.28), transparent 45%), radial-gradient(circle at 0% 130%, rgba(255,255,255,.14), transparent 40%); }
+  .bnr.warn { background: linear-gradient(120deg, #fb8c00, #c62828); }
+  .bnr.err { background: linear-gradient(120deg, #e53935, #6a1b1b); }
+  .bnr.good { background: linear-gradient(120deg, #43a047, color-mix(in srgb, var(--hero2) 75%, #000)); }
+  .bnr.charging { background: linear-gradient(120deg, #43a047, color-mix(in srgb, var(--hero2) 80%, #000)); }
+  .bnr.idle { background: linear-gradient(120deg, #607d8b, #37474f); }
+  .bnr svg { width: 18px; height: 18px; flex: none; }
+  .bnr .top { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .bnr .top .spacer { flex: 1; }
+  .bnr .ttl { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 500; }
+  .bnr .main { display: flex; gap: 18px 28px; flex-wrap: wrap; align-items: stretch; }
+  .bnr .lead { flex: 1 1 300px; display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
+  .bnr .ring { width: 54px; height: 54px; flex: none; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(255,255,255,.18); box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); }
+  .bnr .ring svg { width: 26px; height: 26px; }
+  .bnr .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+  .bnr .hb { font-size: 28px; font-weight: 500; line-height: 1.15; margin: 2px 0 4px; }
+  .bnr .sm { font-size: 12.5px; opacity: .9; line-height: 1.45; }
+  .bnr .side { flex: 1 1 300px; padding-left: 26px; border-left: 1px solid rgba(255,255,255,.25); min-width: 0; }
+  @media (max-width: 720px) { .bnr .side { padding-left: 0; border-left: 0; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.25); flex-basis: 100%; } }
+  .bnr .label, .bnr .sub, .bnr .note, .bnr .muted, .bnr .range-labels { color: rgba(255,255,255,.85); }
+  :root:not(.basic) .bnr .big, :root:not(.basic) .bnr #o-status { color: #fff; }
+  :root:not(.basic) .bnr .chip { background: rgba(255,255,255,.94); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .bnr .chip:not(.ok):not(.warn):not(.err):not(.info) { color: #455a64; }
+  .bnr .btn { background: rgba(255,255,255,.14); color: #fff; border-color: rgba(255,255,255,.4); border-radius: 999px; }
+  .bnr .btn:hover:not(:disabled) { background: #fff; color: color-mix(in srgb, var(--primary) 70%, #000); }
+  .bnr .btn.primary { background: #fff; color: color-mix(in srgb, var(--primary) 75%, #000); border-color: #fff; }
+  .bnr .seg { border: 0; gap: 6px; overflow: visible; }
+  .bnr .seg button { border: 1px solid rgba(255,255,255,.38) !important; border-radius: 999px; color: #fff; background: rgba(255,255,255,.12); padding: 5px 12px; }
+  .bnr .seg button[aria-pressed="true"] { background: #fff; color: color-mix(in srgb, var(--primary) 75%, #000); }
+  .bnr select, .bnr input[type="number"] { background: rgba(255,255,255,.95); color: #263238; border-color: transparent; }
+  .bnr details.more > summary { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
+  .bnr .kv dt { color: rgba(255,255,255,.8); } .bnr .kv dd { color: #fff; }
+  .bnr .kv { gap: 7px 18px; font-size: 14px; }
+  .bnr .range { background: rgba(255,255,255,.22); box-shadow: none; height: 12px; }
+  .bnr .range .win { background: rgba(255,255,255,.6); }
+  .bnr .range .mark { background: #fff; box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 60%, #000); }
+  .bnr .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .bnr .stat { background: rgba(255,255,255,.14); border-radius: 12px; padding: 10px 14px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); min-width: 0; }
+  .bnr .stat .big { font-size: 24px; }
+  .bnr .stat .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bnr .hold { gap: 8px; }
+  .bnr .ctl .btn { min-width: 116px; }
+  .bnr-result:empty, .bnr-result[hidden] { display: none; }
+  /* Debug: long log lines wrap */
+  .logs { white-space: pre-wrap; overflow-wrap: anywhere; }
+  /* The basic theme (Settings › Appearance): the banners as plain cards */
+  .basic .bnr, .basic .bnr.warn, .basic .bnr.err, .basic .bnr.good, .basic .bnr.idle { background: var(--card); color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 0 0 1px var(--divider); }
+  .basic .bnr::before { display: none; }
+  .basic .bnr .label, .basic .bnr .sub, .basic .bnr .note, .basic .bnr .muted, .basic .bnr .range-labels, .basic .bnr .kv dt { color: var(--text2); }
+  .basic .bnr .kv dd { color: var(--text); }
+  .basic .bnr .sm, .basic .bnr .k { opacity: 1; color: var(--text2); }
+  .basic .bnr .ring { background: var(--hover); box-shadow: none; color: var(--primary); }
+  .basic .bnr.warn .ring { color: var(--warn); } .basic .bnr.err .ring { color: var(--err); } .basic .bnr.good .ring, .basic .bnr.charging .ring { color: var(--ok); }
+  .basic .bnr .side { border-color: var(--divider); }
+  .basic .bnr .stat { background: var(--hover); box-shadow: none; }
+  .basic .bnr .btn { background: var(--card); color: var(--primary); border-color: var(--divider); border-radius: 8px; }
+  .basic .bnr .btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+  .basic .bnr .seg { border: 1px solid var(--divider); gap: 0; overflow: hidden; }
+  .basic .bnr .seg button { border: 0 !important; border-radius: 0; color: var(--text); background: none; }
+  .basic .bnr .seg button + button { border-left: 1px solid var(--divider) !important; }
+  .basic .bnr .seg button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); }
+  .basic .bnr select, .basic .bnr input[type="number"] { background: var(--bg); color: var(--text); border-color: var(--divider); }
+  .basic .bnr details.more > summary { color: var(--primary); text-decoration: none; }
+  .basic .bnr .range { background: var(--hover); box-shadow: inset 0 0 0 1px var(--divider); }
+  .basic .bnr .range .win { background: color-mix(in srgb, var(--ok) 35%, transparent); }
+  .basic .bnr .range .mark { background: var(--text); box-shadow: none; }
+  /* A list of things (the automations, settings, diagnostics): a row each with a one-line
+     summary, opened in place for the rest (its card's contents) */
+  .rows { padding: 0; overflow: hidden; }
+  .rows > h2 { padding: 16px 16px 8px; margin: 0; }
+  .rows > .rows-intro { margin: 0 16px 12px; }
+  .row-item { border-top: 1px solid var(--divider); }
+  .row-item > summary { list-style: none; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto 18px; gap: 12px; align-items: center; padding: 12px 16px; cursor: pointer; }
+  .row-item > summary::-webkit-details-marker { display: none; }
+  .row-item > summary:hover { background: var(--hover); }
+  .row-item > summary > .ri { width: 22px; height: 22px; color: var(--primary); }
+  .row-item > summary .rt { font-size: 15px; }
+  .row-item > summary .rs { font-size: 12.5px; color: var(--text2); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-item > summary .rs .chip { margin-right: 6px; }
+  .row-item > summary > .rc { display: flex; align-items: center; gap: 8px; }
+  .row-item > summary > .rv { color: var(--text2); transition: transform .15s; }
+  .row-item[open] > summary > .rv { transform: rotate(90deg); }
+  .row-item > .rb { padding: 2px 16px 16px 50px; }
+  .row-item > .rb > h2:first-of-type { display: none; }
+  @media (max-width: 700px) {
+    .row-item > summary { padding: 12px 14px; gap: 10px; }
+    .row-item > summary .rs { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .row-item > .rb { padding: 2px 14px 14px; }
+  }
+  /* the map (Overview) */
+  .nv-card { position: relative; padding: 0 !important; overflow: hidden; height: calc(100vh - 150px); min-height: 320px; background: #121212; }
+  .nv-map { position: absolute; inset: 0; }
+  .nv-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; color: #9a9a9a; }
+  .nv-top { position: absolute; left: 12px; top: 10px; display: flex; gap: 8px; align-items: center; color: #e8e8e8; font-weight: 500; }
+  .nv-chip { font-size: 12px; font-weight: 400; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.12); }
+  .nv-pick { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: var(--primary); color: #fff; padding: 6px 8px 6px 14px; border-radius: 999px; display: flex; gap: 10px; align-items: center; }
+  .nv-tools { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; }
+  .nv-btn { width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer; font-size: 18px; line-height: 1; background: rgba(255,255,255,.14); color: #fff; }
+  .nv-btn:hover { background: rgba(255,255,255,.26); }
+  .nv-pick[hidden], .nv-top[hidden] { display: none; }
+  .nv-card.picking .bld { cursor: pointer; }
+  .nv-card.picking .bld:hover { filter: brightness(1.15) saturate(1.4); }
+</style>
+</head>
+<body>
+<div class="error-banner" id="error">Can't reach the add-on</div>
+<header>
+  <div class="bar">
+    <button class="status-btn" id="status-btn" title="Checking…" aria-label="Health: checking"><span class="dot" id="status-dot"></span></button>
+    <h1>Neighbourhood View</h1>
+    <span class="live" id="live"><span class="dot" id="live-dot"></span><span id="live-text">Connecting…</span></span>
+  </div>
+  <nav role="tablist" id="tabs">
+    <button role="tab" data-tab="overview"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg><span>Overview</span></button>
+    <button role="tab" data-tab="settings"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg><span>Settings</span></button>
+    <button role="tab" data-tab="diagnostics"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>Diagnostics</span></button>
+  </nav>
+</header>
+
+<main>
+  <div class="subnav" id="diag-nav" hidden role="group" aria-label="Diagnostics">
+    <button data-sub="health">Health</button><button data-sub="debug">Debug</button>
+  </div>
+
+  <!-- ============ Overview: what the add-on is doing (renderState) ============ -->
+  <section id="tab-overview" class="stack">
+    <div class="card nv-card">
+      <div class="nv-map" id="o-map"></div>
+      <div class="nv-msg" id="o-msg">Reading the map…</div>
+      <div class="nv-top" id="o-top" hidden><span id="o-addr"></span><span class="nv-chip" id="o-found"></span></div>
+      <div class="nv-pick" id="o-pickbar" hidden>Click your house <button class="btn small" id="o-pick-cancel">Cancel</button></div>
+      <div class="nv-tools">
+        <button class="nv-btn" id="o-pick" title="Pick your house on the map" aria-label="Pick your house">⌂</button>
+        <button class="nv-btn" data-r="-1" title="Turn left" aria-label="Turn left">⟲</button>
+        <button class="nv-btn" data-r="1" title="Turn right" aria-label="Turn right">⟳</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Settings ============ -->
+  <section id="tab-settings" class="stack" hidden>
+    <div class="bnr">
+      <div class="top" style="margin-bottom:8px"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>Settings</span></div>
+      <div class="sm" style="margin-left:26px">Your address (for the map) and the dashboard card.</div>
+    </div>
+    <div class="section-title">How it looks</div>
+    <div class="masonry">
+      <div class="card">
+        <h2>Appearance</h2>
+        <div class="row" style="margin-top:0"><div class="grow">Theme<div class="note" style="margin:0">Colourful puts a coloured banner at the top of each tab; Basic keeps them as plain cards. Saved in this browser.</div></div></div>
+        <div class="row" style="margin-top:8px"><div class="seg" id="c-theme" role="group" aria-label="Theme"><button data-theme="colour">Colourful</button><button data-theme="basic">Basic</button></div></div>
+      </div>
+    </div>
+    <div class="section-title">Your home</div>
+    <div class="masonry">
+      <div class="card">
+        <h2>Address</h2>
+        <div class="row" style="margin-top:0"><div class="grow">Postcode<div class="note" style="margin:0">A UK postcode, e.g. RG41 2AB</div></div>
+          <span class="ctl"><input type="text" id="s-postcode" autocomplete="postal-code" maxlength="9" style="width:110px;text-transform:uppercase" aria-label="Postcode"></span></div>
+        <div class="row"><div class="grow">House number<div class="note" style="margin:0">To find your house in OpenStreetMap. If it isn't there, the map centres on your postcode and you click your house on the Overview (⌂).</div></div>
+          <span class="ctl"><input type="text" id="s-number" maxlength="12" style="width:70px" aria-label="House number"></span></div>
+        <div class="row" style="margin-top:10px"><div class="grow" id="s-map-status"></div><button class="btn small primary" id="s-save">Save</button></div>
+        <div class="row" style="margin-top:8px"><div class="grow note" style="margin:0">The map comes from OpenStreetMap and is kept; it's made again every 30 days, or now with Refresh.</div><button class="btn small" id="s-refresh">Refresh</button></div>
+      </div>
+    </div>
+    <div class="section-title">Dashboard card</div>
+    <div class="masonry">
+      <div class="card">
+        <h2>Dashboard card</h2>
+        <div class="note" style="margin:0 0 8px">The same drawing as a card for your dashboards. It fills the screen in a <b>panel</b> view (one card on the page), and fits phones, tablets and wall screens. <details class="more"><summary>How</summary><div> Edit a dashboard, add a view with the view type <b>Panel (single card)</b>, and give it a <b>Manual</b> card with:<pre style="margin:6px 0;white-space:pre-wrap"><code>type: custom:neighbourhood-view-card</code></pre>Optional: <code>label: HOME</code> (the pin's text; your house number by default), <code>height: 500px</code> (outside a panel view). The card reads the map from this add-on, so it needs an administrator account.</div></details></div>
+        <dl class="kv" id="s-card"></dl>
+      </div>
+    </div>
+    <label class="live" style="display:none"><input type="checkbox" id="sim-all" checked> Show all entities in the lists</label>
+  </section>
+
+  <!-- ============ Diagnostics › Debug ============ -->
+  <section id="tab-debug" class="stack" hidden>
+    <div class="card">
+      <h2>Logs</h2>
+      <div class="row" style="margin-top:0">
+        <div class="grow">Log level<div class="note" style="margin:0">Saved: kept after a restart.</div></div>
+        <div class="seg" id="d-level" role="group" aria-label="Log level"><button data-level="debug">Debug</button><button data-level="info">Info</button><button data-level="warning">Warning</button></div>
+      </div>
+      <div class="row">
+        <div class="grow">Recent log lines<div class="note" style="margin:0">The last 200, newest at the bottom.</div></div>
+        <button class="btn small" id="d-logs-refresh">Refresh</button><button class="btn small" id="d-logs-copy">Copy</button>
+      </div>
+      <pre class="logs" id="d-logs" style="margin-top:10px"></pre>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>Restart</h2>
+        <div class="row" style="margin-top:0">
+          <div class="grow">Restart the add-on<div class="note" style="margin:0">Asks Home Assistant to restart it.</div></div>
+          <button class="btn small" id="d-restart">Restart</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Diagnostics bundle</h2>
+        <div class="row" style="margin-top:0">
+          <div class="grow"><div class="note" style="margin:0">One file to attach to a bug report: the state, settings, health, the add-on's options (secrets hidden) and recent log lines.</div></div>
+          <button class="btn small primary" id="d-bundle">Download</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Diagnostics › Health ============ -->
+  <section id="tab-health" class="stack" hidden>
+    <div class="bnr good" id="h-bnr">
+      <div class="top"><span class="ttl"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>Diagnostics</span></div>
+      <div class="lead" id="h-bnr-lead"></div>
+    </div>
+    <div class="card" id="h-issues-card" hidden><h2>Needs attention</h2><ul class="issues" id="h-issues"></ul></div>
+    <div class="grid">
+      <div class="card"><h2>Add-on</h2><dl class="kv" id="h-addon"></dl></div>
+      <div class="card"><h2>Home Assistant</h2><dl class="kv" id="h-ha"></dl></div>
+      <div class="card span2">
+        <h2>Home Assistant entities</h2>
+        <div class="note" style="margin:0 0 10px">The add-on posts these itself. They show as unavailable while the add-on is stopped.</div>
+        <dl class="kv" id="h-entities"></dl>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="./card.js"></script>
+<script>
+'use strict';
+// ---------- Theme (Settings › Appearance): colourful banners or basic cards, per browser ----------
+function drawTheme() {
+  const basic = document.documentElement.classList.contains('basic');
+  document.querySelectorAll('#c-theme button').forEach((b) => b.setAttribute('aria-pressed', (b.dataset.theme === 'basic') === basic));
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#c-theme button'); if (!b) return;
+  const basic = b.dataset.theme === 'basic';
+  document.documentElement.classList.toggle('basic', basic);
+  try { localStorage.setItem('neighbourhood-view-theme', basic ? 'basic' : 'colour'); } catch (e2) {}
+  drawTheme();
+});
+document.addEventListener('DOMContentLoaded', drawTheme);
+const $ = (id) => document.getElementById(id);
+let state = null;          // latest /api/state
+let activeTab = 'overview';
+
+// ---------- formatting ----------
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v, d = 1) => (v === null || v === undefined || isNaN(v)) ? '—' : Number(v).toLocaleString(undefined, {minimumFractionDigits: d, maximumFractionDigits: d});
+function dur(s) {
+  if (s === null || s === undefined) return '—';
+  s = Math.max(0, Math.round(s));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+function dateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso), today = new Date();
+  const t = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+  return d.toDateString() === today.toDateString() ? `Today ${t}` : `${d.toLocaleDateString([], {day: 'numeric', month: 'short'})} ${t}`;
+}
+const ago = (iso) => iso ? dur((Date.now() - new Date(iso)) / 1000) + ' ago' : '—';
+const kv = (rows) => rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
+
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ---------- Home Assistant theme ----------
+// In the HA sidebar the page is an iframe on HA's own origin, so the theme's
+// CSS variables can be read from the parent page.
+function applyHaTheme() {
+  try {
+    const p = window.parent;
+    if (!p || p === window) return;
+    const cs = p.getComputedStyle(p.document.documentElement);
+    const v = (name) => cs.getPropertyValue(name).trim();
+    const map = {
+      '--bg': '--primary-background-color', '--card': '--card-background-color',
+      '--text': '--primary-text-color', '--text2': '--secondary-text-color',
+      '--divider': '--divider-color', '--primary': '--primary-color',
+      '--on-primary': '--text-primary-color', '--code': '--code-background-color',
+      '--ok': '--success-color', '--warn': '--warning-color', '--err': '--error-color', '--info': '--info-color',
+    };
+    let found = false;
+    for (const [ours, theirs] of Object.entries(map)) {
+      const val = v(theirs);
+      if (val) { document.documentElement.style.setProperty(ours, val); found = true; }
+    }
+    if (!found) return;
+    const m = v('--primary-background-color').match(/\d+/g);
+    if (m && m.length >= 3) {
+      const dark = (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) < 128;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.documentElement.style.setProperty('--hover', dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)');
+      if (!v('--code-background-color')) document.documentElement.style.setProperty('--code', dark ? '#262626' : '#f3f3f3');
+    }
+  } catch (e) { /* not in HA, or another origin */ }
+}
+
+// ---------- API ----------
+async function api(path, opts) {
+  const r = await fetch('./api/' + path, opts);
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try { const j = await r.json(); if (j.message) msg = j.message; } catch (e) {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+async function post(path, body) {
+  try {
+    await api(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: body === undefined ? undefined : JSON.stringify(body)});
+    return true;
+  } catch (e) { toast('Failed: ' + e.message); return false; }
+}
+
+// ---------- tabs ----------
+const DIAG = ['health', 'debug'];  // the Diagnostics tab's sections
+function showTab(name) {
+  if (name === 'diagnostics') name = 'health';
+  if (!document.getElementById('tab-' + name)) name = 'overview';
+  const moved = activeTab !== name;
+  activeTab = name;
+  const diag = DIAG.includes(name);
+  document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-selected',
+    b.dataset.tab === name || (diag && b.dataset.tab === 'diagnostics')));
+  $('diag-nav').hidden = !diag;
+  $('diag-nav').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.sub === name));
+  document.querySelectorAll('main > section').forEach((s) => s.hidden = s.id !== 'tab-' + name);
+  if (moved) window.scrollTo(0, 0);  // another tab starts at its top
+  try { history.replaceState(null, '', '#' + name); } catch (e) {}
+  refreshTab(true);
+}
+$('tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
+$('diag-nav').addEventListener('click', (e) => { if (e.target.dataset.sub) showTab(e.target.dataset.sub); });
+$('status-btn').addEventListener('click', () => showTab('health'));
+
+// ---------- header status: anything that needs attention ----------
+const statusInfo = {health: null};
+async function pollStatus() {
+  try { statusInfo.health = await api('health'); } catch (e) {}
+  updateStatus();
+}
+// Add your own checks here: [level ('err' or 'warn'), text]
+function currentIssues() {
+  const out = [];
+  const ha = statusInfo.health && statusInfo.health.home_assistant;
+  if (ha && ha.available && !ha.connected) out.push(['warn', 'Home Assistant link down: your entities aren\'t updating' + (ha.error ? ` (${ha.error})` : '')]);
+  if (ha && !ha.available) out.push(['warn', 'Not running under Home Assistant: no entities']);
+  return out;
+}
+function updateStatus() {
+  const issues = currentIssues();
+  const level = issues.some((i) => i[0] === 'err') ? 'err' : issues.length ? 'warn' : 'ok';
+  $('status-btn').className = 'status-btn ' + (level === 'ok' ? '' : level);
+  $('status-dot').className = 'dot ' + level;
+  $('status-btn').title = level === 'ok' ? 'Healthy: everything is working. Open Diagnostics'
+    : `Unhealthy: ${issues.map((i) => i[1]).join('; ')}. Open Diagnostics`;
+  $('status-btn').setAttribute('aria-label', level === 'ok' ? 'Healthy. Open Diagnostics' : `Unhealthy, ${issues.length} issue${issues.length === 1 ? '' : 's'}. Open Diagnostics`);
+  $('h-issues-card').hidden = !issues.length;
+  $('h-bnr').className = 'bnr ' + (level === 'ok' ? 'good' : level);
+  const nErr = issues.filter((i) => i[0] === 'err').length;
+  $('h-bnr-lead').innerHTML = `<div class="ring">${level === 'ok'
+    ? '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+    : '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>'}</div><div style="min-width:0">`
+    + `<div class="k">Health</div><div class="hb">${level === 'ok' ? 'All good' : `${issues.length} thing${issues.length === 1 ? ' needs' : 's need'} attention`}</div>`
+    + `<div class="sm">${level === 'ok' ? 'The add-on and Home Assistant are both working.' : nErr ? `${nErr} problem${nErr === 1 ? '' : 's'}: see below` : 'See below'}</div></div>`;
+  $('h-issues').innerHTML = issues.map(([lvl, t]) => `<li><span class="chip ${lvl}">${lvl === 'err' ? 'Problem' : 'Check'}</span> ${esc(t)}</li>`).join('');
+}
+setInterval(() => { if (!document.hidden) pollStatus(); }, 30000);
+
+// ---------- live state (push, with polling as a fallback) ----------
+let es = null, lastEvent = 0, pollTimer = null;
+function setLive(kind, text) { $('live-dot').className = 'dot ' + kind; $('live-text').textContent = text; }
+function startPush() {
+  if (!window.EventSource) { startPolling(); return; }
+  try { es = new EventSource('./api/events'); } catch (e) { startPolling(); return; }
+  es.onmessage = (ev) => {
+    lastEvent = Date.now();
+    stopPolling();
+    setLive('ok', 'Live');
+    $('error').style.display = 'none';
+    try { renderState(JSON.parse(ev.data)); } catch (e) {}
+  };
+  es.onerror = () => {
+    setLive('warn', 'Reconnecting…'); startPolling();
+    // The browser retries on its own unless the stream was refused (e.g. an
+    // ingress hiccup): then it gives up, so open a new one shortly
+    if (es.readyState === EventSource.CLOSED) { es = null; setTimeout(() => { if (!es) startPush(); }, 10000); }
+  };
+}
+async function pollState() {
+  try {
+    renderState(await api('state'));
+    $('error').style.display = 'none';
+    if (Date.now() - lastEvent > 20000) setLive('warn', 'Polling');
+  } catch (e) {
+    $('error').style.display = 'block'; setLive('err', 'Offline');
+  }
+}
+function startPolling() { if (!pollTimer) { pollState(); pollTimer = setInterval(pollState, 5000); } }
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+// The stream sends at least every 10 s: if it goes quiet, poll instead
+setInterval(() => {
+  if (lastEvent && Date.now() - lastEvent > 25000) {
+    setLive('warn', 'Polling'); startPolling();
+    if (es && es.readyState !== EventSource.CONNECTING && Date.now() - lastEvent > 60000) {
+      es.close(); es = null; lastEvent = Date.now() - 25000; startPush();
+    }
+  }
+}, 5000);
+
+// ---------- Overview ----------
+const FOUND = {address: 'Found from your address', nearest: 'The building nearest your address', picked: 'Picked by you',
+  postcode: 'Not found: click ⌂ and then your house'};
+function renderState(s) {
+  state = s;
+  // (the map's read again when it's been made again, or the address changed)
+  const key = `${s.made}|${s.address}|${s.error}|${s.status}`;
+  if (key !== nv.key) { nv.key = key; loadMap(); }
+  drawMapStatus();
+  drawCard();
+}
+
+// ---------- Overview: the map ----------
+const nv = {scene: null, key: null, picking: false};
+const ROT_KEY = 'neighbourhood-view-rot';
+const getRot = () => { try { return Number(localStorage.getItem(ROT_KEY)) || 0; } catch (e) { return 0; } };
+async function loadMap() {
+  let d;
+  try { d = await api('scene'); } catch (e) { return; }
+  nv.scene = d.scene;
+  if (!d.scene) { $('o-map').innerHTML = ''; showMsg(d.message); $('o-top').hidden = true; return; }
+  drawMap();
+}
+function showMsg(text) { $('o-msg').textContent = text || ''; $('o-msg').style.display = text ? 'flex' : 'none'; }
+function drawMap() {
+  const sc = nv.scene;
+  if (!sc || !window.NeighbourhoodView) return;
+  NeighbourhoodView.render($('o-map'), sc, {rot: getRot(), label: sc.number ? `NO. ${sc.number}`.toUpperCase() : 'HOME', pick: true, hideLabel: nv.picking});
+  showMsg('');
+  $('o-top').hidden = false;
+  $('o-addr').textContent = [sc.number, sc.postcode].filter(Boolean).join(', ');
+  $('o-found').textContent = FOUND[(sc.home || {}).found] || '';
+}
+function drawMapStatus() {
+  const s = state || {};
+  if (s.status === 'Making the map' && !nv.scene) showMsg('Making the map from OpenStreetMap…');
+  if (s.error && !nv.scene) showMsg(s.error);
+  if ($('s-map-status')) {
+    $('s-map-status').innerHTML = s.error ? `<span class="chip err">Problem</span> ${esc(s.error)}`
+      : s.status === 'Making the map' ? '<span class="chip warn">Making the map…</span>'
+      : s.made ? `<span class="chip ok">Map ready</span> ${s.buildings} buildings · made ${dateTime(s.made)}`
+      : '<span class="muted">No address yet</span>';
+  }
+}
+function setPicking(on) {
+  nv.picking = on;
+  $('o-pickbar').hidden = !on;
+  document.querySelector('.nv-card').classList.toggle('picking', on);
+  drawMap();
+}
+document.querySelector('.nv-tools').addEventListener('click', (e) => {
+  const r = Number(e.target.dataset && e.target.dataset.r);
+  if (r) { try { localStorage.setItem(ROT_KEY, String((getRot() + r + 4) % 4)); } catch (err) {} drawMap(); }
+});
+$('o-pick').addEventListener('click', () => {
+  if (!nv.scene) { toast('There\'s no map yet: set your address on the Settings tab'); return; }
+  setPicking(!nv.picking);
+});
+$('o-pick-cancel').addEventListener('click', () => setPicking(false));
+$('o-map').addEventListener('click', async (e) => {
+  if (!nv.picking) return;
+  const g = e.target.closest('.bld');
+  if (!g) return;
+  setPicking(false);
+  if (await post('home', {id: Number(g.dataset.id)})) toast('That\'s your house: the map\'s made again around it');
+});
+
+// ---------- Settings: your address, the dashboard card ----------
+async function refreshAddress() {
+  let st;
+  try { st = await api('settings'); } catch (e) { return; }
+  if (document.activeElement !== $('s-postcode')) $('s-postcode').value = st.postcode || '';
+  if (document.activeElement !== $('s-number')) $('s-number').value = st.house_number || '';
+  drawMapStatus();
+}
+function drawCard() {
+  const c = (state || {}).card || {};
+  const STATUS = {added: '<span class="chip ok">Added to your dashboards</span>', updated: '<span class="chip ok">Added (updated)</span>',
+    ok: '<span class="chip ok">Ready</span>', manual: '<span class="chip warn">Add it by hand</span>'};
+  const html = kv([
+    ['Card', c.status ? STATUS[c.status] || esc(c.status) : '<span class="muted">Setting up…</span>'],
+    ...(c.detail ? [['Why', esc(c.detail)]] : []),
+    ['Resource', c.url ? `<code>${esc(c.url)}</code><div class="sub">JavaScript module${c.status === 'manual' ? ': add it under Settings › Dashboards › ⋮ › Resources' : ''}</div>` : '—'],
+  ]);
+  if ($('s-card').innerHTML !== html) $('s-card').innerHTML = html;
+}
+$('s-save').addEventListener('click', async () => {
+  const body = {postcode: $('s-postcode').value.trim(), house_number: $('s-number').value.trim()};
+  if (await post('address', body)) { toast(body.postcode ? 'Saved: making the map…' : 'Address cleared'); refreshAddress(); }
+});
+['s-postcode', 's-number'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('s-save').click(); }));
+$('s-refresh').addEventListener('click', async () => { if (await post('refresh')) toast('Making the map again from OpenStreetMap…'); });
+
+// ---------- Settings: your Home Assistant entities ----------
+const sim = {data: null, entities: [], edit: {}, entitiesAt: 0};
+async function refreshSensors(force) {
+  try { sim.data = await api('sensors'); } catch (e) { return; }
+  if (force || !sim.entities.length || Date.now() - sim.entitiesAt > 60000) {
+    try { sim.entities = (await api('sensors/entities')).entities; sim.entitiesAt = Date.now(); } catch (e) { sim.entities = []; }
+  }
+  sim.edit = {...sim.data.settings};
+  const typing = document.activeElement && document.activeElement.closest('.picker');
+  if (force || !typing) drawPickers();
+  drawSensors();
+}
+// Settings save as soon as they change
+async function saveSensors(patch, msg) {
+  try {
+    await api('sensors', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(patch)});
+    toast(msg);
+  } catch (e) { toast('Failed: ' + e.message); }
+  await refreshSensors(true);
+  pollState();
+}
+// <span class="picker" data-key="..." data-domain="sensor,..." [data-class="power"] [data-units="W,kW"] [data-none="None"]>
+function drawPickers() {
+  const all = $('sim-all').checked;
+  document.querySelectorAll('main .picker').forEach((span) => {
+    const key = span.dataset.key, domains = span.dataset.domain.split(',');
+    const classes = (span.dataset.class || '').split(',').filter(Boolean);
+    const units = (span.dataset.units || '').split(',').filter(Boolean);
+    const value = sim.edit[key] || '';
+    const fits = (e) => (!classes.length && !units.length) || classes.includes(e.device_class) || units.includes(e.unit || '');
+    let list = sim.entities.filter((e) => domains.some((d) => e.entity_id.startsWith(d + '.')));
+    if (!all) list = list.filter(fits);
+    if (!sim.entities.length) {
+      span.innerHTML = `<input type="text" data-key="${key}" value="${esc(value)}" placeholder="${domains[0]}.example" aria-label="${key}">`;
+      return;
+    }
+    if (value && !list.some((e) => e.entity_id === value)) {
+      const known = sim.entities.find((e) => e.entity_id === value);
+      list = [known || {entity_id: value, name: value, state: null}, ...list];
+    }
+    if (span.contains(document.activeElement)) return;  // don't redraw while someone is typing
+    const none = span.dataset.none || 'None';
+    const opts = [{value: '', label: none, sub: ''}, ...list.map((e) => ({
+      value: e.entity_id, label: e.name || e.entity_id,
+      sub: e.entity_id + (e.state == null ? '' : ` · ${e.state}${e.unit ? ' ' + e.unit : ''}`),
+    }))];
+    span.innerHTML = `<div class="combo"><input type="text" data-combo="${key}" role="combobox" aria-autocomplete="list"
+      aria-expanded="false" aria-controls="cl-${key}" aria-label="${key}" placeholder="Type to search…" autocomplete="off" spellcheck="false">
+      <ul class="combo-list" id="cl-${key}" role="listbox" hidden></ul></div>`
+      + (!all && !list.length ? '<div class="note">No matching entities. Tick "Show all entities in the lists" at the bottom of the Settings tab.</div>' : '');
+    setupCombo(span.querySelector('.combo'), key, opts);
+  });
+}
+// A text box that filters the list as you type (every word must match the
+// name, entity ID or reading). Arrow keys + Enter, or click, to choose.
+function setupCombo(box, key, opts) {
+  const input = box.querySelector('input'), ul = box.querySelector('ul');
+  let shown = [], active = -1;
+  const current = () => opts.find((o) => o.value === (sim.edit[key] || '')) || {value: sim.edit[key], label: sim.edit[key], sub: ''};
+  const showValue = () => { const c = current(); input.value = c.value ? `${c.label} (${c.value})` : ''; input.placeholder = c.value ? 'Type to search…' : c.label; };
+  const close = () => { ul.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); };
+  const setActive = (i) => {
+    active = i;
+    ul.querySelectorAll('li[role="option"]').forEach((li, n) => li.classList.toggle('active', n === i));
+    const li = ul.querySelector(`#co-${key}-${i}`);
+    if (li) { input.setAttribute('aria-activedescendant', li.id); li.scrollIntoView({block: 'nearest'}); }
+  };
+  const draw = (q) => {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    shown = opts.filter((o, n) => (n === 0 && !words.length) || (n > 0 && words.every((w) => (o.label + ' ' + o.sub).toLowerCase().includes(w))));
+    const sel = sim.edit[key] || '';
+    ul.innerHTML = shown.length ? shown.map((o, n) => `<li role="option" id="co-${key}-${n}" data-n="${n}" aria-selected="${o.value === sel}"
+      class="${o.value === sel ? 'sel' : ''}">${esc(o.label)}${o.sub ? `<div class="sub">${esc(o.sub)}</div>` : ''}</li>`).join('')
+      : '<li class="empty">No entities match</li>';
+    ul.hidden = false; input.setAttribute('aria-expanded', 'true');
+    setActive(shown.length ? Math.max(0, shown.findIndex((o) => o.value === sel)) : -1);
+  };
+  const choose = (o) => {
+    if ((sim.edit[key] || '') !== o.value) {
+      sim.edit[key] = o.value;
+      saveSensors({[key]: o.value}, o.value ? 'Entity saved' : 'Entity removed');
+    }
+    close(); showValue(); input.blur();
+  };
+  input.addEventListener('focus', () => { input.value = ''; draw(''); });
+  input.addEventListener('input', () => draw(input.value));
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      if (ul.hidden) { draw(input.value); return; }
+      if (shown.length) setActive((active + (ev.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length);
+    } else if (ev.key === 'Enter') {
+      ev.preventDefault();
+      if (active >= 0 && shown[active]) choose(shown[active]);
+      else if (/^[a-z_]+\.[a-z0-9_]+$/.test(input.value.trim())) choose({value: input.value.trim()});  // typed an entity ID
+    } else if (ev.key === 'Escape') { close(); showValue(); input.blur(); }
+  });
+  input.addEventListener('blur', () => { close(); showValue(); });
+  // mousedown, not click: it fires before the input loses focus
+  ul.addEventListener('mousedown', (ev) => {
+    const li = ev.target.closest('li[data-n]');
+    ev.preventDefault();
+    if (li) choose(shown[+li.dataset.n]);
+  });
+  showValue();
+}
+// Without Home Assistant's entity list (e.g. not connected) the pickers are plain text boxes
+document.addEventListener('change', (ev) => {
+  const key = ev.target.dataset && ev.target.dataset.key;
+  if (key && ev.target.closest('.picker')) saveSensors({[key]: ev.target.value.trim()}, 'Entity saved');
+});
+$('sim-all').addEventListener('change', drawPickers);
+function entityState(ent) {
+  if (!ent) return '<span class="muted">Not set</span>';
+  const st = ent.state == null ? '<span class="chip warn">no reading yet</span>'
+    : (['unavailable', 'unknown'].includes(ent.state) ? `<span class="chip warn">${esc(ent.state)}</span>` : `${esc(ent.state)}${ent.unit ? ' ' + esc(ent.unit) : ''}`);
+  return `${st} <span class="muted">· ${esc(ent.name)}</span>`;
+}
+function drawSensors() {
+  const d = sim.data || {};
+  if (!$('s-example')) return;
+  $('s-example').innerHTML = kv([['Reading', entityState((d.entities || {}).example_entity)]]);
+}
+
+// ---------- Diagnostics › Health ----------
+async function refreshHealth() {
+  let h;
+  try { h = await api('health'); } catch (e) { return; }
+  statusInfo.health = h; updateStatus();
+  $('h-addon').innerHTML = kv([
+    ['Version', esc(h.version)],
+    ['Running for', dur(h.uptime_s)],
+    ['Started', dateTime(h.started)],
+    ['Pages open', String((h.event_streams || {}).gui || 0)],
+  ]);
+  const ha = h.home_assistant;
+  $('h-ha').innerHTML = kv([
+    ['Link', !ha ? '—' : !ha.available ? '<span class="chip err">Not available</span><div class="sub">Not running under Home Assistant</div>'
+      : ha.connected ? '<span class="chip ok">Connected</span>' : `<span class="chip warn">Not connected</span><div class="sub">${esc(ha.error || '')}</div>`],
+  ]);
+  try {
+    const d = await api('sensors');
+    $('h-entities').innerHTML = kv([['Sensors', d.own_sensors.map((e) => `<code>${esc(e)}</code>`).join('<br>')]]);
+  } catch (e) { $('h-entities').innerHTML = '<span class="muted">—</span>'; }
+}
+
+// ---------- Diagnostics › Debug ----------
+async function refreshDebug() {
+  let i;
+  try { i = await api('debug/info?lines=200'); } catch (e) { return; }
+  $('d-level').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.level === i.log_level));
+  const pre = $('d-logs'), atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+  pre.textContent = i.logs.join('\n') || 'No log lines yet';
+  if (atEnd) pre.scrollTop = pre.scrollHeight;
+}
+$('d-level').addEventListener('click', async (e) => {
+  const level = e.target.dataset.level; if (!level) return;
+  if (await post('debug/log_level', {level})) { toast(`Log level: ${level[0].toUpperCase() + level.slice(1)}`); refreshDebug(); }
+});
+$('d-logs-refresh').addEventListener('click', refreshDebug);
+$('d-logs-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('d-logs').textContent); toast('Copied'); } catch (e) { toast("Couldn't copy"); }
+});
+// Two clicks for anything that can't be undone
+function confirmClick(btn, run) {
+  const label = btn.textContent;
+  btn.addEventListener('click', async () => {
+    clearTimeout(btn._reset);
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = '1'; btn.textContent = 'Click again to confirm';
+      btn._reset = setTimeout(() => { delete btn.dataset.armed; btn.textContent = label; }, 4000);
+      return;
+    }
+    delete btn.dataset.armed; btn.textContent = label;
+    await run();
+  });
+}
+confirmClick($('d-restart'), async () => { if (await post('debug/restart')) toast('Restarting the add-on: the page reconnects when it\'s back'); });
+$('d-bundle').addEventListener('click', async () => {
+  const btn = $('d-bundle'); btn.disabled = true;
+  const parts = {state: 'state', sensors: 'sensors', settings: 'settings', health: 'health', debug: 'debug/info?lines=500'};
+  const out = {generated: new Date().toISOString()};
+  for (const [k, p] of Object.entries(parts)) { try { out[k] = await api(p); } catch (e) { out[k] = {error: e.message}; } }
+  const blob = new Blob([JSON.stringify(out, null, 1)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `neighbourhood_view_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  btn.disabled = false;
+  toast('Diagnostics bundle downloaded');
+});
+
+// ---------- refresh loop ----------
+function refreshTab(full) {
+  if (activeTab === 'settings') refreshAddress();
+  else if (activeTab === 'health') refreshHealth();
+  else if (activeTab === 'debug') refreshDebug();
+}
+setInterval(() => { if (!document.hidden) refreshTab(false); }, 10000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshTab(false); });
+
+const ROW_ICON = {
+  fire: 'M17.66 11.2c-.23-.3-.51-.56-.77-.82-.67-.6-1.43-1.03-2.07-1.66C13.33 7.26 13 4.85 13.95 3c-.95.23-1.78.75-2.49 1.32-2.59 2.08-3.61 5.75-2.39 8.9.04.1.08.2.08.33 0 .22-.15.42-.35.5-.23.1-.47.04-.66-.12a.58.58 0 0 1-.14-.17c-1.13-1.43-1.31-3.48-.55-5.12C5.78 10 4.87 12.3 5 14.47c.06.5.12 1 .29 1.5.14.6.41 1.2.71 1.73 1.08 1.73 2.95 2.97 4.96 3.22 2.14.27 4.43-.12 6.07-1.6 1.83-1.66 2.47-4.32 1.53-6.6l-.13-.26c-.21-.46-.77-1.26-.77-1.26Z',
+  thermo: 'M15 13V5a3 3 0 0 0-6 0v8a5 5 0 1 0 6 0Zm-3-9a1 1 0 0 1 1 1v3h-2V5a1 1 0 0 1 1-1Z',
+  water: 'M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8Z',
+  layers: 'M11.99 18.54l-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27-7.38 5.74ZM12 16l7.36-5.73L21 9l-9-7-9 7 1.63 1.27L12 16Z',
+  survey: 'M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm2 14H7v-2h7v2Zm3-4H7v-2h10v2Zm0-4H7V7h10v2Z',
+  snow: 'M22 11h-4.17l3.24-3.24-1.41-1.42L15 11h-2V9l4.66-4.66-1.42-1.41L13 6.17V2h-2v4.17L7.76 2.93 6.34 4.34 11 9v2H9L4.34 6.34 2.93 7.76 6.17 11H2v2h4.17l-3.24 3.24 1.41 1.42L9 13h2v2l-4.66 4.66 1.42 1.41L11 17.83V22h2v-4.17l3.24 3.24 1.42-1.41L13 15v-2h2l4.66 4.66 1.41-1.42L17.83 13H22v-2Z',
+  sched: 'M3 13h2v-2H3v2Zm0 4h2v-2H3v2Zm0-8h2V7H3v2Zm4 4h14v-2H7v2Zm0 4h14v-2H7v2ZM7 7v2h14V7H7Z',
+  bolt: 'M7 2v11h3v9l7-12h-4l4-8H7Z',
+  plug: 'M16 7V3h-2v4h-4V3H8v4c-1 0-2 1-2 2v5.5L9.5 18v3h5v-3l3.5-3.5V9c0-1-1-2-2-2Z',
+  car: 'M18.9 6c-.2-.6-.8-1-1.4-1h-11c-.7 0-1.2.4-1.4 1L3 12v8c0 .6.4 1 1 1h1c.6 0 1-.4 1-1v-1h12v1c0 .6.4 1 1 1h1c.6 0 1-.4 1-1v-8l-2.1-6ZM6.5 16a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm11 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3ZM5 11l1.5-4.5h11L19 11H5Z',
+  replug: 'M17.65 6.35A8 8 0 1 0 19.73 14h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35Z',
+  palette: 'M12 3a9 9 0 0 0 0 18c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.42-4.03-8-9-8Zm-5.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm3-4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm3 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z',
+  tune: 'M3 17v2h6v-2H3ZM3 5v2h10V5H3Zm10 16v-2h8v-2h-8v-2h-2v6h2ZM7 9v2H3v2h4v2h2V9H7Zm14 4v-2H11v2h10Zm-6-4h2V7h4V5h-4V3h-2v6Z',
+  power: 'M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21Z',
+  battery: 'M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4Z',
+  volt: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1 17v-5H8l5-9v5h3l-5 9Z',
+  bell: 'M12 22c1.1 0 2-.9 2-2h-4a2 2 0 0 0 2 2Zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2Z',
+  lock: 'M18 8h-1V6A5 5 0 0 0 7 6v2H6a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2Zm-6 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm3.1-9H8.9V6a3.1 3.1 0 0 1 6.2 0v2Z',
+  next: 'M4 18l8.5-6L4 6v12Zm9-12v12l8.5-6L13 6Z',
+  sensor: 'M7.76 16.24A5.98 5.98 0 0 1 6 12c0-1.66.67-3.16 1.76-4.24l1.42 1.42A3.99 3.99 0 0 0 8 12c0 1.1.45 2.1 1.17 2.83l-1.41 1.41Zm8.48 0-1.42-1.42A3.99 3.99 0 0 0 16 12c0-1.1-.45-2.1-1.17-2.83l1.41-1.41A5.98 5.98 0 0 1 18 12c0 1.66-.67 3.16-1.76 4.24ZM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z',
+  clock: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm.5 5v5.25l4.5 2.67-.75 1.23L11 13V7h1.5Z',
+  limit: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM4 12c0-4.42 3.58-8 8-8 1.85 0 3.55.63 4.9 1.69L5.69 16.9A7.9 7.9 0 0 1 4 12Zm8 8c-1.85 0-3.55-.63-4.9-1.69L18.31 7.1A7.9 7.9 0 0 1 20 12c0 4.42-3.58 8-8 8Z',
+  info: 'M11 7h2v2h-2V7Zm0 4h2v6h-2v-6Zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z',
+  link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7a5 5 0 0 0 0 10h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1ZM8 13h8v-2H8v2Zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4a5 5 0 0 0 0-10Z',
+  heart: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35Z',
+  home: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8h5Z',
+  queue: 'M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6Zm16-4H8a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Zm-1 9H9V9h10v2Zm-4 4H9v-2h6v2Zm4-8H9V5h10v2Z',
+  list: 'M3 13h2v-2H3v2Zm0 4h2v-2H3v2Zm0-8h2V7H3v2Zm4 4h14v-2H7v2Zm0 4h14v-2H7v2ZM7 7v2h14V7H7Z',
+  new: 'M20 4H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm-11.5 11H7.3l-2.55-3.5V15H3.5V9h1.25l2.5 3.5V9H8.5v6Zm5-4.74H11v1.12h2.5v1.26H11v1.11h2.5V15h-4V9h4v1.26ZM20.5 14c0 .55-.45 1-1 1h-4c-.55 0-1-.45-1-1V9h1.25v4.51h1.13V9.99h1.25v3.51h1.12V9h1.25v5Z',
+  key: 'M12.65 10A6 6 0 0 0 1 12a6 6 0 0 0 11.65 2H17v4h4v-4h2v-4H12.65ZM7 14a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z',
+  chart: 'M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99l1.5 1.5Z',
+  gear: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.48.48 0 0 0-.12-.61l-2.01-1.58ZM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2Z',
+  test: 'M7 2v2h1v14a4 4 0 0 0 8 0V4h1V2H7Zm4 14c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1Zm2-4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1Zm1-5h-4V4h4v3Z',
+  send: 'M2.01 21 23 12 2.01 3 2 10l15 2-15 2z',
+  shield: 'M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4Z',
+  move: 'M16 17.01V10h-2v7.01h-3L15 21l4-3.99h-3ZM9 3 5 6.99h3V14h2V6.99h3L9 3Z',
+  download: 'M19 9h-4V3H9v6H5l7 7 7-7ZM5 18v2h14v-2H5Z',
+  trash: 'M6 19c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z',
+};
+const ROWS_KEY = 'neighbourhood-view-rows-open';  // (each add-on its own)
+let rowsOpen = new Set();
+try { rowsOpen = new Set(JSON.parse(localStorage.getItem(ROWS_KEY) || '[]')); } catch (e) {}
+const rowSums = [];
+// One line of a kv list's value (by its label), as shown: chips kept, line breaks as ' · '
+function kvLine(id, label) {
+  const dl = $(id); if (!dl) return '';
+  const dt = [...dl.querySelectorAll('dt')].find((x) => x.textContent.trim() === label);
+  return dt && dt.nextElementSibling ? oneLine(dt.nextElementSibling.innerHTML) : '';
+}
+function oneLine(html) {
+  return String(html || '').replace(/<(div|br)[^>]*>/gi, ' · ').replace(/<\/div>/gi, '').replace(/^(\s*·\s*)+/, '').replace(/(\s*·\s*)+$/, '').replace(/(\s*·\s*){2,}/g, ' · ').trim();
+}
+const chk = (id) => !!($(id) && $(id).checked);
+const segOn = (id) => { const b = $(id) && $(id).querySelector('button[aria-pressed="true"], button.on, button.active'); return b ? esc(b.textContent.trim()) : ''; };
+const val = (id) => $(id) ? $(id).value : '';
+const txt = (id) => $(id) ? oneLine($(id).innerHTML) : '';
+// The first few number fields in a box, as "Label 10 s · ..."
+function fieldsLine(id, n = 3) {
+  const box = $(id); if (!box) return '';
+  return [...box.querySelectorAll('.row')].filter((r) => r.querySelector('input')).slice(0, n).map((r) => {
+    const g = r.querySelector('.grow'), lab = g ? g.firstChild.textContent.trim() : '';
+    const inp = r.querySelector('input'), unit = r.querySelector('.unit');
+    return esc(`${lab} ${inp.value}${unit ? (/^%$/.test(unit.textContent) ? '' : ' ') + unit.textContent : ''}`);
+  }).join(' · ');
+}
+const onOff = (on, yes = 'On', no = 'Off') => on ? `<span class="chip ok">${yes}</span>` : `<span class="chip">${no}</span>`;
+const firstNote = (card) => { const n = card.querySelector(':scope > .note, .note'); return n ? esc(n.textContent.replace(/\bMore\b[\s\S]*$/, '').trim()) : ''; };
+// Make `title` a list of rows from cards in `section` (found by their h2), where its group was
+// (a section title of that name, or the first card's place); rows: [{t: h2 text, id, icon, sum: (card) => html}]
+function rowList(section, title, rows, intro) {
+  const sec = typeof section === 'string' ? $(section) : section;
+  const found = rows.map((r) => ({...r, card: [...sec.querySelectorAll('.card')].find((c) => {
+    const h = c.querySelector(':scope > h2'); return h && h.textContent.trim().startsWith(r.t); })})).filter((r) => r.card);
+  if (!found.length) return;
+  const list = document.createElement('div');
+  list.className = 'card rows';
+  list.innerHTML = `<h2>${esc(title)}</h2>`;
+  const head = [...sec.children].find((c) => c.classList.contains('section-title') && c.textContent.trim().toLowerCase() === title.toLowerCase());
+  const top = (el) => { while (el.parentElement !== sec) el = el.parentElement; return el; };
+  sec.insertBefore(list, head || top(found[0].card));
+  if (head) head.remove();
+  if (intro) { intro.classList.add('rows-intro'); list.appendChild(intro); }
+  const parents = new Set(found.map((r) => r.card.parentElement));
+  for (const r of found) {
+    const d = document.createElement('details');
+    d.className = 'row-item' + (r.card.classList.contains('pkcard') ? ' pkcard' : ''); d.dataset.row = r.id;
+    const h2 = r.card.querySelector(':scope > h2');
+    d.innerHTML = `<summary><svg class="ri" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${ROW_ICON[r.icon] || ROW_ICON.info}"/></svg>`
+      + `<div><div class="rt">${r.title ? esc(r.title) : h2 ? h2.innerHTML.replace(/<span class="spacer"><\/span>[\s\S]*$/, '') : esc(r.t)}</div><div class="rs"></div></div><span class="rc"></span>`
+      + '<svg class="rv" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9 6l6 6-6 6-1.4-1.4L12.2 12 7.6 7.4z"/></svg></summary><div class="rb"></div>';
+    // (the controls in its heading, e.g. its switch: kept to hand in the row)
+    const rb = d.querySelector('.rb');
+    if (h2) [...h2.children].filter((c) => !c.classList.contains('spacer') && !c.classList.contains('supn') && c.tagName !== 'B')
+      .forEach((c) => (r.ctlInside ? rb : d.querySelector('.rc')).appendChild(c));
+    if (r.card.id) { d.id = r.card.id; r.card.removeAttribute('id'); }
+    if (r.card.hidden && !r.card.classList.contains('pkcard')) d.hidden = true;
+    [...r.card.childNodes].forEach((n) => rb.appendChild(n));
+    r.card.remove();
+    d.open = rowsOpen.has(r.id);
+    d.addEventListener('toggle', () => {
+      if (d.open) rowsOpen.add(r.id); else rowsOpen.delete(r.id);
+      try { localStorage.setItem(ROWS_KEY, JSON.stringify([...rowsOpen])); } catch (e) {}
+    });
+    list.appendChild(d);
+    rowSums.push([d, r.sum]);
+  }
+  // (the boxes the cards were in, now empty, go)
+  parents.forEach((p) => { if (p !== sec && p.isConnected && !p.children.length) p.remove(); });
+}
+function drawRowSums() {
+  for (const [d, sum] of rowSums) {
+    if (d.closest('section') && d.closest('section').hidden) continue;
+    let html = '';
+    try { html = sum ? sum(d) : ''; } catch (e) {}
+    const el = d.querySelector('.rs');
+    if (el.innerHTML !== html) el.innerHTML = html;
+  }
+}
+
+// The Settings and Diagnostics cards as lists: a row each with an icon, its title and a
+// one-line summary (kept up to date), opened in place. Add a card to a list: its h2's text in
+// `t`, an id (remembers it open), an icon from ROW_ICON and what it says while folded in `sum`.
+function setupRows() {
+  rowList('tab-settings', 'How it looks', [
+    {t: 'Appearance', id: 'appearance', icon: 'palette', sum: () => segOn('c-theme')},
+  ]);
+  rowList('tab-settings', 'Your home', [
+    {t: 'Address', id: 'address', icon: 'home', sum: () => {
+      const s = state || {};
+      return s.address ? esc(s.address) + (s.error ? ' · <span class="chip err">Problem</span>' : s.made ? ' · map ready' : '') : '<span class="chip">Not set</span>Your postcode and house number';
+    }},
+  ]);
+  rowList('tab-settings', 'Dashboard card', [
+    {t: 'Dashboard card', id: 'card', icon: 'layers', sum: () => {
+      const c = (state || {}).card || {};
+      return c.status === 'manual' ? '<span class="chip warn">Add it by hand</span>' : c.status ? 'Ready: custom:neighbourhood-view-card' : 'Setting up…';
+    }},
+  ]);
+  rowList('tab-health', 'Status', [
+    {t: 'Add-on', id: 'addon', icon: 'info', sum: () => `Version ${kvLine('h-addon', 'Version')} · running for ${kvLine('h-addon', 'Running for')}`},
+    {t: 'Home Assistant', id: 'ha', icon: 'home', sum: () => kvLine('h-ha', 'Link')},
+    {t: 'Home Assistant entities', id: 'entities', icon: 'list', sum: () => esc(`${$('h-entities').querySelectorAll('code').length} sensors, posted by the add-on`)},
+  ]);
+  rowList('tab-debug', 'Tools', [
+    {t: 'Restart', id: 'restart', icon: 'replug', sum: () => 'Restart the add-on'},
+    {t: 'Diagnostics bundle', id: 'bundle', icon: 'download', sum: () => 'One file to attach to a bug report'},
+  ]);
+  drawRowSums();
+  setInterval(() => { if (!document.hidden) drawRowSums(); }, 1000);
+  document.querySelector('main').addEventListener('change', () => setTimeout(drawRowSums, 50));
+}
+setupRows();
+
+applyHaTheme();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyHaTheme);
+showTab((location.hash || '#overview').slice(1));
+window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (t && t !== activeTab) showTab(t); });
+startPush();
+pollState();
+pollStatus();
+</script>
+</body>
+</html>

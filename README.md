@@ -18,6 +18,7 @@ store.
 | [Predbat Dashboard](predbat_dashboard/) | A clean, colourful dashboard for Predbat that you arrange yourself: drag the cards you want onto it, with a few controls. |
 | [Heat Loss Calculator](heat_loss_calculator/) | Your home's heat loss (W/K, and kW at your design temperatures) from your gas use and temperatures, next to your heat pump surveys. |
 | [Tigo Solar](tigo_solar/) | Your Tigo solar panels: a clickable view of your roof, production by day, week, month and year with reclaimed power, and sensors for each panel. |
+| [Neighbourhood View](neighbourhood_view/) | An isometric drawing of the streets around your home from OpenStreetMap, as a page and a full-screen dashboard card. |
 | [Add-on Template](addon_template/) | A working add-on to start new ones from: web page, Home Assistant link, its own sensors, settings and diagnostics. |
 
 ## Starting a new add-on

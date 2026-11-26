@@ -5,7 +5,7 @@ subscription. `CLAUDE.md` has the working rules; this file has the
 background: what each add-on does, how the owner uses them, what was
 decided and why, and what's still open.
 
-**Last updated:** 24 Nov 2026 (ocpp_charge_proxy 2.120.1).
+**Last updated:** 26 Nov 2026 (neighbourhood_view 0.1.0).
 
 **Keep this file current.** Whoever changes the repository (any AI agent
 or person) updates this file in the same commit when the change affects
@@ -64,6 +64,7 @@ anything below, and bumps the "Last updated" line.
 | `octopus_charge_pack` | 0.10.8 | Octopus API helpers; 0.10.8 drops old `device_id`/`poll_seconds` options via the Supervisor API (`POST http://supervisor/addons/self/options`). |
 | `sigenergy_evdc_soc_range_manager` | 0.44.0 | "SigEnergy DC Charger": keeps the EVDC car between limits on a weekly schedule. Limits are named **Maximum charge** and **Keep at least**; an entry can be Maximum charge / Keep at least / Both / Charge only / Discharge only (one-way entries stay within the limits); entries may overlap; start == end means 24 hours; the week view has three lanes (one-way entries in the middle). The Overview's Car SoC chart shows charge/discharge only as a coloured strip along the bottom (0.43.0; points in `soc_history.json` carry a 6th value, "charge"/"discharge", only then). Notifications (0.44.0): the notify service box suggests HA's notify services (`/api/notify_services`) with a Test button; **What to send** (`notify_level`: info = everything incl. starts/stops, warning, error, none; default info); warnings/errors in its log are sent too (`src/log_notify.py`, ported from OCPP's). about 105 tests (test_api needs pytest-asyncio; one notify test needs aiohttp). |
 | `tigo_solar` | 0.7.0 | Tigo panel data: roof view (reclaimed in brackets), drag-to-select chart, quick-select per string, per-panel estimates every minute (system power shared by interpolated reading shares), backfill of real 15-minute per-panel readings via Tigo's `lastvalue` (`resourceId=lastValue-{date}-{pin|reclaimedPower}-{HH:MM}`, about 2 requests per slot, 3 s apart; trusted after 3 answers within 35%/30 W of system power, off after 3 misses), fixed scale, hover tooltip, reclaimed %, "By the time of day" and "Through the year" heatmap / 3D surface with Month/Year and 3D zoom. 22 tests. |
+| `neighbourhood_view` | 0.1.0 | New (26 Nov 2026): an isometric SVG drawing of the streets ~250 m around your home from OpenStreetMap (postcodes.io for the postcode, Overpass for buildings/roads/areas/trees and the house-number lookup), as the add-on's page and a dashboard card. See "Neighbourhood View" below. |
 | `heat_loss_calculator`, `predbat_dashboard`, `stellantis_ev_stats` | 0.7.1, 0.3.2, 0.3.2 | Not worked on recently. |
 | `addon_template` | 0.1.7 | Start new add-ons with `python scripts/new_addon.py`. |
 
@@ -143,6 +144,39 @@ anything below, and bumps the "Last updated" line.
   battery wear or house use modelled).
 - The planner's "Automatic schedule planned" log line doesn't say why it
   planned again (offered, not done).
+
+## Neighbourhood View (new)
+
+`neighbourhood_view/` (from `addon_template/`). The owner asked for: Settings with postcode + house
+number; an Overview drawing the surrounding streets with the house in the middle, in the style of a
+low-poly isometric map; and a dashboard card that's the only card on a page and scales to any
+device. Choices the owner made: OpenStreetMap data, a fixed isometric picture (not 3D/rotatable;
+quarter turns are allowed), about 250 m around, add-on and card together.
+
+- `src/scene.py` (pure): Overpass queries, projection to metres (x east, y north) around the home,
+  clipping to a 500 m square, building kinds/heights (houses get a gable roof on their min-area
+  rectangle), roads/rails/areas/water, synthetic trees (parks, woods, residential streets; seeded
+  by position so they don't move), `find_address` (house number + postcode within 400 m),
+  `pick_home`. `tests/osm_sample.py` is a made-up neighbourhood in Overpass's form.
+- `src/places.py`: postcodes.io + Overpass (two servers), `SceneStore` (/data/scene.json, made
+  again after 30 days, on an address change or Refresh), `picked_home` (a building clicked on the
+  Overview: saved as `picked` {id, lat, lon} in app settings; the map is re-centred on it).
+- `src/static/neighbourhood-view-card.js`: the renderer (`window.NeighbourhoodView.render/draw/fit`,
+  axonometric: yaw 30° + quarter turns, 35° elevation, painter's order by depth) and the card
+  `custom:neighbourhood-view-card`. The page loads it from `./card.js`. `fit()` zooms in around
+  the pin (up to 2.4×) when the box's shape is far from the drawing's (phones upright).
+- The card reads `api/scene` through ingress: `supervisor/api` websocket calls for `/addons`
+  (slug ending `_neighbourhood_view`), `/addons/<slug>/info` (ingress_url) and `/ingress/session`
+  (cookie `ingress_session`, path /api/hassio_ingress/), so it needs an admin user. Config
+  options: `label`, `height`, `addon`, `url`. In a panel view (`isPanel`) it fills
+  100vh minus the header.
+- `src/card_install.py`: writes the card to `/homeassistant/www/neighbourhood-view/` (config.yaml
+  maps `homeassistant_config` rw) and adds/updates the Lovelace resource
+  (`/local/neighbourhood-view/neighbourhood-view-card.js?v=<version>`) over the websocket.
+- Not tested against the real services (the cloud sandbox couldn't reach postcodes.io or
+  Overpass); the UI was checked with a stub server and Playwright. Icons are still the template's.
+- Ideas not done: road names, building colours from OSM tags, live overlays (e.g. the car, the
+  battery, weather), a "how big" setting.
 
 ## Testing and environment notes
 
