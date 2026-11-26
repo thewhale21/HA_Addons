@@ -387,6 +387,52 @@ def _street_trees(roads: list, buildings: list, half: float) -> list:
     return out
 
 
+FACE_STREET_M = 40.0  # a house's ridge runs along the street within this distance of it
+
+
+def _face_streets(buildings: list, roads: list) -> None:
+    """Turns each pitched roof so its ridge runs along the nearest street, as British houses' do
+    (a terraced or semi-detached house is usually deeper than it is wide, so its longer side would
+    put the ridge front to back). With no street near, the ridge stays along the longer side."""
+    cell = FACE_STREET_M
+    grid: dict = {}
+    for r in roads:
+        if r["k"] == "path":
+            continue
+        for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
+            for gx in range(int(math.floor(min(x1, x2) / cell)), int(math.floor(max(x1, x2) / cell)) + 1):
+                for gy in range(int(math.floor(min(y1, y2) / cell)), int(math.floor(max(y1, y2) / cell)) + 1):
+                    grid.setdefault((gx, gy), []).append((x1, y1, x2, y2))
+    for b in buildings:
+        if b.get("r") != "gable" or not b.get("rect"):
+            continue
+        cx, cy = centroid(b["p"])
+        gx, gy = int(math.floor(cx / cell)), int(math.floor(cy / cell))
+        best = None
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for x1, y1, x2, y2 in grid.get((gx + dx, gy + dy), ()):
+                    vx, vy = x2 - x1, y2 - y1
+                    ln2 = vx * vx + vy * vy
+                    if ln2 < 1e-6:
+                        continue
+                    t = max(0.0, min(1.0, ((cx - x1) * vx + (cy - y1) * vy) / ln2))
+                    d = math.hypot(x1 + vx * t - cx, y1 + vy * t - cy)
+                    if best is None or d < best[0]:
+                        best = (d, vx, vy)
+        if best is None or best[0] > FACE_STREET_M:
+            continue
+        rect = b["rect"]
+        _, vx, vy = best
+        e1 = (rect[1][0] - rect[0][0], rect[1][1] - rect[0][1])
+        e2 = (rect[2][0] - rect[1][0], rect[2][1] - rect[1][1])
+        along = lambda e: abs(e[0] * vx + e[1] * vy) / ((math.hypot(*e) or 1) * math.hypot(vx, vy))  # noqa: E731
+        if along(e2) > along(e1):
+            b["rect"] = rect[1:] + rect[:1]  # (the ridge along the street; the span is now the other side)
+            span = math.hypot(*e1)
+            b["rh"] = round(min(4.5, max(1.5, span * 0.38)), 1)
+
+
 CAR_EVERY = 9.0  # a place for a parked car this often on each side of a street...
 CAR_CHANCE = 0.22  # ...with one in about this many
 
@@ -506,6 +552,7 @@ def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = 
         trees += _scatter(poly, TREE_SPACING[kind], foot)
     trees += _street_trees(roads, foot, half)
     cars = _cars(roads, foot, half)
+    _face_streets(buildings, roads)
     home = pick_home(buildings, lat0, lon0, home_pt, home_id)
     return {"v": 1, "half": half, "home": home, "buildings": buildings, "roads": roads, "rails": rails,
             "areas": areas, "water": water, "trees": trees[:4000], "cars": cars}

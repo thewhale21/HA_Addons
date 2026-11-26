@@ -407,7 +407,7 @@
   /* Fits the drawing to its box: all of it where the box is about its shape; in a much narrower
    * (or flatter) box, e.g. a phone held upright, closer in around your home (up to MAX_ZOOM),
    * rather than tiny in the middle. Done again as the box changes size. */
-  const MAX_ZOOM = 2.4;
+  const MAX_ZOOM = 2.4, MAX_TOTAL = 10;
   function fit(el) {
     const svg = el.querySelector('svg');
     if (!svg) return;
@@ -415,7 +415,9 @@
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const boxAr = r.width / r.height, ar = w / h;
-    const z = Math.min(MAX_ZOOM, Math.max(1, boxAr < ar ? ar / boxAr : boxAr / ar) ** 0.75) * (Number(svg.dataset.zoom) || 1);
+    // (closer in for a box much narrower or flatter than the drawing, on top of the zoom chosen)
+    const shapeZ = Math.min(MAX_ZOOM, Math.max(1, boxAr < ar ? ar / boxAr : boxAr / ar) ** 0.75);
+    const z = Math.min(MAX_TOTAL, (Number(svg.dataset.zoom) || 1) * Math.sqrt(shapeZ));
     let vw, vh;
     if (boxAr < ar) { vw = w / z; vh = vw / boxAr; } else { vh = h / z; vw = vh * boxAr; }
     const clampTo = (c, size, lo, full) => (size >= full ? lo + (full - size) / 2 : Math.min(lo + full - size, Math.max(lo, c - size / 2)));
@@ -434,11 +436,13 @@
   }
 
   // Zoom (the + and − buttons): steps in from the whole square, remembered on each device
-  const ZOOMS = [1, 1.6, 2.6, 4, 6];
-  const ZOOM_KEY = 'neighbourhood-view-zoom';
+  // (starting at 2.6×: your street and the ones round it, as close as in a game; − shows the whole square)
+  const ZOOMS = [1, 1.6, 2.6, 4, 6, 9];
+  const ZOOM_DEFAULT = 2;
+  const ZOOM_KEY = 'neighbourhood-view-zoom2';
   function zoomStep(delta) {
-    let i = 0;
-    try { i = Number(localStorage.getItem(ZOOM_KEY)) || 0; } catch (e) { /* (not kept) */ }
+    let i = ZOOM_DEFAULT;
+    try { const v = localStorage.getItem(ZOOM_KEY); if (v !== null && v !== '') i = Number(v) || 0; } catch (e) { /* (not kept) */ }
     if (delta) {
       i = Math.max(0, Math.min(ZOOMS.length - 1, i + delta));
       try { localStorage.setItem(ZOOM_KEY, String(i)); } catch (e) { /* (not kept) */ }

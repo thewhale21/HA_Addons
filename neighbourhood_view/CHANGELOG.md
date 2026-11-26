@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 — Closer in, and roofs along the street
+
+- **Change:** it starts zoomed in on your street and the ones round it
+  (2.6×), as close as a game's view; − shows the whole square, and + goes
+  closer than before (up to 9×). Your zoom is kept on each device (after
+  this update it starts at the new default once).
+- **Fix:** houses' roofs run along the nearest street, as British terraces
+  and semis do. Before, a terraced house (deeper than it's wide) got its
+  ridge front to back, so a row of them looked like a row of fins.
+
 ## 0.3.0 — Torn out of the ground
 
 - **Improvement:** the map's edge is no longer a straight-sided board: the

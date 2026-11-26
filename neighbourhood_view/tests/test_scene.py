@@ -149,3 +149,23 @@ def test_the_card_is_put_in_place_and_added(tmp_path):
     async def yaml_mode(msg):
         raise RuntimeError("Not supported")
     assert run(register(yaml_mode, "0.1.0"))["status"] == "manual"
+
+
+def test_ridges_run_along_the_street():
+    """A terraced house 5 m wide and 9 m deep on an east-west street: its ridge runs east-west (along
+    the street), not front to back as its longer side would have it."""
+    def house(x):
+        pts = [(x, 10), (x + 5, 10), (x + 5, 19), (x, 19), (x, 10)]
+        return {"type": "way", "id": int(x) + 100, "tags": {"building": "terrace"},
+                "geometry": [{"lat": S.unproject(px, py, LAT0, LON0)[0], "lon": S.unproject(px, py, LAT0, LON0)[1]} for px, py in pts]}
+    road = {"type": "way", "id": 1, "tags": {"highway": "residential"},
+            "geometry": [{"lat": S.unproject(px, 0, LAT0, LON0)[0], "lon": S.unproject(px, 0, LAT0, LON0)[1]} for px in (-60, 60)]}
+    sc = S.build_scene({"elements": [road, house(0), house(5)]}, LAT0, LON0)
+    for b in sc["buildings"]:
+        (ax, ay), (bx, by) = b["rect"][0], b["rect"][1]
+        assert abs(by - ay) < 0.2 and abs(abs(bx - ax) - 5) < 0.2  # (the ridge east-west, 5 m)
+        assert b["rh"] == round(min(4.5, 9 * 0.38), 1)
+    # with no street near, along its longer side
+    sc = S.build_scene({"elements": [house(0)]}, LAT0, LON0)
+    (ax, ay), (bx, by) = sc["buildings"][0]["rect"][:2]
+    assert abs(abs(by - ay) - 9) < 0.2

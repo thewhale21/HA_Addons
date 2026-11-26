@@ -12,8 +12,10 @@ as the add-on's page and as a dashboard card.
    address, or now with **Refresh**.
 3. **Overview:** the streets about 250 m each way from your house (a 500 m
    square), with a pin on your house showing its number.
-   - **+ −** zoom in around your house and back out, **⟲ ⟳** turn it a
-     quarter at a time (both remembered on each device).
+   - **+ −** zoom in around your house and back out (it starts close in,
+     on your street and the ones round it; − four times shows the whole
+     square), **⟲ ⟳** turn it a quarter at a time (both remembered on
+     each device).
    - **⌂** picks your house: click it, then click your house. The map's
      made again centred on it, and it's kept until you change your address.
      Use it when the pin isn't on your house.
@@ -28,7 +30,8 @@ parks, grass, woods, sports pitches, car parks, water and rivers, and the
 trees it has, drawn like a video game's town:
 
 - **Houses** each get their own look: brick, render or stone walls, a
-  tiled, slate or clay roof, gabled or hipped, a chimney on some, windows
+  tiled, slate or clay roof, gabled or hipped, its ridge running along the
+  nearest street (as a terrace's or a semi's does), a chimney on some, windows
   on every storey and a front door. Where OpenStreetMap has no height, most
   are 2 storeys, some bungalows and some 3 storeys.
 - **Other buildings:** flats and offices with rows of windows, shops with
