@@ -335,17 +335,29 @@
     return 'M' + p.map(([x, y]) => { const q = V.p(x, y, z); return f(q[0]) + ' ' + f(q[1]); }).join('L');
   }
 
-  /**
-   * The drawing as SVG text. opts: {rot: 0-3 (quarter turns), label: the pin's text, pick: true
-   * (buildings can be clicked: data-id), hideLabel}
-   */
-  function draw(scene, opts = {}) {
+  const PIN_H = 250;  // (pins and faces sized as on a 250 m map, whatever the map's size)
+
+  // A person's face (their picture, else their initials on their colour), at cx, cy
+  function avatar(cx, cy, r, fs, p, title) {
+    const col = personColour(p.entity_id || p.name), clip = 'nvp' + Math.random().toString(36).slice(2, 8);
+    return `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r + fs * 0.12)}" fill="#ffffff"/>`
+      + `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}" fill="${col}"/>`
+      + `<text x="${f(cx)}" y="${f(cy)}" fill="#ffffff" font-size="${f(r * 0.8)}" font-family="sans-serif" font-weight="700" text-anchor="middle" dominant-baseline="central">${esc(p.initials || '?')}</text>`
+      + (p.picture ? `<clipPath id="${clip}"><circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}"/></clipPath><image href="${esc(p.picture)}" x="${f(cx - r)}" y="${f(cy - r)}" width="${f(r * 2)}" height="${f(r * 2)}" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid slice"/>` : '')
+      + `<title>${esc(title)}</title>`;
+  }
+
+  /* One chunk of map (your home's, or another place's), in its own coordinates: {svg, box: [x0, y0,
+   * w, h], pin: [x, y] (over the house or the middle)}. opts: rot, zoom, label, pick (buildings can
+   * be clicked: data-id), hideLabel, live (night...), isHome, pinColour, atPin: people shown over the
+   * pin, onMap: [{p, x, y}] people drawn where they are. */
+  function island(scene, opts = {}) {
     const V = view(opts.rot || 0), H = scene.half || 250, home = scene.home || {};
     const live = opts.live || {}, people = live.people || [];
     const anyHome = people.some((p) => p.home);
     CTX.night = !!live.night;
-    CTX.homeLit = people.length ? anyHome : true;  // (no people set: your house lit at night as any)
-    CTX.smoke = !live.night && anyHome;
+    CTX.homeLit = opts.isHome ? (people.length ? anyHome : true) : false;  // (no people set: your house lit at night as any)
+    CTX.smoke = !!opts.isHome && !live.night && anyHome;
     const out = [];
     // the chunk of ground, torn out: its earth sides (those facing the viewer, back ones first),
     // then its top, with a lip of turf
@@ -397,7 +409,7 @@
     }
     out.push('</g>');
     // (at night, with someone home: a warm glow on the ground round your house)
-    if (CTX.night && CTX.homeLit && people.length) {
+    if (opts.isHome && CTX.night && CTX.homeLit && people.length) {
       const g = V.p(home.x || 0, home.y || 0, 0);
       out.push(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="16" ry="${f(16 * SE)}" fill="${LIGHT}" opacity=".28"/><ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="9" ry="${f(9 * SE)}" fill="${LIGHT2}" opacity=".35"/>`);
     }
@@ -407,11 +419,11 @@
     // (only what's on the chunk: a building the torn edge cuts through isn't drawn)
     const on = (x, y) => insideRing(x, y, edge);
     for (const b of scene.buildings || []) {
-      const [cx, cy] = centroid(b.p), isHome = home.id != null && b.id === home.id;
+      const [cx, cy] = centroid(b.p), isHome = !!opts.isHome && home.id != null && b.id === home.id;
       if (!isHome && !b.p.every(([x, y]) => on(x, y))) continue;
       const d = building(V, b, isHome);
       if (isHome) pin = d.top;
-      const attrs = opts.pick ? ` data-id="${b.id}" class="bld"` : '';
+      const attrs = opts.pick && opts.isHome ? ` data-id="${b.id}" class="bld"` : '';
       things.push([V.d(cx, cy), `<g${attrs}>${d.svg}</g>`]);
     }
     for (const t of scene.trees || []) if (on(t[0], t[1])) things.push([V.d(t[0], t[1]), tree(V, t)]);
@@ -425,35 +437,125 @@
         out[i] = out[i].replace(/#[0-9a-f]{6}/gi, (c) => (c === LIGHT || c === LIGHT2 ? c : (cache[c] = cache[c] || mix(c, '#0b1736', 0.6))));
       }
     }
-    // the pin over your home
+    // the pin over your home (or the place's middle), and who's there over it
     if (!pin) pin = V.p(home.x || 0, home.y || 0, 0);
+    const zs = Math.pow(opts.zoom || 1, 0.9), fs = PIN_H * 0.034 / zs, pc = opts.pinColour || C.pin;
+    let top = pin[1];
     if (!opts.hideLabel) {
       // (the same size on the screen however far it's zoomed in)
-      const zs = Math.pow(opts.zoom || 1, 0.9);
-      const label = esc(opts.label || 'HOME'), fs = H * 0.034 / zs, w = label.length * fs * 0.66 + fs * 1.6, ph = fs * 1.9;
-      const top = pin[1] - H * 0.13 / zs;
-      out.push(`<line x1="${f(pin[0])}" y1="${f(pin[1])}" x2="${f(pin[0])}" y2="${f(top)}" stroke="${C.pin}" stroke-width="${f(fs * 0.14)}"/>`
-        + `<circle cx="${f(pin[0])}" cy="${f(pin[1])}" r="${f(fs * 0.3)}" fill="${C.pin}"/>`
-        + `<rect x="${f(pin[0] - w / 2)}" y="${f(top - ph)}" width="${f(w)}" height="${f(ph)}" rx="${f(ph / 2)}" fill="${C.pin}" stroke="#ffffff" stroke-width="${f(fs * 0.12)}"/>`
+      const label = esc(opts.label || 'HOME'), w = label.length * fs * 0.66 + fs * 1.6, ph = fs * 1.9;
+      top = pin[1] - PIN_H * 0.13 / zs;
+      out.push(`<line x1="${f(pin[0])}" y1="${f(pin[1])}" x2="${f(pin[0])}" y2="${f(top)}" stroke="${pc}" stroke-width="${f(fs * 0.14)}"/>`
+        + `<circle cx="${f(pin[0])}" cy="${f(pin[1])}" r="${f(fs * 0.3)}" fill="${pc}"/>`
+        + `<rect x="${f(pin[0] - w / 2)}" y="${f(top - ph)}" width="${f(w)}" height="${f(ph)}" rx="${f(ph / 2)}" fill="${pc}" stroke="#ffffff" stroke-width="${f(fs * 0.12)}"/>`
         + `<text x="${f(pin[0])}" y="${f(top - ph / 2)}" fill="${C.pinText}" font-size="${f(fs)}" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-weight="700" letter-spacing="${f(fs * 0.08)}" text-anchor="middle" dominant-baseline="central">${label}</text>`);
-      // who's home: their faces (or initials) in a row above the pin
-      const here = people.filter((p) => p.home), r = fs * 1.05;
+      top -= ph;
+      const here = opts.atPin || [], r = fs * 1.05;
       here.forEach((p, i) => {
-        const cx = pin[0] + (i - (here.length - 1) / 2) * r * 2.3, cy = top - ph - r * 1.45;
-        const col = personColour(p.entity_id || p.name), clip = 'nvp' + Math.random().toString(36).slice(2, 8);
-        out.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r + fs * 0.12)}" fill="#ffffff"/>`
-          + `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}" fill="${col}"/>`
-          + `<text x="${f(cx)}" y="${f(cy)}" fill="#ffffff" font-size="${f(fs * 0.85)}" font-family="sans-serif" font-weight="700" text-anchor="middle" dominant-baseline="central">${esc(p.initials || '?')}</text>`
-          + (p.picture ? `<clipPath id="${clip}"><circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}"/></clipPath><image href="${esc(p.picture)}" x="${f(cx - r)}" y="${f(cy - r)}" width="${f(r * 2)}" height="${f(r * 2)}" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid slice"/>` : '')
-          + `<title>${esc(p.name)}: home</title>`);
+        out.push(avatar(pin[0] + (i - (here.length - 1) / 2) * r * 2.3, top - r * 1.45, r, fs, p, `${p.name}: ${opts.isHome ? 'home' : opts.label}`));
       });
+    }
+    // people out and about on this map: their face on a stalk where they are
+    for (const {p, x, y} of opts.onMap || []) {
+      const g = V.p(x, y, 0), r = fs * 0.85, ty = g[1] - PIN_H * 0.07 / zs;
+      out.push(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="${f(r * 0.6)}" ry="${f(r * 0.6 * SE)}" fill="#000000" opacity=".25"/>`
+        + `<line x1="${f(g[0])}" y1="${f(g[1])}" x2="${f(g[0])}" y2="${f(ty)}" stroke="#ffffff" stroke-width="${f(fs * 0.16)}"/>`
+        + avatar(g[0], ty - r, r, fs, p, `${p.name}: here`));
     }
     // the box around it all (for the viewBox)
     const corners = [];
     for (const [x, y, dp] of edge) corners.push(V.p(x, y, 0), V.p(x, y, -dp));
-    const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]).concat([pin[1] - H * 0.2]);
+    const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]).concat([top - fs * 3.5, pin[1] - PIN_H * 0.2 / zs]);
     const m = H * 0.04, x0 = Math.min(...xs) - m, y0 = Math.min(...ys) - m, w = Math.max(...xs) - x0 + m, h = Math.max(...ys) - y0 + m * 2.2;
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1] - H * 0.06 / Math.pow(opts.zoom || 1, 0.9))}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" role="img" aria-label="The streets around your home">${out.join('')}</svg>`;
+    return {svg: out.join(''), box: [x0, y0, w, h], pin: [pin[0], pin[1] - PIN_H * 0.06 / zs]};
+  }
+
+  // A point's place on a map (metres from its middle), from latitude and longitude
+  function onScene(sc, lat, lon) {
+    const R = 6371008.8, rad = Math.PI / 180;
+    return [(lon - sc.lon) * rad * R * Math.cos(sc.lat * rad), (lat - sc.lat) * rad * R];
+  }
+
+  /* Where everyone is: over your house (home), on a map where their tracker puts them, over a
+   * place they're at (their zone's name), or away (just their chip). */
+  function whereabouts(scene, places, people) {
+    const out = {home: [], homeMap: [], places: places.map(() => ({at: [], map: []})), away: []};
+    for (const p of people) {
+      if (p.home) { out.home.push(p); continue; }
+      let done = false;
+      if (p.lat != null && p.lon != null) {
+        const maps = [[scene, out.homeMap], ...places.map((pl, i) => [pl.scene, out.places[i].map])];
+        for (const [sc, list] of maps) {
+          if (!sc || sc.lat == null) continue;
+          const [x, y] = onScene(sc, Number(p.lat), Number(p.lon)), lim = (sc.half || 150) * 0.94;
+          if (Math.abs(x) <= lim && Math.abs(y) <= lim) { list.push({p, x, y}); done = true; break; }
+        }
+      }
+      if (!done && p.state) {
+        const i = places.findIndex((pl) => String(pl.name || '').toLowerCase() === String(p.state).toLowerCase());
+        if (i >= 0) { out.places[i].at.push(p); done = true; }
+      }
+      if (!done) out.away.push(p);
+    }
+    return out;
+  }
+
+  /**
+   * The drawing as SVG text: your home's map, with the other places' maps beside it (left, right,
+   * above, below; several on one side share it). opts: {rot: 0-3 (quarter turns), zoom, label: the
+   * pin's text, pick: true (your map's buildings can be clicked: data-id), hideLabel, live,
+   * places: [{name, side, scene}]}
+   */
+  function draw(scene, opts = {}) {
+    const live = opts.live || {}, places = (opts.places || []).filter((pl) => pl && pl.scene);
+    const who = whereabouts(scene, places, live.people || []);
+    const homeI = island(scene, {...opts, isHome: true, atPin: who.home, onMap: who.homeMap});
+    const [hx, hy, hw, hh] = homeI.box;
+    const gap = hw * 0.06;
+    const groups = [`<g class="nvisl" data-f="">${homeI.svg}</g>`];
+    const boxes = [[hx, hy, hx + hw, hy + hh]];
+    const PLACE_PINS = ['#7e57c2', '#00897b', '#f4511e', '#6d4c41', '#c2185b', '#3949ab'];
+    const bySide = {left: [], right: [], up: [], down: []};
+    places.forEach((pl, i) => {
+      const I = island(pl.scene, {rot: opts.rot, zoom: opts.zoom, live, isHome: false, label: String(pl.name || 'PLACE').toUpperCase(),
+        pinColour: PLACE_PINS[i % PLACE_PINS.length], atPin: who.places[i].at, onMap: who.places[i].map});
+      (bySide[pl.side] || bySide.left).push(I);
+    });
+    const place = (I, tx, ty, sc) => {
+      const [bx, by, bw, bh] = I.box;
+      const dx = tx - bx * sc, dy = ty - by * sc;
+      groups.push(`<g class="nvisl" data-f="${f(dx + I.pin[0] * sc)} ${f(dy + I.pin[1] * sc)}" transform="translate(${f(dx)} ${f(dy)}) scale(${sc.toFixed(4)})">${I.svg}</g>`);
+      boxes.push([tx, ty, tx + bw * sc, ty + bh * sc]);
+    };
+    // (left and right: a column as tall as your map, shared; above and below: a row as wide)
+    for (const side of ['left', 'right']) {
+      const list = bySide[side];
+      if (!list.length) continue;
+      const need = list.reduce((t, I) => t + I.box[3], 0) + gap * (list.length - 1);
+      const sc = Math.min(1, hh / need), colW = Math.max(...list.map((I) => I.box[2])) * sc;
+      let ty = hy + hh / 2 - (need * sc) / 2;
+      for (const I of list) {
+        const x = side === 'left' ? hx - gap - colW / 2 - (I.box[2] * sc) / 2 : hx + hw + gap + colW / 2 - (I.box[2] * sc) / 2;
+        place(I, x, ty, sc);
+        ty += I.box[3] * sc + gap * sc;
+      }
+    }
+    for (const side of ['up', 'down']) {
+      const list = bySide[side];
+      if (!list.length) continue;
+      const need = list.reduce((t, I) => t + I.box[2], 0) + gap * (list.length - 1);
+      const sc = Math.min(1, hw / need), rowH = Math.max(...list.map((I) => I.box[3])) * sc;
+      let tx = hx + hw / 2 - (need * sc) / 2;
+      for (const I of list) {
+        const y = side === 'up' ? hy - gap - rowH / 2 - (I.box[3] * sc) / 2 : hy + hh + gap + rowH / 2 - (I.box[3] * sc) / 2;
+        place(I, tx, y, sc);
+        tx += I.box[2] * sc + gap * sc;
+      }
+    }
+    const x0 = Math.min(...boxes.map((b) => b[0])), y0 = Math.min(...boxes.map((b) => b[1]));
+    const w = Math.max(...boxes.map((b) => b[2])) - x0, h = Math.max(...boxes.map((b) => b[3])) - y0;
+    const pin = homeI.pin;
+    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" role="img" aria-label="The streets around your home">${groups.join('')}</svg>`, away: who.away};
   }
 
   /* Fits the drawing to its box: all of it where the box is about its shape; in a much narrower
@@ -463,13 +565,15 @@
   function fit(el) {
     const svg = el.querySelector('svg');
     if (!svg) return;
-    const [x0, y0, w, h] = svg.dataset.box.split(' ').map(Number), [px, py] = svg.dataset.pin.split(' ').map(Number);
+    // (round your house, or the place you tapped)
+    const [x0, y0, w, h] = svg.dataset.box.split(' ').map(Number), [px, py] = el._nvFocus || svg.dataset.pin.split(' ').map(Number);
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const boxAr = r.width / r.height, ar = w / h;
     // (closer in for a box much narrower or flatter than the drawing, on top of the zoom chosen)
     const shapeZ = Math.min(MAX_ZOOM, Math.max(1, boxAr < ar ? ar / boxAr : boxAr / ar) ** 0.75);
-    const z = Math.min(MAX_TOTAL, (Number(svg.dataset.zoom) || 1) * Math.sqrt(shapeZ));
+    // (zoomed right out: all of it, other places too)
+    const uz = Number(svg.dataset.zoom) || 1, z = uz <= 1 ? 1 : Math.min(MAX_TOTAL, uz * Math.sqrt(shapeZ));
     let vw, vh;
     if (boxAr < ar) { vw = w / z; vh = vw / boxAr; } else { vh = h / z; vw = vh * boxAr; }
     const clampTo = (c, size, lo, full) => (size >= full ? lo + (full - size) / 2 : Math.min(lo + full - size, Math.max(lo, c - size / 2)));
@@ -538,9 +642,22 @@
 
   function render(el, scene, opts) {
     // (OpenStreetMap's credit, as its licence asks: in a corner of the box, whatever the zoom)
-    el.innerHTML = draw(scene, opts) + overlays((opts || {}).live) + '<div style="position:absolute;left:10px;bottom:6px;font:11px/1.2 sans-serif;color:rgba(255,255,255,.55);pointer-events:none">\u00a9 OpenStreetMap contributors</div>';
+    const d = draw(scene, opts);
+    el.innerHTML = d.svg + overlays((opts || {}).live) + '<div style="position:absolute;left:10px;bottom:6px;font:11px/1.2 sans-serif;color:rgba(255,255,255,.55);pointer-events:none">\u00a9 OpenStreetMap contributors</div>';
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
     fit(el);
+    el._nvPick = !!(opts && opts.pick);
+    if (!el._nvClick) {
+      // tap another place's map to zoom round it; tap yours to come back
+      el._nvClick = (e) => {
+        const g = e.target.closest && e.target.closest('.nvisl');
+        if (!g || (el._nvPick && e.target.closest('.bld'))) return;
+        const fp = g.dataset.f ? g.dataset.f.split(' ').map(Number) : null;
+        el._nvFocus = fp;
+        fit(el);
+      };
+      el.addEventListener('click', el._nvClick);
+    }
     if (!el._nvObserver && window.ResizeObserver) {
       el._nvObserver = new ResizeObserver(() => fit(el));
       el._nvObserver.observe(el);
@@ -576,7 +693,8 @@
       const st = states[e] || {}, a = st.attributes || {};
       const name = a.friendly_name || e.split('.').pop().replace(/_/g, ' ');
       const initials = (name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('') || '?').toUpperCase();
-      out.people.push({entity_id: e, name, initials, picture: a.entity_picture || null, state: st.state, home: st.state === 'home'});
+      out.people.push({entity_id: e, name, initials, picture: a.entity_picture || null, state: st.state, home: st.state === 'home',
+        lat: a.latitude ?? null, lon: a.longitude ?? null});
     }
     return out;
   }
@@ -696,6 +814,7 @@
         const d = await r.json();
         if (!d.scene) { this._scene = null; this._msg(d.message || 'Set your postcode and house number in the Neighbourhood View add-on.'); return; }
         this._scene = d.scene;
+        this._places = d.places || [];
         // (the entities to follow: the card's own weather / people, else the add-on's Settings)
         const c = this._config;
         this._ents = {...(d.entities || {}), ...(c.weather ? {weather: c.weather} : {}), ...(c.people ? {people: [].concat(c.people)} : {})};
@@ -712,7 +831,7 @@
       const s = this._scene, label = this._config.label || (s.number ? `NO. ${s.number}` : 'HOME');
       const live = this._ents && this._hass ? liveFrom(this._hass.states || {}, this._ents) : null;
       this._liveKey = JSON.stringify(live);
-      render(this._root.querySelector('.map'), s, {rot: getRot(), zoom: zoomStep(0), label: String(label).toUpperCase(), live});
+      render(this._root.querySelector('.map'), s, {rot: getRot(), zoom: zoomStep(0), label: String(label).toUpperCase(), live, places: this._places});
       this._msg('');
     }
   }

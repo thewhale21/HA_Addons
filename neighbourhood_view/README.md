@@ -3,9 +3,10 @@
 ![Supports aarch64 Architecture][aarch64-shield]
 ![Supports amd64 Architecture][amd64-shield]
 
-An isometric drawing of the streets around your home, about 250 m each
-way: buildings (houses with pitched roofs), roads, railways, parks, water
-and trees, from OpenStreetMap, with a pin on your house. It's the add-on's
+An isometric drawing of the streets around your home, about 150 m each
+way (you choose): buildings (houses with pitched roofs), roads, railways, parks, water
+and trees, from OpenStreetMap, with a pin on your house, and
+little maps of your other places (work, school…) beside it. It's the add-on's
 page in the sidebar, and a card for your dashboards that fills the screen
 on a phone, tablet or wall screen.
 

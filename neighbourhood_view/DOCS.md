@@ -9,9 +9,12 @@ as the add-on's page and as a dashboard card.
 2. **Settings › Address:** your **postcode** (UK) and **house number**,
    then **Save** (or Enter). The map's made straight away, usually in a few
    seconds, and kept: it's made again every 30 days, when you change your
-   address, or now with **Refresh**.
-3. **Overview:** the streets about 250 m each way from your house (a 500 m
-   square), with a pin on your house showing its number.
+   address, or now with **Refresh**. **Map size** (beside them) is how far
+   the map goes each way from your house: 150 m by default (a 300 m
+   square), anything from 50 to 500 m. A bigger map takes longer to make
+   and draw.
+3. **Overview:** the streets round your house, with a pin on your house
+   showing its number.
    - **+ −** zoom in around your house and back out (it starts close in,
      on your street and the ones round it; − four times shows the whole
      square), **⟲ ⟳** turn it a quarter at a time (both remembered on
@@ -35,12 +38,35 @@ Settings › **On the map**:
 - **People:** up to 6 people (Home Assistant's people, or device
   trackers). Each has a chip at the top right: home, away, or the zone
   they're in. Whoever's home has their picture (or initials) over your
-  house.
+  house. Someone out whose tracker gives a location (e.g. the companion
+  app's GPS) that's on one of the maps, yours or another place's, has
+  their face on a stalk where they are; someone in a zone that's one of
+  your other places, without a location, over that place's pin.
 - **Night** (Home Assistant's sun below the horizon): the map goes dark
   blue, about a third of the other houses' windows are lit, and your
   house's lights are on, with a warm glow round it, when someone's home,
   and off when nobody is. **By day**, someone home: smoke from your
   chimney (and their faces over the house).
+
+## Other places
+
+Settings › **Other places**: up to 6 more maps beside yours, e.g. work, a
+school or the gym, each a Home Assistant **zone** (Settings › Areas,
+labels & zones › Zones in Home Assistant). For each: the zone, which side
+of your map it goes (**left**, **right**, **above** or **below**) and how
+far it goes each way round the zone's middle (100 m by default, 30 to
+400 m). Then **Save**.
+
+- Each is drawn as its own little island next to yours, with a pin
+  labelled with the zone's name. Places on the same side share it: two on
+  the left are one above the other, two below are side by side, made
+  smaller to fit if they need to be.
+- **Tap a place** on the Overview (or the card) to zoom in round it; tap
+  your own map to come back to it. At the furthest zoom out (**−**)
+  everything's in view.
+- Their maps are made after yours (a couple of seconds apart, to be kind
+  to OpenStreetMap's servers), kept, and made again every 30 days, when
+  the zone moves or you change its size.
 
 ## What's drawn
 
@@ -138,7 +164,9 @@ add-on is stopped.
 ## Privacy
 
 Your postcode goes to postcodes.io, and the location of your postcode (or
-house) to OpenStreetMap's Overpass servers, when the map is made. Nothing
+house), and of your other places' zones, to OpenStreetMap's Overpass
+servers, when the maps are made. People's locations stay in Home
+Assistant: they're only used to draw them. Nothing
 else leaves Home Assistant. The map's kept in the add-on's own data.
 
 ## Diagnostics

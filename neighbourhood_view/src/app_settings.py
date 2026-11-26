@@ -16,7 +16,12 @@ logger = logging.getLogger(__name__)
 LEVELS = ("debug", "info", "warning", "error")
 DEFAULTS = {"log_level": "info", "postcode": "", "house_number": "",
             # your house picked on the Overview: {"id": OpenStreetMap way id, "lat", "lon"}, or None
-            "picked": None}
+            "picked": None,
+            # how far round your house the map goes (m), and other places shown beside it:
+            # [{"zone": "zone.work", "side": "left"|"right"|"up"|"down", "radius": m}]
+            "radius": 150, "places": []}
+SIDES = ("left", "right", "up", "down")
+MAX_PLACES = 6
 NUMBER_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z /-]{0,11}$")
 
 
@@ -52,6 +57,33 @@ class AppSettings:
             if num and not NUMBER_RE.match(num):
                 raise ValueError("The house number is up to 12 letters and numbers (e.g. 12 or 12A)")
             out["house_number"] = num
+        if "radius" in body:
+            try:
+                r = int(float(body["radius"]))
+            except (TypeError, ValueError):
+                raise ValueError("The map size is a number of metres") from None
+            if not 50 <= r <= 500:
+                raise ValueError("The map size is 50 to 500 m round your house")
+            out["radius"] = r
+        if "places" in body:
+            places = body["places"]
+            if not isinstance(places, list) or len(places) > MAX_PLACES:
+                raise ValueError(f"Up to {MAX_PLACES} other places")
+            clean = []
+            for pl in places:
+                if not isinstance(pl, dict) or not str(pl.get("zone") or "").startswith("zone."):
+                    raise ValueError("Each place is a Home Assistant zone (zone.…)")
+                side = str(pl.get("side") or "left")
+                if side not in SIDES:
+                    raise ValueError("A place's side is left, right, up or down")
+                try:
+                    r = int(float(pl.get("radius") or 100))
+                except (TypeError, ValueError):
+                    raise ValueError("A place's size is a number of metres") from None
+                if not 30 <= r <= 400:
+                    raise ValueError("A place's size is 30 to 400 m round it")
+                clean.append({"zone": str(pl["zone"]).strip(), "side": side, "radius": r})
+            out["places"] = clean
         if "picked" in body:
             p = body["picked"]
             if p is not None:

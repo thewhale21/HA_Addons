@@ -32,7 +32,46 @@ MAP_RETRY_S = 15 * 60  # after it couldn't be made (e.g. OpenStreetMap busy): tr
 MAP_CHECK_S = 6 * 3600  # ...and looked at this often anyway (made again once it's 30 days old)
 
 
-async def map_maker(state: SharedState, settings: AppSettings, store: places.SceneStore, wake: asyncio.Event) -> None:
+async def make_places(session, state: SharedState, settings: AppSettings, pstore: places.PlaceStore, link: HaLink) -> None:
+    """The other places' maps (Settings › Other places), round their Home Assistant zones. Returns
+    whether they all are."""
+    wanted = settings.data.get("places") or []
+    pstore.keep_only([p["zone"] for p in wanted])
+    if not wanted:
+        state.extra["places"] = []
+        return True
+    zones = {}
+    try:
+        zones = {st["entity_id"]: st for st in await link.all_states() if str(st.get("entity_id", "")).startswith("zone.")}
+    except Exception as err:
+        logger.debug("Zones: %s", err)
+    status = []
+    for pl in wanted:
+        z = zones.get(pl["zone"]) or {}
+        a = z.get("attributes") or {}
+        name = a.get("friendly_name") or pl["zone"].split(".", 1)[1].replace("_", " ").title()
+        if a.get("latitude") is None:
+            status.append({"zone": pl["zone"], "name": name, "error": "zone not found in Home Assistant"})
+            continue
+        lat, lon = float(a["latitude"]), float(a["longitude"])
+        if not pstore.fits(pl["zone"], lat, lon, pl["radius"]):
+            try:
+                sc = await places.fetch_area(session, lat, lon, pl["radius"])
+                pstore.put(pl["zone"], sc)
+                logger.info("Map made for %s: %d buildings", name, len(sc["buildings"]))
+                await asyncio.sleep(2)  # (gently, for OpenStreetMap's servers)
+            except Exception as err:
+                status.append({"zone": pl["zone"], "name": name, "error": str(err)})
+                continue
+        sc = pstore.get(pl["zone"])
+        sc["name"] = name
+        status.append({"zone": pl["zone"], "name": name, "made": sc.get("made")})
+    state.extra["places"] = status
+    return not any(st.get("error") for st in status)
+
+
+async def map_maker(state: SharedState, settings: AppSettings, store: places.SceneStore, wake: asyncio.Event,
+                    pstore: Optional[places.PlaceStore] = None, link: Optional[HaLink] = None) -> None:
     """Makes the map for your address (src/places.py) when there's none for it (or it's old, or
     Refresh was pressed: wake with state.extra["force"]), and keeps the page's state up to date."""
     async with aiohttp.ClientSession() as session:
@@ -43,10 +82,10 @@ async def map_maker(state: SharedState, settings: AppSettings, store: places.Sce
             wait = MAP_CHECK_S
             if not s["postcode"]:
                 state.status, state.error = "Waiting for your address", None
-            elif force or not store.fits(s["postcode"], s["house_number"], s["picked"]):
+            elif force or not store.fits(s["postcode"], s["house_number"], s["picked"], s["radius"]):
                 state.status, state.error = "Making the map", None
                 try:
-                    store.save(await places.fetch_scene(session, s["postcode"], s["house_number"], s["picked"]))
+                    store.save(await places.fetch_scene(session, s["postcode"], s["house_number"], s["picked"], half=s["radius"]))
                 except places.PlaceError as err:
                     state.error = str(err)
                     wait = MAP_RETRY_S
@@ -64,6 +103,13 @@ async def map_maker(state: SharedState, settings: AppSettings, store: places.Sce
                     state.status = "Ready"
             elif not s["postcode"]:
                 state.made, state.buildings, state.home_found, state.address = None, 0, None, None
+            if pstore is not None and link is not None and s["postcode"]:
+                try:
+                    if not await make_places(session, state, settings, pstore, link):
+                        wait = MAP_RETRY_S  # (e.g. Home Assistant's zones not read yet: soon again)
+                except Exception:
+                    logger.warning("The other places' maps couldn't be made", exc_info=True)
+                    wait = MAP_RETRY_S
             if state.error:
                 state.status = "Problem"
             try:
@@ -104,6 +150,7 @@ async def run() -> None:
     state = SharedState()
     health = Health()
     store = places.SceneStore(data_dir)
+    pstore = places.PlaceStore(data_dir)
     wake = asyncio.Event()
 
     async def entity_changed(entity_id: str, st) -> None:
@@ -114,7 +161,7 @@ async def run() -> None:
     debug = DebugTools(config=config, log_buffer=log_buffer, settings=settings)
 
     app = create_api_app(state, ha_link=link, health=health, debug=debug, app_settings=settings,
-                         store=store, wake=wake)
+                         store=store, wake=wake, pstore=pstore)
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", PORT).start()
@@ -128,7 +175,7 @@ async def run() -> None:
         except NotImplementedError:  # Windows, when run by hand
             pass
 
-    tasks = [asyncio.create_task(link.run()), asyncio.create_task(map_maker(state, settings, store, wake)),
+    tasks = [asyncio.create_task(link.run()), asyncio.create_task(map_maker(state, settings, store, wake, pstore, link)),
              asyncio.create_task(card_setup(state, link, health.version))]
     try:
         await stop.wait()

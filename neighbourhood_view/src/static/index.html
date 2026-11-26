@@ -352,6 +352,8 @@
           <span class="ctl"><input type="text" id="s-postcode" autocomplete="postal-code" maxlength="9" style="width:110px;text-transform:uppercase" aria-label="Postcode"></span></div>
         <div class="row"><div class="grow">House number<div class="note" style="margin:0">To find your house in OpenStreetMap. If it isn't there, the map centres on your postcode and you click your house on the Overview (⌂).</div></div>
           <span class="ctl"><input type="text" id="s-number" maxlength="12" style="width:70px" aria-label="House number"></span></div>
+        <div class="row"><div class="grow">Map size<div class="note" style="margin:0">How far round your house it goes, each way (50 to 500 m)</div></div>
+          <span class="ctl"><input type="number" id="s-radius" min="50" max="500" step="10" style="width:80px" aria-label="Map size (m)"> m</span></div>
         <div class="row" style="margin-top:10px"><div class="grow" id="s-map-status"></div><button class="btn small primary" id="s-save">Save</button></div>
         <div class="row" style="margin-top:8px"><div class="grow note" style="margin:0">The map comes from OpenStreetMap and is kept; it's made again every 30 days, or now with Refresh.</div><button class="btn small" id="s-refresh">Refresh</button></div>
       </div>
@@ -372,6 +374,15 @@
         <div class="row nv-person" data-n="4" hidden style="margin-top:6px"><span class="picker" data-key="person_4" data-domain="person,device_tracker" data-none="None"></span></div>
         <div class="row nv-person" data-n="5" hidden style="margin-top:6px"><span class="picker" data-key="person_5" data-domain="person,device_tracker" data-none="None"></span></div>
         <div class="row nv-person" data-n="6" hidden style="margin-top:6px"><span class="picker" data-key="person_6" data-domain="person,device_tracker" data-none="None"></span></div>
+      </div>
+    </div>
+    <div class="section-title">Other places</div>
+    <div class="masonry">
+      <div class="card">
+        <h2>Other places</h2>
+        <div class="note" style="margin:0 0 8px">More chunks of map beside yours, round places in Home Assistant (its zones, e.g. Work), to the left, right, above or below; several on one side share it. Someone in that zone has their face over it; someone whose tracker puts them on any of the maps is drawn where they are. Tap a place's map to zoom round it, yours to come back.</div>
+        <div id="s-places"></div>
+        <div class="row" style="margin-top:8px"><div class="grow note" style="margin:0" id="s-places-status"></div><button class="btn small" id="s-place-add">Add a place</button><button class="btn small primary" id="s-places-save">Save</button></div>
       </div>
     </div>
     <div class="section-title">Dashboard card</div>
@@ -634,7 +645,7 @@ const FOUND = {address: 'Found from your address', nearest: 'The building neares
 function renderState(s) {
   state = s;
   // (the map's read again when it's been made again, or the address changed)
-  const key = `${s.made}|${s.address}|${s.error}|${s.status}`;
+  const key = `${s.made}|${s.address}|${s.error}|${s.status}|${JSON.stringify((s.extra || {}).places || [])}`;
   if (key !== nv.key) { nv.key = key; loadMap(); }
   else if (JSON.stringify(s.live || {}) !== nv.liveKey) drawMap();
   drawMapStatus();
@@ -649,6 +660,7 @@ async function loadMap() {
   let d;
   try { d = await api('scene'); } catch (e) { return; }
   nv.scene = d.scene;
+  nv.places = d.places || [];
   if (!d.scene) { $('o-map').innerHTML = ''; showMsg(d.message); $('o-top').hidden = true; return; }
   drawMap();
 }
@@ -657,7 +669,7 @@ function drawMap() {
   const sc = nv.scene;
   if (!sc || !window.NeighbourhoodView) return;
   nv.liveKey = JSON.stringify((state || {}).live || {});
-  NeighbourhoodView.render($('o-map'), sc, {rot: getRot(), zoom: NeighbourhoodView.zoom(0), live: (state || {}).live, label: sc.number ? `NO. ${sc.number}`.toUpperCase() : 'HOME', pick: true, hideLabel: nv.picking});
+  NeighbourhoodView.render($('o-map'), sc, {rot: getRot(), zoom: NeighbourhoodView.zoom(0), live: (state || {}).live, places: nv.places, label: sc.number ? `NO. ${sc.number}`.toUpperCase() : 'HOME', pick: true, hideLabel: nv.picking});
   showMsg('');
   $('o-top').hidden = false;
   $('o-addr').textContent = [sc.number, sc.postcode].filter(Boolean).join(', ');
@@ -704,6 +716,8 @@ async function refreshAddress() {
   try { st = await api('settings'); } catch (e) { return; }
   if (document.activeElement !== $('s-postcode')) $('s-postcode').value = st.postcode || '';
   if (document.activeElement !== $('s-number')) $('s-number').value = st.house_number || '';
+  if (document.activeElement !== $('s-radius')) $('s-radius').value = st.radius ?? 150;
+  if (!nvPlaces.dirty) { nvPlaces.list = JSON.parse(JSON.stringify(st.places || [])); drawPlaces(); }
   drawMapStatus();
 }
 function drawCard() {
@@ -718,10 +732,51 @@ function drawCard() {
   if ($('s-card').innerHTML !== html) $('s-card').innerHTML = html;
 }
 $('s-save').addEventListener('click', async () => {
-  const body = {postcode: $('s-postcode').value.trim(), house_number: $('s-number').value.trim()};
+  const body = {postcode: $('s-postcode').value.trim(), house_number: $('s-number').value.trim(), radius: Number($('s-radius').value) || 150};
   if (await post('address', body)) { toast(body.postcode ? 'Saved: making the map…' : 'Address cleared'); refreshAddress(); }
 });
 ['s-postcode', 's-number'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('s-save').click(); }));
+// ---------- Settings › Other places ----------
+const nvPlaces = {list: [], zones: null, dirty: false};
+const SIDE_NAMES = {left: 'Left', right: 'Right', up: 'Above', down: 'Below'};
+async function drawPlaces() {
+  if (!nvPlaces.zones) {
+    try { nvPlaces.zones = (await api('zones')).zones || []; } catch (e) { nvPlaces.zones = []; }
+  }
+  const zones = nvPlaces.zones;
+  $('s-places').innerHTML = nvPlaces.list.length ? nvPlaces.list.map((pl, i) => `<div class="row" data-i="${i}" style="margin-top:6px">
+      <select data-f="zone" aria-label="Place">${zones.some((z) => z.entity_id === pl.zone) ? '' : `<option value="${esc(pl.zone)}">${esc(pl.zone)}</option>`}${zones.map((z) => `<option value="${esc(z.entity_id)}"${z.entity_id === pl.zone ? ' selected' : ''}>${esc(z.name)}</option>`).join('')}</select>
+      <select data-f="side" aria-label="Side">${Object.entries(SIDE_NAMES).map(([k, v]) => `<option value="${k}"${pl.side === k ? ' selected' : ''}>${v}</option>`).join('')}</select>
+      <span class="ctl"><input type="number" data-f="radius" min="30" max="400" step="10" value="${pl.radius ?? 100}" style="width:70px" aria-label="Size (m)"> m</span>
+      <button class="btn small" data-f="remove" title="Remove">✕</button></div>`).join('')
+    : `<div class="muted">${zones.length ? 'None yet' : 'No zones in Home Assistant yet (Settings › Areas, labels & zones › Zones)'}</div>`;
+  const st = ((state || {}).extra || {}).places || [];
+  $('s-places-status').innerHTML = st.map((p) => p.error ? `<span class="chip warn">${esc(p.name)}</span> ${esc(p.error)}` : `<span class="chip ok">${esc(p.name)}</span>`).join(' ');
+}
+$('s-places').addEventListener('change', (e) => {
+  const row = e.target.closest('[data-i]'), k = e.target.dataset.f;
+  if (!row || !k) return;
+  const pl = nvPlaces.list[Number(row.dataset.i)];
+  pl[k] = k === 'radius' ? Number(e.target.value) : e.target.value;
+  nvPlaces.dirty = true;
+});
+$('s-places').addEventListener('click', (e) => {
+  if (e.target.dataset.f !== 'remove') return;
+  nvPlaces.list.splice(Number(e.target.closest('[data-i]').dataset.i), 1);
+  nvPlaces.dirty = true; drawPlaces();
+});
+$('s-place-add').addEventListener('click', async () => {
+  if (nvPlaces.list.length >= 6) { toast('Up to 6 places'); return; }
+  const zones = nvPlaces.zones || [];
+  const free = zones.find((z) => z.entity_id !== 'zone.home' && !nvPlaces.list.some((p) => p.zone === z.entity_id));
+  if (!free) { toast('No more zones: add one in Home Assistant first'); return; }
+  const used = nvPlaces.list.map((p) => p.side);
+  nvPlaces.list.push({zone: free.entity_id, side: ['left', 'right', 'up', 'down'].find((s) => !used.includes(s)) || 'left', radius: 100});
+  nvPlaces.dirty = true; drawPlaces();
+});
+$('s-places-save').addEventListener('click', async () => {
+  if (await post('places', {places: nvPlaces.list})) { nvPlaces.dirty = false; toast('Saved: making their maps…'); refreshAddress(); }
+});
 $('s-refresh').addEventListener('click', async () => { if (await post('refresh')) toast('Making the map again from OpenStreetMap…'); });
 
 // ---------- Settings: your Home Assistant entities ----------
@@ -1076,6 +1131,12 @@ function setupRows() {
       const ents = (sim.data || {}).entities || {};
       const ps = Object.keys(ents).filter((k) => k.startsWith('person_') && ents[k]).map((k) => ents[k]);
       return ps.length ? esc(ps.map((p) => `${p.name}: ${p.state === 'home' ? 'home' : p.state === 'not_home' ? 'away' : p.state ?? '—'}`).join(' · ')) : '<span class="chip">Not set</span>Nobody yet';
+    }},
+  ]);
+  rowList('tab-settings', 'Other places', [
+    {t: 'Other places', id: 'places', icon: 'layers', sum: () => {
+      const st = ((state || {}).extra || {}).places || [];
+      return st.length ? esc(st.map((p) => p.name).join(' · ')) : '<span class="chip">None</span>Maps of other places beside yours';
     }},
   ]);
   rowList('tab-settings', 'Dashboard card', [

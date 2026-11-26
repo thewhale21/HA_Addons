@@ -64,7 +64,7 @@ def test_building_kinds_and_heights():
 def test_the_scene_from_openstreetmap():
     pt = S.find_address(address_answer(), "RG41 2AB", "12", LAT0, LON0)
     assert pt is not None  # (the number 12 with your postcode, not the one in another)
-    sc = S.build_scene(sample(), pt[0], pt[1], home_pt=pt)
+    sc = S.build_scene(sample(), pt[0], pt[1], home_pt=pt, half=250)
     assert sc["home"]["found"] == "address" and sc["home"]["id"] is not None
     assert abs(sc["home"]["x"]) < 6 and abs(sc["home"]["y"]) < 6  # (your house in the middle)
     assert len(sc["buildings"]) > 100 and any(b["r"] == "gable" for b in sc["buildings"])
@@ -82,7 +82,11 @@ def test_the_scene_from_openstreetmap():
     kinds = [a["k"] for a in sc["areas"]]
     assert kinds.index("grass") < kinds.index("water")
     # the same each time (the trees don't move)
-    assert S.build_scene(sample(), pt[0], pt[1], home_pt=pt)["trees"] == sc["trees"]
+    assert S.build_scene(sample(), pt[0], pt[1], home_pt=pt, half=250)["trees"] == sc["trees"]
+    # (150 m round it, by default: the square's that much smaller)
+    small = S.build_scene(sample(), pt[0], pt[1], home_pt=pt)
+    assert small["half"] == 150 and len(small["buildings"]) < len(sc["buildings"])
+    assert all(abs(x) <= 150.05 and abs(y) <= 150.05 for b in small["buildings"] for x, y in b["p"])
 
 
 def test_your_house_when_openstreetmap_hasnt_its_address():
@@ -115,10 +119,11 @@ def test_the_saved_map(tmp_path):
     store = SceneStore(str(tmp_path))
     assert not store.fits("RG41 2AB", "12")
     now = datetime.datetime.now(datetime.timezone.utc)
-    sc = {"postcode": "RG41 2AB", "number": "12", "made": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "home": {"found": "address", "id": 3}}
+    sc = {"postcode": "RG41 2AB", "number": "12", "made": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "home": {"found": "address", "id": 3}, "half": 150}
     store.save(sc)
     assert SceneStore(str(tmp_path)).fits("RG41 2AB", "12")
     assert not store.fits("RG41 2AB", "14") and not store.fits("RG41 2AB", "12", {"id": 3})
+    assert not store.fits("RG41 2AB", "12", half=200)  # (a new map size: made again)
     old = (now - datetime.timedelta(days=31)).strftime("%Y-%m-%dT%H:%M:%SZ")
     store.save({**sc, "made": old})
     assert not store.fits("RG41 2AB", "12")
@@ -186,3 +191,22 @@ def test_garden_trees_keep_off_roads_buildings_and_yards():
                 t = max(0.0, min(1.0, ((x - x1) * vx + (y - y1) * vy) / ((vx * vx + vy * vy) or 1)))
                 assert math.hypot(x1 + vx * t - x, y1 + vy * t - y) >= r["w"] / 2 + 3.4
     assert S._area_kind({"landuse": "retail"}) == "yard" and S._area_kind({"landuse": "residential"}) is None
+
+
+def test_other_places_settings_and_store(tmp_path):
+    from src.places import PlaceStore
+    s = AppSettings(str(tmp_path))
+    assert s.data["radius"] == 150 and s.data["places"] == []
+    s.update({"radius": 200, "places": [{"zone": "zone.work", "side": "left", "radius": 80}, {"zone": "zone.gym", "side": "up"}]})
+    assert s.data["places"][1] == {"zone": "zone.gym", "side": "up", "radius": 100}
+    for bad in ({"radius": 20}, {"places": [{"zone": "person.x"}]}, {"places": [{"zone": "zone.a", "side": "behind"}]},
+                {"places": [{"zone": "zone.a", "radius": 5}]}, {"places": [{"zone": f"zone.{i}"} for i in range(7)]}):
+        with pytest.raises(ValueError):
+            s.update(bad)
+    store = PlaceStore(str(tmp_path))
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    store.put("zone.work", {"lat": 51.5, "lon": -0.9, "half": 80, "made": now})
+    again = PlaceStore(str(tmp_path))
+    assert again.fits("zone.work", 51.5, -0.9, 80) and not again.fits("zone.work", 51.5, -0.9, 120)
+    again.keep_only(["zone.gym"])
+    assert PlaceStore(str(tmp_path)).get("zone.work") is None

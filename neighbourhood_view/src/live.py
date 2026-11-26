@@ -22,7 +22,8 @@ def _initials(name: str) -> str:
 
 def compute(settings: dict, states: dict) -> dict:
     """{"night": bool or None (no sun), "weather": {"entity", "state", "temperature", "unit"} or None,
-    "people": [{"entity_id", "name", "initials", "picture", "state", "home"}]}"""
+    "people": [{"entity_id", "name", "initials", "picture", "state", "home", "lat", "lon"}]}
+    (lat, lon: where they are, if their tracker says: drawn there when it's on one of the maps)"""
     ents = entities(settings)
     sun = states.get(ents["sun"]) or {}
     night = None if not sun.get("state") else sun.get("state") == "below_horizon"
@@ -39,5 +40,5 @@ def compute(settings: dict, states: dict) -> dict:
         name = a.get("friendly_name") or e.split(".", 1)[-1].replace("_", " ").title()
         state = st.get("state")
         people.append({"entity_id": e, "name": name, "initials": _initials(name), "picture": a.get("entity_picture"),
-                       "state": state, "home": state == "home"})
+                       "state": state, "home": state == "home", "lat": a.get("latitude"), "lon": a.get("longitude")})
     return {"night": night, "weather": weather, "people": people}

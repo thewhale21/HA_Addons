@@ -19,7 +19,7 @@ import math
 import re
 from typing import Optional
 
-HALF = 250.0  # metres each way from your home: a 500 m square
+HALF = 150.0  # metres each way from your home (Settings › Address › Map size): a 300 m square by default
 EARTH_R = 6371008.8
 
 # --- buildings -------------------------------------------------------------------------------

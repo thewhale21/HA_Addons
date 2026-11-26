@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0 — Other places, and a smaller map
+
+- **Change:** the map goes 150 m each way from your house (it was 250 m),
+  so it's quicker to make and closer in. It's made again at the new size
+  the first time the add-on starts after updating.
+- **Feature:** Settings › Address › **Map size**: how far the map goes
+  each way, 50 to 500 m.
+- **Feature:** Settings › **Other places**: up to 6 Home Assistant zones
+  (work, school…), each drawn as its own little map to the left, right,
+  above or below yours, at a size you choose; places on the same side share
+  it. Tap one to zoom in round it.
+- **Feature:** people who are out are drawn where they are when their
+  location is on one of the maps (a face on a stalk), or over the pin of
+  the place whose zone they're in.
 ## 0.6.0 — Weather, people, day and night
 
 - **Feature:** Settings › On the map › **Weather**: a weather entity, drawn

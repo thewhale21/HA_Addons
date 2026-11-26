@@ -23,7 +23,7 @@ LIVE_FIELDS: set = set()
 
 
 def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_settings=None,
-                   store=None, wake=None) -> web.Application:
+                   store=None, wake=None, pstore=None) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state  # src.shared_state.SharedState
     app["ha_link"] = ha_link  # src.ha_link.HaLink, or None
@@ -31,6 +31,7 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app["debug"] = debug  # src.debug_tools.DebugTools, or None
     app["app_settings"] = app_settings  # src.app_settings.AppSettings, or None
     app["store"] = store  # src.places.SceneStore, or None
+    app["pstore"] = pstore  # src.places.PlaceStore (the other places' maps), or None
     app["wake"] = wake  # asyncio.Event: the map maker looks again (src/__main__.py)
     app["events_stop"] = asyncio.Event()
     app["event_clients"] = {"gui": 0}
@@ -44,6 +45,8 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app.router.add_post("/api/address", handle_address)
     app.router.add_post("/api/home", handle_home)
     app.router.add_post("/api/refresh", handle_refresh)
+    app.router.add_post("/api/places", handle_places)
+    app.router.add_get("/api/zones", handle_zones)
     app.router.add_get("/api/state", handle_get_state)
     app.router.add_get("/api/events", handle_events)
     app.router.add_get("/api/health", handle_health)
@@ -114,7 +117,14 @@ async def handle_scene(request: web.Request) -> web.Response:
     from src.live import entities
     # (the entities the dashboard card follows itself, and what they are now, for this page)
     ents = entities(link.settings) if link is not None else None
-    return web.json_response({"scene": sc, "message": message, "status": state.status, "entities": ents, "live": state.live},
+    # the other places, in the order set, with their maps (once made)
+    pls = []
+    pstore = app["pstore"]
+    for pl in (settings.data.get("places") or []) if settings is not None else []:
+        psc = pstore.get(pl["zone"]) if pstore is not None else None
+        if psc:
+            pls.append({"zone": pl["zone"], "side": pl["side"], "name": psc.get("name") or pl["zone"], "scene": psc})
+    return web.json_response({"scene": sc, "places": pls, "message": message, "status": state.status, "entities": ents, "live": state.live},
                              dumps=lambda d: json.dumps(d, separators=(",", ":")))
 
 
@@ -127,7 +137,7 @@ async def handle_address(request: web.Request) -> web.Response:
         body = await request.json()
         if not isinstance(body, dict):
             raise ValueError("Send a JSON object")
-        out = settings.update({k: body[k] for k in ("postcode", "house_number") if k in body})
+        out = settings.update({k: body[k] for k in ("postcode", "house_number", "radius") if k in body})
     except (ValueError, TypeError, json.JSONDecodeError) as err:
         return _bad_request(err)
     request.app["shared_state"].error = None
@@ -152,6 +162,32 @@ async def handle_home(request: web.Request) -> web.Response:
         return _bad_request(err)
     _wake(app)
     return web.json_response({"status": "ok", **out})
+
+
+async def handle_places(request: web.Request) -> web.Response:
+    """{"places": [{"zone", "side", "radius"}]}: the other places beside your map; their maps made."""
+    settings = request.app["app_settings"]
+    if settings is None:
+        return _unavailable()
+    try:
+        body = await request.json()
+        out = settings.update({"places": (body or {}).get("places")} if isinstance(body, dict) else body)
+    except (ValueError, TypeError, json.JSONDecodeError) as err:
+        return _bad_request(err)
+    _wake(request.app)
+    return web.json_response({"status": "ok", **out})
+
+
+async def handle_zones(request: web.Request) -> web.Response:
+    """Home Assistant's zones, for Settings › Other places: [{"entity_id", "name"}]."""
+    link = request.app["ha_link"]
+    try:
+        states = await link.all_states() if link is not None else []
+    except Exception as err:
+        return web.json_response({"zones": [], "message": f"Couldn't read the zones: {err}"})
+    zones = [{"entity_id": st["entity_id"], "name": (st.get("attributes") or {}).get("friendly_name") or st["entity_id"]}
+             for st in states if str(st.get("entity_id", "")).startswith("zone.")]
+    return web.json_response({"zones": sorted(zones, key=lambda z: z["name"].lower())})
 
 
 async def handle_refresh(request: web.Request) -> web.Response:

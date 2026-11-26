@@ -67,13 +67,13 @@ async def overpass(session, query: str) -> dict:
     raise PlaceError(f"Couldn't read OpenStreetMap: {last}")
 
 
-async def fetch_scene(session, postcode: str, number: str, picked: Optional[dict] = None) -> dict:
+async def fetch_scene(session, postcode: str, number: str, picked: Optional[dict] = None, half: float = S.HALF) -> dict:
     """The scene for your address (src/scene.py), with where it's from. picked: your house chosen on
     the page, {"id", "lat", "lon"}: centred on it, without looking your address up."""
     if picked:
         lat, lon = float(picked["lat"]), float(picked["lon"])
-        osm = await overpass(session, S.overpass_query(lat, lon))
-        sc = S.build_scene(osm, lat, lon, home_id=int(picked["id"]))
+        osm = await overpass(session, S.overpass_query(lat, lon, half))
+        sc = S.build_scene(osm, lat, lon, home_id=int(picked["id"]), half=half)
         return _finish(sc, postcode, number, (lat, lon))
     lat, lon = await postcode_location(session, postcode)
     home_pt = None
@@ -83,9 +83,17 @@ async def fetch_scene(session, postcode: str, number: str, picked: Optional[dict
         except PlaceError as err:
             logger.info("Your house number couldn't be looked up (%s): centred on the postcode", err)
     centre = home_pt or (lat, lon)
-    osm = await overpass(session, S.overpass_query(*centre))
-    sc = S.build_scene(osm, centre[0], centre[1], home_pt=home_pt)
+    osm = await overpass(session, S.overpass_query(centre[0], centre[1], half))
+    sc = S.build_scene(osm, centre[0], centre[1], home_pt=home_pt, half=half)
     return _finish(sc, postcode, number, centre)
+
+
+async def fetch_area(session, lat: float, lon: float, half: float) -> dict:
+    """The scene round another place (Settings › Other places: a Home Assistant zone), no house in it."""
+    osm = await overpass(session, S.overpass_query(lat, lon, half))
+    sc = S.build_scene(osm, lat, lon, half=half)
+    sc.update(lat=round(lat, 6), lon=round(lon, 6), made=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    return sc
 
 
 def _finish(sc: dict, postcode: str, number: str, centre: tuple) -> dict:
@@ -115,8 +123,8 @@ def picked_home(sc: dict, building_id: int) -> dict:
 class SceneStore:
     """The scene, kept in /data/scene.json."""
 
-    def __init__(self, data_dir: Optional[str]) -> None:
-        self._path = os.path.join(data_dir, "scene.json") if data_dir else None
+    def __init__(self, data_dir: Optional[str], name: str = "scene.json") -> None:
+        self._path = os.path.join(data_dir, name) if data_dir else None
         self.scene: Optional[dict] = None
         if self._path:
             try:
@@ -144,10 +152,12 @@ class SceneStore:
         except Exception:
             logger.warning("Couldn't save the map", exc_info=True)
 
-    def fits(self, postcode: str, number: str, picked: Optional[dict] = None) -> bool:
-        """The saved scene is for this address (and house picked), and not too old."""
+    def fits(self, postcode: str, number: str, picked: Optional[dict] = None, half: float = S.HALF) -> bool:
+        """The saved scene is for this address (and house picked, and map size), and not too old."""
         sc = self.scene or {}
         if sc.get("postcode") != S.norm_postcode(postcode) or sc.get("number") != str(number or ""):
+            return False
+        if float(sc.get("half") or 0) != float(half):
             return False
         if (picked or {}).get("id") != ((sc.get("home") or {}).get("id") if (sc.get("home") or {}).get("found") == "picked" else None):
             return False
@@ -156,3 +166,39 @@ class SceneStore:
         except (KeyError, ValueError):
             return False
         return datetime.datetime.now(datetime.timezone.utc) - made < datetime.timedelta(days=REFRESH_DAYS)
+
+
+def _fresh(sc: dict) -> bool:
+    try:
+        made = datetime.datetime.strptime(sc["made"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except (KeyError, ValueError, TypeError):
+        return False
+    return datetime.datetime.now(datetime.timezone.utc) - made < datetime.timedelta(days=REFRESH_DAYS)
+
+
+class PlaceStore:
+    """The other places' scenes (Settings › Other places), kept in /data/places.json: {zone: scene}."""
+
+    def __init__(self, data_dir: Optional[str]) -> None:
+        self._inner = SceneStore(data_dir, "places.json")
+        self.scenes: dict = self._inner.scene if isinstance(self._inner.scene, dict) else {}
+
+    def get(self, zone: str) -> Optional[dict]:
+        return self.scenes.get(zone)
+
+    def fits(self, zone: str, lat: float, lon: float, half: float) -> bool:
+        sc = self.scenes.get(zone) or {}
+        return (sc.get("lat") == round(lat, 6) and sc.get("lon") == round(lon, 6)
+                and float(sc.get("half") or 0) == float(half) and _fresh(sc))
+
+    def put(self, zone: str, sc: dict) -> None:
+        self.scenes[zone] = sc
+        self._inner.save(self.scenes)
+
+    def keep_only(self, zones: list) -> None:
+        """Forgets the places no longer set."""
+        gone = [z for z in self.scenes if z not in zones]
+        for z in gone:
+            del self.scenes[z]
+        if gone:
+            self._inner.save(self.scenes)
