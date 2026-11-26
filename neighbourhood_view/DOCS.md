@@ -108,6 +108,14 @@ trees it has, drawn like a video game's town:
   night the sky's dark with stars, and street lamps along the bigger
   streets light pools on the pavement. Rivers shimmer, and a ring pulses
   out on the ground round your house.
+- **Junctions** have zebra crossings on each street just back from them.
+- **Ponds and lakes** have a darker edge, are lighter in the middle, and
+  ripples spread across them now and then.
+- **Birds:** now and then a flock flies over (by day, when it's dry).
+- **Seasons** (from the date): in autumn many trees turn orange, red and
+  yellow; in winter they go dull and the grass browner; in spring some
+  blossom pink and white. When the weather entity says it's **snowing**,
+  roofs, lawns, parks and trees turn white (roads stay clear).
 
 What's made up (each house's colours, the trees and cars added, the
 storeys where none are known) is the same every time, so nothing moves

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.0 — Seasons, snow, birds and zebra crossings
+
+- **Feature:** zebra crossings on each street just back from junctions.
+- **Feature:** ponds and lakes have a darker edge, a lighter middle and
+  ripples spreading across them.
+- **Feature:** now and then a flock of birds flies over (by day, when it's
+  dry).
+- **Feature:** seasons: trees turn in autumn, go dull in winter and some
+  blossom in spring; when it's snowing (the weather entity), roofs, lawns,
+  parks and trees are white.
 ## 0.9.0 — A better-looking world
 
 - **Improvement:** the maps float in a sky: blue with drifting clouds by

@@ -161,7 +161,17 @@
   // Windows on a wall: rows (one a storey from z0, each storey sh high), every `every` m
   /* What's being drawn now: night (lights on in windows), how likely a window in the building
    * being drawn is lit (CTX.lit: 0..1), and whether your house's chimney smokes (someone's home). */
-  const CTX = {night: false, lit: 0, smoke: false, seed: 0};
+  const CTX = {night: false, lit: 0, smoke: false, seed: 0, season: 'summer', snow: false};
+  const SNOW = '#f2f5f9';
+  const snowy = (c, k = 0.8) => (CTX.snow ? mix(c, SNOW, k) : c);
+  // the season, from the month (Northern Hemisphere): trees turn in autumn, go bare-ish in winter,
+  // and some blossom in spring
+  function season(month) {
+    return [2, 3, 4].includes(month) ? 'spring' : [5, 6, 7].includes(month) ? 'summer' : [8, 9, 10].includes(month) ? 'autumn' : 'winter';
+  }
+  const AUTUMN = [['#e8a33c', '#c27a22', '#f6c768'], ['#d9672e', '#a84a1f', '#f08f55'], ['#c9442f', '#94301f', '#e56a52'], ['#d8b43a', '#a8891f', '#f0d46a']];
+  const WINTER = [['#8f8a6c', '#6e6a52', '#a8a386'], ['#7f7a63', '#615d4a', '#9a957b']];
+  const BLOSSOM = [['#f4b6cf', '#d98aac', '#fbd6e4'], ['#f7f1f4', '#dcc9d2', '#ffffff']];
   const LIGHT = '#ffd36b', LIGHT2 = '#ffe9a8';  // (kept bright at night: see nightTint)
 
   function windows(V, p, q, len, z0, storeys, sh, ww, wh, every, lit, skipMid) {
@@ -220,7 +230,7 @@
     const storeys = Math.max(1, Math.round(h / 2.9)), sh = h / storeys;
     const wall = isHome ? HOME.walls[0] : pick(HOUSE_WALLS, rnd(id, 1));
     const cols = isHome ? HOME.walls : [wall, mix(wall, '#000000', 0.16)];
-    const roof = isHome ? HOME.roof : pick(ROOFS, rnd(id, 2));
+    const roof = (isHome ? HOME.roof : pick(ROOFS, rnd(id, 2))).map((c) => snowy(c, isHome ? 0.6 : 0.8));
     const hip = rnd(id, 3) < 0.38;
     const rect = b.rect, [A, B, Cc] = rect;
     const lng = Math.hypot(B[0] - A[0], B[1] - A[1]), short = Math.hypot(Cc[0] - B[0], Cc[1] - B[1]);
@@ -283,7 +293,7 @@
       return windows(V, p, q, len, 0, storeys, sh, k === 'flats' ? 1.4 : 1.6, 1.45, k === 'flats' ? 3.0 : 3.6, lit);
     };
     let svg = walls(V, b.p, 0, h, cols, null, deco);
-    const roofCol = set[2];
+    const roofCol = snowy(set[2]);
     svg += poly(b.p.map(([x, y]) => V.p(x, y, h)), roofCol, ` stroke="${mix(roofCol, '#000000', 0.22)}" stroke-width=".9" stroke-linejoin="round"`);
     // things on the roof: an air conditioning unit or a stair tower on some bigger ones
     const [cx, cy] = centroid(b.p);
@@ -301,7 +311,12 @@
   // Trees: round (low-poly, two-tone), pointed (stacked cones) or a bush; size from s
   function tree(V, [x, y, s]) {
     s = s || 1;
-    const kind = rnd(x, y, 11), g = pick(GREENS, rnd(x, y, 12));
+    const kind = rnd(x, y, 11), turn = rnd(x, y, 13);
+    let g = pick(GREENS, rnd(x, y, 12));
+    if (kind >= 0.12 && kind < 0.36) { /* (conifers stay green) */ } else if (CTX.season === 'autumn' && turn < 0.6) g = pick(AUTUMN, rnd(x, y, 14));
+    else if (CTX.season === 'winter' && turn < 0.65) g = pick(WINTER, rnd(x, y, 14));
+    else if (CTX.season === 'spring' && turn < 0.16) g = pick(BLOSSOM, rnd(x, y, 14));
+    if (CTX.snow) g = g.map((c) => mix(c, SNOW, 0.45));
     if (kind < 0.12) {  // a bush
       const r = 1.3 * s, c = V.p(x, y, r * 0.7);
       return `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="${f(r)}" fill="${g[1]}"/><circle cx="${f(c[0] - r * 0.2)}" cy="${f(c[1] - r * 0.25)}" r="${f(r * 0.7)}" fill="${g[0]}"/>`;
@@ -396,6 +411,8 @@
     CTX.night = !!live.night;
     CTX.homeLit = opts.isHome ? (people.length ? anyHome : true) : false;  // (no people set: your house lit at night as any)
     CTX.smoke = !!opts.isHome && !live.night && anyHome;
+    CTX.season = season(opts.month != null ? opts.month : new Date().getMonth());
+    CTX.snow = ['snowy', 'snowy-rainy'].includes((live.weather || {}).state);
     const out = [];
     // the chunk of ground, torn out: its earth sides (those facing the viewer, back ones first),
     // then its top, with a lip of turf
@@ -430,11 +447,31 @@
     }
     for (const sd of sides) out.push(sd[1]);
     const topPts = edge.map(([x, y]) => V.p(x, y, 0));
-    out.push(poly(topPts, C.ground, ` stroke="${C.turf}" stroke-width="1.6" stroke-linejoin="round"`));
+    const groundCol = CTX.season === 'winter' ? mix(C.ground, '#b9c2a4', 0.35) : CTX.season === 'autumn' ? mix(C.ground, '#cfd39a', 0.25) : C.ground;
+    out.push(poly(topPts, snowy(groundCol, 0.85), ` stroke="${snowy(C.turf, 0.7)}" stroke-width="1.6" stroke-linejoin="round"`));
     // the ground: areas, water, roads, railways (kept to the board: a road's end doesn't stick out)
     const clip = 'nvclip' + Math.random().toString(36).slice(2, 8);
     out.push(`<clipPath id="${clip}"><polygon points="${pts(topPts)}"/></clipPath><g clip-path="url(#${clip})">`);
-    for (const a of scene.areas || []) out.push(poly(a.p.map(([x, y]) => V.p(x, y, 0)), C[a.k] || C.grass));
+    const wid = 'nvw' + Math.random().toString(36).slice(2, 8);
+    out.push(`<defs><radialGradient id="${wid}"><stop offset="0" stop-color="#b4def6"/><stop offset=".7" stop-color="${C.water}"/><stop offset="1" stop-color="#6eaedb"/></radialGradient></defs>`);
+    for (const a of scene.areas || []) {
+      const P = a.p.map(([x, y]) => V.p(x, y, 0));
+      if (a.k !== 'water') { out.push(poly(P, ['paved', 'yard'].includes(a.k) ? (C[a.k]) : snowy(C[a.k] || C.grass, 0.85))); continue; }
+      // ponds and lakes: a darker edge, lighter in the middle, and ripples spreading now and then
+      out.push(poly(P, `url(#${wid})`, ` stroke="#4e8dbf" stroke-width="1.1" stroke-linejoin="round"`));
+      const xs = a.p.map((q) => q[0]), ys = a.p.map((q) => q[1]);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      const n = Math.min(4, Math.max(1, Math.round((x1 - x0) * (y1 - y0) / 500)));
+      for (let k = 0, tries = 0; k < n && tries < 20; tries++) {
+        const x = x0 + (x1 - x0) * rnd(x0, tries, 80), y = y0 + (y1 - y0) * rnd(y0, tries, 81);
+        if (!insideRing(x, y, a.p) || !insideRing(x, y, edge)) continue;
+        const c = V.p(x, y, 0), dur = (3 + rnd(x, y, 82) * 3).toFixed(1), begin = (rnd(x, y, 83) * 4).toFixed(1);
+        out.push(`<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".5" ry="${f(0.5 * SE)}" fill="none" stroke="#ffffff" stroke-width=".3" opacity="0">`
+          + `<animate attributeName="rx" values=".5;4" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/><animate attributeName="ry" values="${f(0.5 * SE)};${f(4 * SE)}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
+          + `<animate attributeName="opacity" values=".8;0" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/></ellipse>`);
+        k++;
+      }
+    }
     for (const w of scene.water || []) out.push(`<path d="${line(V, w.p)}" fill="none" stroke="${C.water}" stroke-width="${f(w.w)}" stroke-linecap="round" stroke-linejoin="round"/>`
       + `<path d="${line(V, w.p)}" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="${f(Math.max(0.3, w.w * 0.12))}" stroke-dasharray="1.5 5" stroke-linecap="round"><animate attributeName="stroke-dashoffset" from="0" to="-13" dur="4s" repeatCount="indefinite"/></path>`);
     const roads = scene.roads || [];
@@ -446,10 +483,59 @@
     for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.kerb}" stroke-width="${f(r.w + PAVE * 2 + 0.6)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.pave}" stroke-width="${f(r.w + PAVE * 2)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     // (a grass verge between the pavement and the kerb on residential streets)
-    for (const r of streets.filter((r) => r.k === 'minor')) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.verge}" stroke-width="${f(r.w + 2.4)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of streets.filter((r) => r.k === 'minor')) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${snowy(C.verge, 0.85)}" stroke-width="${f(r.w + 2.4)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of cars) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${mix(C.road, '#ffffff', 0.35)}" stroke-width="${f(r.w + 0.5)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of cars) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.road}" stroke-width="${f(r.w)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.roadLine}" stroke-width="${r.k === 'major' ? '.45' : '.3'}" stroke-dasharray="${r.k === 'major' ? '4 3' : '2.5 4'}" opacity=".85"/>`);
+    // zebra crossings on each street just back from where streets meet (a shared point, one
+    // street's end on another, or two crossing)
+    const segs = [];
+    streets.forEach((r, ri) => { for (let i = 0; i < r.p.length - 1; i++) segs.push([ri, r.p[i], r.p[i + 1], r.w]); });
+    const joins = new Map();
+    const leg = (P, ri, a, b, t, w) => {
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]), k = Math.round(P[0]) + ',' + Math.round(P[1]);
+      if (!joins.has(k)) joins.set(k, {P, legs: [], w: 0});
+      const J = joins.get(k);
+      J.w = Math.max(J.w, w);
+      for (const [len, dx, dy] of [[t * L, a[0] - b[0], a[1] - b[1]], [(1 - t) * L, b[0] - a[0], b[1] - a[1]]]) {
+        const ux = dx / L, uy = dy / L;
+        if (len > 1 && !J.legs.some((g) => g.ri === ri && g.ux * ux + g.uy * uy > 0.9)) J.legs.push({ri, ux, uy, len, w});
+      }
+    };
+    for (let i = 0; i < segs.length; i++) {
+      const [ri, a, b, wa] = segs[i], La = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (!La) continue;
+      for (let j = i + 1; j < segs.length; j++) {
+        const [rj, c, d, wc] = segs[j];
+        if (ri === rj) continue;
+        if (Math.max(c[0], d[0]) < Math.min(a[0], b[0]) - 2 || Math.min(c[0], d[0]) > Math.max(a[0], b[0]) + 2
+          || Math.max(c[1], d[1]) < Math.min(a[1], b[1]) - 2 || Math.min(c[1], d[1]) > Math.max(a[1], b[1]) + 2) continue;
+        const Lc = Math.hypot(d[0] - c[0], d[1] - c[1]), rx = b[0] - a[0], ry = b[1] - a[1], sx = d[0] - c[0], sy = d[1] - c[1];
+        const den = rx * sy - ry * sx;
+        if (!Lc || Math.abs(den) < 1e-9) continue;
+        const t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / den, u = ((c[0] - a[0]) * ry - (c[1] - a[1]) * rx) / den;
+        const ta = 1.5 / La, tc = 1.5 / Lc;
+        if (t < -ta || t > 1 + ta || u < -tc || u > 1 + tc) continue;
+        const tt = Math.max(0, Math.min(1, t)), uu = Math.max(0, Math.min(1, u)), P = [a[0] + rx * tt, a[1] + ry * tt];
+        leg(P, ri, a, b, tt, wa);
+        leg(P, rj, c, d, uu, wc);
+      }
+    }
+    const zebra = [];
+    for (const {P, legs, w} of joins.values()) {
+      if (legs.length < 3) continue;  // (a bend, not a junction)
+      const dd = w / 2 + PAVE + 1.8;
+      for (const g of legs) {
+        if (g.len < dd + 5) continue;
+        const ux = g.ux, uy = g.uy, vx = -uy, vy = ux, cx = P[0] + ux * dd, cy = P[1] + uy * dd;
+        if (!insideRing(cx, cy, edge)) continue;
+        for (let o = -g.w / 2 + 0.55; o <= g.w / 2 - 0.5; o += 1.05) {
+          const at = (s, e) => V.p(cx + ux * s + vx * (o + e), cy + uy * s + vy * (o + e), 0);
+          zebra.push(poly([at(-1.2, 0), at(1.2, 0), at(1.2, 0.5), at(-1.2, 0.5)], C.roadLine));
+        }
+      }
+    }
+    if (zebra.length) out.push(`<g opacity=".9">${zebra.join('')}</g>`);
     for (const r of scene.rails || []) {
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.rail}" stroke-width="${f(r.w)}" stroke-linecap="butt" stroke-linejoin="round"/>`);
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railTie}" stroke-width="${f(r.w * 0.55)}" stroke-dasharray=".6 1.4"/>`);
@@ -721,7 +807,25 @@
     const x0 = Math.min(...boxes.map((b) => b[0])), y0 = Math.min(...boxes.map((b) => b[1]));
     const w = Math.max(...boxes.map((b) => b[2])) - x0, h = Math.max(...boxes.map((b) => b[3])) - y0;
     const pin = homeI.pin;
-    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;position:relative" role="img" aria-label="The streets around your home">${groups.join('')}${bridges.join('')}</svg>`, away: who.away};
+    // now and then a few birds fly over (by day, when it's not wet)
+    let birds = '';
+    const wx = (live.weather || {}).state || '';
+    if (!live.night && !/rain|pour|snow|hail|lightning|fog/.test(wx)) {
+      const flock = (n, y, dur, begin, dir) => {
+        const ya = y0 + h * y, yb = ya - h * 0.12, xa = dir > 0 ? x0 - 30 : x0 + w + 30, xb = dir > 0 ? x0 + w + 30 : x0 - 30;
+        let s = '';
+        for (let i = 0; i < n; i++) {
+          const ox = -dir * Math.ceil(i / 2) * 5.5, oy = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 3, sz = 2.4 + (i % 3) * 0.3;
+          const up = `M${f(ox - sz)} ${f(oy - sz * 0.5)}Q${f(ox - sz * 0.4)} ${f(oy - sz * 0.6)} ${f(ox)} ${f(oy)}Q${f(ox + sz * 0.4)} ${f(oy - sz * 0.6)} ${f(ox + sz)} ${f(oy - sz * 0.5)}`;
+          const dn = `M${f(ox - sz)} ${f(oy + sz * 0.3)}Q${f(ox - sz * 0.4)} ${f(oy - sz * 0.1)} ${f(ox)} ${f(oy)}Q${f(ox + sz * 0.4)} ${f(oy - sz * 0.1)} ${f(ox + sz)} ${f(oy + sz * 0.3)}`;
+          s += `<path d="${up}" fill="none" stroke="#2c3440" stroke-width=".35" stroke-linecap="round"><animate attributeName="d" values="${up};${dn};${up}" dur="${(0.5 + i * 0.07).toFixed(2)}s" repeatCount="indefinite"/></path>`;
+        }
+        return `<g opacity="0"><animateTransform attributeName="transform" type="translate" values="${f(xa)} ${f(ya)};${f(xb)} ${f(yb)};${f(xb)} ${f(yb)}" keyTimes="0;.55;1" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
+          + `<animate attributeName="opacity" values="1;1;0;0" keyTimes="0;.55;.56;1" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>${s}</g>`;
+      };
+      birds = `<g class="nvbirds" pointer-events="none">${flock(5, 0.3, 40, 3, 1)}${flock(3, 0.62, 55, 24, -1)}</g>`;
+    }
+    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;position:relative" role="img" aria-label="The streets around your home">${groups.join('')}${bridges.join('')}${birds}</svg>`, away: who.away};
   }
 
   /* Fits the drawing to its box: all of it where the box is about its shape; in a much narrower
