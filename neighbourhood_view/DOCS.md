@@ -61,7 +61,8 @@ far it goes each way round the zone's middle (100 m by default, 30 to
   labelled with the zone's name, joined to yours by a bridge between the
   nearest streets on the two maps: a road that leaves each map along its
   street and curves (an S where the streets don't line up) and arches
-  gently over the gap.
+  gently over the gap. Each end is as wide as the street it carries on
+  (road and pavements), so they line up, narrowing or widening between.
 - A place only shows **while someone's there**: in its zone, or on its
   map by their tracker's location. When they leave, it disappears (and if
   you were zoomed in on it, the view goes back to your house). Places showing on the same side share it: two on

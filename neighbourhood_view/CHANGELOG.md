@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.1 — Bridges that line up
+
+- **Fix:** each end of a bridge is now as wide as the street it joins (the
+  road and its pavements, at that map's size) and carries straight on from
+  it, so the kerbs and road line up on both islands; it narrows or widens
+  smoothly in between.
 ## 0.11.0 — Weather on the ground, and the autumn fall
 
 - **Feature:** rain (and heavy rain, thunderstorms, sleet, hail): wet, darker

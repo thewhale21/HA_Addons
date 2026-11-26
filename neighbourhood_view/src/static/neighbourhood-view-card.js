@@ -691,11 +691,11 @@
         const ddx = (sb[0] - sa[0]) / sl, ddy = (sb[1] - sa[1]) / sl;
         for (let k = 0; k <= n; k++) {
           const x = ax + (bx - ax) * k / n, y = ay + (by - ay) * k / n;
-          if (insideRing(x, y, edge)) ends.push(V.p(x, y, 0).concat([ddx, ddy]));
+          if (insideRing(x, y, edge)) ends.push(V.p(x, y, 0).concat([ddx, ddy, r.w]));
         }
       }
     }
-    if (!ends.length) for (const [x, y] of edge) ends.push(V.p(x * 0.97, y * 0.97, 0).concat([0, 0]));
+    if (!ends.length) for (const [x, y] of edge) ends.push(V.p(x * 0.97, y * 0.97, 0).concat([0, 0, 6]));
     // (at night, with someone home: a warm glow on the ground round your house)
     if (opts.isHome && CTX.night && CTX.homeLit && people.length) {
       const g = V.p(home.x || 0, home.y || 0, 0);
@@ -819,17 +819,24 @@
     // (each end's way out: along its street, towards the other end, eased a little towards it)
     const way = (p, tx, ty) => {
       let dx = p[2] || 0, dy = p[3] || 0;
+      if (!dx && !dy) { dx = tx; dy = ty; }
       if (dx * tx + dy * ty < 0) { dx = -dx; dy = -dy; }
-      dx = dx * 0.7 + tx * 0.3; dy = dy * 0.7 + ty * 0.3;
+      // (straight on from the street, so its kerbs carry on; eased towards the other end only
+      // when the street runs nearly across the gap)
+      const along = dx * tx + dy * ty;
+      if (along < 0.35) { const k2 = (0.35 - along) * 1.2; dx += tx * k2; dy += ty * k2; }
       const l = Math.hypot(dx, dy) || 1;
       return [dx / l, dy / l];
     };
     const ta = way(a, ux, uy), tb = way(b, -ux, -uy), k = dist * 0.45;
     const P1 = [a[0] + ta[0] * k, a[1] + ta[1] * k], P2 = [b[0] + tb[0] * k, b[1] + tb[1] * k];
     const N = 36, mid = [], L = [], R = [], Ld = [], Rd = [], Lr = [], Rr = [];
-    const W = 3.6, rise = 2.6, thick = 1.3, rail = 0.9;
+    const wa = a[4] || 6, wb = b[4] || 6, rise = 2.6, thick = 1.3, rail = 0.9, RW = [];
     for (let i = 0; i <= N; i++) {
       const t = i / N, u = 1 - t, s = sa + (sb - sa) * t;
+      // (each end as wide as the street it carries on: the road, then a pavement each side)
+      const rw = (wa + (wb - wa) * t) / 2, W = rw + PAVE + 0.3;
+      RW.push(rw / W);
       const x = u * u * u * a[0] + 3 * u * u * t * P1[0] + 3 * u * t * t * P2[0] + t * t * t * b[0];
       const y0 = u * u * u * a[1] + 3 * u * u * t * P1[1] + 3 * u * t * t * P2[1] + t * t * t * b[1];
       const dx = 3 * u * u * (P1[0] - a[0]) + 6 * u * t * (P2[0] - P1[0]) + 3 * t * t * (b[0] - P2[0]);
@@ -843,12 +850,12 @@
       Lr.push([x + px * W, y + py * W - rail * CE * s]); Rr.push([x - px * W, y - py * W - rail * CE * s]);
     }
     const side = (top, down) => poly(top.concat(down.slice().reverse()), col('#8c8173'));
-    const inner = (k2) => mid.map(([x, y], i) => [x + (L[i][0] - x) * k2, y + (L[i][1] - y) * k2]).concat(mid.map(([x, y], i) => [x + (R[i][0] - x) * k2, y + (R[i][1] - y) * k2]).reverse());
+    const inner = () => mid.map(([x, y], i) => [x + (L[i][0] - x) * RW[i], y + (L[i][1] - y) * RW[i]]).concat(mid.map(([x, y], i) => [x + (R[i][0] - x) * RW[i], y + (R[i][1] - y) * RW[i]]).reverse());
     return `<g class="nvbridge">`
       // its slim sides (both: an S shows each in turn), then the deck: kerbs, the road, its line
       + side(L, Ld) + side(R, Rd)
       + poly(L.concat(R.slice().reverse()), col(C.kerb))
-      + poly(inner(0.72), col(C.road))
+      + poly(inner(), col(C.road))
       + `<polyline points="${pts(mid)}" fill="none" stroke="${col(C.roadLine)}" stroke-width=".3" stroke-dasharray="2.5 4" opacity=".85"/>`
       // low rails
       + `<polyline points="${pts(Lr)}" fill="none" stroke="${col('#f1ece2')}" stroke-width=".35" opacity=".8" stroke-linejoin="round"/>`
@@ -904,7 +911,7 @@
       groups.push(`<g class="nvisl" data-k="${esc(I.key)}" data-f="${f(dx + I.pin[0] * sc)} ${f(dy + I.pin[1] * sc)}" transform="translate(${f(dx)} ${f(dy)}) scale(${sc.toFixed(4)})">${I.svg}</g>`);
       boxes.push([tx, ty, tx + bw * sc, ty + bh * sc]);
       // a bridge from the nearest of your streets to the nearest of its
-      const ends = I.ends.map((p) => [dx + p[0] * sc, dy + p[1] * sc, p[2], p[3]]);
+      const ends = I.ends.map((p) => [dx + p[0] * sc, dy + p[1] * sc, p[2], p[3], p[4]]);
       const pair = nearestPair(homeI.ends, ends, hc, [tx + bw * sc / 2, ty + bh * sc / 2]);
       if (pair) bridges.push(bridge(pair[0], pair[1], 1, sc, !!live.night));
     };
