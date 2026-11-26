@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.0 — Weather, people, day and night
+
+- **Feature:** Settings › On the map › **Weather**: a weather entity, drawn
+  over the map (rain, snow, fog, cloud shadows, sun, lightning) with a chip
+  for it and the temperature.
+- **Feature:** Settings › On the map › **People**: up to 6 people, each
+  with a home / away (or zone) chip; whoever's home has their picture or
+  initials over your house.
+- **Feature:** night, from Home Assistant's sun: the map goes dark, some of
+  the neighbours' windows are lit, and your house's lights are on (with a
+  warm glow) when someone's home and off when nobody is. By day, someone
+  home: smoke from your chimney.
+- **Improvement:** the zoom and turn buttons are on a dark pill with an
+  edge, so they stand out on the light map.
+- **Feature:** the card follows the weather and people straight from Home
+  Assistant, as they change; its own `weather` and `people` options too.
+
 ## 0.5.0 — Greener
 
 - **Improvement:** the ground is lawn green (gardens), with shops',

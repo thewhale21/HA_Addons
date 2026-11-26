@@ -23,6 +23,25 @@ as the add-on's page and as a dashboard card.
      (OpenStreetMap has it), the building nearest your address, picked by
      you, or not found (the map's centred on your postcode: pick it).
 
+## Weather and people
+
+Settings › **On the map**:
+
+- **Weather:** a weather entity (e.g. the Met Office or Met.no
+  integration's `weather.home`). Its weather is drawn over the map: rain
+  (heavier when pouring), snow, fog, cloud shadows drifting over, a warm
+  light when it's sunny and flashes of lightning in a thunderstorm, with a
+  chip at the top right saying what it is and the temperature.
+- **People:** up to 6 people (Home Assistant's people, or device
+  trackers). Each has a chip at the top right: home, away, or the zone
+  they're in. Whoever's home has their picture (or initials) over your
+  house.
+- **Night** (Home Assistant's sun below the horizon): the map goes dark
+  blue, about a third of the other houses' windows are lit, and your
+  house's lights are on, with a warm glow round it, when someone's home,
+  and off when nobody is. **By day**, someone home: smoke from your
+  chimney (and their faces over the house).
+
 ## What's drawn
 
 From OpenStreetMap: buildings, roads and paths, railways and tram lines,
@@ -92,10 +111,13 @@ Options:
 | `height` | The card's height outside a panel view, e.g. `500px` |
 | `addon` | The add-on's slug, if it can't be found (e.g. `a1b2c3d4_neighbourhood_view`) |
 | `url` | Read the map from this address instead of through Home Assistant (e.g. `http://homeassistant.local:8099/`) |
+| `weather` | A weather entity for this card, instead of the add-on's |
+| `people` | People for this card, instead of the add-on's, e.g. `[person.matt, person.jo]` |
 
 The card reads the map from the add-on through Home Assistant's ingress, as
 the add-on's page does, so it needs an **administrator** account. It reads
-it again every 30 minutes. The card's file has nothing about you in it.
+it again every 30 minutes. The weather, people and day or night it follows
+straight from Home Assistant, as they change. The card's file has nothing about you in it.
 
 **Dashboards in YAML mode:** the add-on can't add the resource; add it to
 your configuration:

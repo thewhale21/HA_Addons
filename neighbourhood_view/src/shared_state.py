@@ -15,7 +15,8 @@ class SharedState:
     address: Optional[str] = None  # e.g. "12, RG41 2AB"
     home_found: Optional[str] = None  # how your house was found: address, nearest, picked, postcode
     buildings: int = 0
-    card: dict = field(default_factory=dict)  # the dashboard card: {"status", "url", "detail"}
+    card: dict = field(default_factory=dict)
+    live: dict = field(default_factory=dict)  # the weather, who's home, night (src/live.py)  # the dashboard card: {"status", "url", "detail"}
     extra: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:

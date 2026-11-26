@@ -110,7 +110,11 @@ async def handle_scene(request: web.Request) -> web.Response:
     if sc is None:
         message = state.error or ("Set your postcode and house number in the add-on's Settings."
                                   if not (settings and settings.data["postcode"]) else "Making the map…")
-    return web.json_response({"scene": sc, "message": message, "status": state.status},
+    link = app["ha_link"]
+    from src.live import entities
+    # (the entities the dashboard card follows itself, and what they are now, for this page)
+    ents = entities(link.settings) if link is not None else None
+    return web.json_response({"scene": sc, "message": message, "status": state.status, "entities": ents, "live": state.live},
                              dumps=lambda d: json.dumps(d, separators=(",", ":")))
 
 

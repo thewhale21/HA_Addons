@@ -35,7 +35,9 @@ on a phone, tablet or wall screen.
 2. **Overview:** your street, with your house in the middle. If the pin
    isn't on your house (not every house has its address in OpenStreetMap),
    click **⌂** and then your house.
-3. **A dashboard:** add a view with the type **Panel (single card)** and a
+3. **Settings › On the map** (optional): a weather entity, and the people
+   who live there (home / away on the map; lights on at night).
+4. **A dashboard:** add a view with the type **Panel (single card)** and a
    card with `type: custom:neighbourhood-view-card`.
 
 ## Its Home Assistant entities

@@ -41,9 +41,9 @@ async def test_health(client):
 
 @pytest.mark.asyncio
 async def test_entity_settings(client):
-    resp = await client.post("/api/sensors", json={"example_entity": "sensor.temp"})
-    assert resp.status == 200 and (await resp.json())["settings"]["example_entity"] == "sensor.temp"
-    resp = await client.post("/api/sensors", json={"example_entity": "automation.x"})
+    resp = await client.post("/api/sensors", json={"weather_entity": "weather.home"})
+    assert resp.status == 200 and (await resp.json())["settings"]["weather_entity"] == "weather.home"
+    resp = await client.post("/api/sensors", json={"weather_entity": "automation.x"})
     assert resp.status == 400
 
 

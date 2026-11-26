@@ -157,17 +157,23 @@
   }
 
   // Windows on a wall: rows (one a storey from z0, each storey sh high), every `every` m
+  /* What's being drawn now: night (lights on in windows), how likely a window in the building
+   * being drawn is lit (CTX.lit: 0..1), and whether your house's chimney smokes (someone's home). */
+  const CTX = {night: false, lit: 0, smoke: false, seed: 0};
+  const LIGHT = '#ffd36b', LIGHT2 = '#ffe9a8';  // (kept bright at night: see nightTint)
+
   function windows(V, p, q, len, z0, storeys, sh, ww, wh, every, lit, skipMid) {
     const n = Math.floor((len - 0.8) / every);
     if (n < 1 || len < 2.2) return '';
-    const fill = mix(C.glassLit, C.glass, lit);
+    const glass = mix(C.glassLit, C.glass, lit);
     let svg = '';
     for (let s = 0; s < storeys; s++) {
       const zb = z0 + s * sh + (sh - wh) * 0.55;
       for (let j = 0; j < n; j++) {
         if (skipMid && s === 0 && j === Math.floor(n / 2)) continue;
         const c = (j + 0.5) / n, half = ww / 2 / len;
-        svg += onWall(V, p, q, c - half, c + half, zb, zb + wh, fill);
+        const on = CTX.night && CTX.lit > 0 && rnd(p[0] + c * 7, p[1] + s * 3, CTX.seed + j) < CTX.lit;
+        svg += onWall(V, p, q, c - half, c + half, zb, zb + wh, on ? (lit > 0.5 ? LIGHT : LIGHT2) : glass);
       }
     }
     return svg;
@@ -206,6 +212,9 @@
 
   function house(V, b, isHome) {
     const id = b.id || 0, h = b.h || 5.8;
+    // (at night: your house lit if someone's home, dark if not; about a third of the others lit)
+    CTX.lit = isHome ? (CTX.homeLit ? 0.85 : 0) : (rnd(id, 40) < 0.55 ? 0.45 : 0);
+    CTX.seed = id % 997;
     const storeys = Math.max(1, Math.round(h / 2.9)), sh = h / storeys;
     const wall = isHome ? HOME.walls[0] : pick(HOUSE_WALLS, rnd(id, 1));
     const cols = isHome ? HOME.walls : [wall, mix(wall, '#000000', 0.16)];
@@ -231,10 +240,21 @@
     const r = gableRoof(V, rect, h, rh, roof, hip);
     // a chimney on some, near one end of the ridge
     let chim = '';
-    if (rnd(id, 4) < 0.45 && lng > 5) {
+    if ((isHome || rnd(id, 4) < 0.45) && lng > 5) {
       const e = rnd(id, 5) < 0.5 ? 1 : -1, t = 0.3;
       const cx = (r.Ra[0] + r.Rb[0]) / 2 + r.ux * e * lng * t, cy = (r.Ra[1] + r.Rb[1]) / 2 + r.uy * e * lng * t;
       chim = box(V, cx, cy, Math.atan2(r.uy, r.ux), 0.8, 0.6, h + rh * 0.4, h + rh + 0.8, [mix(cols[0], '#9a6b55', 0.5), mix(cols[1], '#6f4b3c', 0.5)], '#6d5a50');
+      // someone's home: smoke from the chimney (by day; at night the lights say so)
+      if (isHome && CTX.smoke) {
+        const t = V.p(cx, cy, h + rh + 1);
+        for (let k = 0; k < 3; k++) {
+          chim += `<circle cx="${f(t[0])}" cy="${f(t[1])}" r="1" fill="#f2f2f2" opacity="0">`
+            + `<animate attributeName="cy" from="${f(t[1])}" to="${f(t[1] - 9)}" dur="3.6s" begin="${k * 1.2}s" repeatCount="indefinite"/>`
+            + `<animate attributeName="cx" from="${f(t[0])}" to="${f(t[0] + 2.5)}" dur="3.6s" begin="${k * 1.2}s" repeatCount="indefinite"/>`
+            + `<animate attributeName="r" from=".7" to="2.6" dur="3.6s" begin="${k * 1.2}s" repeatCount="indefinite"/>`
+            + `<animate attributeName="opacity" values="0;.85;0" dur="3.6s" begin="${k * 1.2}s" repeatCount="indefinite"/></circle>`;
+        }
+      }
     }
     // (the chimney drawn before the roof if it's behind the ridge from here, after it if in front)
     svg += r.svg + chim;
@@ -243,6 +263,8 @@
 
   function block(V, b, isHome) {
     const id = b.id || 0, h = b.h || 8, k = b.k;
+    CTX.lit = isHome ? (CTX.homeLit ? 0.85 : 0) : k === 'industrial' ? 0.1 : k === 'flats' ? 0.5 : 0.3;
+    CTX.seed = id % 997;
     const set = isHome ? [HOME.walls[0], HOME.walls[1], HOME.flat] : pick(KIND[k] || KIND.large, rnd(id, 1));
     const cols = [set[0], set[1]];
     const storeys = Math.max(1, Math.round(h / 3.1)), sh = h / storeys;
@@ -319,6 +341,11 @@
    */
   function draw(scene, opts = {}) {
     const V = view(opts.rot || 0), H = scene.half || 250, home = scene.home || {};
+    const live = opts.live || {}, people = live.people || [];
+    const anyHome = people.some((p) => p.home);
+    CTX.night = !!live.night;
+    CTX.homeLit = people.length ? anyHome : true;  // (no people set: your house lit at night as any)
+    CTX.smoke = !live.night && anyHome;
     const out = [];
     // the chunk of ground, torn out: its earth sides (those facing the viewer, back ones first),
     // then its top, with a lip of turf
@@ -369,6 +396,11 @@
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railLine}" stroke-width=".35"/>`);
     }
     out.push('</g>');
+    // (at night, with someone home: a warm glow on the ground round your house)
+    if (CTX.night && CTX.homeLit && people.length) {
+      const g = V.p(home.x || 0, home.y || 0, 0);
+      out.push(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="16" ry="${f(16 * SE)}" fill="${LIGHT}" opacity=".28"/><ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="9" ry="${f(9 * SE)}" fill="${LIGHT2}" opacity=".35"/>`);
+    }
     // the buildings and trees, back to front
     const things = [];
     let pin = null;
@@ -386,6 +418,13 @@
     for (const c of scene.cars || []) if (on(c[0], c[1])) things.push([V.d(c[0], c[1]), car(V, c)]);
     things.sort((a, b) => b[0] - a[0]);
     for (const t of things) out.push(t[1]);
+    // night: everything darker and bluer, but the lit windows
+    if (CTX.night) {
+      const cache = {};
+      for (let i = 0; i < out.length; i++) {
+        out[i] = out[i].replace(/#[0-9a-f]{6}/gi, (c) => (c === LIGHT || c === LIGHT2 ? c : (cache[c] = cache[c] || mix(c, '#0b1736', 0.6))));
+      }
+    }
     // the pin over your home
     if (!pin) pin = V.p(home.x || 0, home.y || 0, 0);
     if (!opts.hideLabel) {
@@ -397,6 +436,17 @@
         + `<circle cx="${f(pin[0])}" cy="${f(pin[1])}" r="${f(fs * 0.3)}" fill="${C.pin}"/>`
         + `<rect x="${f(pin[0] - w / 2)}" y="${f(top - ph)}" width="${f(w)}" height="${f(ph)}" rx="${f(ph / 2)}" fill="${C.pin}" stroke="#ffffff" stroke-width="${f(fs * 0.12)}"/>`
         + `<text x="${f(pin[0])}" y="${f(top - ph / 2)}" fill="${C.pinText}" font-size="${f(fs)}" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-weight="700" letter-spacing="${f(fs * 0.08)}" text-anchor="middle" dominant-baseline="central">${label}</text>`);
+      // who's home: their faces (or initials) in a row above the pin
+      const here = people.filter((p) => p.home), r = fs * 1.05;
+      here.forEach((p, i) => {
+        const cx = pin[0] + (i - (here.length - 1) / 2) * r * 2.3, cy = top - ph - r * 1.45;
+        const col = personColour(p.entity_id || p.name), clip = 'nvp' + Math.random().toString(36).slice(2, 8);
+        out.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r + fs * 0.12)}" fill="#ffffff"/>`
+          + `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}" fill="${col}"/>`
+          + `<text x="${f(cx)}" y="${f(cy)}" fill="#ffffff" font-size="${f(fs * 0.85)}" font-family="sans-serif" font-weight="700" text-anchor="middle" dominant-baseline="central">${esc(p.initials || '?')}</text>`
+          + (p.picture ? `<clipPath id="${clip}"><circle cx="${f(cx)}" cy="${f(cy)}" r="${f(r)}"/></clipPath><image href="${esc(p.picture)}" x="${f(cx - r)}" y="${f(cy - r)}" width="${f(r * 2)}" height="${f(r * 2)}" clip-path="url(#${clip})" preserveAspectRatio="xMidYMid slice"/>` : '')
+          + `<title>${esc(p.name)}: home</title>`);
+      });
     }
     // the box around it all (for the viewBox)
     const corners = [];
@@ -426,9 +476,69 @@
     svg.setAttribute('viewBox', `${f(clampTo(px, vw, x0, w))} ${f(clampTo(py, vh, y0, h))} ${f(vw)} ${f(vh)}`);
   }
 
+  function personColour(key) {
+    return pick(['#e53935', '#8e24aa', '#3949ab', '#00897b', '#f4511e', '#6d4c41', '#c2185b', '#2e7d32'], rnd(String(key).length, String(key).charCodeAt(0) + String(key).charCodeAt(String(key).length - 1), 50));
+  }
+
+  // The weather over the map (rain, snow, fog, cloud shadows, a flash of lightning): HTML layers
+  // over the drawing, the same whatever the zoom
+  const WEATHER = {
+    'sunny': ['☀', 'Sunny'], 'clear-night': ['☾', 'Clear'], 'partlycloudy': ['⛅', 'Partly cloudy'], 'cloudy': ['☁', 'Cloudy'],
+    'fog': ['🌫', 'Fog'], 'rainy': ['🌧', 'Rain'], 'pouring': ['🌧', 'Heavy rain'], 'snowy': ['❄', 'Snow'], 'snowy-rainy': ['🌨', 'Sleet'],
+    'hail': ['🌨', 'Hail'], 'lightning': ['⚡', 'Thunder'], 'lightning-rainy': ['⛈', 'Thunderstorms'], 'windy': ['💨', 'Windy'],
+    'windy-variant': ['💨', 'Windy'], 'exceptional': ['⚠', 'Severe weather'],
+  };
+  const FX_CSS = `
+    .nvfx{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+    .nv-rain{background-image:repeating-linear-gradient(105deg,rgba(190,215,255,.0) 0 7px,rgba(190,215,255,.32) 7px 8px,rgba(190,215,255,0) 8px 19px);background-size:120px 120px;animation:nvrain .45s linear infinite}
+    .nv-rain.heavy{background-image:repeating-linear-gradient(105deg,rgba(190,215,255,0) 0 4px,rgba(190,215,255,.42) 4px 5px,rgba(190,215,255,0) 5px 11px);animation-duration:.3s}
+    @keyframes nvrain{to{background-position:-32px 120px}}
+    .nv-snow{background-image:radial-gradient(circle,#fff 0 1.4px,transparent 2px),radial-gradient(circle,rgba(255,255,255,.8) 0 1px,transparent 1.6px);background-size:46px 46px,29px 29px;background-position:0 0,13px 7px;animation:nvsnow 6s linear infinite}
+    @keyframes nvsnow{to{background-position:-46px 460px,-29px 290px}}
+    .nv-fog{background:linear-gradient(180deg,rgba(235,240,245,.55),rgba(235,240,245,.25) 60%,rgba(235,240,245,.45));animation:nvfog 12s ease-in-out infinite alternate}
+    @keyframes nvfog{to{opacity:.6}}
+    .nv-cloud{background-image:radial-gradient(ellipse 22% 14% at 20% 30%,rgba(20,30,50,.20),transparent 70%),radial-gradient(ellipse 26% 16% at 70% 60%,rgba(20,30,50,.18),transparent 70%),radial-gradient(ellipse 18% 12% at 45% 85%,rgba(20,30,50,.16),transparent 70%);background-size:200% 200%;animation:nvcloud 40s linear infinite}
+    .nv-cloud.light{opacity:.55}
+    @keyframes nvcloud{to{background-position:100% 30%}}
+    .nv-grey{background:rgba(70,80,95,.16)}
+    .nv-sun{background:radial-gradient(ellipse at 15% 0%,rgba(255,220,130,.22),transparent 60%)}
+    .nv-flash{background:#fff;opacity:0;animation:nvflash 7s infinite}
+    @keyframes nvflash{0%,90%,94%,100%{opacity:0}91%{opacity:.55}92.5%{opacity:.1}93%{opacity:.45}}
+    .nvchips{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;pointer-events:none;font:13px/1.2 sans-serif}
+    .nvchip{display:flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;background:rgba(18,22,30,.78);color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+    .nvchip.wx{padding:5px 12px;font-size:14px}
+    .nvchip .av{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background-size:cover;background-position:center}
+    .nvchip.away{opacity:.72}
+    .nvchip .st{color:rgba(255,255,255,.7)}
+    @media (prefers-reduced-motion: reduce){.nvfx{animation:none!important}}`;
+
+  function overlays(live) {
+    const w = (live && live.weather) || null, st = w && w.state;
+    let fx = '';
+    if (['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy', 'hail'].includes(st)) fx += `<div class="nvfx nv-grey"></div><div class="nvfx nv-cloud"></div><div class="nvfx nv-rain${st === 'pouring' || st === 'lightning-rainy' ? ' heavy' : ''}"></div>`;
+    if (['snowy', 'snowy-rainy'].includes(st)) fx += '<div class="nvfx nv-snow"></div>';
+    if (st === 'fog') fx += '<div class="nvfx nv-fog"></div>';
+    if (st === 'cloudy') fx += '<div class="nvfx nv-grey"></div><div class="nvfx nv-cloud"></div>';
+    if (st === 'partlycloudy') fx += '<div class="nvfx nv-cloud light"></div>';
+    if (st === 'sunny' && !(live && live.night)) fx += '<div class="nvfx nv-sun"></div>';
+    if (['lightning', 'lightning-rainy'].includes(st)) fx += '<div class="nvfx nv-flash"></div>';
+    let chips = '';
+    if (w && st && st !== 'unavailable' && st !== 'unknown') {
+      const [icon, text] = WEATHER[st] || ['', st];
+      const t = w.temperature != null && w.temperature !== '' ? ` ${Math.round(Number(w.temperature))}${esc(w.unit || '°C')}` : '';
+      chips += `<div class="nvchip wx" title="${esc(text)}">${icon} ${esc(text)}${t}</div>`;
+    }
+    for (const p of (live && live.people) || []) {
+      const col = personColour(p.entity_id || p.name);
+      const where = p.home ? 'Home' : !p.state || p.state === 'not_home' ? 'Away' : p.state === 'unknown' || p.state === 'unavailable' ? '—' : p.state;
+      chips += `<div class="nvchip${p.home ? '' : ' away'}"><span class="av" style="background-color:${col}${p.picture ? `;background-image:url('${esc(p.picture)}')` : ''}">${p.picture ? '' : esc(p.initials || '?')}</span>${esc(p.name)} <span class="st">${esc(where)}</span></div>`;
+    }
+    return `<style>${FX_CSS}</style>${fx}${chips ? `<div class="nvchips">${chips}</div>` : ''}`;
+  }
+
   function render(el, scene, opts) {
     // (OpenStreetMap's credit, as its licence asks: in a corner of the box, whatever the zoom)
-    el.innerHTML = draw(scene, opts) + '<div style="position:absolute;left:10px;bottom:6px;font:11px/1.2 sans-serif;color:rgba(255,255,255,.55);pointer-events:none">\u00a9 OpenStreetMap contributors</div>';
+    el.innerHTML = draw(scene, opts) + overlays((opts || {}).live) + '<div style="position:absolute;left:10px;bottom:6px;font:11px/1.2 sans-serif;color:rgba(255,255,255,.55);pointer-events:none">\u00a9 OpenStreetMap contributors</div>';
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
     fit(el);
     if (!el._nvObserver && window.ResizeObserver) {
@@ -452,7 +562,26 @@
     return ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i))];
   }
 
-  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, version: VERSION};
+  /* What's happening now, from Home Assistant's states (the card; the add-on's page gets the same
+   * from the add-on, src/live.py): ents = {weather, people: [...], sun}. */
+  function liveFrom(states, ents) {
+    if (!ents) return null;
+    const sun = states[ents.sun || 'sun.sun'];
+    const out = {night: sun ? sun.state === 'below_horizon' : null, weather: null, people: []};
+    if (ents.weather) {
+      const st = states[ents.weather] || {}, a = st.attributes || {};
+      out.weather = {entity: ents.weather, state: st.state, temperature: a.temperature, unit: a.temperature_unit || '°C'};
+    }
+    for (const e of ents.people || []) {
+      const st = states[e] || {}, a = st.attributes || {};
+      const name = a.friendly_name || e.split('.').pop().replace(/_/g, ' ');
+      const initials = (name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('') || '?').toUpperCase();
+      out.people.push({entity_id: e, name, initials, picture: a.entity_picture || null, state: st.state, home: st.state === 'home'});
+    }
+    return out;
+  }
+
+  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, version: VERSION};
 
   // ---------- the dashboard card ----------
   if (!window.customElements || customElements.get('neighbourhood-view-card')) return;
@@ -478,6 +607,11 @@
     set hass(hass) {
       this._hass = hass;
       if (!this._root) this._build();
+      // (drawn again when the weather, someone's home/away or day/night changes)
+      if (this._scene && this._ents) {
+        const live = liveFrom(hass.states || {}, this._ents), key = JSON.stringify(live);
+        if (key !== this._liveKey) { this._liveKey = key; this._draw(); }
+      }
       if (!this._started && hass) {
         this._started = true;
         this._load();
@@ -498,10 +632,11 @@
         .map { position: absolute; inset: 0; }
         .msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
           padding: 24px; color: var(--secondary-text-color, #999); font: 14px/1.4 var(--paper-font-body1_-_font-family, sans-serif); }
-        .tools { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; }
+        .tools { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 2px; padding: 3px; border-radius: 999px;
+          background: rgba(18,22,30,.82); box-shadow: 0 2px 8px rgba(0,0,0,.4); border: 1px solid rgba(255,255,255,.18); }
         .tools button { width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer; font-size: 17px; line-height: 1;
-          background: rgba(0,0,0,.35); color: #fff; backdrop-filter: blur(4px); }
-        .tools button:hover { background: rgba(0,0,0,.55); }
+          background: transparent; color: #fff; }
+        .tools button:hover { background: rgba(255,255,255,.16); }
       </style><ha-card><div class="map"></div><div class="msg">Reading the map…</div>
         <div class="tools"><button data-z="-1" title="Zoom out" aria-label="Zoom out">−</button><button data-z="1" title="Zoom in" aria-label="Zoom in">+</button><button data-r="-1" title="Turn left" aria-label="Turn left">⟲</button><button data-r="1" title="Turn right" aria-label="Turn right">⟳</button></div></ha-card>`;
       this._root.querySelector('.tools').addEventListener('click', (e) => {
@@ -561,6 +696,10 @@
         const d = await r.json();
         if (!d.scene) { this._scene = null; this._msg(d.message || 'Set your postcode and house number in the Neighbourhood View add-on.'); return; }
         this._scene = d.scene;
+        // (the entities to follow: the card's own weather / people, else the add-on's Settings)
+        const c = this._config;
+        this._ents = {...(d.entities || {}), ...(c.weather ? {weather: c.weather} : {}), ...(c.people ? {people: [].concat(c.people)} : {})};
+        this._liveKey = null;
         this._draw();
       } catch (e) {
         const admin = this._hass && this._hass.user && this._hass.user.is_admin;
@@ -571,7 +710,9 @@
     _draw() {
       if (!this._scene) return;
       const s = this._scene, label = this._config.label || (s.number ? `NO. ${s.number}` : 'HOME');
-      render(this._root.querySelector('.map'), s, {rot: getRot(), zoom: zoomStep(0), label: String(label).toUpperCase()});
+      const live = this._ents && this._hass ? liveFrom(this._hass.states || {}, this._ents) : null;
+      this._liveKey = JSON.stringify(live);
+      render(this._root.querySelector('.map'), s, {rot: getRot(), zoom: zoomStep(0), label: String(label).toUpperCase(), live});
       this._msg('');
     }
   }

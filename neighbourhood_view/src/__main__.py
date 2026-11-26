@@ -11,7 +11,7 @@ from typing import Optional
 import aiohttp
 from aiohttp import web
 
-from src import card_install, log_filters, places
+from src import card_install, live, log_filters, places
 from src.api import create_api_app
 from src.app_settings import AppSettings
 from src.config import load_config
@@ -106,7 +106,11 @@ async def run() -> None:
     store = places.SceneStore(data_dir)
     wake = asyncio.Event()
 
-    link = HaLink(data_dir, state)
+    async def entity_changed(entity_id: str, st) -> None:
+        """The weather, someone's home/away or the sun changed: drawn over the map."""
+        state.live = live.compute(link.settings, link.states)
+
+    link = HaLink(data_dir, state, on_entity_changed=entity_changed)
     debug = DebugTools(config=config, log_buffer=log_buffer, settings=settings)
 
     app = create_api_app(state, ha_link=link, health=health, debug=debug, app_settings=settings,

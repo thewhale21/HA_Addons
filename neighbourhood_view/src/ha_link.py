@@ -34,10 +34,14 @@ SUPERVISOR_WS = "ws://supervisor/core/websocket"
 SUPERVISOR_API = "http://supervisor/core/api"
 RECONNECT_DELAYS = (2, 5, 10, 20, 30, 60)
 ENTITY_LIST_TTL_S = 30
-PICKER_DOMAINS = ("sensor", "binary_sensor", "switch", "input_boolean", "input_number", "light", "climate")
+PICKER_DOMAINS = ("weather", "person", "device_tracker")
 
 # The entity pickers on the Settings tab: key -> domain(s) allowed
-ENTITY_KEYS = {"example_entity": ("sensor", "binary_sensor", "switch", "input_boolean", "input_number", "light")}
+# (the weather, and up to MAX_PEOPLE people: Settings › Weather, People)
+MAX_PEOPLE = 6
+ENTITY_KEYS = {"weather_entity": ("weather",),
+               **{f"person_{i}": ("person", "device_tracker") for i in range(1, MAX_PEOPLE + 1)}}
+ALWAYS_WATCHED = ("sun.sun",)  # (day or night, for the house lights)
 
 
 def default_settings() -> dict:
@@ -130,7 +134,7 @@ class HaLink:
 
     @property
     def watched(self) -> list[str]:
-        return sorted({v for k, v in self.settings.items() if k in ENTITY_KEYS and v})
+        return sorted({v for k, v in self.settings.items() if k in ENTITY_KEYS and v} | set(ALWAYS_WATCHED if self.available else ()))
 
     # --- reacting to states ----------------------------------------------------
 

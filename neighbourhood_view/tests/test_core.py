@@ -45,9 +45,10 @@ def test_app_settings_are_checked_and_saved(tmp_path):
 
 
 def test_entity_settings_are_checked():
-    assert validate_settings({"example_entity": " sensor.temp "})["example_entity"] == "sensor.temp"
-    assert validate_settings({"example_entity": ""})["example_entity"] == ""
-    for bad in ({"example_entity": "automation.x"}, {"example_entity": 3}, {"nope": 1}, []):
+    assert validate_settings({"weather_entity": " weather.home "})["weather_entity"] == "weather.home"
+    assert validate_settings({"person_1": "person.matt", "person_2": "device_tracker.phone"})["person_2"] == "device_tracker.phone"
+    assert validate_settings({"weather_entity": ""})["weather_entity"] == ""
+    for bad in ({"weather_entity": "sensor.x"}, {"person_1": "weather.home"}, {"weather_entity": 3}, {"nope": 1}, {"person_7": "person.x"}, []):
         with pytest.raises(ValueError):
             validate_settings(bad)
 
@@ -60,23 +61,24 @@ def test_link_follows_changes_and_saves(tmp_path):
 
     link = HaLink(str(tmp_path), SharedState(), token="", on_entity_changed=changed)
     assert not link.available and link.watched == []
-    _run(link.update_settings({"example_entity": "sensor.temp"}))
-    assert link.watched == ["sensor.temp"]
-    _run(link.handle_entities_event({"a": {"sensor.temp": {"s": "20.5", "a": {"friendly_name": "Temp", "unit_of_measurement": "°C"}}}}))
-    _run(link.handle_entities_event({"c": {"sensor.temp": {"+": {"s": "21"}}}}))
-    assert seen[-2:] == [("sensor.temp", "20.5"), ("sensor.temp", "21")]
+    _run(link.update_settings({"person_1": "person.matt"}))
+    assert link.watched == ["person.matt"]
+    _run(link.handle_entities_event({"a": {"person.matt": {"s": "home", "a": {"friendly_name": "Matt"}}}}))
+    _run(link.handle_entities_event({"c": {"person.matt": {"+": {"s": "not_home"}}}}))
+    assert seen[-2:] == [("person.matt", "home"), ("person.matt", "not_home")]
     snap = link.snapshot()
-    assert snap["entities"]["example_entity"] == {"entity_id": "sensor.temp", "name": "Temp", "state": "21", "unit": "°C"}
-    assert HaLink(str(tmp_path), SharedState(), token="").settings["example_entity"] == "sensor.temp"  # saved
+    assert snap["entities"]["person_1"] == {"entity_id": "person.matt", "name": "Matt", "state": "not_home", "unit": None}
+    assert HaLink(str(tmp_path), SharedState(), token="").settings["person_1"] == "person.matt"  # saved
+    assert HaLink(str(tmp_path), SharedState(), token="x").watched == ["person.matt", "sun.sun"]  # (the sun, under HA)
 
 
 def test_entity_list_for_the_pickers():
     out = entity_list([
-        {"entity_id": "sensor.b", "state": "1", "attributes": {"friendly_name": "B", "unit_of_measurement": "W"}},
+        {"entity_id": "weather.b", "state": "rainy", "attributes": {"friendly_name": "B"}},
         {"entity_id": "automation.x", "state": "on", "attributes": {}},
-        {"entity_id": "light.a", "state": "off", "attributes": {"friendly_name": "A"}},
+        {"entity_id": "person.a", "state": "home", "attributes": {"friendly_name": "A"}},
     ])
-    assert [e["entity_id"] for e in out] == ["light.a", "sensor.b"]
+    assert [e["entity_id"] for e in out] == ["person.a", "weather.b"]
 
 
 def test_own_sensors_are_posted_when_they_change():
@@ -122,3 +124,19 @@ def test_page_polling_is_kept_out_of_the_log():
     assert not f.filter(rec('1.2.3.4 "GET /api/state HTTP/1.1" 200 12'))
     assert f.filter(rec('1.2.3.4 "POST /api/sensors HTTP/1.1" 200 12'))
     assert f.filter(rec('1.2.3.4 "GET /api/state HTTP/1.1" 500 12'))
+
+
+def test_whats_happening_now():
+    from src.live import compute, entities
+    settings = {"weather_entity": "weather.home", "person_1": "person.matt", "person_3": "person.jo_bloggs", "person_2": ""}
+    assert entities(settings) == {"weather": "weather.home", "people": ["person.matt", "person.jo_bloggs"], "sun": "sun.sun"}
+    states = {
+        "sun.sun": {"state": "below_horizon"},
+        "weather.home": {"state": "rainy", "attributes": {"temperature": 9.4, "temperature_unit": "°C"}},
+        "person.matt": {"state": "home", "attributes": {"friendly_name": "Matt Lee", "entity_picture": "/api/image/serve/x/512x512"}},
+        "person.jo_bloggs": {"state": "Work", "attributes": {}},
+    }
+    live = compute(settings, states)
+    assert live["night"] is True and live["weather"] == {"entity": "weather.home", "state": "rainy", "temperature": 9.4, "unit": "°C"}
+    assert [(p["name"], p["initials"], p["home"], p["state"]) for p in live["people"]] == [("Matt Lee", "ML", True, "home"), ("Jo Bloggs", "JB", False, "Work")]
+    assert compute({}, {})["night"] is None and compute({}, {})["weather"] is None
