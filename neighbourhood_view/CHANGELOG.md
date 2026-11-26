@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0 — Bridges
+
+- **Feature:** each other place is joined to your map by a bridge (a road
+  deck on a stone span, with railings) between the nearest streets on the
+  two maps.
+- **Change:** another place's map only shows while someone's there (in its
+  zone, or on it by their tracker), and disappears when they leave.
+- **Improvement:** the other places sit a little closer to your map.
 ## 0.7.0 — Other places, and a smaller map
 
 - **Change:** the map goes 150 m each way from your house (it was 250 m),

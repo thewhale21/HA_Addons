@@ -408,6 +408,18 @@
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railLine}" stroke-width=".35"/>`);
     }
     out.push('</g>');
+    // (points along the streets, on the screen: where a bridge to another map can start)
+    const ends = [];
+    for (const r of streets) {
+      for (let i = 0; i < r.p.length - 1; i++) {
+        const [ax, ay] = r.p[i], [bx, by] = r.p[i + 1], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 6));
+        for (let k = 0; k <= n; k++) {
+          const x = ax + (bx - ax) * k / n, y = ay + (by - ay) * k / n;
+          if (insideRing(x, y, edge)) ends.push(V.p(x, y, 0));
+        }
+      }
+    }
+    if (!ends.length) for (const [x, y] of edge) ends.push(V.p(x * 0.97, y * 0.97, 0));
     // (at night, with someone home: a warm glow on the ground round your house)
     if (opts.isHome && CTX.night && CTX.homeLit && people.length) {
       const g = V.p(home.x || 0, home.y || 0, 0);
@@ -467,7 +479,7 @@
     for (const [x, y, dp] of edge) corners.push(V.p(x, y, 0), V.p(x, y, -dp));
     const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]).concat([top - fs * 3.5, pin[1] - PIN_H * 0.2 / zs]);
     const m = H * 0.04, x0 = Math.min(...xs) - m, y0 = Math.min(...ys) - m, w = Math.max(...xs) - x0 + m, h = Math.max(...ys) - y0 + m * 2.2;
-    return {svg: out.join(''), box: [x0, y0, w, h], pin: [pin[0], pin[1] - PIN_H * 0.06 / zs]};
+    return {svg: out.join(''), box: [x0, y0, w, h], pin: [pin[0], pin[1] - PIN_H * 0.06 / zs], ends};
   }
 
   // A point's place on a map (metres from its middle), from latitude and longitude
@@ -500,6 +512,58 @@
     return out;
   }
 
+  /* A bridge from a on your map to b on another's (screen points, at ground level), sa and sb
+   * their scales: a road deck between pavements, on a stone span, with railings. */
+  function bridge(a, b, sa, sb, night) {
+    const col = (c) => (night ? mix(c, '#0b1736', 0.6) : c);
+    const dx = b[0] - a[0], dy = b[1] - a[1], gl = Math.hypot(dx, dy / SE) || 1;
+    // (across the bridge, flat on the ground, per metre; + is the far side when it points up the screen)
+    let px = (dy / SE) / gl, py = (-dx * SE) / gl;
+    if (py > 0) { px = -px; py = -py; }
+    const W = 5.5, at = (p, s, k) => [p[0] + px * W * s * k, p[1] + py * W * s * k];
+    const af = at(a, sa, 1), bf = at(b, sb, 1), an = at(a, sa, -1), bn = at(b, sb, -1);
+    const down = (p, s, m) => [p[0], p[1] + m * CE * s];
+    const out = [];
+    // the span under the deck (its near face), with an arch cut out
+    out.push(poly([an, bn, down(bn, sb, 3.2), down(an, sa, 3.2)], col('#9c8f7f'), ` stroke="${col('#7f7366')}" stroke-width=".5" stroke-linejoin="round"`));
+    const n = 24, arch = [];
+    for (let i = 0; i <= n; i++) {
+      const t = 0.08 + 0.84 * i / n, s = sa + (sb - sa) * t, p = [an[0] + (bn[0] - an[0]) * t, an[1] + (bn[1] - an[1]) * t];
+      arch.push(down(p, s, 3.2 - 2.2 * Math.sin(Math.PI * (t - 0.08) / 0.84)));
+    }
+    out.push(`<polyline points="${pts(arch)}" fill="none" stroke="${col('#6f6458')}" stroke-width=".7" stroke-linejoin="round"/>`);
+    // the deck: pavements, road, its line
+    out.push(poly([af, bf, bn, an], col(C.kerb)));
+    const ri = (p, s, k) => at(p, s, k * 0.62);
+    out.push(poly([ri(a, sa, 1), ri(b, sb, 1), ri(b, sb, -1), ri(a, sa, -1)], col(C.road)));
+    out.push(`<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="${col(C.roadLine)}" stroke-width=".35" stroke-dasharray="2.5 3"/>`);
+    // railings: posts and a top rail, far side then near
+    for (const [p, q] of [[af, bf], [an, bn]]) {
+      const posts = Math.max(2, Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]) / 4)), tops = [];
+      let s = '';
+      for (let i = 0; i <= posts; i++) {
+        const t = i / posts, sc = sa + (sb - sa) * t, x = p[0] + (q[0] - p[0]) * t, y = p[1] + (q[1] - p[1]) * t, top = y - 1.3 * CE * sc;
+        s += `<line x1="${f(x)}" y1="${f(y)}" x2="${f(x)}" y2="${f(top)}" stroke="${col('#7a6a58')}" stroke-width=".45"/>`;
+        tops.push([x, top]);
+      }
+      out.push(s + `<polyline points="${pts(tops)}" fill="none" stroke="${col('#efe8da')}" stroke-width=".6" stroke-linecap="round"/>`);
+    }
+    return `<g class="nvbridge">${out.join('')}</g>`;
+  }
+
+  /* The nearest pair of points between two sets (a bridge's ends): each cut to those nearest the
+   * other's middle first, so it's quick. */
+  function nearestPair(A, B, ca, cb) {
+    const near = (list, c) => list.map((p) => [Math.hypot(p[0] - c[0], p[1] - c[1]), p]).sort((x, y) => x[0] - y[0]).slice(0, 160).map((x) => x[1]);
+    const a = near(A, cb), b = near(B, ca);
+    let best = null, bd = Infinity;
+    for (const p of a) for (const q of b) {
+      const d = (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2;
+      if (d < bd) { bd = d; best = [p, q]; }
+    }
+    return best;
+  }
+
   /**
    * The drawing as SVG text: your home's map, with the other places' maps beside it (left, right,
    * above, below; several on one side share it). opts: {rot: 0-3 (quarter turns), zoom, label: the
@@ -507,25 +571,35 @@
    * places: [{name, side, scene}]}
    */
   function draw(scene, opts = {}) {
-    const live = opts.live || {}, places = (opts.places || []).filter((pl) => pl && pl.scene);
-    const who = whereabouts(scene, places, live.people || []);
+    const live = opts.live || {}, all = (opts.places || []).filter((pl) => pl && pl.scene);
+    const whoAll = whereabouts(scene, all, live.people || []);
+    // (another place's map only shows while someone's there)
+    const keep = all.map((pl, i) => whoAll.places[i].at.length + whoAll.places[i].map.length > 0);
+    const places = all.filter((pl, i) => keep[i]);
+    const who = {...whoAll, places: whoAll.places.filter((x, i) => keep[i])};
     const homeI = island(scene, {...opts, isHome: true, atPin: who.home, onMap: who.homeMap});
     const [hx, hy, hw, hh] = homeI.box;
-    const gap = hw * 0.06;
-    const groups = [`<g class="nvisl" data-f="">${homeI.svg}</g>`];
+    const gap = hw * 0.025;
+    const groups = [`<g class="nvisl" data-f="" data-k="">${homeI.svg}</g>`], bridges = [];
+    const hc = [hx + hw / 2, hy + hh / 2];
     const boxes = [[hx, hy, hx + hw, hy + hh]];
     const PLACE_PINS = ['#7e57c2', '#00897b', '#f4511e', '#6d4c41', '#c2185b', '#3949ab'];
     const bySide = {left: [], right: [], up: [], down: []};
     places.forEach((pl, i) => {
       const I = island(pl.scene, {rot: opts.rot, zoom: opts.zoom, live, isHome: false, label: String(pl.name || 'PLACE').toUpperCase(),
         pinColour: PLACE_PINS[i % PLACE_PINS.length], atPin: who.places[i].at, onMap: who.places[i].map});
+      I.key = String(pl.zone || pl.name || i);
       (bySide[pl.side] || bySide.left).push(I);
     });
     const place = (I, tx, ty, sc) => {
       const [bx, by, bw, bh] = I.box;
       const dx = tx - bx * sc, dy = ty - by * sc;
-      groups.push(`<g class="nvisl" data-f="${f(dx + I.pin[0] * sc)} ${f(dy + I.pin[1] * sc)}" transform="translate(${f(dx)} ${f(dy)}) scale(${sc.toFixed(4)})">${I.svg}</g>`);
+      groups.push(`<g class="nvisl" data-k="${esc(I.key)}" data-f="${f(dx + I.pin[0] * sc)} ${f(dy + I.pin[1] * sc)}" transform="translate(${f(dx)} ${f(dy)}) scale(${sc.toFixed(4)})">${I.svg}</g>`);
       boxes.push([tx, ty, tx + bw * sc, ty + bh * sc]);
+      // a bridge from the nearest of your streets to the nearest of its
+      const ends = I.ends.map((p) => [dx + p[0] * sc, dy + p[1] * sc]);
+      const pair = nearestPair(homeI.ends, ends, hc, [tx + bw * sc / 2, ty + bh * sc / 2]);
+      if (pair) bridges.push(bridge(pair[0], pair[1], 1, sc, !!live.night));
     };
     // (left and right: a column as tall as your map, shared; above and below: a row as wide)
     for (const side of ['left', 'right']) {
@@ -555,7 +629,7 @@
     const x0 = Math.min(...boxes.map((b) => b[0])), y0 = Math.min(...boxes.map((b) => b[1]));
     const w = Math.max(...boxes.map((b) => b[2])) - x0, h = Math.max(...boxes.map((b) => b[3])) - y0;
     const pin = homeI.pin;
-    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" role="img" aria-label="The streets around your home">${groups.join('')}</svg>`, away: who.away};
+    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" role="img" aria-label="The streets around your home">${groups.join('')}${bridges.join('')}</svg>`, away: who.away};
   }
 
   /* Fits the drawing to its box: all of it where the box is about its shape; in a much narrower
@@ -565,8 +639,10 @@
   function fit(el) {
     const svg = el.querySelector('svg');
     if (!svg) return;
-    // (round your house, or the place you tapped)
-    const [x0, y0, w, h] = svg.dataset.box.split(' ').map(Number), [px, py] = el._nvFocus || svg.dataset.pin.split(' ').map(Number);
+    // (round your house, or the place you tapped while it's still shown)
+    const fg = el._nvFocus ? [...svg.querySelectorAll('.nvisl')].find((g) => g.dataset.k === el._nvFocus) : null;
+    if (el._nvFocus && !fg) el._nvFocus = null;
+    const [x0, y0, w, h] = svg.dataset.box.split(' ').map(Number), [px, py] = (fg ? fg.dataset.f : svg.dataset.pin).split(' ').map(Number);
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const boxAr = r.width / r.height, ar = w / h;
@@ -652,8 +728,7 @@
       el._nvClick = (e) => {
         const g = e.target.closest && e.target.closest('.nvisl');
         if (!g || (el._nvPick && e.target.closest('.bld'))) return;
-        const fp = g.dataset.f ? g.dataset.f.split(' ').map(Number) : null;
-        el._nvFocus = fp;
+        el._nvFocus = g.dataset.k || null;
         fit(el);
       };
       el.addEventListener('click', el._nvClick);

@@ -58,7 +58,11 @@ far it goes each way round the zone's middle (100 m by default, 30 to
 400 m). Then **Save**.
 
 - Each is drawn as its own little island next to yours, with a pin
-  labelled with the zone's name. Places on the same side share it: two on
+  labelled with the zone's name, joined to yours by a bridge between the
+  nearest streets on the two maps.
+- A place only shows **while someone's there**: in its zone, or on its
+  map by their tracker's location. When they leave, it disappears (and if
+  you were zoomed in on it, the view goes back to your house). Places showing on the same side share it: two on
   the left are one above the other, two below are side by side, made
   smaller to fit if they need to be.
 - **Tap a place** on the Overview (or the card) to zoom in round it; tap
