@@ -12,7 +12,8 @@ as the add-on's page and as a dashboard card.
    address, or now with **Refresh**.
 3. **Overview:** the streets about 250 m each way from your house (a 500 m
    square), with a pin on your house showing its number.
-   - **⟲ ⟳** turn it a quarter at a time (remembered on each device).
+   - **+ −** zoom in around your house and back out, **⟲ ⟳** turn it a
+     quarter at a time (both remembered on each device).
    - **⌂** picks your house: click it, then click your house. The map's
      made again centred on it, and it's kept until you change your address.
      Use it when the pin isn't on your house.
@@ -24,12 +25,27 @@ as the add-on's page and as a dashboard card.
 
 From OpenStreetMap: buildings, roads and paths, railways and tram lines,
 parks, grass, woods, sports pitches, car parks, water and rivers, and the
-trees it has. Where it has no heights, buildings get one by type (a house
-6 m, flats 12 m, shops 8 m, garages 2.8 m...), or 3 m a storey where the
-number of storeys is known. Houses get a pitched roof along their longer
-side. Woods and parks get trees where OpenStreetMap has none mapped, and
-residential streets get a few street trees (placed the same way each time,
-so they don't move). Your house is drawn in blue.
+trees it has, drawn like a video game's town:
+
+- **Houses** each get their own look: brick, render or stone walls, a
+  tiled, slate or clay roof, gabled or hipped, a chimney on some, windows
+  on every storey and a front door. Where OpenStreetMap has no height, most
+  are 2 storeys, some bungalows and some 3 storeys.
+- **Other buildings:** flats and offices with rows of windows, shops with
+  a glass front and a coloured fascia, warehouses with high windows, and
+  things on their flat roofs. Heights from OpenStreetMap (3 m a storey),
+  else by type (flats 12 m, shops 8 m, garages 2.8 m...).
+- **Streets** have a pavement each side with its kerb, and white lines
+  down the middle; footpaths are drawn on their own.
+- **Trees** in three kinds (round, pointed and bushes), in different
+  greens and sizes: the ones OpenStreetMap has, more in woods and parks,
+  and some along residential streets.
+- **Cars** parked along the kerbs, in different colours (not near
+  junctions).
+
+What's made up (each house's colours, the trees and cars added, the
+storeys where none are known) is the same every time, so nothing moves
+about between visits. Your house is drawn in blue.
 
 How your house is found: postcodes.io gives the postcode's centre, then
 OpenStreetMap's addresses within 400 m with your house number and postcode.
@@ -54,7 +70,8 @@ says whether it did). Then:
 In a panel view it fills the screen below the header; elsewhere it's 4:3,
 or as tall as `height` says. On a screen much narrower (or flatter) than
 the drawing, e.g. a phone held upright, it shows closer in around your
-house instead of the whole square small in the middle. ⟲ ⟳ turn it.
+house instead of the whole square small in the middle. **+ −** zoom in
+and out, **⟲ ⟳** turn it.
 
 Options:
 

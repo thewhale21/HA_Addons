@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0 — Like a video game town
+
+- **Improvement:** houses each get their own look: brick, render or stone
+  walls, tiled, slate or clay roofs, gabled or hipped, chimneys, windows on
+  every storey and a front door; bungalows, 2 and 3 storeys where
+  OpenStreetMap has no height.
+- **Improvement:** flats and offices with rows of windows, shops with a
+  glass front and a coloured fascia, warehouses with high windows, and
+  things on flat roofs.
+- **Feature:** pavements with kerbs along the streets, white lines down the
+  middle, and cars parked along the kerbs.
+- **Improvement:** trees in three kinds (round, pointed, bushes), different
+  greens and sizes.
+- **Feature:** **+ −** zoom in around your house and back out, on the
+  page and the card.
+
 ## 0.1.0 — First version
 
 - **Feature:** an isometric drawing of the streets around your home, about

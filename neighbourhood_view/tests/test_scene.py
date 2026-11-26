@@ -55,7 +55,10 @@ def test_building_kinds_and_heights():
     assert S.building_kind({"building": "garage"}, 15) == "small"
     assert S.building_height({"building:levels": "4"}, "flats") == 12
     assert S.building_height({"height": "15 m", "roof:height": "3"}, "flats") == 12
-    assert S.building_height({}, "house") == 6
+    # (a house with no height: mostly 2 storeys, some bungalows and 3 storeys; the same each time)
+    hs = [S.building_height({}, "house", i) for i in range(1, 400)]
+    assert set(hs) == {3.2, 5.8, 8.4} and hs.count(5.8) > 250
+    assert S.building_height({}, "house", 42) == S.building_height({}, "house", 42)
 
 
 def test_the_scene_from_openstreetmap():
@@ -68,7 +71,8 @@ def test_the_scene_from_openstreetmap():
     assert any(b["k"] == "flats" and b["h"] == 15 for b in sc["buildings"])
     assert {r["k"] for r in sc["roads"]} >= {"minor", "major", "path"}
     assert sc["rails"] and {a["k"] for a in sc["areas"]} >= {"grass", "water", "pitch", "paved"}
-    assert len(sc["trees"]) > 20
+    assert len(sc["trees"]) > 20 and len({t[2] for t in sc["trees"]}) > 10  # (trees of many sizes)
+    assert sc["cars"] and all(len(c) == 4 and 0 <= c[3] <= 9 for c in sc["cars"])
     h = sc["half"]
     for b in sc["buildings"]:
         assert S.area(b["p"]) > 0 and all(abs(x) <= h + 0.05 and abs(y) <= h + 0.05 for x, y in b["p"])

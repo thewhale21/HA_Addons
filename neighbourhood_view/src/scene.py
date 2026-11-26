@@ -302,8 +302,12 @@ def building_kind(tags: dict, a: float) -> str:
     return "house" if a <= HOUSE_MAX_AREA else "large"
 
 
-def building_height(tags: dict, kind: str) -> float:
-    """Wall height in metres: its height tag (less the roof), else its levels, else by kind."""
+HOUSE_STOREYS = ((0.14, 3.2), (0.86, 5.8), (1.0, 8.4))  # houses with no height: bungalows, 2 and 3 storeys
+
+
+def building_height(tags: dict, kind: str, bid: int = 0) -> float:
+    """Wall height in metres: its height tag (less the roof), else its levels, else by kind (a house:
+    mostly 2 storeys, some bungalows and 3 storeys, the same each time for the same building)."""
     h = _num(tags.get("height"))
     roof = _num(tags.get("roof:height")) or 0.0
     if h:
@@ -311,6 +315,9 @@ def building_height(tags: dict, kind: str) -> float:
     levels = _num(tags.get("building:levels"))
     if levels:
         return max(2.5, levels * LEVEL_M)
+    if kind == "house":
+        r = _hash01(bid or 0, 7, 6)
+        return next(h for p, h in HOUSE_STOREYS if r <= p)
     return HEIGHTS[kind]
 
 
@@ -346,7 +353,7 @@ def _scatter(poly: list, spacing: float, avoid: list) -> list:
             px = x + (_hash01(x, y, 1) - 0.5) * spacing * 0.8
             py = y + (_hash01(x, y, 2) - 0.5) * spacing * 0.8
             if inside((px, py), poly) and not any(inside((px, py), b) for b in avoid):
-                out.append([round(px, 1), round(py, 1), round(0.8 + 0.5 * _hash01(x, y, 3), 2)])
+                out.append([round(px, 1), round(py, 1), round(0.7 + 1.0 * _hash01(x, y, 3), 2)])
             x += spacing
         y += spacing
     return out
@@ -359,7 +366,7 @@ def _street_trees(roads: list, buildings: list, half: float) -> list:
     for r in roads:
         if r["k"] != "minor":
             continue
-        off = r["w"] / 2 + 3.0
+        off = r["w"] / 2 + 2.2  # (in the pavement, by its outer edge)
         for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
             ln = math.hypot(x2 - x1, y2 - y1)
             if ln < 1:
@@ -375,9 +382,50 @@ def _street_trees(roads: list, buildings: list, half: float) -> list:
                     if any(bx0 - 1 <= px <= bx1 + 1 and by0 - 1 <= py <= by1 + 1 and inside((px, py), b)
                            for bx0, by0, bx1, by1, b in boxes):
                         continue
-                    out.append([round(px, 1), round(py, 1), round(0.75 + 0.4 * _hash01(px, py, 5), 2)])
+                    out.append([round(px, 1), round(py, 1), round(0.6 + 0.8 * _hash01(px, py, 5), 2)])
                 t += STREET_TREE_EVERY
     return out
+
+
+CAR_EVERY = 9.0  # a place for a parked car this often on each side of a street...
+CAR_CHANCE = 0.22  # ...with one in about this many
+
+
+def _cars(roads: list, buildings: list, half: float) -> list:
+    """Cars parked along the kerbs of streets (not near a junction): [[x, y, angle°, colour 0-9]]."""
+    seen: dict = {}
+    for r in roads:
+        if r["k"] in ("minor", "major"):
+            for x, y in r["p"]:
+                key = (round(x), round(y))
+                seen[key] = seen.get(key, 0) + 1
+    junctions = [k for k, n in seen.items() if n > 1]
+    for r in roads:
+        if r["k"] in ("minor", "major"):
+            junctions += [(round(r["p"][0][0]), round(r["p"][0][1])), (round(r["p"][-1][0]), round(r["p"][-1][1]))]
+    out = []
+    for r in roads:
+        if r["k"] not in ("minor", "major"):
+            continue
+        off = r["w"] / 2 - 1.3
+        for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
+            ln = math.hypot(x2 - x1, y2 - y1)
+            if ln < 6:
+                continue
+            ux, uy = (x2 - x1) / ln, (y2 - y1) / ln
+            ang = round(math.degrees(math.atan2(uy, ux)))
+            t = CAR_EVERY / 2
+            while t < ln - 3:
+                cx, cy = x1 + ux * t, y1 + uy * t
+                for side in (1, -1):
+                    px, py = cx - uy * off * side, cy + ux * off * side
+                    if _hash01(px, py, 9) > CAR_CHANCE or abs(px) > half - 4 or abs(py) > half - 4:
+                        continue
+                    if any(math.hypot(px - jx, py - jy) < 14 for jx, jy in junctions):
+                        continue
+                    out.append([round(px, 1), round(py, 1), ang, int(_hash01(px, py, 10) * 10) % 10])
+                t += CAR_EVERY
+    return out[:800]
 
 
 def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = None,
@@ -394,7 +442,7 @@ def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = 
             if tags.get("natural") == "tree" and "lat" in el:
                 x, y = project(el["lat"], el["lon"], lat0, lon0)
                 if abs(x) <= half and abs(y) <= half:
-                    trees.append([round(x, 1), round(y, 1), 1.0])
+                    trees.append([round(x, 1), round(y, 1), round(0.8 + 0.8 * _hash01(x, y, 8), 2)])
             continue
         if tags.get("building") and tags.get("building") != "no" and tags.get("location") != "underground":
             for ring in _rings(el, lat0, lon0):
@@ -406,7 +454,7 @@ def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = 
                 if not clipped:
                     continue
                 kind = building_kind(tags, a)
-                b = {"id": el.get("id"), "k": kind, "p": _r(anticlockwise(clipped)), "h": round(building_height(tags, kind), 1)}
+                b = {"id": el.get("id"), "k": kind, "p": _r(anticlockwise(clipped)), "h": round(building_height(tags, kind, el.get("id") or 0), 1)}
                 shape = str(tags.get("roof:shape") or "").lower()
                 if kind == "house" and shape not in ("flat",) and len(clipped) == len(ring):
                     rect = min_rect(ring)
@@ -457,9 +505,10 @@ def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = 
     for kind, poly in tree_areas:
         trees += _scatter(poly, TREE_SPACING[kind], foot)
     trees += _street_trees(roads, foot, half)
+    cars = _cars(roads, foot, half)
     home = pick_home(buildings, lat0, lon0, home_pt, home_id)
     return {"v": 1, "half": half, "home": home, "buildings": buildings, "roads": roads, "rails": rails,
-            "areas": areas, "water": water, "trees": trees[:4000]}
+            "areas": areas, "water": water, "trees": trees[:4000], "cars": cars}
 
 
 def pick_home(buildings: list, lat0: float, lon0: float, home_pt: Optional[tuple], home_id: Optional[int]) -> dict:

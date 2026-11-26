@@ -10,27 +10,35 @@
 
   // ---------- colours ----------
   const C = {
-    ground: '#e6e9df', sideA: '#dcaa6c', sideB: '#c99256',
-    grass: '#a9d98e', wood: '#8ccb76', pitch: '#9bd284', water: '#93c8ec', paved: '#cfd3d8',
-    road: '#676b73', roadEdge: '#f4f1ea', roadLine: '#f3f3f3', path: '#f6f1e4', pathEdge: '#d9d2c0',
+    ground: '#e3e9d6', sideA: '#dcaa6c', sideB: '#c99256',
+    grass: '#a6d98a', wood: '#8bcb73', pitch: '#94d07e', water: '#8fc6ec', paved: '#cdd1d7',
+    road: '#62666e', roadLine: '#f5f5f5', pave: '#d9dbdf', kerb: '#b9bdc4', path: '#f2ede1', pathEdge: '#d6cfbd',
     rail: '#b2aca2', railLine: '#6f6a63', railTie: '#8d877e',
-    tree: '#5fb04d', treeDark: '#3e8b39', treeLight: '#8fd170', trunk: '#8c6a48',
+    trunk: '#8c6a48', glass: '#4f6f92', glassLit: '#7fa3c9', door: '#7a5238',
     pin: '#2196f3', pinText: '#ffffff', text: '#6b6b6b',
   };
-  // walls (lit, shaded), roof (flat), roof slopes (lit, shaded)
+  // a house's walls (render, brick, stone...) and roofs ([lit, shaded]: tiles, slate...)
+  const HOUSE_WALLS = ['#f4ead2', '#f8f6f0', '#ead0a8', '#c9765a', '#b9876a', '#e8dcc2', '#dfe2e6', '#d7a184'];
+  const ROOFS = [['#ea8253', '#c8643c'], ['#ea8253', '#c8643c'], ['#7d8996', '#5f6a77'], ['#a3694c', '#83513b'],
+    ['#d65a4c', '#ae4339'], ['#5f646b', '#474b51'], ['#e39a5c', '#c27d43']];
+  // other buildings: walls [lit, shaded], roof
   const KIND = {
-    house: ['#f5ecd6', '#dccfb1', '#c9c3b8', '#ea8253', '#c8643c'],
-    flats: ['#f3f4f6', '#d1d5db', '#c3c8d0'],
-    commercial: ['#f4f4f2', '#d3d5d8', '#b7bdc6'],
-    industrial: ['#e3e7ed', '#c1c7d0', '#a8b0bc'],
-    small: ['#e8e3d8', '#c9c2b4', '#a9a8a4'],
-    civic: ['#f3ede1', '#d9ceb8', '#bba98f'],
-    large: ['#eef0f2', '#cfd3d9', '#bcc2cb'],
-    home: ['#e3f1fd', '#b7d8f5', '#64b5f6', '#42a5f5', '#1e88e5'],
+    flats: [['#f3f4f6', '#d1d5db', '#c3c8d0'], ['#efe6d6', '#d4c7b0', '#b9b1a3'], ['#e9eef3', '#c7d0da', '#aab4c0'], ['#d9a98c', '#b98a6e', '#9aa1a9']],
+    commercial: [['#f4f4f2', '#d3d5d8', '#b7bdc6'], ['#f2ece1', '#d6cdbd', '#b5aea3'], ['#e6edf2', '#c6d0d8', '#a9b3bd']],
+    industrial: [['#e3e7ed', '#c1c7d0', '#a8b0bc'], ['#dfe6dc', '#bfcabb', '#a3ad9f'], ['#e9e2d3', '#cbc2ae', '#aaa293'], ['#d8e2ee', '#b5c3d3', '#97a6b8']],
+    small: [['#e8e3d8', '#c9c2b4', '#a9a8a4'], ['#d9cfc0', '#b8ad9c', '#8f8a84']],
+    civic: [['#f3ede1', '#d9ceb8', '#bba98f'], ['#e9d6c4', '#cbb39d', '#a4927f']],
+    large: [['#eef0f2', '#cfd3d9', '#bcc2cb'], ['#f1ebe0', '#d4cab9', '#b8b0a3']],
   };
+  const HOME = {walls: ['#e3f1fd', '#b7d8f5'], roof: ['#42a5f5', '#1e88e5'], flat: '#64b5f6'};
+  const SHOPS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#00897b', '#d81b60'];
+  const CARS = ['#e53935', '#f5f5f5', '#212121', '#1e88e5', '#9e9e9e', '#fdd835', '#43a047', '#3949ab', '#fb8c00', '#cfd8dc'];
+  const GREENS = [['#5fb04d', '#3e8b39', '#8fd170'], ['#4e9f43', '#357a31', '#7cc461'], ['#72bb57', '#4f9a3f', '#a3dc84'],
+    ['#3f8f3d', '#2b6b2b', '#62b058'], ['#8cc04e', '#6a9a37', '#b5dc7c']];
   const ELEV = 35 * Math.PI / 180;  // how high above the ground it's looked at from
   const SE = Math.sin(ELEV), CE = Math.cos(ELEV);
   const BASE = 9;  // the board's thickness, m
+  const PAVE = 2.8;  // the pavement each side of a street, m
 
   function view(rot) {
     const a = (30 + 90 * ((rot || 0) % 4)) * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
@@ -48,6 +56,14 @@
   const pts = (arr) => arr.map(([x, y]) => f(x) + ',' + f(y)).join(' ');
   const poly = (arr, fill, extra = '') => `<polygon points="${pts(arr)}" fill="${fill}"${extra}/>`;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  // a repeatable 0..1 for a building or place (so it looks the same every time)
+  function rnd(a, b = 0, salt = 0) {
+    let h = (Math.imul(Math.floor(a * 13) | 0, 73856093) ^ Math.imul(Math.floor(b * 17) | 0, 19349663) ^ Math.imul(salt + 1, 83492791)) >>> 0;
+    h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 3266489917) >>> 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  const pick = (arr, r) => arr[Math.floor(r * arr.length) % arr.length];
 
   // a colour between two (t 0..1)
   function mix(a, b, t) {
@@ -66,60 +82,190 @@
     return [x / (3 * a), y / (3 * a)];
   }
 
-  // The walls of a footprint (anticlockwise) that face the viewer, back ones first: [[depth, svg]]
-  function walls(V, ring, z0, z1, cols, extraTop) {
+  // How lit a face is from its outward direction (0 lit .. 1 shaded): light from the left
+  function shadeOf(V, nx, ny) {
+    const [ax, aw] = V.n(nx, ny), len = Math.hypot(ax, aw) || 1;
+    return Math.max(0, Math.min(1, (ax / len + 1) / 2));
+  }
+
+  /* The walls of a footprint (anticlockwise) that face the viewer, back ones first:
+   * [{d, svg, p, q, len}]. extraTop[i]: a point above edge i's top (a gable). deco(p, q, len, lit)
+   * adds windows and doors on a wall. */
+  function walls(V, ring, z0, z1, cols, extraTop, deco) {
     const out = [];
     for (let i = 0; i < ring.length; i++) {
       const p = ring[i], q = ring[(i + 1) % ring.length];
-      const [ax, aw] = V.n(q[1] - p[1], -(q[0] - p[0]));
+      const [, aw] = V.n(q[1] - p[1], -(q[0] - p[0]));
       if (aw >= -1e-6) continue;  // facing away
-      const len = Math.hypot(ax, aw) || 1;
-      const shade = mix(cols[0], cols[1], Math.max(0, Math.min(1, (ax / len + 1) / 2)));
+      const t = shadeOf(V, q[1] - p[1], -(q[0] - p[0]));
+      const shade = mix(cols[0], cols[1], t);
       const face = [V.p(p[0], p[1], z0), V.p(q[0], q[1], z0), V.p(q[0], q[1], z1), V.p(p[0], p[1], z1)];
       if (extraTop && extraTop[i]) face.splice(3, 0, extraTop[i]);
-      out.push([V.d((p[0] + q[0]) / 2, (p[1] + q[1]) / 2), poly(face, shade, ' stroke="' + shade + '" stroke-width=".3"')]);
+      let svg = poly(face, shade, ` stroke="${mix(shade, '#000000', 0.1)}" stroke-width=".25" stroke-linejoin="round"`);
+      const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (deco) svg += deco(p, q, len, t, i);
+      out.push({d: V.d((p[0] + q[0]) / 2, (p[1] + q[1]) / 2), svg});
     }
-    return out.sort((a, b) => b[0] - a[0]);
+    return out.sort((a, b) => b.d - a.d).map((w) => w.svg).join('');
+  }
+
+  // A rectangle on a wall, from along a to b (0..1) and z0 to z1, in a colour
+  function onWall(V, p, q, a, b, z0, z1, fill) {
+    const at = (t, z) => V.p(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, z);
+    return poly([at(a, z0), at(b, z0), at(b, z1), at(a, z1)], fill);
+  }
+
+  // Windows on a wall: rows (one a storey from z0, each storey sh high), every `every` m
+  function windows(V, p, q, len, z0, storeys, sh, ww, wh, every, lit, skipMid) {
+    const n = Math.floor((len - 0.8) / every);
+    if (n < 1 || len < 2.2) return '';
+    const fill = mix(C.glassLit, C.glass, lit);
+    let svg = '';
+    for (let s = 0; s < storeys; s++) {
+      const zb = z0 + s * sh + (sh - wh) * 0.55;
+      for (let j = 0; j < n; j++) {
+        if (skipMid && s === 0 && j === Math.floor(n / 2)) continue;
+        const c = (j + 0.5) / n, half = ww / 2 / len;
+        svg += onWall(V, p, q, c - half, c + half, zb, zb + wh, fill);
+      }
+    }
+    return svg;
+  }
+
+  function gableRoof(V, rect, h, rh, roof, hip) {
+    const [A, B, Cc, D] = rect, top = h + rh;
+    const lng = Math.hypot(B[0] - A[0], B[1] - A[1]), sh = Math.hypot(Cc[0] - B[0], Cc[1] - B[1]);
+    const ux = (B[0] - A[0]) / lng, uy = (B[1] - A[1]) / lng;
+    let Ra = [(D[0] + A[0]) / 2, (D[1] + A[1]) / 2], Rb = [(B[0] + Cc[0]) / 2, (B[1] + Cc[1]) / 2];
+    if (hip) {
+      const inset = Math.min(sh / 2, lng / 2 - 0.3);
+      Ra = [Ra[0] + ux * inset, Ra[1] + uy * inset]; Rb = [Rb[0] - ux * inset, Rb[1] - uy * inset];
+    }
+    const faces = [[A, B, Rb, Ra], [Cc, D, Ra, Rb]];
+    if (hip) faces.push([B, Cc, Rb], [D, A, Ra]);
+    const svg = faces.map((s) => {
+      const t = shadeOf(V, s[1][1] - s[0][1], -(s[1][0] - s[0][0]));
+      const [, aw] = V.n(s[1][1] - s[0][1], -(s[1][0] - s[0][0]));
+      const col = mix(roof[0], roof[1], Math.min(1, t * 0.6 + (aw > 0 ? 0.4 : 0)));
+      const face = s.map((pt, i) => V.p(pt[0], pt[1], i < 2 ? h : top));
+      return [V.d((s[0][0] + s[1][0]) / 2, (s[0][1] + s[1][1]) / 2), poly(face, col, ` stroke="${mix(col, '#000000', 0.15)}" stroke-width=".3" stroke-linejoin="round"`)];
+    }).sort((a, b) => b[0] - a[0]).map((x) => x[1]).join('');
+    const r1 = V.p(Ra[0], Ra[1], top), r2 = V.p(Rb[0], Rb[1], top);
+    return {svg: svg + `<line x1="${f(r1[0])}" y1="${f(r1[1])}" x2="${f(r2[0])}" y2="${f(r2[1])}" stroke="${roof[1]}" stroke-width=".5"/>`,
+      top: [(r1[0] + r2[0]) / 2, Math.min(r1[1], r2[1])], Ra, Rb, ux, uy, sh};
+  }
+
+  // A box: centre, angle (radians), length, width, from z0 to z1, walls [lit, shaded], top colour
+  function box(V, cx, cy, ang, L, W, z0, z1, cols, topCol) {
+    const ux = Math.cos(ang), uy = Math.sin(ang), vx = -uy, vy = ux;
+    const ring = [[cx - ux * L / 2 - vx * W / 2, cy - uy * L / 2 - vy * W / 2], [cx + ux * L / 2 - vx * W / 2, cy + uy * L / 2 - vy * W / 2],
+      [cx + ux * L / 2 + vx * W / 2, cy + uy * L / 2 + vy * W / 2], [cx - ux * L / 2 + vx * W / 2, cy - uy * L / 2 + vy * W / 2]];
+    return walls(V, ring, z0, z1, cols) + poly(ring.map(([x, y]) => V.p(x, y, z1)), topCol, ` stroke="${mix(topCol, '#000000', 0.12)}" stroke-width=".2"`);
+  }
+
+  function house(V, b, isHome) {
+    const id = b.id || 0, h = b.h || 5.8;
+    const storeys = Math.max(1, Math.round(h / 2.9)), sh = h / storeys;
+    const wall = isHome ? HOME.walls[0] : pick(HOUSE_WALLS, rnd(id, 1));
+    const cols = isHome ? HOME.walls : [wall, mix(wall, '#000000', 0.16)];
+    const roof = isHome ? HOME.roof : pick(ROOFS, rnd(id, 2));
+    const hip = rnd(id, 3) < 0.38;
+    const rect = b.rect, [A, B, Cc] = rect;
+    const lng = Math.hypot(B[0] - A[0], B[1] - A[1]), short = Math.hypot(Cc[0] - B[0], Cc[1] - B[1]);
+    const rh = b.rh || Math.min(4.5, Math.max(1.5, short * 0.38));
+    const Ra = [(rect[3][0] + A[0]) / 2, (rect[3][1] + A[1]) / 2], Rb = [(B[0] + Cc[0]) / 2, (B[1] + Cc[1]) / 2];
+    const gables = hip ? null : [null, V.p(Rb[0], Rb[1], h + rh), null, V.p(Ra[0], Ra[1], h + rh)];
+    let doorDone = false;
+    const deco = (p, q, len, lit, i) => {
+      if (i % 2 === 1) return len > 4.5 ? windows(V, p, q, len, 0, storeys, sh, 1.0, 1.15, 3.4, lit) : '';  // (the ends)
+      let s = windows(V, p, q, len, 0, storeys, sh, 1.15, 1.25, 3.0, lit, !doorDone);
+      if (!doorDone) {
+        const half = 0.5 / len;
+        s += onWall(V, p, q, 0.5 - half, 0.5 + half, 0, 2.1, C.door);
+        doorDone = true;
+      }
+      return s;
+    };
+    let svg = walls(V, rect, 0, h, cols, gables, deco);
+    const r = gableRoof(V, rect, h, rh, roof, hip);
+    // a chimney on some, near one end of the ridge
+    let chim = '';
+    if (rnd(id, 4) < 0.45 && lng > 5) {
+      const e = rnd(id, 5) < 0.5 ? 1 : -1, t = 0.3;
+      const cx = (r.Ra[0] + r.Rb[0]) / 2 + r.ux * e * lng * t, cy = (r.Ra[1] + r.Rb[1]) / 2 + r.uy * e * lng * t;
+      chim = box(V, cx, cy, Math.atan2(r.uy, r.ux), 0.8, 0.6, h + rh * 0.4, h + rh + 0.8, [mix(cols[0], '#9a6b55', 0.5), mix(cols[1], '#6f4b3c', 0.5)], '#6d5a50');
+    }
+    // (the chimney drawn before the roof if it's behind the ridge from here, after it if in front)
+    svg += r.svg + chim;
+    return {svg, top: r.top};
+  }
+
+  function block(V, b, isHome) {
+    const id = b.id || 0, h = b.h || 8, k = b.k;
+    const set = isHome ? [HOME.walls[0], HOME.walls[1], HOME.flat] : pick(KIND[k] || KIND.large, rnd(id, 1));
+    const cols = [set[0], set[1]];
+    const storeys = Math.max(1, Math.round(h / 3.1)), sh = h / storeys;
+    const shop = k === 'commercial' ? pick(SHOPS, rnd(id, 6)) : null;
+    const deco = (p, q, len, lit) => {
+      if (k === 'small') return '';
+      if (k === 'industrial') return windows(V, p, q, len, h * 0.62, 1, h * 0.3, 2.4, 0.9, 6, lit);
+      if (shop) {
+        // a shop front: glass below, a coloured fascia, then windows above
+        let s = onWall(V, p, q, 0.04, 0.96, 0.3, 2.6, mix(C.glassLit, C.glass, lit)) + onWall(V, p, q, 0, 1, 2.6, 3.3, mix(shop, '#000000', lit * 0.2));
+        if (storeys > 1) s += windows(V, p, q, len, 3.3, storeys - 1, (h - 3.3) / (storeys - 1), 1.4, 1.4, 3.2, lit);
+        return s;
+      }
+      return windows(V, p, q, len, 0, storeys, sh, k === 'flats' ? 1.4 : 1.6, 1.45, k === 'flats' ? 3.0 : 3.6, lit);
+    };
+    let svg = walls(V, b.p, 0, h, cols, null, deco);
+    const roofCol = set[2];
+    svg += poly(b.p.map(([x, y]) => V.p(x, y, h)), roofCol, ` stroke="${mix(roofCol, '#000000', 0.22)}" stroke-width=".9" stroke-linejoin="round"`);
+    // things on the roof: an air conditioning unit or a stair tower on some bigger ones
+    const [cx, cy] = centroid(b.p);
+    if (k !== 'small' && Math.abs(b.p.length) && rnd(id, 7) < 0.55) {
+      const ang = Math.atan2(b.p[1][1] - b.p[0][1], b.p[1][0] - b.p[0][0]);
+      svg += box(V, cx + (rnd(id, 8) - 0.5) * 3, cy + (rnd(id, 9) - 0.5) * 3, ang, 2.6, 1.8, h, h + 1.3, ['#e9ecef', '#c3c8ce'], '#d5d9de');
+    }
+    return {svg, top: V.p(cx, cy, h + 1.3)};
   }
 
   function building(V, b, isHome) {
-    const cols = isHome ? KIND.home : (KIND[b.k] || KIND.large);
-    const h = b.h || 6;
-    let svg = '';
-    if (b.r === 'gable' && b.rect) {
-      const [A, B, Cc, D] = b.rect, rh = b.rh || 2.5, top = h + rh;
-      const Ra = [(D[0] + A[0]) / 2, (D[1] + A[1]) / 2], Rb = [(B[0] + Cc[0]) / 2, (B[1] + Cc[1]) / 2];
-      // the gable ends: the short walls (B→C and D→A) go up to the ridge
-      const gables = [null, V.p(Rb[0], Rb[1], top), null, V.p(Ra[0], Ra[1], top)];
-      svg += walls(V, b.rect, 0, h, cols, gables).map((w) => w[1]).join('');
-      const roofLit = cols[3] || cols[2], roofDark = cols[4] || cols[2];
-      const slopes = [[A, B, Rb, Ra], [Cc, D, Ra, Rb]].map((s) => {
-        const [nx, nw] = V.n(s[1][1] - s[0][1], -(s[1][0] - s[0][0]));
-        const len = Math.hypot(nx, nw) || 1;
-        const col = mix(roofLit, roofDark, Math.max(0, Math.min(1, (nx / len + 1) / 2 * 0.6 + (nw > 0 ? 0.4 : 0))));
-        const face = [V.p(s[0][0], s[0][1], h), V.p(s[1][0], s[1][1], h), V.p(s[2][0], s[2][1], top), V.p(s[3][0], s[3][1], top)];
-        return [V.d((s[0][0] + s[1][0]) / 2, (s[0][1] + s[1][1]) / 2), poly(face, col, ` stroke="${col}" stroke-width=".3"`)];
-      }).sort((a, b) => b[0] - a[0]);
-      svg += slopes.map((s) => s[1]).join('');
-      // the ridge
-      const r1 = V.p(Ra[0], Ra[1], top), r2 = V.p(Rb[0], Rb[1], top);
-      svg += `<line x1="${f(r1[0])}" y1="${f(r1[1])}" x2="${f(r2[0])}" y2="${f(r2[1])}" stroke="${roofDark}" stroke-width=".5"/>`;
-      return {svg, top: [(r1[0] + r2[0]) / 2, Math.min(r1[1], r2[1])]};
-    }
-    svg += walls(V, b.p, 0, h, cols).map((w) => w[1]).join('');
-    const roof = b.p.map(([x, y]) => V.p(x, y, h));
-    svg += poly(roof, cols[2], ` stroke="${mix(cols[2], '#000000', 0.12)}" stroke-width=".4"`);
-    const [cx, cy] = centroid(b.p);
-    return {svg, top: V.p(cx, cy, h)};
+    return b.r === 'gable' && b.rect ? house(V, b, isHome) : block(V, b, isHome);
   }
 
+  // Trees: round (low-poly, two-tone), pointed (stacked cones) or a bush; size from s
   function tree(V, [x, y, s]) {
-    const r = 2.6 * (s || 1), trunkTop = 2.6 * (s || 1);
-    const base = V.p(x, y, 0), t = V.p(x, y, trunkTop), c = V.p(x, y, trunkTop + r * 0.9);
-    return `<line x1="${f(base[0])}" y1="${f(base[1])}" x2="${f(t[0])}" y2="${f(t[1])}" stroke="${C.trunk}" stroke-width="${f(r * 0.28)}"/>`
-      + `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="${f(r)}" fill="${C.treeDark}"/>`
-      + `<circle cx="${f(c[0] - r * 0.22)}" cy="${f(c[1] - r * 0.22)}" r="${f(r * 0.78)}" fill="${C.tree}"/>`
-      + `<circle cx="${f(c[0] - r * 0.4)}" cy="${f(c[1] - r * 0.42)}" r="${f(r * 0.3)}" fill="${C.treeLight}"/>`;
+    s = s || 1;
+    const kind = rnd(x, y, 11), g = pick(GREENS, rnd(x, y, 12));
+    if (kind < 0.12) {  // a bush
+      const r = 1.3 * s, c = V.p(x, y, r * 0.7);
+      return `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="${f(r)}" fill="${g[1]}"/><circle cx="${f(c[0] - r * 0.2)}" cy="${f(c[1] - r * 0.25)}" r="${f(r * 0.7)}" fill="${g[0]}"/>`;
+    }
+    const base = V.p(x, y, 0);
+    if (kind < 0.36) {  // a conifer
+      const ht = 7 * s, r = 1.9 * s, t0 = V.p(x, y, ht * 0.15);
+      let svg = `<line x1="${f(base[0])}" y1="${f(base[1])}" x2="${f(t0[0])}" y2="${f(t0[1])}" stroke="${C.trunk}" stroke-width="${f(r * 0.35)}"/>`;
+      for (let i = 0; i < 3; i++) {
+        const zb = ht * (0.15 + i * 0.24), zt = zb + ht * 0.45, w = r * (1 - i * 0.22);
+        const b0 = V.p(x, y, zb), tp = V.p(x, y, zt);
+        svg += poly([[b0[0] - w, b0[1]], [tp[0], tp[1]], [b0[0], b0[1] + w * 0.35]], mix(g[1], '#2c662c', 0.15))
+          + poly([[b0[0], b0[1] + w * 0.35], [tp[0], tp[1]], [b0[0] + w, b0[1]]], mix(g[1], '#163b16', 0.45));
+      }
+      return svg;
+    }
+    // a round tree
+    const r = 2.5 * s, trunkTop = 2.4 * s, t = V.p(x, y, trunkTop), c = V.p(x, y, trunkTop + r * 0.9);
+    return `<line x1="${f(base[0])}" y1="${f(base[1])}" x2="${f(t[0])}" y2="${f(t[1])}" stroke="${C.trunk}" stroke-width="${f(Math.max(0.35, r * 0.24))}"/>`
+      + `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="${f(r)}" fill="${g[1]}"/>`
+      + `<path d="M${f(c[0] - r)} ${f(c[1])}A${f(r)} ${f(r)} 0 0 1 ${f(c[0] + r * 0.6)} ${f(c[1] - r * 0.8)}L${f(c[0] - r * 0.1)} ${f(c[1] + r * 0.2)}Z" fill="${g[0]}"/>`
+      + `<circle cx="${f(c[0] - r * 0.42)}" cy="${f(c[1] - r * 0.4)}" r="${f(r * 0.28)}" fill="${g[2]}"/>`;
+  }
+
+  // A parked car: a body and a cabin, as boxes
+  function car(V, [x, y, ang, ci]) {
+    const a = ang * Math.PI / 180, col = CARS[ci % CARS.length];
+    return box(V, x, y, a, 4.2, 1.8, 0.25, 1.0, [col, mix(col, '#000000', 0.3)], mix(col, '#ffffff', 0.12))
+      + box(V, x - Math.cos(a) * 0.2, y - Math.sin(a) * 0.2, a, 2.2, 1.6, 1.0, 1.55, ['#7d9fc4', '#4d6b8c'], mix(col, '#ffffff', 0.2));
   }
 
   function line(V, p, z = 0) {
@@ -152,9 +298,13 @@
     const paths = roads.filter((r) => r.k === 'path'), cars = roads.filter((r) => r.k !== 'path');
     for (const r of paths) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.pathEdge}" stroke-width="${f(r.w + 0.8)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of paths) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.path}" stroke-width="${f(r.w)}" stroke-linecap="round" stroke-linejoin="round"/>`);
-    for (const r of cars) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.roadEdge}" stroke-width="${f(r.w + 3)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    // streets: a pavement each side (with its kerb), the road, its markings
+    const streets = cars.filter((r) => r.k !== 'service');
+    for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.kerb}" stroke-width="${f(r.w + PAVE * 2 + 0.6)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.pave}" stroke-width="${f(r.w + PAVE * 2)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of cars) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${mix(C.road, '#ffffff', 0.35)}" stroke-width="${f(r.w + 0.5)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of cars) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.road}" stroke-width="${f(r.w)}" stroke-linecap="round" stroke-linejoin="round"/>`);
-    for (const r of cars.filter((r) => r.k === 'major')) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.roadLine}" stroke-width=".5" stroke-dasharray="4 4"/>`);
+    for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.roadLine}" stroke-width="${r.k === 'major' ? '.45' : '.3'}" stroke-dasharray="${r.k === 'major' ? '4 3' : '2.5 4'}" opacity=".85"/>`);
     for (const r of scene.rails || []) {
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.rail}" stroke-width="${f(r.w)}" stroke-linecap="butt" stroke-linejoin="round"/>`);
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railTie}" stroke-width="${f(r.w * 0.55)}" stroke-dasharray=".6 1.4"/>`);
@@ -172,13 +322,16 @@
       things.push([V.d(cx, cy), `<g${attrs}>${d.svg}</g>`]);
     }
     for (const t of scene.trees || []) things.push([V.d(t[0], t[1]), tree(V, t)]);
+    for (const c of scene.cars || []) things.push([V.d(c[0], c[1]), car(V, c)]);
     things.sort((a, b) => b[0] - a[0]);
     for (const t of things) out.push(t[1]);
     // the pin over your home
     if (!pin) pin = V.p(home.x || 0, home.y || 0, 0);
     if (!opts.hideLabel) {
-      const label = esc(opts.label || 'HOME'), fs = H * 0.034, w = label.length * fs * 0.66 + fs * 1.6, ph = fs * 1.9;
-      const top = pin[1] - H * 0.13;
+      // (the same size on the screen however far it's zoomed in)
+      const zs = Math.pow(opts.zoom || 1, 0.9);
+      const label = esc(opts.label || 'HOME'), fs = H * 0.034 / zs, w = label.length * fs * 0.66 + fs * 1.6, ph = fs * 1.9;
+      const top = pin[1] - H * 0.13 / zs;
       out.push(`<line x1="${f(pin[0])}" y1="${f(pin[1])}" x2="${f(pin[0])}" y2="${f(top)}" stroke="${C.pin}" stroke-width="${f(fs * 0.14)}"/>`
         + `<circle cx="${f(pin[0])}" cy="${f(pin[1])}" r="${f(fs * 0.3)}" fill="${C.pin}"/>`
         + `<rect x="${f(pin[0] - w / 2)}" y="${f(top - ph)}" width="${f(w)}" height="${f(ph)}" rx="${f(ph / 2)}" fill="${C.pin}" stroke="#ffffff" stroke-width="${f(fs * 0.12)}"/>`
@@ -189,7 +342,7 @@
     for (const [x, y] of sq) corners.push(V.p(x, y, 0), V.p(x, y, -BASE));
     const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]).concat([pin[1] - H * 0.2]);
     const m = H * 0.04, x0 = Math.min(...xs) - m, y0 = Math.min(...ys) - m, w = Math.max(...xs) - x0 + m, h = Math.max(...ys) - y0 + m * 2.2;
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1] - H * 0.06)}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" role="img" aria-label="The streets around your home">${out.join('')}</svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1] - H * 0.06 / Math.pow(opts.zoom || 1, 0.9))}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" role="img" aria-label="The streets around your home">${out.join('')}</svg>`;
   }
 
   /* Fits the drawing to its box: all of it where the box is about its shape; in a much narrower
@@ -203,7 +356,7 @@
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const boxAr = r.width / r.height, ar = w / h;
-    const z = Math.min(MAX_ZOOM, Math.max(1, boxAr < ar ? ar / boxAr : boxAr / ar) ** 0.75);
+    const z = Math.min(MAX_ZOOM, Math.max(1, boxAr < ar ? ar / boxAr : boxAr / ar) ** 0.75) * (Number(svg.dataset.zoom) || 1);
     let vw, vh;
     if (boxAr < ar) { vw = w / z; vh = vw / boxAr; } else { vh = h / z; vw = vh * boxAr; }
     const clampTo = (c, size, lo, full) => (size >= full ? lo + (full - size) / 2 : Math.min(lo + full - size, Math.max(lo, c - size / 2)));
@@ -221,7 +374,20 @@
     }
   }
 
-  window.NeighbourhoodView = {draw, render, fit, version: VERSION};
+  // Zoom (the + and − buttons): steps in from the whole square, remembered on each device
+  const ZOOMS = [1, 1.6, 2.6, 4, 6];
+  const ZOOM_KEY = 'neighbourhood-view-zoom';
+  function zoomStep(delta) {
+    let i = 0;
+    try { i = Number(localStorage.getItem(ZOOM_KEY)) || 0; } catch (e) { /* (not kept) */ }
+    if (delta) {
+      i = Math.max(0, Math.min(ZOOMS.length - 1, i + delta));
+      try { localStorage.setItem(ZOOM_KEY, String(i)); } catch (e) { /* (not kept) */ }
+    }
+    return ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i))];
+  }
+
+  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, version: VERSION};
 
   // ---------- the dashboard card ----------
   if (!window.customElements || customElements.get('neighbourhood-view-card')) return;
@@ -272,11 +438,12 @@
           background: rgba(0,0,0,.35); color: #fff; backdrop-filter: blur(4px); }
         .tools button:hover { background: rgba(0,0,0,.55); }
       </style><ha-card><div class="map"></div><div class="msg">Reading the map…</div>
-        <div class="tools"><button data-r="-1" title="Turn left" aria-label="Turn left">⟲</button><button data-r="1" title="Turn right" aria-label="Turn right">⟳</button></div></ha-card>`;
+        <div class="tools"><button data-z="-1" title="Zoom out" aria-label="Zoom out">−</button><button data-z="1" title="Zoom in" aria-label="Zoom in">+</button><button data-r="-1" title="Turn left" aria-label="Turn left">⟲</button><button data-r="1" title="Turn right" aria-label="Turn right">⟳</button></div></ha-card>`;
       this._root.querySelector('.tools').addEventListener('click', (e) => {
-        const r = Number(e.target.dataset && e.target.dataset.r);
-        if (!r) return;
-        setRot((getRot() + r + 4) % 4);
+        const d = (e.target && e.target.dataset) || {}, r = Number(d.r), z = Number(d.z);
+        if (r) setRot((getRot() + r + 4) % 4);
+        else if (z) zoomStep(z);
+        else return;
         this._draw();
       });
       this._size();
@@ -339,7 +506,7 @@
     _draw() {
       if (!this._scene) return;
       const s = this._scene, label = this._config.label || (s.number ? `NO. ${s.number}` : 'HOME');
-      render(this._root.querySelector('.map'), s, {rot: getRot(), label: String(label).toUpperCase()});
+      render(this._root.querySelector('.map'), s, {rot: getRot(), zoom: zoomStep(0), label: String(label).toUpperCase()});
       this._msg('');
     }
   }

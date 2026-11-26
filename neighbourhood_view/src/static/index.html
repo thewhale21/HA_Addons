@@ -321,6 +321,8 @@
       <div class="nv-pick" id="o-pickbar" hidden>Click your house <button class="btn small" id="o-pick-cancel">Cancel</button></div>
       <div class="nv-tools">
         <button class="nv-btn" id="o-pick" title="Pick your house on the map" aria-label="Pick your house">⌂</button>
+        <button class="nv-btn" data-z="-1" title="Zoom out" aria-label="Zoom out">−</button>
+        <button class="nv-btn" data-z="1" title="Zoom in" aria-label="Zoom in">+</button>
         <button class="nv-btn" data-r="-1" title="Turn left" aria-label="Turn left">⟲</button>
         <button class="nv-btn" data-r="1" title="Turn right" aria-label="Turn right">⟳</button>
       </div>
@@ -634,7 +636,7 @@ function showMsg(text) { $('o-msg').textContent = text || ''; $('o-msg').style.d
 function drawMap() {
   const sc = nv.scene;
   if (!sc || !window.NeighbourhoodView) return;
-  NeighbourhoodView.render($('o-map'), sc, {rot: getRot(), label: sc.number ? `NO. ${sc.number}`.toUpperCase() : 'HOME', pick: true, hideLabel: nv.picking});
+  NeighbourhoodView.render($('o-map'), sc, {rot: getRot(), zoom: NeighbourhoodView.zoom(0), label: sc.number ? `NO. ${sc.number}`.toUpperCase() : 'HOME', pick: true, hideLabel: nv.picking});
   showMsg('');
   $('o-top').hidden = false;
   $('o-addr').textContent = [sc.number, sc.postcode].filter(Boolean).join(', ');
@@ -658,8 +660,9 @@ function setPicking(on) {
   drawMap();
 }
 document.querySelector('.nv-tools').addEventListener('click', (e) => {
-  const r = Number(e.target.dataset && e.target.dataset.r);
+  const d = e.target.dataset || {}, r = Number(d.r), z = Number(d.z);
   if (r) { try { localStorage.setItem(ROT_KEY, String((getRot() + r + 4) % 4)); } catch (err) {} drawMap(); }
+  if (z) { NeighbourhoodView.zoom(z); drawMap(); }
 });
 $('o-pick').addEventListener('click', () => {
   if (!nv.scene) { toast('There\'s no map yet: set your address on the Settings tab'); return; }
