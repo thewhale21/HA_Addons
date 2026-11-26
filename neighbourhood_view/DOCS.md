@@ -101,7 +101,13 @@ trees it has, drawn like a video game's town:
 
 - **The edge:** the square looks torn out of the ground, with a ragged
   edge, a lip of turf, and soil and rock (with the odd stone) down its
-  sides. Buildings the torn edge would cut through aren't drawn.
+  sides, and a few chunks of rock floating underneath. Buildings the torn
+  edge would cut through aren't drawn.
+- **Light:** by day buildings and trees cast soft shadows, and the maps
+  float in a blue sky with clouds drifting behind (grey when it's wet). At
+  night the sky's dark with stars, and street lamps along the bigger
+  streets light pools on the pavement. Rivers shimmer, and a ring pulses
+  out on the ground round your house.
 
 What's made up (each house's colours, the trees and cars added, the
 storeys where none are known) is the same every time, so nothing moves

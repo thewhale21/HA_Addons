@@ -49,6 +49,8 @@
       d: (x, y) => x * sa + y * ca,
       // a direction turned to the screen: [across, away]
       n: (nx, ny) => [nx * ca - ny * sa, nx * sa + ny * ca],
+      // which way shadows fall on the ground, per metre of height (the sun's behind, to the left)
+      s: [(ca - 0.55 * sa) * 0.75, (-sa - 0.55 * ca) * 0.75],
     };
   }
 
@@ -335,6 +337,42 @@
     return 'M' + p.map(([x, y]) => { const q = V.p(x, y, z); return f(q[0]) + ' ' + f(q[1]); }).join('L');
   }
 
+  // The outline round a set of points (convex hull, anticlockwise)
+  function hull(P) {
+    const p = P.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    if (p.length < 3) return p;
+    const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const lo = [], hi = [];
+    for (const q of p) { while (lo.length > 1 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+    for (const q of p.slice().reverse()) { while (hi.length > 1 && cr(hi[hi.length - 2], hi[hi.length - 1], q) <= 0) hi.pop(); hi.push(q); }
+    return lo.slice(0, -1).concat(hi.slice(0, -1));
+  }
+
+  // A street lamp (lit at night)
+  function lamp(V, [x, y]) {
+    const b = V.p(x, y, 0), t = V.p(x, y, 4.8);
+    let s = `<line x1="${f(b[0])}" y1="${f(b[1])}" x2="${f(t[0])}" y2="${f(t[1])}" stroke="#454a52" stroke-width=".34"/>`
+      + `<rect x="${f(t[0] - 0.5)}" y="${f(t[1] - 0.45)}" width="1" height=".55" rx=".18" fill="#383c44"/>`;
+    if (CTX.night) s += `<circle cx="${f(t[0])}" cy="${f(t[1] + 0.3)}" r="1.6" fill="${LIGHT}" opacity=".35"/><circle cx="${f(t[0])}" cy="${f(t[1] + 0.25)}" r=".45" fill="${LIGHT2}"/>`;
+    return s;
+  }
+
+  // A chunk of rock floating under the map: a low-poly shard with a turf top, bobbing
+  function shard(V, x, y, z, s, seed) {
+    const a = rnd(seed, 1, 70) * Math.PI / 2, ring = [0, 1, 2, 3].map((i) => [x + Math.cos(a + i * Math.PI / 2) * s * (0.8 + 0.4 * rnd(seed, i, 71)), y + Math.sin(a + i * Math.PI / 2) * s * (0.8 + 0.4 * rnd(seed, i, 72))]);
+    const tip = V.p(x + (rnd(seed, 2, 73) - 0.5) * s, y, z - s * (1.6 + rnd(seed, 3, 74)));
+    const faces = [];
+    for (let i = 0; i < 4; i++) {
+      const p = ring[i], q = ring[(i + 1) % 4], tt = shadeOf(V, q[1] - p[1], -(q[0] - p[0]));
+      faces.push([V.d((p[0] + q[0]) / 2, (p[1] + q[1]) / 2), poly([V.p(p[0], p[1], z), V.p(q[0], q[1], z), tip], mix(C.rock, C.rockDark, tt))]);
+    }
+    faces.sort((m, n) => m[0] - n[0]);  // (the near ones last... drawn after the far)
+    faces.reverse();
+    const top = poly(ring.map(([u, v]) => V.p(u, v, z)), C.turf, ` stroke="${C.turfDark}" stroke-width=".3"`);
+    const d = (4 + rnd(seed, 5, 75) * 3).toFixed(1), amp = (0.8 + rnd(seed, 6, 76)).toFixed(2);
+    return {svg: `<g><animateTransform attributeName="transform" type="translate" values="0 0;0 -${amp};0 0" dur="${d}s" repeatCount="indefinite"/>${faces.map((x) => x[1]).join('')}${top}</g>`, low: tip[1]};
+  }
+
   const PIN_H = 250;  // (pins and faces sized as on a 250 m map, whatever the map's size)
 
   // A person's face (their picture, else their initials on their colour), at cx, cy
@@ -362,11 +400,12 @@
     // the chunk of ground, torn out: its earth sides (those facing the viewer, back ones first),
     // then its top, with a lip of turf
     const edge = outline(H, (scene.lat || 0) * 1000 + (scene.lon || 0) * 7000);
-    const sides = [];
+    const sides = [], front = [];
     for (let i = 0; i < edge.length; i++) {
       const p = edge[i], q = edge[(i + 1) % edge.length];
       const [, aw] = V.n(q[1] - p[1], -(q[0] - p[0]));
       if (aw >= 0) continue;
+      front.push([p[0], p[1], p[2]]);
       const t = shadeOf(V, q[1] - p[1], -(q[0] - p[0]));
       const turf = 0.9, mid = (p[2] + q[2]) / 2;
       const quad = (z0p, z0q, z1p, z1q, col) => poly([V.p(p[0], p[1], z0p), V.p(q[0], q[1], z0q), V.p(q[0], q[1], z1q), V.p(p[0], p[1], z1p)], col, ` stroke="${col}" stroke-width=".4" stroke-linejoin="round"`);
@@ -381,6 +420,14 @@
         })() : '')]);
     }
     sides.sort((a, b) => b[0] - a[0]);
+    // (a few rocks floating under the front edge, drawn behind it)
+    let low = -Infinity;
+    const seed0 = Math.round((scene.lat || 1) * 1e4 + (scene.lon || 1) * 3e4);
+    for (let k = 0; k < 4 && front.length; k++) {
+      const [x, y, dp] = front[Math.floor(rnd(seed0, k, 77) * front.length)];
+      const r = shard(V, x * 0.92, y * 0.92, -dp - 7 - rnd(seed0, k, 78) * 12, 2 + rnd(seed0, k, 79) * 3.5, seed0 + k);
+      out.push(r.svg); low = Math.max(low, r.low);
+    }
     for (const sd of sides) out.push(sd[1]);
     const topPts = edge.map(([x, y]) => V.p(x, y, 0));
     out.push(poly(topPts, C.ground, ` stroke="${C.turf}" stroke-width="1.6" stroke-linejoin="round"`));
@@ -388,7 +435,8 @@
     const clip = 'nvclip' + Math.random().toString(36).slice(2, 8);
     out.push(`<clipPath id="${clip}"><polygon points="${pts(topPts)}"/></clipPath><g clip-path="url(#${clip})">`);
     for (const a of scene.areas || []) out.push(poly(a.p.map(([x, y]) => V.p(x, y, 0)), C[a.k] || C.grass));
-    for (const w of scene.water || []) out.push(`<path d="${line(V, w.p)}" fill="none" stroke="${C.water}" stroke-width="${f(w.w)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const w of scene.water || []) out.push(`<path d="${line(V, w.p)}" fill="none" stroke="${C.water}" stroke-width="${f(w.w)}" stroke-linecap="round" stroke-linejoin="round"/>`
+      + `<path d="${line(V, w.p)}" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="${f(Math.max(0.3, w.w * 0.12))}" stroke-dasharray="1.5 5" stroke-linecap="round"><animate attributeName="stroke-dashoffset" from="0" to="-13" dur="4s" repeatCount="indefinite"/></path>`);
     const roads = scene.roads || [];
     const paths = roads.filter((r) => r.k === 'path'), cars = roads.filter((r) => r.k !== 'path');
     for (const r of paths) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.pathEdge}" stroke-width="${f(r.w + 0.8)}" stroke-linecap="round" stroke-linejoin="round"/>`);
@@ -407,6 +455,49 @@
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railTie}" stroke-width="${f(r.w * 0.55)}" stroke-dasharray=".6 1.4"/>`);
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railLine}" stroke-width=".35"/>`);
     }
+    // shadows: each building's and tree's, cast on the ground (soft by day; none at night)
+    const on = (x, y) => insideRing(x, y, edge);
+    if (!CTX.night) {
+      const sh = [], [sx, sy] = V.s;
+      for (const b of scene.buildings || []) {
+        const hh = (b.h || 6) + (b.r === 'gable' ? (b.rh || 2.5) * 0.6 : 0);
+        sh.push(poly(hull(b.p.concat(b.p.map(([x, y]) => [x + sx * hh, y + sy * hh]))).map(([x, y]) => V.p(x, y, 0)), '#24401f'));
+      }
+      for (const [x, y, s] of scene.trees || []) {
+        if (!on(x, y)) continue;
+        const r = 2.3 * (s || 1), k = 3.2 * (s || 1), c = V.p(x + sx * k, y + sy * k, 0);
+        sh.push(`<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx="${f(r)}" ry="${f(r * SE)}" fill="#24401f"/>`);
+      }
+      out.push(`<g opacity=".2">${sh.join('')}</g>`);
+    }
+    // street lamps along the bigger streets, every 34 m or so, either side in turn
+    const lamps = [];
+    for (const r of streets) {
+      let acc = 10 + rnd(r.p[0][0], r.p[0][1], 60) * 20, side = 1;
+      for (let i = 0; i < r.p.length - 1; i++) {
+        const [ax, ay] = r.p[i], [bx, by] = r.p[i + 1], L = Math.hypot(bx - ax, by - ay);
+        if (!L) continue;
+        const ux = (bx - ax) / L, uy = (by - ay) / L, off = r.w / 2 + PAVE * 0.8;
+        while (acc < L) {
+          const x = ax + ux * acc - uy * off * side, y = ay + uy * acc + ux * off * side;
+          if (on(x, y) && !lamps.some(([u, v]) => Math.hypot(u - x, v - y) < 14)) lamps.push([x, y]);
+          side = -side; acc += 34;
+        }
+        acc -= L;
+      }
+    }
+    const gid = 'nvg' + Math.random().toString(36).slice(2, 8);
+    out.push(`<defs><radialGradient id="${gid}"><stop offset="0" stop-color="${LIGHT}" stop-opacity=".6"/><stop offset=".55" stop-color="${LIGHT}" stop-opacity=".22"/><stop offset="1" stop-color="${LIGHT}" stop-opacity="0"/></radialGradient></defs>`);
+    if (CTX.night) for (const [x, y] of lamps) { const g = V.p(x, y, 0); out.push(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="8" ry="${f(8 * SE)}" fill="url(#${gid})"/>`); }
+    // your house: a ring pulsing out on the ground round it, so it's easy to spot
+    if (opts.isHome) {
+      const g = V.p(home.x || 0, home.y || 0, 0), pc0 = opts.pinColour || C.pin;
+      for (const k of [0, 1.6]) {
+        out.push(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="6" ry="${f(6 * SE)}" fill="none" stroke="${pc0}" stroke-width=".9" opacity="0">`
+          + `<animate attributeName="rx" values="6;17" dur="3.2s" begin="${k}s" repeatCount="indefinite"/><animate attributeName="ry" values="${f(6 * SE)};${f(17 * SE)}" dur="3.2s" begin="${k}s" repeatCount="indefinite"/>`
+          + `<animate attributeName="opacity" values=".8;0" dur="3.2s" begin="${k}s" repeatCount="indefinite"/></ellipse>`);
+      }
+    }
     out.push('</g>');
     // (points along the streets, on the screen: where a bridge to another map can start)
     const ends = [];
@@ -423,13 +514,12 @@
     // (at night, with someone home: a warm glow on the ground round your house)
     if (opts.isHome && CTX.night && CTX.homeLit && people.length) {
       const g = V.p(home.x || 0, home.y || 0, 0);
-      out.push(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="16" ry="${f(16 * SE)}" fill="${LIGHT}" opacity=".28"/><ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="9" ry="${f(9 * SE)}" fill="${LIGHT2}" opacity=".35"/>`);
+      out.push(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="18" ry="${f(18 * SE)}" fill="url(#${gid})"/>`);
     }
     // the buildings and trees, back to front
     const things = [];
     let pin = null;
     // (only what's on the chunk: a building the torn edge cuts through isn't drawn)
-    const on = (x, y) => insideRing(x, y, edge);
     for (const b of scene.buildings || []) {
       const [cx, cy] = centroid(b.p), isHome = !!opts.isHome && home.id != null && b.id === home.id;
       if (!isHome && !b.p.every(([x, y]) => on(x, y))) continue;
@@ -440,6 +530,7 @@
     }
     for (const t of scene.trees || []) if (on(t[0], t[1])) things.push([V.d(t[0], t[1]), tree(V, t)]);
     for (const c of scene.cars || []) if (on(c[0], c[1])) things.push([V.d(c[0], c[1]), car(V, c)]);
+    for (const L of lamps) things.push([V.d(L[0], L[1]), lamp(V, L)]);
     things.sort((a, b) => b[0] - a[0]);
     for (const t of things) out.push(t[1]);
     // night: everything darker and bluer, but the lit windows
@@ -459,6 +550,7 @@
       top = pin[1] - PIN_H * 0.13 / zs;
       out.push(`<line x1="${f(pin[0])}" y1="${f(pin[1])}" x2="${f(pin[0])}" y2="${f(top)}" stroke="${pc}" stroke-width="${f(fs * 0.14)}"/>`
         + `<circle cx="${f(pin[0])}" cy="${f(pin[1])}" r="${f(fs * 0.3)}" fill="${pc}"/>`
+        + `<rect x="${f(pin[0] - w / 2)}" y="${f(top - ph + fs * 0.28)}" width="${f(w)}" height="${f(ph)}" rx="${f(ph / 2)}" fill="#000000" opacity=".25"/>`
         + `<rect x="${f(pin[0] - w / 2)}" y="${f(top - ph)}" width="${f(w)}" height="${f(ph)}" rx="${f(ph / 2)}" fill="${pc}" stroke="#ffffff" stroke-width="${f(fs * 0.12)}"/>`
         + `<text x="${f(pin[0])}" y="${f(top - ph / 2)}" fill="${C.pinText}" font-size="${f(fs)}" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-weight="700" letter-spacing="${f(fs * 0.08)}" text-anchor="middle" dominant-baseline="central">${label}</text>`);
       top -= ph;
@@ -477,7 +569,7 @@
     // the box around it all (for the viewBox)
     const corners = [];
     for (const [x, y, dp] of edge) corners.push(V.p(x, y, 0), V.p(x, y, -dp));
-    const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]).concat([top - fs * 3.5, pin[1] - PIN_H * 0.2 / zs]);
+    const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]).concat([top - fs * 3.5, pin[1] - PIN_H * 0.2 / zs], low > -Infinity ? [low + 2] : []);
     const m = H * 0.04, x0 = Math.min(...xs) - m, y0 = Math.min(...ys) - m, w = Math.max(...xs) - x0 + m, h = Math.max(...ys) - y0 + m * 2.2;
     return {svg: out.join(''), box: [x0, y0, w, h], pin: [pin[0], pin[1] - PIN_H * 0.06 / zs], ends};
   }
@@ -629,7 +721,7 @@
     const x0 = Math.min(...boxes.map((b) => b[0])), y0 = Math.min(...boxes.map((b) => b[1]));
     const w = Math.max(...boxes.map((b) => b[2])) - x0, h = Math.max(...boxes.map((b) => b[3])) - y0;
     const pin = homeI.pin;
-    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block" role="img" aria-label="The streets around your home">${groups.join('')}${bridges.join('')}</svg>`, away: who.away};
+    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;position:relative" role="img" aria-label="The streets around your home">${groups.join('')}${bridges.join('')}</svg>`, away: who.away};
   }
 
   /* Fits the drawing to its box: all of it where the box is about its shape; in a much narrower
@@ -668,6 +760,12 @@
     'hail': ['🌨', 'Hail'], 'lightning': ['⚡', 'Thunder'], 'lightning-rainy': ['⛈', 'Thunderstorms'], 'windy': ['💨', 'Windy'],
     'windy-variant': ['💨', 'Windy'], 'exceptional': ['⚠', 'Severe weather'],
   };
+  // puffy clouds drifting behind the maps: each a few soft circles
+  const CLOUDS = [[6, 72], [17, 24], [29, 58], [41, 14], [53, 84], [64, 36], [77, 66], [89, 18]].map(([x, y], i) =>
+    [[0, 6, 26], [26, -8, 34], [56, 0, 28], [80, 8, 20], [38, 12, 26]].map(([dx, dy, r]) => {
+      const k = 0.75 + (i % 3) * 0.2;
+      return `radial-gradient(circle ${Math.round(r * k)}px at calc(${x}% + ${Math.round(dx * k)}px) calc(${y}% + ${Math.round(dy * k)}px),rgba(255,255,255,.88) 0 70%,rgba(255,255,255,0) 100%)`;
+    }).join(',')).join(',');
   const FX_CSS = `
     .nvfx{position:absolute;inset:0;pointer-events:none;overflow:hidden}
     .nv-rain{background-image:repeating-linear-gradient(105deg,rgba(190,215,255,.0) 0 7px,rgba(190,215,255,.32) 7px 8px,rgba(190,215,255,0) 8px 19px);background-size:120px 120px;animation:nvrain .45s linear infinite}
@@ -690,7 +788,22 @@
     .nvchip .av{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background-size:cover;background-position:center}
     .nvchip.away{opacity:.72}
     .nvchip .st{color:rgba(255,255,255,.7)}
-    @media (prefers-reduced-motion: reduce){.nvfx{animation:none!important}}`;
+    .nvsky{position:absolute;inset:0;overflow:hidden;pointer-events:none;background:linear-gradient(180deg,#78c3ec 0%,#acdcf3 50%,#dcf1f0 100%)}
+    .nvsky.grey{background:linear-gradient(180deg,#8f9eab 0%,#b8c2ca 55%,#d6dcdf 100%)}
+    .nvsky.night{background:linear-gradient(180deg,#050c20 0%,#0c1a3b 55%,#17284d 100%)}
+    .nvsky .cl{position:absolute;top:0;bottom:0;left:-100%;width:300%;animation:nvdrift 160s linear infinite;background-image:${CLOUDS}}
+    .nvsky .cl.b{animation-duration:90s;opacity:.55;transform:scale(1.3);top:10%}
+    .nvsky.grey .cl{opacity:.6}
+    .nvsky.night .cl{opacity:.06}
+    .nvsky .st{position:absolute;inset:0;display:none;background-image:radial-gradient(circle,#fff 0 1px,transparent 1.5px),radial-gradient(circle,rgba(255,255,255,.7) 0 .8px,transparent 1.3px),radial-gradient(circle,rgba(200,220,255,.8) 0 1.2px,transparent 1.8px);
+      background-size:137px 129px,83px 97px,211px 173px;background-position:0 0,40px 61px,90px 20px;animation:nvtwinkle 5s ease-in-out infinite alternate}
+    .nvsky.night .st{display:block}
+    @keyframes nvdrift{from{transform:translateX(0)}to{transform:translateX(33.3%)}}
+    @keyframes nvtwinkle{from{opacity:.55}to{opacity:1}}
+    .nvvig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 75% 70% at 50% 48%,transparent 60%,rgba(8,16,36,.26) 100%)}
+    .nvcredit{position:absolute;left:10px;bottom:6px;font:11px/1.2 sans-serif;color:rgba(20,40,60,.6);pointer-events:none}
+    .nvcredit.dark{color:rgba(255,255,255,.55)}
+    @media (prefers-reduced-motion: reduce){.nvfx,.nvsky .cl,.nvsky .st{animation:none!important}}`;
 
   function overlays(live) {
     const w = (live && live.weather) || null, st = w && w.state;
@@ -719,7 +832,12 @@
   function render(el, scene, opts) {
     // (OpenStreetMap's credit, as its licence asks: in a corner of the box, whatever the zoom)
     const d = draw(scene, opts);
-    el.innerHTML = d.svg + overlays((opts || {}).live) + '<div style="position:absolute;left:10px;bottom:6px;font:11px/1.2 sans-serif;color:rgba(255,255,255,.55);pointer-events:none">\u00a9 OpenStreetMap contributors</div>';
+    // (behind it: the sky, by day or night, greyer when it's wet; over it: a soft vignette)
+    const live = (opts || {}).live || {}, st = (live.weather || {}).state || '';
+    const grey = /rain|pour|cloudy$|fog|snow|hail|lightning/.test(st) && st !== 'partlycloudy';
+    const sky = live.night ? 'night' : grey ? 'grey' : '';
+    el.innerHTML = `<div class="nvsky ${sky}"><div class="st"></div><div class="cl b"></div><div class="cl"></div></div>` + d.svg + '<div class="nvvig"></div>' + overlays(live)
+      + `<div class="nvcredit${live.night ? ' dark' : ''}">\u00a9 OpenStreetMap contributors</div>`;
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
     fit(el);
     el._nvPick = !!(opts && opts.pick);

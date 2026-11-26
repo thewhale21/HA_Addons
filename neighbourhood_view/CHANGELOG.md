@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.0 — A better-looking world
+
+- **Improvement:** the maps float in a sky: blue with drifting clouds by
+  day, grey when it's wet, dark with twinkling stars at night, with a soft
+  vignette round the edge.
+- **Improvement:** buildings and trees cast soft shadows by day.
+- **Feature:** street lamps along the bigger streets, lighting pools on the
+  pavement at night (and a softer glow round your house).
+- **Improvement:** chunks of rock float under each map's edge, rivers
+  shimmer, a ring pulses out round your house, and the pin labels have a
+  drop shadow.
 ## 0.8.0 — Bridges
 
 - **Feature:** each other place is joined to your map by a bridge (a road
