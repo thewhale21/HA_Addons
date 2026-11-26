@@ -161,7 +161,7 @@
   // Windows on a wall: rows (one a storey from z0, each storey sh high), every `every` m
   /* What's being drawn now: night (lights on in windows), how likely a window in the building
    * being drawn is lit (CTX.lit: 0..1), and whether your house's chimney smokes (someone's home). */
-  const CTX = {night: false, lit: 0, smoke: false, seed: 0, season: 'summer', snow: false};
+  const CTX = {night: false, lit: 0, smoke: false, seed: 0, season: 'summer', snow: false, wet: false, windy: false, hail: false, leaves: 0};
   const SNOW = '#f2f5f9';
   const snowy = (c, k = 0.8) => (CTX.snow ? mix(c, SNOW, k) : c);
   // the season, from the month (Northern Hemisphere): trees turn in autumn, go bare-ish in winter,
@@ -333,12 +333,49 @@
       }
       return svg;
     }
-    // a round tree
+    // a round tree: in full leaf, turning and thinning (autumn), bare (winter) or in blossom
     const r = 2.5 * s, trunkTop = 2.4 * s, t = V.p(x, y, trunkTop), c = V.p(x, y, trunkTop + r * 0.9);
-    return `<line x1="${f(base[0])}" y1="${f(base[1])}" x2="${f(t[0])}" y2="${f(t[1])}" stroke="${C.trunk}" stroke-width="${f(Math.max(0.35, r * 0.24))}"/>`
-      + `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="${f(r)}" fill="${g[1]}"/>`
-      + `<path d="M${f(c[0] - r)} ${f(c[1])}A${f(r)} ${f(r)} 0 0 1 ${f(c[0] + r * 0.6)} ${f(c[1] - r * 0.8)}L${f(c[0] - r * 0.1)} ${f(c[1] + r * 0.2)}Z" fill="${g[0]}"/>`
-      + `<circle cx="${f(c[0] - r * 0.42)}" cy="${f(c[1] - r * 0.4)}" r="${f(r * 0.28)}" fill="${g[2]}"/>`;
+    const autumn = CTX.season === 'autumn' && turn < 0.6, bare = CTX.season === 'winter' && turn < 0.4;
+    const thin = autumn && rnd(x, y, 15) < 0.35, bloom = CTX.season === 'spring' && turn < 0.16;
+    let svg = '';
+    // (leaves fallen round it, on the grass)
+    if (autumn && !CTX.snow) {
+      for (let i = 0, n = thin ? 11 : 6; i < n; i++) {
+        const a = rnd(x, y, 90 + i) * 6.283, d = r * (0.3 + rnd(y, x, 110 + i) * 1.1), q = V.p(x + Math.cos(a) * d, y + Math.sin(a) * d, 0);
+        svg += `<ellipse cx="${f(q[0])}" cy="${f(q[1])}" rx=".42" ry="${f(0.42 * SE)}" fill="${g[i % 3]}"/>`;
+      }
+    }
+    svg += `<line x1="${f(base[0])}" y1="${f(base[1])}" x2="${f(t[0])}" y2="${f(t[1])}" stroke="${C.trunk}" stroke-width="${f(Math.max(0.35, r * 0.24))}"/>`;
+    if (bare || thin) {
+      // branches (and, thinning, a few clumps of leaves left on them)
+      for (let i = 0; i < 5; i++) {
+        const a = rnd(x, y, 120 + i) * 6.283, e = V.p(x + Math.cos(a) * r * 0.75, y + Math.sin(a) * r * 0.75, trunkTop + r * (0.8 + rnd(x, y, 130 + i) * 0.9));
+        const m = V.p(x + Math.cos(a) * r * 0.3, y + Math.sin(a) * r * 0.3, trunkTop + r * 0.45);
+        svg += `<path d="M${f(t[0])} ${f(t[1])}Q${f(m[0])} ${f(m[1])} ${f(e[0])} ${f(e[1])}" fill="none" stroke="${mix(C.trunk, '#3d2c1e', 0.25)}" stroke-width="${f(Math.max(0.18, r * 0.09))}" stroke-linecap="round"/>`;
+        if (thin && i % 2 === 0) svg += `<circle cx="${f(e[0])}" cy="${f(e[1])}" r="${f(r * 0.38)}" fill="${g[i % 3]}"/>`;
+        if (bare && CTX.snow) svg += `<circle cx="${f(e[0])}" cy="${f(e[1])}" r="${f(r * 0.12)}" fill="${SNOW}"/>`;
+      }
+      const top = V.p(x, y, trunkTop + r * 1.6);
+      svg += `<line x1="${f(t[0])}" y1="${f(t[1])}" x2="${f(top[0])}" y2="${f(top[1])}" stroke="${mix(C.trunk, '#3d2c1e', 0.25)}" stroke-width="${f(Math.max(0.2, r * 0.12))}" stroke-linecap="round"/>`;
+    } else {
+      svg += `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="${f(r)}" fill="${g[1]}"/>`
+        + `<path d="M${f(c[0] - r)} ${f(c[1])}A${f(r)} ${f(r)} 0 0 1 ${f(c[0] + r * 0.6)} ${f(c[1] - r * 0.8)}L${f(c[0] - r * 0.1)} ${f(c[1] + r * 0.2)}Z" fill="${g[0]}"/>`
+        + `<circle cx="${f(c[0] - r * 0.42)}" cy="${f(c[1] - r * 0.4)}" r="${f(r * 0.28)}" fill="${g[2]}"/>`;
+    }
+    // leaves (or petals) falling now and then: more on a windy day, blown further
+    if ((autumn || bloom) && !CTX.snow && CTX.leaves > 0 && rnd(x, y, 140) < (CTX.windy ? 0.7 : 0.4)) {
+      const drop = base[1] - c[1] + r * 0.6;
+      for (let i = 0, n = CTX.windy ? 3 : 2; i < n && CTX.leaves > 0; i++, CTX.leaves--) {
+        const sx = c[0] + (rnd(x, y, 150 + i) - 0.5) * r * 1.4, sy = c[1] + (rnd(y, x, 160 + i) - 0.5) * r;
+        const dx = (CTX.windy ? 9 : 2.5) * (0.5 + rnd(x, y, 170 + i)), dur = (4 + rnd(x, y, 180 + i) * 4).toFixed(1), begin = (rnd(x, y, 190 + i) * 8).toFixed(1);
+        const col = bloom ? g[2] : g[i % 3];
+        svg += `<g opacity="0"><animateTransform attributeName="transform" type="translate" values="0 0;${f(dx * 0.4)} ${f(drop * 0.45)};${f(dx * 0.7)} ${f(drop * 0.75)};${f(dx)} ${f(drop)}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
+          + `<animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.1;.85;1" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
+          + `<path d="M${f(sx - 0.35)} ${f(sy)}Q${f(sx)} ${f(sy - 0.3)} ${f(sx + 0.35)} ${f(sy)}Q${f(sx)} ${f(sy + 0.3)} ${f(sx - 0.35)} ${f(sy)}Z" fill="${col}">`
+          + `<animateTransform attributeName="transform" type="rotate" values="0 ${f(sx)} ${f(sy)};180 ${f(sx)} ${f(sy)};360 ${f(sx)} ${f(sy)}" dur="${(1.6 + rnd(x, y, 200 + i)).toFixed(1)}s" repeatCount="indefinite"/></path></g>`;
+      }
+    }
+    return svg;
   }
 
   // A parked car: a body and a cabin, as boxes
@@ -405,6 +442,15 @@
    * be clicked: data-id), hideLabel, live (night...), isHome, pinColour, atPin: people shown over the
    * pin, onMap: [{p, x, y}] people drawn where they are. */
   function island(scene, opts = {}) {
+    // (wet: the roads and pavements darker, with a blue sheen; put back after)
+    const wx = ((opts.live || {}).weather || {}).state || '', keep = {road: C.road, pave: C.pave, kerb: C.kerb, path: C.path};
+    if (['rainy', 'pouring', 'lightning-rainy', 'hail', 'snowy-rainy'].includes(wx)) {
+      C.road = mix(C.road, '#2b3542', 0.4); C.pave = mix(C.pave, '#8e9aa8', 0.35); C.kerb = mix(C.kerb, '#7d8896', 0.3); C.path = mix(C.path, '#a9a59a', 0.35);
+    }
+    try { return islandDrawn(scene, opts); } finally { Object.assign(C, keep); }
+  }
+
+  function islandDrawn(scene, opts = {}) {
     const V = view(opts.rot || 0), H = scene.half || 250, home = scene.home || {};
     const live = opts.live || {}, people = live.people || [];
     const anyHome = people.some((p) => p.home);
@@ -412,7 +458,12 @@
     CTX.homeLit = opts.isHome ? (people.length ? anyHome : true) : false;  // (no people set: your house lit at night as any)
     CTX.smoke = !!opts.isHome && !live.night && anyHome;
     CTX.season = season(opts.month != null ? opts.month : new Date().getMonth());
-    CTX.snow = ['snowy', 'snowy-rainy'].includes((live.weather || {}).state);
+    const wx = (live.weather || {}).state || '';
+    CTX.snow = ['snowy', 'snowy-rainy'].includes(wx);
+    CTX.wet = ['rainy', 'pouring', 'lightning-rainy', 'hail', 'snowy-rainy'].includes(wx);
+    CTX.hail = wx === 'hail';
+    CTX.windy = ['windy', 'windy-variant', 'pouring', 'lightning-rainy'].includes(wx);
+    CTX.leaves = 90;  // (falling leaves on this map, at most)
     const out = [];
     // the chunk of ground, torn out: its earth sides (those facing the viewer, back ones first),
     // then its top, with a lip of turf
@@ -536,6 +587,46 @@
       }
     }
     if (zebra.length) out.push(`<g opacity=".9">${zebra.join('')}</g>`);
+    // wet: puddles by the kerbs and on the pavements, raindrops rippling some of them
+    if (CTX.wet) {
+      const pud = [];
+      for (const r of cars.concat(paths)) {
+        let acc = 6 + rnd(r.p[0][0], r.p[0][1], 220) * 14;
+        for (let i = 0; i < r.p.length - 1; i++) {
+          const [ax, ay] = r.p[i], [bx, by] = r.p[i + 1], L = Math.hypot(bx - ax, by - ay);
+          if (!L) continue;
+          const ux = (bx - ax) / L, uy = (by - ay) / L;
+          while (acc < L) {
+            const k = rnd(ax + acc, ay, 221), side = k < 0.5 ? 1 : -1;
+            const off = r.k === 'path' ? (rnd(ax, acc, 222) - 0.5) * r.w * 0.5 : r.w / 2 - 0.9 + (k > 0.8 ? PAVE * 0.9 : 0);
+            const x = ax + ux * acc - uy * off * side, y = ay + uy * acc + ux * off * side;
+            if (insideRing(x, y, edge)) {
+              const L2 = 1.2 + rnd(x, y, 223) * 2.2, W2 = L2 * (0.45 + rnd(x, y, 224) * 0.25), ang = Math.atan2(uy, ux);
+              const blob = (cx0, cy0, l, w, col, op) => {
+                const P = [];
+                for (let j = 0; j < 10; j++) {
+                  const a = j / 10 * 6.283, rr = 1 + (rnd(cx0 + j, cy0, 225) - 0.5) * 0.35;
+                  const lx = Math.cos(a) * l * rr, ly = Math.sin(a) * w * rr;
+                  P.push(V.p(cx0 + lx * Math.cos(ang) - ly * Math.sin(ang), cy0 + lx * Math.sin(ang) + ly * Math.cos(ang), 0));
+                }
+                return `<polygon points="${pts(P)}" fill="${col}" opacity="${op}" stroke-linejoin="round"/>`;
+              };
+              let s = blob(x, y, L2, W2, '#7f97ab', '.75') + blob(x - ux * L2 * 0.2, y - uy * L2 * 0.2, L2 * 0.45, W2 * 0.35, '#dbe8f2', '.7');
+              if (rnd(x, y, 226) < 0.55) {
+                const c = V.p(x, y, 0), dur = (1.2 + rnd(x, y, 227)).toFixed(2), begin = (rnd(x, y, 228) * 2).toFixed(2);
+                s += `<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".2" ry="${f(0.2 * SE)}" fill="none" stroke="#ffffff" stroke-width=".15" opacity="0">`
+                  + `<animate attributeName="rx" values=".2;${f(W2 * 0.8)}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/><animate attributeName="ry" values="${f(0.2 * SE)};${f(W2 * 0.8 * SE)}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
+                  + `<animate attributeName="opacity" values=".9;0" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/></ellipse>`;
+              }
+              pud.push(s);
+            }
+            acc += 16 + rnd(ax, acc, 229) * 22;
+          }
+          acc -= L;
+        }
+      }
+      out.push(pud.join(''));
+    }
     for (const r of scene.rails || []) {
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.rail}" stroke-width="${f(r.w)}" stroke-linecap="butt" stroke-linejoin="round"/>`);
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railTie}" stroke-width="${f(r.w * 0.55)}" stroke-dasharray=".6 1.4"/>`);
@@ -551,10 +642,15 @@
       }
       for (const [x, y, s] of scene.trees || []) {
         if (!on(x, y)) continue;
-        const r = 2.3 * (s || 1), k = 3.2 * (s || 1), c = V.p(x + sx * k, y + sy * k, 0);
+        // (a bare tree's is next to nothing, a thinning one's smaller)
+        const round = rnd(x, y, 11) >= 0.36, turn = rnd(x, y, 13);
+        if (round && CTX.season === 'winter' && turn < 0.4) continue;
+        const thinning = round && CTX.season === 'autumn' && turn < 0.6 && rnd(x, y, 15) < 0.35;
+        const r = 2.3 * (s || 1) * (thinning ? 0.55 : 1), k = 3.2 * (s || 1), c = V.p(x + sx * k, y + sy * k, 0);
         sh.push(`<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx="${f(r)}" ry="${f(r * SE)}" fill="#24401f"/>`);
       }
-      out.push(`<g opacity=".2">${sh.join('')}</g>`);
+      // (faint under a grey sky)
+      out.push(`<g opacity="${/rain|pour|cloudy$|fog|snow|hail|lightning/.test(wx) && wx !== 'partlycloudy' ? '.07' : '.2'}">${sh.join('')}</g>`);
     }
     // street lamps along the bigger streets, every 34 m or so, either side in turn
     const lamps = [];
@@ -617,11 +713,31 @@
       const attrs = opts.pick && opts.isHome ? ` data-id="${b.id}" class="bld"` : '';
       things.push([V.d(cx, cy), `<g${attrs}>${d.svg}</g>`]);
     }
-    for (const t of scene.trees || []) if (on(t[0], t[1])) things.push([V.d(t[0], t[1]), tree(V, t)]);
+    for (const t of scene.trees || []) {
+      if (!on(t[0], t[1])) continue;
+      const s = tree(V, t);
+      // (on a windy day, swaying, each in its own time)
+      things.push([V.d(t[0], t[1]), CTX.windy ? `<g class="nvsway" style="animation-delay:-${(rnd(t[0], t[1], 210) * 3).toFixed(2)}s">${s}</g>` : s]);
+    }
     for (const c of scene.cars || []) if (on(c[0], c[1])) things.push([V.d(c[0], c[1]), car(V, c)]);
     for (const L of lamps) things.push([V.d(L[0], L[1]), lamp(V, L)]);
     things.sort((a, b) => b[0] - a[0]);
     for (const t of things) out.push(t[1]);
+    // rain splashing on the ground all over (or hailstones lying about)
+    if (CTX.wet || CTX.hail) {
+      const sp = [];
+      for (let i = 0; i < 70; i++) {
+        const x = (rnd(i, H, 230) - 0.5) * 2 * H, y = (rnd(H, i, 231) - 0.5) * 2 * H;
+        if (!on(x, y)) continue;
+        const c = V.p(x, y, 0);
+        if (CTX.hail) { sp.push(`<circle cx="${f(c[0])}" cy="${f(c[1])}" r=".22" fill="#ffffff" opacity=".9"/>`); continue; }
+        const dur = (0.7 + rnd(i, 1, 232) * 0.6).toFixed(2), begin = (rnd(i, 2, 233) * 1.5).toFixed(2);
+        sp.push(`<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".1" ry=".06" fill="none" stroke="#e8f2fa" stroke-width=".18" opacity="0">`
+          + `<animate attributeName="rx" values=".1;.9" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/><animate attributeName="ry" values=".06;${f(0.9 * SE)}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
+          + `<animate attributeName="opacity" values=".85;0" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/></ellipse>`);
+      }
+      out.push(`<g pointer-events="none">${sp.join('')}</g>`);
+    }
     // night: everything darker and bluer, but the lit windows
     if (CTX.night) {
       const cache = {};
@@ -920,7 +1036,9 @@
     .nvvig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 75% 70% at 50% 48%,transparent 60%,rgba(8,16,36,.26) 100%)}
     .nvcredit{position:absolute;left:10px;bottom:6px;font:11px/1.2 sans-serif;color:rgba(20,40,60,.6);pointer-events:none}
     .nvcredit.dark{color:rgba(255,255,255,.55)}
-    @media (prefers-reduced-motion: reduce){.nvfx,.nvsky .cl,.nvsky .st{animation:none!important}}`;
+    .nvsway{transform-box:fill-box;transform-origin:50% 100%;animation:nvsway 2.6s ease-in-out infinite alternate}
+    @keyframes nvsway{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
+    @media (prefers-reduced-motion: reduce){.nvfx,.nvsky .cl,.nvsky .st,.nvsway{animation:none!important}}`;
 
   function overlays(live) {
     const w = (live && live.weather) || null, st = w && w.state;

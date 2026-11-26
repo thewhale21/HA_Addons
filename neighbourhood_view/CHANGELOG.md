@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.0 — Weather on the ground, and the autumn fall
+
+- **Feature:** rain (and heavy rain, thunderstorms, sleet, hail): wet, darker
+  roads and pavements, puddles by the kerbs and on pavements with raindrops
+  rippling them, and splashes all over; hail leaves hailstones lying about.
+- **Feature:** wind (and heavy rain, thunderstorms): the trees sway.
+- **Feature:** autumn: some trees thin to bare branches with a few clumps
+  of leaves left, leaves lie under the turned trees, and leaves fall now and
+  then (blown further when windy). Spring blossom drops petals.
+- **Feature:** winter: many trees are bare branches (with snow on them when
+  it's snowing).
+- **Improvement:** shadows fade under a grey sky; bare and thinning trees
+  cast little or none.
 ## 0.10.1 — Curvier, quieter bridges
 
 - **Improvement:** the bridges to other places are now a curving road (an S

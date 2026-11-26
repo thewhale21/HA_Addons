@@ -115,9 +115,19 @@ trees it has, drawn like a video game's town:
   ripples spread across them now and then.
 - **Birds:** now and then a flock flies over (by day, when it's dry).
 - **Seasons** (from the date): in autumn many trees turn orange, red and
-  yellow; in winter they go dull and the grass browner; in spring some
-  blossom pink and white. When the weather entity says it's **snowing**,
-  roofs, lawns, parks and trees turn white (roads stay clear).
+  yellow, some thinning to bare branches with a few clumps left, leaves
+  lying round them and falling now and then; in winter many are bare and
+  the rest dull, and the grass browner; in spring some blossom pink and
+  white and drop petals.
+- **The weather on the ground** (from the weather entity):
+  - **Rain** (and heavy rain, thunderstorms, sleet): the roads and
+    pavements go dark and wet, puddles lie by the kerbs and on the
+    pavements with raindrops rippling them, and rain splashes all over.
+  - **Hail:** wet roads and puddles, with hailstones lying about.
+  - **Snow:** roofs, lawns, parks and trees turn white (roads stay clear).
+  - **Wind** (and heavy rain, thunderstorms): the trees sway, and falling
+    leaves are blown further.
+  - Under a grey sky shadows fade; with sun they're crisp.
 
 What's made up (each house's colours, the trees and cars added, the
 storeys where none are known) is the same every time, so nothing moves
