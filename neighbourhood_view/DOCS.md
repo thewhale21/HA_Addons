@@ -38,11 +38,15 @@ trees it has, drawn like a video game's town:
   a glass front and a coloured fascia, warehouses with high windows, and
   things on their flat roofs. Heights from OpenStreetMap (3 m a storey),
   else by type (flats 12 m, shops 8 m, garages 2.8 m...).
-- **Streets** have a pavement each side with its kerb, and white lines
-  down the middle; footpaths are drawn on their own.
+- **The ground** is lawn, as gardens mostly are; shops', offices' and
+  industrial land is hard standing, and car parks are grey.
+- **Streets** have a pavement each side with its kerb (and a grass verge
+  on residential streets), and white lines down the middle; footpaths are
+  drawn on their own.
 - **Trees** in three kinds (round, pointed and bushes), in different
   greens and sizes: the ones OpenStreetMap has, more in woods and parks,
-  and some along residential streets.
+  some along residential streets, and some in gardens (never on a road,
+  pavement, building, car park or yard).
 - **Cars** parked along the kerbs, in different colours (not near
   junctions).
 

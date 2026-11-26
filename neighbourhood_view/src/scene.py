@@ -51,10 +51,13 @@ WOOD = {"forest", "wood", "scrub", "heath"}
 WATER = {"water", "reservoir", "basin", "riverbank", "pond", "swimming_pool"}
 PITCH = {"pitch", "track", "sports_centre"}
 PAVED = {"parking", "garages", "railway", "platform", "marketplace", "bus_station"}
+YARD = {"retail", "commercial", "industrial", "construction", "brownfield", "depot", "fuel"}  # (not lawn: hard standing)
 WATERWAY_WIDTHS = {"river": 10, "canal": 8, "stream": 2.5, "drain": 1.5, "ditch": 1.5}
 TREE_SPACING = {"wood": 9.0, "grass": 26.0}  # synthetic trees in woods and parks, about one per this many m
 STREET_TREE_EVERY = 15.0  # ...and along residential streets: a place for one this often on each side
 STREET_TREE_CHANCE = 0.4  # ...with a tree in about this many of them
+GARDEN_TREE_EVERY = 16.0  # trees in gardens: a place for one about this often...
+GARDEN_TREE_CHANCE = 0.33  # ...with a tree in about this many (not on a road, pavement, building or yard)
 
 
 # --- geometry ---------------------------------------------------------------------------------
@@ -333,6 +336,8 @@ def _area_kind(tags: dict) -> Optional[str]:
         return "grass"
     if vals & PAVED or tags.get("public_transport") == "platform":
         return "paved"
+    if vals & YARD:
+        return "yard"
     return None
 
 
@@ -356,6 +361,54 @@ def _scatter(poly: list, spacing: float, avoid: list) -> list:
                 out.append([round(px, 1), round(py, 1), round(0.7 + 1.0 * _hash01(x, y, 3), 2)])
             x += spacing
         y += spacing
+    return out
+
+
+def _garden_trees(roads: list, buildings: list, areas: list, half: float) -> list:
+    """Trees in gardens and open ground: a jittered grid over the square, keeping off roads (and
+    their pavements), buildings, car parks, yards, water and pitches."""
+    cell = 30.0
+    grid: dict = {}
+    for r in roads:
+        pad = r["w"] / 2 + (3.5 if r["k"] != "path" else 1.0)
+        for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
+            for gx in range(int(math.floor((min(x1, x2) - pad) / cell)), int(math.floor((max(x1, x2) + pad) / cell)) + 1):
+                for gy in range(int(math.floor((min(y1, y2) - pad) / cell)), int(math.floor((max(y1, y2) + pad) / cell)) + 1):
+                    grid.setdefault((gx, gy), []).append((x1, y1, x2, y2, pad))
+    boxes = [(min(p[0] for p in b) - 1.5, min(p[1] for p in b) - 1.5, max(p[0] for p in b) + 1.5, max(p[1] for p in b) + 1.5)
+             for b in buildings]
+    bgrid: dict = {}
+    for i, (x0, y0, x1, y1) in enumerate(boxes):
+        for gx in range(int(math.floor(x0 / cell)), int(math.floor(x1 / cell)) + 1):
+            for gy in range(int(math.floor(y0 / cell)), int(math.floor(y1 / cell)) + 1):
+                bgrid.setdefault((gx, gy), []).append(i)
+    hard = [a["p"] for a in areas if a["k"] in ("paved", "yard", "water", "pitch")]
+    hard_boxes = [(min(p[0] for p in a), min(p[1] for p in a), max(p[0] for p in a), max(p[1] for p in a), a) for a in hard]
+    out = []
+    step = GARDEN_TREE_EVERY
+    y = -half + step / 2
+    while y < half:
+        x = -half + step / 2
+        while x < half:
+            if _hash01(x, y, 12) < GARDEN_TREE_CHANCE:
+                px = x + (_hash01(x, y, 13) - 0.5) * step * 0.9
+                py = y + (_hash01(x, y, 14) - 0.5) * step * 0.9
+                g = (int(math.floor(px / cell)), int(math.floor(py / cell)))
+                ok = not any(bx0 <= px <= bx1 and by0 <= py <= by1 for bx0, by0, bx1, by1 in (boxes[i] for i in bgrid.get(g, ())))
+                if ok:
+                    for x1, y1, x2, y2, pad in grid.get(g, ()):
+                        vx, vy = x2 - x1, y2 - y1
+                        ln2 = vx * vx + vy * vy or 1e-9
+                        t = max(0.0, min(1.0, ((px - x1) * vx + (py - y1) * vy) / ln2))
+                        if math.hypot(x1 + vx * t - px, y1 + vy * t - py) < pad:
+                            ok = False
+                            break
+                if ok and any(x0 <= px <= x1 and y0 <= py <= y1 and inside((px, py), a) for x0, y0, x1, y1, a in hard_boxes):
+                    ok = False
+                if ok:
+                    out.append([round(px, 1), round(py, 1), round(0.6 + 1.1 * _hash01(x, y, 15), 2)])
+            x += step
+        y += step
     return out
 
 
@@ -551,6 +604,7 @@ def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = 
     for kind, poly in tree_areas:
         trees += _scatter(poly, TREE_SPACING[kind], foot)
     trees += _street_trees(roads, foot, half)
+    trees += _garden_trees(roads, foot, areas, half)
     cars = _cars(roads, foot, half)
     _face_streets(buildings, roads)
     home = pick_home(buildings, lat0, lon0, home_pt, home_id)

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — Greener
+
+- **Improvement:** the ground is lawn green (gardens), with shops',
+  offices' and industrial land as hard standing; parks and woods a deeper
+  green.
+- **Feature:** trees in gardens and open ground, keeping off roads,
+  pavements, buildings, car parks and yards.
+- **Feature:** a grass verge along residential streets.
+
 ## 0.4.0 — Closer in, and roofs along the street
 
 - **Change:** it starts zoomed in on your street and the ones round it

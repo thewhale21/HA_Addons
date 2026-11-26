@@ -169,3 +169,20 @@ def test_ridges_run_along_the_street():
     sc = S.build_scene({"elements": [house(0)]}, LAT0, LON0)
     (ax, ay), (bx, by) = sc["buildings"][0]["rect"][:2]
     assert abs(abs(by - ay) - 9) < 0.2
+
+
+def test_garden_trees_keep_off_roads_buildings_and_yards():
+    sc = S.build_scene(sample(), LAT0, LON0)
+    roads = [r for r in sc["roads"] if r["k"] != "path"]
+    paved = [a["p"] for a in sc["areas"] if a["k"] in ("paved", "water", "pitch")]
+    garden = S._garden_trees(sc["roads"], [b["p"] for b in sc["buildings"]], sc["areas"], sc["half"])
+    assert len(garden) > 50
+    for x, y, s in garden:
+        assert not any(S.inside((x, y), b["p"]) for b in sc["buildings"])
+        assert not any(S.inside((x, y), p) for p in paved)
+        for r in roads:
+            for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
+                vx, vy = x2 - x1, y2 - y1
+                t = max(0.0, min(1.0, ((x - x1) * vx + (y - y1) * vy) / ((vx * vx + vy * vy) or 1)))
+                assert math.hypot(x1 + vx * t - x, y1 + vy * t - y) >= r["w"] / 2 + 3.4
+    assert S._area_kind({"landuse": "retail"}) == "yard" and S._area_kind({"landuse": "residential"}) is None

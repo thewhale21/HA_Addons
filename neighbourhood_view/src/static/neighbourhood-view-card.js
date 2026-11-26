@@ -10,9 +10,9 @@
 
   // ---------- colours ----------
   const C = {
-    ground: '#e3e9d6', turf: '#86bf5f', turfDark: '#5f9a43',
+    ground: '#c4dfa0', yard: '#dcd9cf', verge: '#9fcf78', turf: '#86bf5f', turfDark: '#5f9a43',
     soil: '#a8703f', soilDark: '#7d5130', rock: '#8a7d6e', rockDark: '#625849',
-    grass: '#a6d98a', wood: '#8bcb73', pitch: '#94d07e', water: '#8fc6ec', paved: '#cdd1d7',
+    grass: '#9ed37c', wood: '#7dbf63', pitch: '#8cc96f', water: '#8fc6ec', paved: '#cdd1d7',
     road: '#62666e', roadLine: '#f5f5f5', pave: '#d9dbdf', kerb: '#b9bdc4', path: '#f2ede1', pathEdge: '#d6cfbd',
     rail: '#b2aca2', railLine: '#6f6a63', railTie: '#8d877e',
     trunk: '#8c6a48', glass: '#4f6f92', glassLit: '#7fa3c9', door: '#7a5238',
@@ -358,6 +358,8 @@
     const streets = cars.filter((r) => r.k !== 'service');
     for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.kerb}" stroke-width="${f(r.w + PAVE * 2 + 0.6)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.pave}" stroke-width="${f(r.w + PAVE * 2)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    // (a grass verge between the pavement and the kerb on residential streets)
+    for (const r of streets.filter((r) => r.k === 'minor')) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.verge}" stroke-width="${f(r.w + 2.4)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of cars) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${mix(C.road, '#ffffff', 0.35)}" stroke-width="${f(r.w + 0.5)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of cars) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.road}" stroke-width="${f(r.w)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.roadLine}" stroke-width="${r.k === 'major' ? '.45' : '.3'}" stroke-dasharray="${r.k === 'major' ? '4 3' : '2.5 4'}" opacity=".85"/>`);
