@@ -243,3 +243,45 @@ def test_back_gardens_dont_overlap():
     sc = S.build_scene(sample(), LAT0, LON0)
     ps = [p for p in sc["plots"] if p["b"] >= 2]
     assert not [(a["id"], b["id"]) for i, a in enumerate(ps) for b in ps[i + 1:] if S._overlap(S._back_rect(a, 0.4), S._back_rect(b, 0.4))]
+
+
+def test_whole_gardens_share_out_the_blocks():
+    sc = S.build_scene(sample(), LAT0, LON0)
+    fences = sc["fences"]
+    kinds = {f["k"] for f in fences}
+    assert kinds == {"side", "street", "edge"}
+    ids = {b["id"] for b in sc["buildings"] if b["k"] == "house"}
+    for f in fences:
+        assert len(f["p"]) >= 2 and set(f["o"]) <= ids
+        assert len(f["o"]) == (2 if f["k"] == "side" else 1)
+    # houses back to back (y -64 and y -16, either side of the block between the streets at y -80
+    # and 0) meet half way, at about y -40
+    meet = [f for f in fences if f["k"] == "side" and all(abs(y + 40) < 3 for _, y in f["p"])]
+    assert len(meet) >= 5
+    # no garden boundary on a street or its pavements
+    for f in fences:
+        for x, y in f["p"]:
+            for r in sc["roads"]:
+                if r["k"] == "path":
+                    continue
+                d = min(S._seg_dist(x, y, *a, *b)[0] for a, b in zip(r["p"], r["p"][1:]))
+                assert d > r["w"] / 2 + r.get("pv", S.PAVE) - 1.0
+
+
+def test_houses_kept_off_streets_and_footpaths():
+    def house(cx, cy):
+        return [(cx - 4, cy - 5), (cx + 4, cy - 5), (cx + 4, cy + 5), (cx - 4, cy + 5)]
+    b1 = {"id": 1, "k": "house", "p": house(0, 9)}    # (into the pavement of the street at y 0)
+    b2 = {"id": 2, "k": "house", "p": house(30, 12)}  # (clear of it)
+    b3 = {"id": 3, "k": "house", "p": house(60, 40)}
+    roads = [{"k": "minor", "w": 7.0, "p": [(-50, 0), (100, 0)]},
+             {"k": "path", "w": 2.0, "p": [(60, 20), (60, 60)]}]  # (a footpath through house 3)
+    out = S._make_room([b1, b2, b3], roads)
+    st = out[0]
+    for b in (b1, b2):
+        assert S._bdist(b["p"], st["p"])[0] >= st["w"] / 2 + st.get("pv", S.PAVE) - 0.01
+    assert b2["p"][0] == (26, 7) or b2["p"][0] == [26, 7]  # (not moved)
+    paths = [r for r in out if r["k"] == "path"]
+    assert len(paths) == 2  # (either side of the house)
+    for r in paths:
+        assert all(not S.inside(q, b3["p"]) for q in r["p"])

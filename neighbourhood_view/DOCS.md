@@ -103,18 +103,28 @@ trees it has, drawn like a video game's town:
   industrial land is hard standing, and car parks are grey.
 - **Streets** have a pavement each side with its kerb (and a grass verge
   on residential streets), and white lines down the middle; footpaths are
-  drawn on their own.
+  drawn on their own. Houses are never drawn on a street, its pavements or
+  a footpath: where houses are close, the pavements (then the road, a
+  little) are drawn narrower, a house still on one is moved back off it,
+  and a footpath that runs through a building is left out there.
 - **Trees** in three kinds (round, pointed and bushes), in different
   greens and sizes: the ones OpenStreetMap has, more in woods and parks,
   some along residential streets, and some in gardens (never on a road,
   pavement, building, car park or yard).
 - **Cars** parked along the kerbs, in different colours (not near
   junctions).
-- **Gardens:** each house's plot from where its street is. At the front:
+- **Gardens:** as on a satellite photo, the ground round the houses is
+  shared out between them: each bit goes to the nearest house (going round,
+  not across, streets, footpaths, other buildings, parks, car parks and
+  water), up to 45 m from it. So back gardens run back to meet the gardens
+  of the next street half way, side boundaries sit half way between
+  neighbours, and a block is all gardens, with no spare lawn. Between back
+  gardens there's a fence (some a hedge), where a garden backs onto a
+  street or park a fence, wall or hedge, and between front gardens a low
+  wall or hedge (or nothing: many are open). At the front:
   a path to the door, a driveway on about half (many with a car, some
   leading to a garage), a hedge or low wall along the pavement, flowers
-  under the window. At the back: fences or hedges between the gardens,
-  patios, the odd conservatory, sheds, trampolines, washing lines (brought
+  under the window. At the back: patios, the odd conservatory, sheds, trampolines, washing lines (brought
   in when it's wet or dark), bushes and flower beds.
 - **Roofs:** skylights, dormers and satellite dishes on some.
 - **Greenery:** parks and playing fields mown in stripes, reeds round

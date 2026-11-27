@@ -5,7 +5,7 @@ subscription. `CLAUDE.md` has the working rules; this file has the
 background: what each add-on does, how the owner uses them, what was
 decided and why, and what's still open.
 
-**Last updated:** 27 Nov 2026 (neighbourhood_view 0.17.1).
+**Last updated:** 27 Nov 2026 (neighbourhood_view 0.18.0).
 
 **Keep this file current.** Whoever changes the repository (any AI agent
 or person) updates this file in the same commit when the change affects
@@ -64,7 +64,7 @@ anything below, and bumps the "Last updated" line.
 | `octopus_charge_pack` | 0.10.8 | Octopus API helpers; 0.10.8 drops old `device_id`/`poll_seconds` options via the Supervisor API (`POST http://supervisor/addons/self/options`). |
 | `sigenergy_evdc_soc_range_manager` | 0.44.0 | "SigEnergy DC Charger": keeps the EVDC car between limits on a weekly schedule. Limits are named **Maximum charge** and **Keep at least**; an entry can be Maximum charge / Keep at least / Both / Charge only / Discharge only (one-way entries stay within the limits); entries may overlap; start == end means 24 hours; the week view has three lanes (one-way entries in the middle). The Overview's Car SoC chart shows charge/discharge only as a coloured strip along the bottom (0.43.0; points in `soc_history.json` carry a 6th value, "charge"/"discharge", only then). Notifications (0.44.0): the notify service box suggests HA's notify services (`/api/notify_services`) with a Test button; **What to send** (`notify_level`: info = everything incl. starts/stops, warning, error, none; default info); warnings/errors in its log are sent too (`src/log_notify.py`, ported from OCPP's). about 105 tests (test_api needs pytest-asyncio; one notify test needs aiohttp). |
 | `tigo_solar` | 0.7.0 | Tigo panel data: roof view (reclaimed in brackets), drag-to-select chart, quick-select per string, per-panel estimates every minute (system power shared by interpolated reading shares), backfill of real 15-minute per-panel readings via Tigo's `lastvalue` (`resourceId=lastValue-{date}-{pin|reclaimedPower}-{HH:MM}`, about 2 requests per slot, 3 s apart; trusted after 3 answers within 35%/30 W of system power, off after 3 misses), fixed scale, hover tooltip, reclaimed %, "By the time of day" and "Through the year" heatmap / 3D surface with Month/Year and 3D zoom. 22 tests. |
-| `neighbourhood_view` | 0.17.1 | New (26 Nov 2026): an isometric SVG drawing of the streets (150 m by default, a setting) around your home from OpenStreetMap (postcodes.io for the postcode, Overpass for buildings/roads/areas/trees and the house-number lookup), as the add-on's page and a dashboard card. See "Neighbourhood View" below. |
+| `neighbourhood_view` | 0.18.0 | New (26 Nov 2026): an isometric SVG drawing of the streets (150 m by default, a setting) around your home from OpenStreetMap (postcodes.io for the postcode, Overpass for buildings/roads/areas/trees and the house-number lookup), as the add-on's page and a dashboard card. See "Neighbourhood View" below. |
 | `heat_loss_calculator`, `predbat_dashboard`, `stellantis_ev_stats` | 0.7.1, 0.3.2, 0.3.2 | Not worked on recently. |
 | `addon_template` | 0.1.7 | Start new add-ons with `python scripts/new_addon.py`. |
 
@@ -332,6 +332,22 @@ quarter turns are allowed), about 250 m around, add-on and card together.
   or its middle is in a building (`inBuilding`: a 20 m grid of footprints); hedges/walls drawn as the
   face towards you + top (no end caps, so pieces join); fences a single panel. `on()` has a fast path
   (|x|, |y| < H - 35 is always on the island): drawing ~2x faster.
+- 0.18.0 (owner sent a satellite photo: gardens should fit together like the real street; then:
+  houses and gardens not on roads or footpaths): scene.py `_make_room()` (before everything else uses
+  the roads): a street with buildings within w/2 + PAVE + CLEAR gets narrower pavements (`pv`, down
+  to PAVE_MIN 1.6) then road (down to NARROW_MIN 0.8 of w), ignoring buildings it runs into; a small
+  building still on it is moved straight away from it (up to NUDGE_MAX 4 m, not into another
+  building); footpaths are cut where they go through a building. Consumers of the old 2.8 use
+  `r.get("pv", PAVE)` (rgrid folds pv into w). `_lots()`: a ~300-cell grid; roads + pv and paths
+  + 0.4, big/other buildings, paved/yard/water/pitch/wood and grass > 2500 m² blocked; a multi-source
+  Dijkstra from the house footprints (LOT_MAX 45 m) shares the rest out; edges between owners are
+  chained, Douglas-Peucker'd and returned as `scene.fences` [{k side|street|edge, p, o [ids]}]; each
+  plot's `b` is cut to the depth its lot mostly fills (then `_no_overlaps` again). SCENE_V 4. Card:
+  `gardenFences()` draws them in 3 m depth-sorted pieces (street ones in front of a house left to
+  plotBits' front hedge with gaps; open/low between front gardens; fence/hedge behind); plotBits'
+  rectangle fences only for old scenes (`lots` false). `pv(r)` for pavement widths, verge only if
+  pv >= 2.5. The sample's end-of-row houses touching the cross streets can't be moved (they'd go into
+  the next house) and are left.
 - Ideas not done: road names, building colours from OSM tags, live overlays (e.g. the car, the
   battery).
 

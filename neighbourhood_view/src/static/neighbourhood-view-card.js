@@ -38,7 +38,8 @@
     ['#3f8f3d', '#2b6b2b', '#62b058'], ['#8cc04e', '#6a9a37', '#b5dc7c']];
   const ELEV = 35 * Math.PI / 180;  // how high above the ground it's looked at from
   const SE = Math.sin(ELEV), CE = Math.cos(ELEV);
-  const PAVE = 2.8;  // the pavement each side of a street, m
+  const PAVE = 2.8;  // the pavement each side of a street, m (narrower on a street with houses close: its "pv")
+  const pv = (r) => r.pv || PAVE;
 
   function view(rot) {
     const a = (30 + 90 * ((rot || 0) % 4)) * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
@@ -630,6 +631,40 @@
     return poly([p0, p1, q1, q0], col) + `<line x1="${f(q0[0])}" y1="${f(q0[1])}" x2="${f(q1[0])}" y2="${f(q1[1])}" stroke="${snowy('#86653f', 0.85)}" stroke-width=".14"/>`;
   }
 
+  // The gardens' boundaries (scene.fences: each house's whole plot, worked out by the add-on):
+  // between back gardens a fence (some a hedge), a fence or wall where one backs onto a street,
+  // footpath, park..., and between front gardens a low hedge or wall or nothing (many are open).
+  // Along the pavement in front of a house it's left to the garden's own (with gaps for its path
+  // and drive). In short pieces, each drawn in its place among the buildings, as plotBits' are.
+  function gardenFences(V, scene, on, inBuilding) {
+    const out = [], plots = new Map((scene.plots || []).map((P) => [P.id, P]));
+    // (how far in front of (-) or behind (+) its house's front a point in a garden is)
+    const depth = (id, x, y) => { const P = plots.get(id); return P ? (x - P.c[0]) * P.n[0] + (y - P.c[1]) * P.n[1] + P.hf : 1; };
+    for (const F of scene.fences || []) {
+      const [a, b] = F.o, h = rnd(a || 0, b || 0, 340);
+      for (let i = 0; i < F.p.length - 1; i++) {
+        const A = F.p[i], B = F.p[i + 1], L = Math.hypot(B[0] - A[0], B[1] - A[1]), n = Math.max(1, Math.ceil(L / 3));
+        for (let k = 0; k < n; k++) {
+          const e = 0.04 / Math.max(L, 0.1), t0 = Math.max(0, k / n - e), t1 = Math.min(1, (k + 1) / n + e);
+          const p = [A[0] + (B[0] - A[0]) * t0, A[1] + (B[1] - A[1]) * t0], q = [A[0] + (B[0] - A[0]) * t1, A[1] + (B[1] - A[1]) * t1];
+          const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+          if (!on(p[0], p[1]) || !on(q[0], q[1]) || inBuilding(mx, my)) continue;
+          const front = F.o.every((id) => depth(id, mx, my) < 0.3);
+          let kind;
+          if (F.k === 'street') {
+            if (front) continue;  // (the garden's own, along the pavement)
+            kind = h < 0.3 ? 'hedge' : h < 0.55 ? 'wall' : 'fence';
+          } else if (front) {
+            if (h < 0.45) continue;  // (open fronts)
+            kind = h < 0.75 ? 'wall' : 'hedge';
+          } else kind = F.k === 'side' && h < 0.22 ? 'hedge' : 'fence';
+          out.push([V.d(mx, my), boundary(V, p, q, kind)]);
+        }
+      }
+    }
+    return out;
+  }
+
   // A bed of flowers (bare soil in winter) on the quad q (world points)
   function flowerBed(V, q, seed) {
     let s = poly(q.map(([x, y]) => V.p(x, y, 0)), snowy('#8a6a4a', 0.85));
@@ -738,7 +773,7 @@
    * (some with a car, or a garage), a hedge or low wall; back: fences or hedges, a patio or a
    * conservatory, a shed, a trampoline, a washing line, bushes, flower beds. Your house: your car on
    * the drive (glowing while charging) and the heat pump. */
-  function plotBits(V, P, on, isHome, inBuilding = () => false) {
+  function plotBits(V, P, on, isHome, inBuilding = () => false, lots = false) {
     const ground = [], things = [], id = P.id || 0, r = (k) => rnd(id, k, 300), energy = isHome ? (CTX.energy || {}) : {};
     // (kept to the island, and out of other buildings: e.g. a garden running into the house next door)
     const thing = (x, y, svg) => { if (svg && on(x, y) && !inBuilding(x, y)) things.push([V.d(x, y), svg]); };
@@ -799,11 +834,11 @@
     // the back
     if (bk >= 2) {
       const kind = r(9) < 0.25 ? 'hedge' : 'fence', sd2 = r(11) < 0.5 ? 1 : -1;
-      for (const l of [w, -w]) {
-        const a = PW(P, hb, l), b = PW(P, hb + bk, l), m = PW(P, hb + bk / 2, l);
-        run(a, b, kind);
+      if (!lots) {
+        // (an older map, without the gardens' own boundaries: a rectangle behind the house)
+        for (const l of [w, -w]) run(PW(P, hb, l), PW(P, hb + bk, l), kind);
+        run(PW(P, hb + bk, -w), PW(P, hb + bk, w), kind);
       }
-      run(PW(P, hb + bk, -w), PW(P, hb + bk, w), kind);
       const cons = !isHome && bk >= 6 && r(12) < 0.1, pd = Math.min(3, bk * 0.35);
       if (cons) {
         const [x, y] = PW(P, hb + 1.5, 0);
@@ -1100,10 +1135,10 @@
     for (const r of paths) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.path}" stroke-width="${f(r.w)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     // streets: a pavement each side (with its kerb), the road, its markings
     const streets = cars.filter((r) => r.k !== 'service');
-    for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.kerb}" stroke-width="${f(r.w + PAVE * 2 + 0.6)}" stroke-linecap="round" stroke-linejoin="round"/>`);
-    for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.pave}" stroke-width="${f(r.w + PAVE * 2)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.kerb}" stroke-width="${f(r.w + pv(r) * 2 + 0.6)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.pave}" stroke-width="${f(r.w + pv(r) * 2)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     // (a grass verge between the pavement and the kerb on residential streets)
-    for (const r of streets.filter((r) => r.k === 'minor')) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${snowy(C.verge, 0.85)}" stroke-width="${f(r.w + 2.4)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of streets.filter((r) => r.k === 'minor' && pv(r) >= 2.5)) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${snowy(C.verge, 0.85)}" stroke-width="${f(r.w + 2.4)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of cars) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${mix(C.road, '#ffffff', 0.35)}" stroke-width="${f(r.w + 0.5)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of cars) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.road}" stroke-width="${f(r.w)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.roadLine}" stroke-width="${r.k === 'major' ? '.45' : '.3'}" stroke-dasharray="${r.k === 'major' ? '4 3' : '2.5 4'}" opacity=".85"/>`);
@@ -1167,7 +1202,7 @@
           const ux = (bx - ax) / L, uy = (by - ay) / L;
           while (acc < L) {
             const k = rnd(ax + acc, ay, 221), side = k < 0.5 ? 1 : -1;
-            const off = r.k === 'path' ? (rnd(ax, acc, 222) - 0.5) * r.w * 0.5 : r.w / 2 - 0.9 + (k > 0.8 ? PAVE * 0.9 : 0);
+            const off = r.k === 'path' ? (rnd(ax, acc, 222) - 0.5) * r.w * 0.5 : r.w / 2 - 0.9 + (k > 0.8 ? pv(r) * 0.9 : 0);
             const x = ax + ux * acc - uy * off * side, y = ay + uy * acc + ux * off * side;
             if (insideRing(x, y, edge)) {
               const L2 = 1.2 + rnd(x, y, 223) * 2.2, W2 = L2 * (0.45 + rnd(x, y, 224) * 0.25), ang = Math.atan2(uy, ux);
@@ -1221,10 +1256,11 @@
     const plotThings = [];
     for (const P of scene.plots || []) {
       if (!on(P.c[0], P.c[1])) continue;
-      const bits = plotBits(V, P, on, !!opts.isHome && P.id === home.id, inBuilding);
+      const bits = plotBits(V, P, on, !!opts.isHome && P.id === home.id, inBuilding, !!scene.fences);
       out.push(bits.ground.join(''));
       plotThings.push(...bits.things);
     }
+    if (scene.fences) plotThings.push(...gardenFences(V, scene, on, inBuilding));
     // schools' playgrounds
     for (const b of scene.buildings || []) if (b.lm === 'school' && b.p.every(([x, y]) => on(x, y))) out.push(playground(V, b));
     // the cars parked at the kerbs, on the road, so the traffic drives past them: those on the far
@@ -1274,7 +1310,7 @@
       const walks = streets.filter((r) => plen(r.p) >= 30), nPeople = Math.min(walks.length * 3, CTX.night ? 4 : CTX.wet ? 6 : 14);
       for (let i = 0; i < nPeople && walks.length; i++) {
         const r = walks[Math.floor(rnd(i, H, 320) * walks.length)], side = rnd(i, H, 321) < 0.5 ? 1 : -1;
-        const p = offsetLine(r.p, side * (r.w / 2 + PAVE * 0.5)), L = plen(p), s0 = rnd(i, H, 322) * Math.max(0, L - 30);
+        const p = offsetLine(r.p, side * (r.w / 2 + pv(r) * 0.5)), L = plen(p), s0 = rnd(i, H, 322) * Math.max(0, L - 30);
         const bit = stretch(p, s0, Math.min(L, s0 + 30));
         if (bit.length < 2) continue;
         const walk = plen(bit) / 1.3;
@@ -1309,7 +1345,7 @@
       for (let i = 0; i < r.p.length - 1; i++) {
         const [ax, ay] = r.p[i], [bx, by] = r.p[i + 1], L = Math.hypot(bx - ax, by - ay);
         if (!L) continue;
-        const ux = (bx - ax) / L, uy = (by - ay) / L, off = r.w / 2 + PAVE * 0.8;
+        const ux = (bx - ax) / L, uy = (by - ay) / L, off = r.w / 2 + pv(r) * 0.8;
         while (acc < L) {
           const x = ax + ux * acc - uy * off * side, y = ay + uy * acc + ux * off * side;
           if (on(x, y) && !lamps.some(([u, v]) => Math.hypot(u - x, v - y) < 14)) lamps.push([x, y]);

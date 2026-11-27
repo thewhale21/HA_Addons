@@ -10,9 +10,10 @@ The scene, in metres from your home (x east, y north), clipped to a square HALF 
     {"v": 1, "half": 250, "home": {"x", "y", "id", "found"},
      "buildings": [{"id", "k" (kind), "p" [[x, y], ...] (anticlockwise), "h" (wall height),
                     "r": "flat" | "gable", "rect" (gable: [[x, y]] x4, the long side first), "rh" (roof height)}],
-     "roads": [{"k", "w" (width), "p"}], "rails": [{"k", "w", "p"}], "areas": [{"k", "p"}],
+     "roads": [{"k", "w" (width), "p", "pv" (its pavements' width, where narrowed: see _make_room)}], "rails": [{"k", "w", "p"}], "areas": [{"k", "p"}],
      "water": [{"w", "p"}], "trees": [[x, y, size]], "cars": [[x, y, angle, colour]],
      "plots": [{"id", "c", "u", "n", "hl", "w", "hf", "hb", "f", "b"}] (houses' gardens: see _plots),
+     "fences": [{"k": "side" | "street" | "edge", "p", "o" [house ids]}] (the gardens' boundaries: see _lots),
      "poi": [[x, y, kind]] (bus_stop, bench, post_box, bin: OpenStreetMap's)}
 
 A building may also have "lm": "church" | "school" | "pub" (a landmark, drawn as one).
@@ -24,7 +25,7 @@ import math
 import re
 from typing import Optional
 
-SCENE_V = 3  # 2: gardens (plots), landmarks (lm), street furniture (poi); 3: gardens not overlapping, cars at the kerb
+SCENE_V = 4  # 4: whole gardens (fences: the plots shared out, as on a satellite photo); 2: gardens (plots), landmarks (lm), street furniture (poi); 3: gardens not overlapping, cars at the kerb
 HALF = 150.0  # metres each way from your home (Settings › Address › Map size): a 300 m square by default
 EARTH_R = 6371008.8
 
@@ -121,6 +122,7 @@ def inside(pt: tuple, poly: list) -> bool:
 
 def clip_polygon(poly: list, half: float) -> list:
     """The polygon clipped to the square -half..half (Sutherland–Hodgman); [] if none of it's in it."""
+
     def clip(pts, inside_fn, cross):
         out = []
         for i, cur in enumerate(pts):
@@ -251,6 +253,7 @@ def address_query(lat: float, lon: float, number: str, radius: int = 400) -> str
 
 def _rings(el: dict, lat0: float, lon0: float) -> list:
     """The outer rings of a way or multipolygon relation, in metres."""
+
     def pts(geom):
         return [project(g["lat"], g["lon"], lat0, lon0) for g in geom or [] if g]
 
@@ -445,7 +448,7 @@ def _street_trees(roads: list, buildings: list, half: float) -> list:
     for r in roads:
         if r["k"] != "minor":
             continue
-        off = r["w"] / 2 + 2.2  # (in the pavement, by its outer edge)
+        off = r["w"] / 2 + r.get("pv", PAVE) - 0.6  # (in the pavement, by its outer edge)
         for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
             ln = math.hypot(x2 - x1, y2 - y1)
             if ln < 1:
@@ -467,6 +470,137 @@ def _street_trees(roads: list, buildings: list, half: float) -> list:
 
 
 FACE_STREET_M = 40.0  # a house's ridge runs along the street within this distance of it
+
+
+PAVE = 2.8  # m: the pavement each side of a street (the page draws them this wide unless a street says "pv")
+PAVE_MIN = 1.6  # ...narrowed to no less than this where the houses are close
+NARROW_MIN = 0.8  # ...and the road itself to no less than this much of its usual width
+NUDGE_MAX = 4.0  # m: a house still on the pavement moved back off it, by up to this
+CLEAR = 0.3  # m: left between a house and the pavement or a footpath
+
+
+def _seg_dist(px: float, py: float, x1: float, y1: float, x2: float, y2: float) -> tuple:
+    """(distance, nearest x, nearest y) from (px, py) to the segment."""
+    vx, vy = x2 - x1, y2 - y1
+    L = vx * vx + vy * vy
+    t = 0.0 if L < 1e-9 else max(0.0, min(1.0, ((px - x1) * vx + (py - y1) * vy) / L))
+    qx, qy = x1 + vx * t, y1 + vy * t
+    return math.hypot(px - qx, py - qy), qx, qy
+
+
+def _bdist(poly: list, line: list) -> tuple:
+    """How near a building comes to a line: (distance, the nearest point on the line, on the
+    building); the distance is 0 where the line goes into it."""
+    best = (math.inf, None, None)
+    for (x1, y1), (x2, y2) in zip(line, line[1:]):
+        for px, py in poly:
+            d, qx, qy = _seg_dist(px, py, x1, y1, x2, y2)
+            if d < best[0]:
+                best = (d, (qx, qy), (px, py))
+        n = max(1, int(math.hypot(x2 - x1, y2 - y1)))
+        for k in range(n + 1):
+            sx, sy = x1 + (x2 - x1) * k / n, y1 + (y2 - y1) * k / n
+            if inside((sx, sy), poly):
+                return (0.0, (sx, sy), (sx, sy))
+            m = len(poly)
+            for i in range(m):
+                d, qx, qy = _seg_dist(sx, sy, *poly[i], *poly[(i + 1) % m])
+                if d < best[0]:
+                    best = (d, (sx, sy), (qx, qy))
+    return best
+
+
+def _make_room(buildings: list, roads: list) -> list:
+    """Keeps the streets (with their pavements) and footpaths off the houses, as the map's widths
+    are a little generous for some streets: a street with houses close is narrowed (its pavements
+    first, "pv", then the road, a little); a house still on it is moved back off it (by up to
+    NUDGE_MAX); and a footpath's bits that go through a building (under it, or mapped a little off)
+    are left out. Returns the roads (footpaths cut up)."""
+
+    def box(pts, pad=0.0):
+        xs, ys = [q[0] for q in pts], [q[1] for q in pts]
+        return (min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad)
+
+    def meets(a, b):
+        return a[0] <= b[2] and b[0] <= a[2] and a[1] <= b[3] and b[1] <= a[3]
+
+    bboxes = [box(b["p"]) for b in buildings]
+    streets = [r for r in roads if r["k"] != "path"]
+    big = [abs(area(b["p"])) > 400 or b.get("k") not in ("house", "small", "flats") for b in buildings]
+    # the streets: pavements, then the road, narrowed to clear the buildings by them
+    for r in streets:
+        rb = box(r["p"], r["w"] / 2 + PAVE + 1)
+        # (not counting one it goes through or right up to: narrowing it wouldn't help)
+        ds = [_bdist(b["p"], r["p"])[0] for i, b in enumerate(buildings) if meets(bboxes[i], rb)]
+        near = min([d for d in ds if d > r["w"] * NARROW_MIN / 2 + 0.5] or [math.inf])
+        need = near - CLEAR - r["w"] / 2
+        if need >= PAVE:
+            continue
+        pv = max(PAVE_MIN, need)
+        w = r["w"]
+        if need < PAVE_MIN:
+            w = max(r["w"] * NARROW_MIN, 2 * (near - CLEAR - PAVE_MIN))
+        r["pv"], r["w"] = round(pv, 1), round(w, 1)
+    # the houses still on one: moved back, away from it
+    for i, b in enumerate(buildings):
+        if big[i]:
+            continue
+        for _ in range(3):
+            worst = None
+            for r in streets:
+                reach = r["w"] / 2 + r.get("pv", PAVE) + CLEAR
+                if not meets(bboxes[i], box(r["p"], reach)):
+                    continue
+                d, q, _p = _bdist(b["p"], r["p"])
+                if d < reach and (worst is None or reach - d > worst[0]):
+                    worst = (reach - d, q, r)
+            if worst is None:
+                break
+            by, q, r = worst
+            cx, cy = centroid(b["p"])
+            dx, dy = cx - q[0], cy - q[1]
+            L = math.hypot(dx, dy)
+            if L < 1.0 or by > NUDGE_MAX:
+                break  # (a street through it, or too far: left)
+            mx, my = dx / L * (by + 0.1), dy / L * (by + 0.1)
+            moved = [[round(x + mx, 1), round(y + my, 1)] for x, y in b["p"]]
+            mb = box(moved)
+            if any(j != i and meets(mb, bboxes[j]) and (any(inside(v, o["p"]) for v in moved) or any(inside(v, moved) for v in o["p"]))
+                   for j, o in enumerate(buildings)):
+                break  # (it'd go into the next house)
+            b["p"] = moved
+            if b.get("rect"):
+                b["rect"] = [[round(x + mx, 1), round(y + my, 1)] for x, y in b["rect"]]
+            bboxes[i] = mb
+    # footpaths: not through buildings
+    out = []
+    for r in roads:
+        if r["k"] != "path":
+            out.append(r)
+            continue
+        rb = box(r["p"], 2)
+        polys = [b["p"] for i, b in enumerate(buildings) if meets(bboxes[i], rb)]
+        if not polys:
+            out.append(r)
+            continue
+        run: list = []
+
+        def keep(run):
+            if len(run) >= 2 and sum(math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip(run, run[1:])) >= 3:
+                out.append(dict(r, p=_r(run)))
+        for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
+            n = max(1, int(math.hypot(x2 - x1, y2 - y1) / 0.5))
+            for k in range(n + (1 if (x2, y2) == tuple(r["p"][-1]) else 0)):
+                sx, sy = x1 + (x2 - x1) * k / n, y1 + (y2 - y1) * k / n
+                if any(inside((sx, sy), q) or min(_seg_dist(sx, sy, *q[j], *q[(j + 1) % len(q)])[0] for j in range(len(q))) < r["w"] / 2 for q in polys):
+                    keep(run)
+                    run = []
+                elif not run or k == 0 or k % 4 == 0:
+                    run.append((sx, sy))
+            if run and run[-1] != (x2, y2) and not any(inside((x2, y2), q) for q in polys):
+                run.append((x2, y2))
+        keep(run)
+    return out
 
 
 def _face_streets(buildings: list, roads: list) -> None:
@@ -571,7 +705,7 @@ def _plots(buildings: list, roads: list, half: float) -> list:
         for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
             for gx in range(int(math.floor(min(x1, x2) / cell)) - 1, int(math.floor(max(x1, x2) / cell)) + 2):
                 for gy in range(int(math.floor(min(y1, y2) / cell)) - 1, int(math.floor(max(y1, y2) / cell)) + 2):
-                    rgrid.setdefault((gx, gy), []).append((x1, y1, x2, y2, r["w"]))
+                    rgrid.setdefault((gx, gy), []).append((x1, y1, x2, y2, r["w"] + 2 * (r.get("pv", PAVE) - PAVE)))
     bgrid: dict = {}
     for i, b in enumerate(buildings):
         cx, cy = centroid(b["p"])
@@ -623,6 +757,7 @@ def _plots(buildings: list, roads: list, half: float) -> list:
         ss = [(px - cx) * nx + (py - cy) * ny for px, py in corners]
         hl, hf, hb = max(abs(v) for v in ls), -min(ss), max(ss)
         front = d - hf - (w / 2 + 2.8)
+
         # what's behind: the nearest building or street across the garden's width
         def first_behind(p, q, width):
             """How far behind the house (s past hb) the segment p→q first comes, within |l| <= width; None if not."""
@@ -679,6 +814,191 @@ def _plots(buildings: list, roads: list, half: float) -> list:
                     "b": round(max(0.0, back), 1)})
     _no_overlaps(out)
     return out
+
+
+LOT_MAX = 45.0  # m: no garden reaches further than this from its house
+LOT_CELLS = 300  # the grid the gardens are worked out on is about this many cells across
+
+
+def _lots(buildings: list, roads: list, areas: list, plots: list, half: float) -> list:
+    """Every house's whole plot, as on a satellite photo: the ground round the houses shared out to
+    the nearest house (walking round, not across, streets, footpaths, other buildings, parks, car
+    parks and water), up to LOT_MAX from it. So the back gardens of houses back to back meet half way,
+    those side by side half way between, and the block between streets is all gardens. Returns the
+    boundaries, simplified to straight runs: [{"k": "side" (two gardens) | "street" (a garden and a
+    street or footpath) | "edge" (anything else), "p": [[x, y], ...], "o": [house id, ...]}]; and fixes
+    each plot's back depth "b" and half width "w" to its garden's (for its shed, patio...)."""
+    import heapq
+
+    res = max(1.0, 2 * half / LOT_CELLS)
+    n = int(math.ceil(2 * half / res))
+    ROAD, OTHER = -2, -3
+    own = [-1] * (n * n)
+
+    def cell(x, y):
+        i, j = int((x + half) / res), int((y + half) / res)
+        return (i, j) if 0 <= i < n and 0 <= j < n else None
+
+    def fill_poly(poly, value, only_free=False):
+        xs, ys = [p[0] for p in poly], [p[1] for p in poly]
+        i0, i1 = max(0, int((min(xs) + half) / res)), min(n - 1, int((max(xs) + half) / res))
+        j0, j1 = max(0, int((min(ys) + half) / res)), min(n - 1, int((max(ys) + half) / res))
+        for j in range(j0, j1 + 1):
+            for i in range(i0, i1 + 1):
+                if inside(((i + 0.5) * res - half, (j + 0.5) * res - half), poly) and (not only_free or own[j * n + i] == -1):
+                    own[j * n + i] = value
+
+    # what gardens don't go over: streets (with their pavements) and footpaths, parks, car parks,
+    # yards, water and pitches, and buildings other than houses and sheds
+    for a in areas:
+        if a["k"] in ("paved", "yard", "water", "pitch", "wood") or (a["k"] == "grass" and abs(area(a["p"])) > 2500):
+            fill_poly(a["p"], OTHER)
+    for r in roads:
+        pad = r["w"] / 2 + (r.get("pv", PAVE) if r["k"] != "path" else 0.4)
+        for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
+            L = math.hypot(x2 - x1, y2 - y1)
+            for k in range(int(L / (res / 2)) + 1):
+                cx, cy = x1 + (x2 - x1) * k / max(1, int(L / (res / 2))), y1 + (y2 - y1) * k / max(1, int(L / (res / 2)))
+                c = int(math.ceil(pad / res))
+                ci = cell(cx, cy)
+                if ci is None:
+                    continue
+                for dj in range(-c, c + 1):
+                    for di in range(-c, c + 1):
+                        i, j = ci[0] + di, ci[1] + dj
+                        if 0 <= i < n and 0 <= j < n and math.hypot((i + 0.5) * res - half - cx, (j + 0.5) * res - half - cy) <= pad:
+                            own[j * n + i] = ROAD
+    houses = [b for b in buildings if b.get("k") == "house"]
+    for b in buildings:
+        if b.get("k") not in ("house", "small"):
+            fill_poly(b["p"], OTHER)
+    # the houses, then out from each, the nearest taking each bit of ground
+    dist = [math.inf] * (n * n)
+    heap = []
+    for hi, b in enumerate(houses):
+        xs, ys = [p[0] for p in b["p"]], [p[1] for p in b["p"]]
+        i0, i1 = max(0, int((min(xs) + half) / res)), min(n - 1, int((max(xs) + half) / res))
+        j0, j1 = max(0, int((min(ys) + half) / res)), min(n - 1, int((max(ys) + half) / res))
+        for j in range(j0, j1 + 1):
+            for i in range(i0, i1 + 1):
+                k = j * n + i
+                if own[k] != ROAD and inside(((i + 0.5) * res - half, (j + 0.5) * res - half), b["p"]):
+                    own[k], dist[k] = hi, 0.0
+                    heap.append((0.0, k))
+    heapq.heapify(heap)
+    steps = [(1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0), (1, 1, 1.414), (1, -1, 1.414), (-1, 1, 1.414), (-1, -1, 1.414)]
+    limit = LOT_MAX / res
+    while heap:
+        d, k = heapq.heappop(heap)
+        if d > dist[k]:
+            continue
+        i, j = k % n, k // n
+        for di, dj, c in steps:
+            ii, jj = i + di, j + dj
+            if not (0 <= ii < n and 0 <= jj < n):
+                continue
+            kk = jj * n + ii
+            nd = d + c
+            if nd > limit or own[kk] in (ROAD, OTHER) or nd >= dist[kk]:
+                continue
+            if own[kk] >= 0 and dist[kk] == 0.0:
+                continue  # (another house)
+            dist[kk], own[kk] = nd, own[k]
+            heapq.heappush(heap, (nd, kk))
+    # the boundaries: each grid edge with a garden on one side and something else on the other
+    edges: dict = {}  # (vertex) -> [(other vertex, key)]
+
+    def add(v1, v2, key):
+        edges.setdefault(v1, []).append((v2, key))
+        edges.setdefault(v2, []).append((v1, key))
+
+    def kind_of(a, b):
+        if a >= 0 and b >= 0:
+            return ("side", min(a, b), max(a, b))
+        g, o = (a, b) if a >= 0 else (b, a)
+        return ("street" if o == ROAD else "edge", g, -1)
+    for j in range(n):
+        for i in range(n):
+            a = own[j * n + i]
+            for di, dj in ((1, 0), (0, 1)):
+                ii, jj = i + di, j + dj
+                b = own[jj * n + ii] if ii < n and jj < n else -1
+                if a == b or (a < 0 and b < 0):
+                    continue
+                if ii >= n or jj >= n:
+                    continue
+                key = kind_of(a, b)
+                if di:  # (the edge between (i, j) and (i+1, j): vertical, at x = i+1)
+                    add((i + 1, j), (i + 1, j + 1), key)
+                else:
+                    add((i, j + 1), (i + 1, j + 1), key)
+    # chained into lines (each of one kind between the same gardens), then straightened
+    used = set()
+    out = []
+
+    def walk(start, nxt, key):
+        line = [start, nxt]
+        used.add((min(start, nxt), max(start, nxt), key))
+        cur = nxt
+        while True:
+            more = [(v, k) for v, k in edges.get(cur, ()) if k == key and (min(cur, v), max(cur, v), key) not in used]
+            if len(more) != 1 or len([1 for _, k in edges.get(cur, ()) if k == key]) > 2:
+                break
+            v = more[0][0]
+            used.add((min(cur, v), max(cur, v), key))
+            line.append(v)
+            cur = v
+        return line
+    for v, lst in list(edges.items()):
+        for w2, key in lst:
+            if (min(v, w2), max(v, w2), key) in used:
+                continue
+            # (from an end of its line, where there's one)
+            line = walk(v, w2, key)
+            pts = _simplify([((x * res) - half, (y * res) - half) for x, y in line], res * 0.9)
+            if len(pts) >= 2 and sum(math.hypot(q[0] - p[0], q[1] - p[1]) for p, q in zip(pts, pts[1:])) >= res * 1.5:
+                ids = [houses[key[1]]["id"]] + ([houses[key[2]]["id"]] if key[2] >= 0 else [])
+                out.append({"k": key[0], "p": _r(pts), "o": ids})
+    # each plot's back garden: as deep as its garden mostly fills the width behind the house
+    by_house = {b["id"]: hi for hi, b in enumerate(houses)}
+    mine: dict = {}
+    for k in range(n * n):
+        if own[k] >= 0 and dist[k] > 0.0:
+            mine.setdefault(own[k], []).append(k)
+    for p in plots:
+        hi = by_house.get(p["id"])
+        if hi is None:
+            continue
+        (cx, cy), (ux, uy), (nx, ny) = p["c"], p["u"], p["n"]
+        span = max(1.0, p["w"] - 0.5)
+        rows: dict = {}
+        for k in mine.get(hi, ()):
+            x, y = (k % n + 0.5) * res - half, (k // n + 0.5) * res - half
+            s = (x - cx) * nx + (y - cy) * ny - p["hb"]
+            if s > 0 and abs((x - cx) * ux + (y - cy) * uy) <= span:
+                rows[int(s / res)] = rows.get(int(s / res), 0) + 1
+        full = 2 * span / res
+        r = 0
+        while rows.get(r, 0) >= 0.6 * full:
+            r += 1
+        p["b"] = round(min(p["b"], r * res), 1) if r else 0.0
+    return out
+
+
+def _simplify(pts: list, tol: float) -> list:
+    """A line with the points it doesn't need left out (Douglas–Peucker)."""
+    if len(pts) < 3:
+        return pts
+    (x1, y1), (x2, y2) = pts[0], pts[-1]
+    L = math.hypot(x2 - x1, y2 - y1) or 1e-9
+    worst, at = 0.0, 0
+    for i, (x, y) in enumerate(pts[1:-1], 1):
+        d = abs((x2 - x1) * (y1 - y) - (x1 - x) * (y2 - y1)) / L
+        if d > worst:
+            worst, at = d, i
+    if worst <= tol:
+        return [pts[0], pts[-1]]
+    return _simplify(pts[:at + 1], tol)[:-1] + _simplify(pts[at:], tol)
 
 
 def _back_rect(p: dict, shrink: float = 0.0) -> list:
@@ -815,6 +1135,7 @@ def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = 
                         tree_areas.append((kind, clipped))
     # (big areas first, so a park's pond or pitch is drawn over it)
     areas.sort(key=lambda a: -a.pop("_a"))
+    roads = _make_room(buildings, roads)
     foot = [b["p"] for b in buildings]
     for kind, poly in tree_areas:
         trees += _scatter(poly, TREE_SPACING[kind], foot)
@@ -833,9 +1154,11 @@ def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = 
                 break
     home = pick_home(buildings, lat0, lon0, home_pt, home_id)
     plots = _plots(buildings, roads, half)
+    fences = _lots(buildings, roads, areas, plots, half)
+    _no_overlaps(plots)
     # (gardens' trees: off the patios and out of the sheds' corner; kept to the lawn)
     return {"v": SCENE_V, "half": half, "home": home, "buildings": buildings, "roads": roads, "rails": rails,
-            "areas": areas, "water": water, "trees": trees[:4000], "cars": cars, "plots": plots, "poi": poi[:400]}
+            "areas": areas, "water": water, "trees": trees[:4000], "cars": cars, "plots": plots, "fences": fences, "poi": poi[:400]}
 
 
 def pick_home(buildings: list, lat0: float, lon0: float, home_pt: Optional[tuple], home_id: Optional[int]) -> dict:

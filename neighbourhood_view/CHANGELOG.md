@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.18.0 — Whole gardens, like the street really is
+
+- **Feature:** gardens fit together as they do on a satellite photo. The
+  ground round the houses is shared out between them (each bit to the
+  nearest house, going round streets, footpaths, other buildings, parks
+  and water), so back gardens run back to meet the next street's half
+  way, side fences sit half way between neighbours, and the blocks are all
+  gardens instead of rectangles with spare lawn between. Fences between
+  back gardens (some hedges), a fence, wall or hedge where one backs onto a
+  street or park, and low walls or hedges between some front gardens.
+- **Fix:** houses and gardens are no longer drawn on streets, pavements or
+  footpaths: a street with houses close has narrower pavements (and, if
+  need be, a slightly narrower road), a house still on one is moved back
+  off it, and a footpath running through a building is left out there.
+- **Change:** maps are made again (once) after updating, for the gardens.
 ## 0.17.1 — Hedges and fences in their place
 
 - **Fix:** garden hedges, walls and fences are no longer drawn off the
