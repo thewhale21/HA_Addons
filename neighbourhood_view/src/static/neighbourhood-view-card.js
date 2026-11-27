@@ -614,9 +614,20 @@
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
     if (L < 0.5) return '';
     const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2;
-    if (kind === 'hedge') return box(V, cx, cy, ang, L, 0.8, 0, 1.15, [snowy('#4f8f3a', 0.7), snowy('#3b6f2c', 0.7)], snowy('#5fa344', 0.85));
-    if (kind === 'wall') return box(V, cx, cy, ang, L, 0.3, 0, 0.7, ['#b5654a', '#8f4e3a'], snowy('#c9b9a5', 0.85));
-    return box(V, cx, cy, ang, L, 0.08, 0, 1.3, ['#b48d63', '#94704c'], snowy('#86653f', 0.85));
+    if (kind === 'hedge' || kind === 'wall') {
+      // (its side facing you and its top: no ends, so the pieces of a long one run on as one)
+      const W = kind === 'hedge' ? 0.4 : 0.15, Z = kind === 'hedge' ? 1.15 : 0.7, nx = -(b[1] - a[1]) / L * W, ny = (b[0] - a[0]) / L * W;
+      const [, aw] = V.n(-nx, -ny), s = aw < 0 ? -1 : 1;  // (the side whose outward way faces the viewer)
+      const fa = [a[0] + nx * s, a[1] + ny * s], fb = [b[0] + nx * s, b[1] + ny * s], ba = [a[0] - nx * s, a[1] - ny * s], bb = [b[0] - nx * s, b[1] - ny * s];
+      const cols = kind === 'hedge' ? [snowy('#4f8f3a', 0.7), snowy('#3b6f2c', 0.7), snowy('#5fa344', 0.85)] : ['#b5654a', '#8f4e3a', snowy('#c9b9a5', 0.85)];
+      const side = mix(cols[0], cols[1], shadeOf(V, nx * s, ny * s));
+      return poly([V.p(fa[0], fa[1], 0), V.p(fb[0], fb[1], 0), V.p(fb[0], fb[1], Z), V.p(fa[0], fa[1], Z)], side)
+        + poly([V.p(fa[0], fa[1], Z), V.p(fb[0], fb[1], Z), V.p(bb[0], bb[1], Z), V.p(ba[0], ba[1], Z)], cols[2]);
+    }
+    // (a thin fence: one panel, shaded by which way it faces, with a top rail)
+    const p0 = V.p(a[0], a[1], 0), p1 = V.p(b[0], b[1], 0), q1 = V.p(b[0], b[1], 1.3), q0 = V.p(a[0], a[1], 1.3);
+    const col = mix('#b48d63', '#94704c', shadeOf(V, b[1] - a[1], -(b[0] - a[0])));
+    return poly([p0, p1, q1, q0], col) + `<line x1="${f(q0[0])}" y1="${f(q0[1])}" x2="${f(q1[0])}" y2="${f(q1[1])}" stroke="${snowy('#86653f', 0.85)}" stroke-width=".14"/>`;
   }
 
   // A bed of flowers (bare soil in winter) on the quad q (world points)
@@ -727,9 +738,22 @@
    * (some with a car, or a garage), a hedge or low wall; back: fences or hedges, a patio or a
    * conservatory, a shed, a trampoline, a washing line, bushes, flower beds. Your house: your car on
    * the drive (glowing while charging) and the heat pump. */
-  function plotBits(V, P, on, isHome) {
+  function plotBits(V, P, on, isHome, inBuilding = () => false) {
     const ground = [], things = [], id = P.id || 0, r = (k) => rnd(id, k, 300), energy = isHome ? (CTX.energy || {}) : {};
-    const thing = (x, y, svg) => { if (svg && on(x, y)) things.push([V.d(x, y), svg]); };
+    // (kept to the island, and out of other buildings: e.g. a garden running into the house next door)
+    const thing = (x, y, svg) => { if (svg && on(x, y) && !inBuilding(x, y)) things.push([V.d(x, y), svg]); };
+    // A fence, wall or hedge in short pieces, each drawn in its place among the buildings (in front of
+    // one, behind another), and none off the island's edge or through a building
+    const run = (a, b, kind) => {
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L / 4));
+      for (let i = 0; i < n; i++) {
+        const t0 = i / n, t1 = (i + 1) / n, e = 0.04 / Math.max(L, 0.1);
+        const p = [a[0] + (b[0] - a[0]) * Math.max(0, t0 - e), a[1] + (b[1] - a[1]) * Math.max(0, t0 - e)];
+        const q = [a[0] + (b[0] - a[0]) * Math.min(1, t1 + e), a[1] + (b[1] - a[1]) * Math.min(1, t1 + e)];
+        const m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+        if (on(p[0], p[1]) && on(q[0], q[1])) thing(m[0], m[1], boundary(V, p, q, kind));
+      }
+    };
     const angU = Math.atan2(P.u[1], P.u[0]), angN = Math.atan2(P.n[1], P.n[0]);
     const {hl, hf, hb} = P, fr = P.f || 0, bk = P.b || 0, w = Math.max(P.w || hl + 1, hl);
     const sd = r(2) < 0.5 ? 1 : -1;
@@ -759,7 +783,7 @@
       const kind = r(7) < 0.6 ? 'hedge' : 'wall', s = -hf - fr + 0.4, gaps = [[pl - 0.8, pl + 0.8]].concat(drive ? [[dl - 1.7, dl + 1.7]] : []);
       let l0 = -w;
       for (const [g0, g1] of gaps.sort((a, b) => a[0] - b[0]).concat([[w, w]])) {
-        if (g0 - l0 > 0.6) { const a = PW(P, s, l0), b = PW(P, s, g0), m = PW(P, s, (l0 + g0) / 2); thing(m[0], m[1], boundary(V, a, b, kind)); }
+        if (g0 - l0 > 0.6) run(PW(P, s, l0), PW(P, s, g0), kind);
         l0 = Math.max(l0, g1);
       }
     }
@@ -777,9 +801,9 @@
       const kind = r(9) < 0.25 ? 'hedge' : 'fence', sd2 = r(11) < 0.5 ? 1 : -1;
       for (const l of [w, -w]) {
         const a = PW(P, hb, l), b = PW(P, hb + bk, l), m = PW(P, hb + bk / 2, l);
-        thing(m[0], m[1], boundary(V, a, b, kind));
+        run(a, b, kind);
       }
-      { const a = PW(P, hb + bk, -w), b = PW(P, hb + bk, w), m = PW(P, hb + bk, 0); thing(m[0], m[1], boundary(V, a, b, kind)); }
+      run(PW(P, hb + bk, -w), PW(P, hb + bk, w), kind);
       const cons = !isHome && bk >= 6 && r(12) < 0.1, pd = Math.min(3, bk * 0.35);
       if (cons) {
         const [x, y] = PW(P, hb + 1.5, 0);
@@ -1177,12 +1201,27 @@
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railTie}" stroke-width="${f(r.w * 0.55)}" stroke-dasharray=".6 1.4"/>`);
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railLine}" stroke-width=".35"/>`);
     }
-    const on = (x, y) => insideRing(x, y, edge);
+    // (on the island: well inside it for sure, else by its torn edge; the edge is never more than
+    // about 25 m in, and its corners are rounded 34 m)
+    const safe = H - 35, on = (x, y) => (Math.abs(x) < safe && Math.abs(y) < safe) || insideRing(x, y, edge);
+    // (whether a point's in a building: a grid of their boxes, then the footprint)
+    const bcell = 20, bgrid = new Map();
+    for (const b of scene.buildings || []) {
+      const xs = b.p.map((q) => q[0]), ys = b.p.map((q) => q[1]), box2 = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+      for (let gx = Math.floor(box2[0] / bcell); gx <= Math.floor(box2[2] / bcell); gx++)
+        for (let gy = Math.floor(box2[1] / bcell); gy <= Math.floor(box2[3] / bcell); gy++) {
+          const k = gx + ',' + gy;
+          if (!bgrid.has(k)) bgrid.set(k, []);
+          bgrid.get(k).push([box2, b.p]);
+        }
+    }
+    const inBuilding = (x, y) => (bgrid.get(Math.floor(x / bcell) + ',' + Math.floor(y / bcell)) || [])
+      .some(([bx, p]) => x >= bx[0] - 0.3 && x <= bx[2] + 0.3 && y >= bx[1] - 0.3 && y <= bx[3] + 0.3 && insideRing(x, y, p));
     // gardens: their paths, drives, patios and flower beds now; fences, sheds... with the buildings
     const plotThings = [];
     for (const P of scene.plots || []) {
       if (!on(P.c[0], P.c[1])) continue;
-      const bits = plotBits(V, P, on, !!opts.isHome && P.id === home.id);
+      const bits = plotBits(V, P, on, !!opts.isHome && P.id === home.id, inBuilding);
       out.push(bits.ground.join(''));
       plotThings.push(...bits.things);
     }

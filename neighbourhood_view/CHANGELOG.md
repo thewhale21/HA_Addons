@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.17.1 — Hedges and fences in their place
+
+- **Fix:** garden hedges, walls and fences are no longer drawn off the
+  island's edge, through other buildings, or over buildings in front of
+  them: each is drawn in short pieces, every one in its place among the
+  buildings, and a piece off the edge or in a building is left out. Sheds,
+  trampolines and the like aren't put in a building either.
+- **Improvement:** the map draws about twice as fast (quicker checks of
+  what's on the island; fences drawn as a single panel).
 ## 0.17.0 — Occasions you choose, snowmen and frost
 
 - **Feature:** Settings › **Occasions**: turn each decoration on or off and
