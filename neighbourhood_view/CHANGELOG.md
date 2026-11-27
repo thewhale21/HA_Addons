@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.24.1 — Nothing in front of your house
+
+- **Fix:** no tree within a few metres of your house (4 m plus its crown),
+  or in front of it from where the map's looked at (up to 16 m), and no
+  street lamp in front of it either, so nothing hides your house. It
+  follows the map round as you turn it.
 ## 0.24.0 — Brick houses, and fences kept off buildings
 
 - **Feature:** Settings › Your house › **Houses round here**: mostly brick

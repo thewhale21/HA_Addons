@@ -151,7 +151,9 @@ trees it has, drawn like a video game's town:
 - **Trees** in three kinds (round, pointed and bushes), in different
   greens and sizes: the ones OpenStreetMap has, more in woods and parks,
   some along residential streets, and some in gardens (never on a road,
-  pavement, building, car park or yard).
+  pavement, building, car park or yard). None within a few metres of your
+  house, or in front of it from where you're looking (nor a street lamp),
+  so nothing hides it.
 - **Cars** parked along the kerbs, in different colours (not near
   junctions).
 - **Gardens:** as on a satellite photo, the ground round the houses is

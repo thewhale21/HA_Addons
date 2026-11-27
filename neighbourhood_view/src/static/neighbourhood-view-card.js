@@ -1778,6 +1778,24 @@
     // (on the island: well inside it for sure, else by its torn edge; the edge is never more than
     // about 25 m in, and its corners are rounded 34 m)
     const safe = H - 35, on = (x, y) => (Math.abs(x) < safe && Math.abs(y) < safe) || insideRing(x, y, edge);
+    // (no tree right by your house, or in front of it from where it's looked at: it'd hide it)
+    const homeB = opts.isHome && home.id != null ? (scene.buildings || []).find((b) => b.id === home.id) : null;
+    const homeD = homeB ? V.d(...centroid(homeB.p)) : 0, homeX = homeB ? homeB.p.map(([x, y]) => V.p(x, y, 0)[0]) : [];
+    const byHome = (x, y, s = 1) => {
+      if (!homeB) return false;
+      if (insideRing(x, y, homeB.p)) return true;
+      let d = Infinity;
+      for (let i = 0; i < homeB.p.length; i++) {
+        const [ax, ay] = homeB.p[i], [bx, by] = homeB.p[(i + 1) % homeB.p.length], vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy || 1;
+        const tt = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / l2));
+        d = Math.min(d, Math.hypot(ax + vx * tt - x, ay + vy * tt - y));
+      }
+      const crown = 2.5 * (s || 1);
+      if (d < 4 + crown) return true;
+      // (nearer the viewer than the house, and across it on the screen)
+      const sx = V.p(x, y, 0)[0];
+      return V.d(x, y) < homeD && d < 16 + crown && sx > Math.min(...homeX) - crown && sx < Math.max(...homeX) + crown;
+    };
     // (whether a point's in a building: a grid of their boxes, then the footprint)
     const bcell = 20, bgrid = new Map();
     for (const b of scene.buildings || []) {
@@ -1899,7 +1917,7 @@
         sh.push(poly(hull(b.p.concat(b.p.map(([x, y]) => [x + sx * hh, y + sy * hh]))).map(([x, y]) => V.p(x, y, 0)), '#24401f'));
       }
       for (const [x, y, s] of scene.trees || []) {
-        if (!on(x, y)) continue;
+        if (!on(x, y) || byHome(x, y, s)) continue;
         // (a bare tree's is next to nothing, a thinning one's smaller)
         const round = rnd(x, y, 11) >= 0.36, turn = rnd(x, y, 13);
         if (round && CTX.season === 'winter' && turn < 0.4) continue;
@@ -2016,12 +2034,12 @@
       things.push([V.d(cx, cy), `<g${attrs}>${d.svg}</g>`]);
     }
     for (const t of scene.trees || []) {
-      if (!on(t[0], t[1])) continue;
+      if (!on(t[0], t[1]) || byHome(t[0], t[1], t[2])) continue;
       const s = tree(V, t);
       // (on a windy day, swaying, each in its own time)
       things.push([V.d(t[0], t[1]), CTX.windy && !split ? `<g class="nvsway" style="animation-delay:-${(rnd(t[0], t[1], 210) * 3).toFixed(2)}s">${s}</g>` : s]);
     }
-    for (const L of lamps) things.push([V.d(L[0], L[1]), lamp(V, L)]);
+    for (const L of lamps) if (!byHome(L[0], L[1], 0.2)) things.push([V.d(L[0], L[1]), lamp(V, L)]);
     for (const [x, y, cols] of allotSheds) if (on(x, y)) things.push([V.d(x, y), box(V, x, y, 0, 2, 1.6, 0, 2, cols, snowy('#5d4a3a', 0.85))]);
     things.push(...plotThings);
     // street furniture: OpenStreetMap's bus stops, benches, post boxes and bins, and more besides:
