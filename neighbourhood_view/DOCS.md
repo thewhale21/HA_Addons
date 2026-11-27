@@ -156,23 +156,32 @@ trees it has, drawn like a video game's town:
   sunset the sky and the map turn golden.
 - **Occasions** (Settings › **Occasions**: each on or off, and the days
   it's on, as a day and a month, either way round the new year):
+  Each house that joins in does it its own way, and some of the trees and
+  street lamps are decorated too.
   - **Christmas** (1 December to 6 January): lights along the eaves of many
-    houses and yours, twinkling at night; a decorated tree in their front
-    gardens (where there's room) and a big one on a corner of the junction
-    nearest the middle of the map, lit up at night.
+    houses and yours (coloured, warm white, icicles, or blue and white),
+    twinkling at night; in their front gardens a decorated tree with
+    presents under it, a wreath on the door, a light-up reindeer, candy
+    canes along the path; lights in some trees, garlands, bows and stars on
+    the street lamps, and a big tree on a corner of the junction nearest
+    the middle of the map.
   - **New Year** (31 December to 1 January) and **Bonfire Night** (4 to 6
     November): fireworks over the map at night.
   - **Valentine's Day** (14 February): hearts floating up from some houses
-    and yours.
-  - **Chinese New Year**: red lanterns along the eaves, glowing at night.
-    By the calendar (the day before New Year to the Lantern Festival, its
-    dates each year to 2040), or days you choose.
-  - **Easter**: coloured eggs hidden in the back gardens. By the calendar
-    (Good Friday to Easter Monday), or days you choose.
-  - **Halloween** (24 to 31 October): pumpkins by front doors, lit at night.
+    and yours, heart lights along some eaves, and hearts in some trees.
+  - **Chinese New Year**: red lanterns along the eaves, in some trees and
+    on the street lamps, glowing at night. By the calendar (the day before
+    New Year to the Lantern Festival, its dates each year to 2040), or days
+    you choose.
+  - **Easter**: coloured eggs hidden in the back gardens, a bunny in some,
+    and painted eggs hanging in some trees. By the calendar (Good Friday to
+    Easter Monday), or days you choose.
+  - **Halloween** (24 to 31 October): pumpkins by front doors (lit at
+    night), gravestones in some front gardens, orange and purple lights
+    along some eaves, ghosts swinging from some trees, bats on the lamps.
   - **Birthdays**: as many dates as you like, each with a name if you
-    want. On the day, balloons by your front door and a chip wishing them
-    happy birthday.
+    want. On the day, balloons and presents by your front door, bunting
+    across the front, and a chip wishing them happy birthday.
 - **Light:** by day buildings and trees cast soft shadows, and the maps
   float in a blue sky with clouds drifting behind (grey when it's wet). At
   night the sky's dark with stars, and street lamps along the bigger

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.21.0 — More decorations, easier to see
+
+- **Feature:** each house that joins in decorates its own way, and the
+  trees and street lamps join in:
+  - Christmas: eave lights in four styles (coloured, warm white, icicles,
+    blue and white); presents under the front-garden trees; wreaths on
+    doors; light-up reindeer; candy canes along paths; lights in some
+    trees; garlands, bows and stars on the street lamps.
+  - Halloween: bigger pumpkins in twos and threes, gravestones, orange and
+    purple eave lights, ghosts swinging from trees, bats on the lamps.
+  - Valentine's: heart lights along eaves, hearts in trees.
+  - Easter: bigger, striped eggs, bunnies, eggs hanging in trees.
+  - Chinese New Year: bigger lanterns, lanterns in trees and on lamps.
+  - Birthdays: presents and bunting by your front door too.
 ## 0.20.0 — Christmas you can see
 
 - **Feature:** at Christmas, a decorated tree (baubles and a star) in the

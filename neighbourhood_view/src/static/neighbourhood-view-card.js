@@ -313,25 +313,46 @@
       // red lanterns hanging from the eaves (lit at night)
       const n = Math.max(2, Math.min(4, Math.floor(len / 3)));
       for (let k = 1; k <= n; k++) {
-        const q = FP(k / (n + 1), 0, -0.2), cy = q[1] + 0.9;
+        const q = FP(k / (n + 1), 0, -0.2), cy = q[1] + 1.1;
         s += `<line x1="${f(q[0])}" y1="${f(q[1])}" x2="${f(q[0])}" y2="${f(cy - 0.45)}" stroke="#5d4037" stroke-width=".06"/>`
           + (CTX.night ? `<circle cx="${f(q[0])}" cy="${f(cy)}" r="1.1" fill="rgb(255,90,60)" opacity=".25"/>` : '')
-          + `<ellipse cx="${f(q[0])}" cy="${f(cy)}" rx=".42" ry=".48" fill="${CTX.night ? 'rgb(255,70,50)' : 'rgb(214,40,40)'}"/>`
+          + `<ellipse cx="${f(q[0])}" cy="${f(cy)}" rx=".62" ry=".7" fill="${CTX.night ? 'rgb(255,70,50)' : 'rgb(214,40,40)'}"/>`
           + `<rect x="${f(q[0] - 0.22)}" y="${f(cy - 0.54)}" width=".44" height=".1" fill="rgb(240,190,60)"/><rect x="${f(q[0] - 0.22)}" y="${f(cy + 0.44)}" width=".44" height=".1" fill="rgb(240,190,60)"/>`
           + `<line x1="${f(q[0])}" y1="${f(cy + 0.54)}" x2="${f(q[0])}" y2="${f(cy + 0.85)}" stroke="rgb(240,190,60)" stroke-width=".08"/>`;
       }
     }
-    if (CTX.occ && CTX.occ.xmas && (isHome || rnd(id, 35) < 0.4)) {
-      // lights along the eaves (twinkling at night)
-      const n = Math.max(3, Math.floor(len / 0.55));
-      // (the wire, swagged between the bulbs)
-      const w0 = FP(0, 0, -0.1), w1 = FP(1, 0, -0.1);
-      s += `<line x1="${f(w0[0])}" y1="${f(w0[1])}" x2="${f(w1[0])}" y2="${f(w1[1])}" stroke="#2e3b2f" stroke-width=".05" opacity=".7"/>`;
-      for (let k = 0; k <= n; k++) {
-        const q = FP(k / n, 0, -0.1), col = XMAS[(k + id) % 4];
-        s += `<circle cx="${f(q[0])}" cy="${f(q[1])}" r="${CTX.night ? '.26' : '.22'}" fill="${col}"${CTX.night && k % 3 === 0 ? `><animate attributeName="opacity" values="1;.25;1" dur="${(1 + rnd(id, k, 36)).toFixed(1)}s" repeatCount="indefinite"/></circle>` : '/>'}`;
+    // lights along the eaves: Christmas (each house its own: colours, warm white, icicles, blue
+    // and white), Halloween (orange and purple) and Valentine's (pink and red hearts)
+    const o = CTX.occ || {};
+    const style = o.xmas && (isHome || rnd(id, 35) < 0.4) ? ['multi', 'warm', 'icicle', 'blue'][Math.floor(rnd(id, 38) * 4)]
+      : o.halloween && (isHome || rnd(id, 39) < 0.3) ? 'spooky' : o.valentines && (isHome || rnd(id, 39) < 0.22) ? 'love' : null;
+    if (style) s += eaveLights(FP, len, id, style);
+    return s;
+  }
+
+  const EAVE = {warm: ['rgb(255,226,150)'], icicle: ['rgb(235,245,255)'], blue: ['rgb(90,160,255)', 'rgb(235,245,255)'],
+    spooky: ['rgb(255,140,30)', 'rgb(170,90,230)'], love: ['rgb(255,80,140)', 'rgb(230,40,60)', 'rgb(255,170,200)']};
+  function eaveLights(FP, len, id, style) {
+    const cols = style === 'multi' ? XMAS : EAVE[style], n = Math.max(3, Math.floor(len / 0.55)), night = CTX.night;
+    const w0 = FP(0, 0, -0.1), w1 = FP(1, 0, -0.1);
+    let s = `<line x1="${f(w0[0])}" y1="${f(w0[1])}" x2="${f(w1[0])}" y2="${f(w1[1])}" stroke="#2e3b2f" stroke-width=".05" opacity=".7"/>`;
+    for (let k = 0; k <= n; k++) {
+      const q = FP(k / n, 0, -0.1), col = cols[(k + id) % cols.length];
+      const tw = night && k % 3 === 0 ? `><animate attributeName="opacity" values="1;.25;1" dur="${(1 + rnd(id, k, 36)).toFixed(1)}s" repeatCount="indefinite"/></` : null;
+      if (style === 'icicle') {
+        // (strands hanging down, longer and shorter)
+        const L = 0.4 + ((k * 7 + id) % 3) * 0.35;
+        s += `<line x1="${f(q[0])}" y1="${f(q[1])}" x2="${f(q[0])}" y2="${f(q[1] + L)}" stroke="${col}" stroke-width=".13" stroke-linecap="round"${tw ? tw + 'line>' : '/>'}`;
+      } else if (style === 'love') {
+        const hx = q[0], hy = q[1] + 0.15;
+        s += `<path d="M${f(hx)} ${f(hy + 0.22)}c-.35 -.26 -.5 -.42 -.5 -.6c0 -.17 .14 -.28 .28 -.28c.11 0 .19 .06 .22 .14c.03 -.08 .11 -.14 .22 -.14c.14 0 .28 .11 .28 .28c0 .18 -.15 .34 -.5 .6z" fill="${col}"${tw ? tw + 'path>' : '/>'}`;
+      } else {
+        s += `<circle cx="${f(q[0])}" cy="${f(q[1])}" r="${night ? '.26' : '.22'}" fill="${col}"${tw ? tw + 'circle>' : '/>'}`;
       }
-      if (CTX.night) { const m = FP(0.5, 0, -0.1); s += `<ellipse cx="${f(m[0])}" cy="${f(m[1])}" rx="${f(len * 0.6)}" ry="1.4" fill="rgb(255,200,120)" opacity=".12"/>`; }
+    }
+    if (night) {
+      const m = FP(0.5, 0, -0.1), glow = style === 'spooky' ? 'rgb(255,150,60)' : style === 'love' ? 'rgb(255,110,170)' : style === 'blue' || style === 'icicle' ? 'rgb(170,210,255)' : 'rgb(255,200,120)';
+      s += `<ellipse cx="${f(m[0])}" cy="${f(m[1])}" rx="${f(len * 0.6)}" ry="1.4" fill="${glow}" opacity=".14"/>`;
     }
     return s;
   }
@@ -480,7 +501,69 @@
           + `<animateTransform attributeName="transform" type="rotate" values="0 ${f(sx)} ${f(sy)};180 ${f(sx)} ${f(sy)};360 ${f(sx)} ${f(sy)}" dur="${(1.6 + rnd(x, y, 200 + i)).toFixed(1)}s" repeatCount="indefinite"/></path></g>`;
       }
     }
-    return svg;
+    return svg + treeDeco(V, x, y, kind, bare || thin ? null : c, r, trunkTop);
+  }
+
+  /* An occasion's decorations on some of the trees: Christmas lights wound round (a conifer's in
+   * tiers), a ghost hanging from a branch at Halloween, hearts at Valentine's, painted eggs at
+   * Easter, red lanterns at Chinese New Year. c: the crown's middle (null: bare branches). */
+  function treeDeco(V, x, y, kind, c, r, trunkTop) {
+    const o = CTX.occ;
+    if (!o || kind < 0.12 || rnd(x, y, 430) > 0.4) return '';
+    const night = CTX.night, conifer = kind < 0.36;
+    // (where things hang: round the crown, or up a conifer)
+    const spots = (n) => {
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        if (conifer) {
+          const z = (1.4 + 4.4 * (i + 0.5) / n) * (r / 1.9), p = V.p(x, y, z);
+          out.push([p[0] + ((i % 2) * 2 - 1) * r * 0.6 * (1 - (i + 0.5) / n), p[1]]);
+        } else {
+          // (spread over the crown, a little more round its edge)
+          const cc = c || V.p(x, y, trunkTop + r * 0.9), a = (i * 2.4 + rnd(x, y, 431) * 6.283), d = r * (0.3 + 0.62 * Math.sqrt(rnd(x, i, 434)));
+          out.push([cc[0] + Math.cos(a) * d, cc[1] + Math.sin(a) * d * 0.85]);
+        }
+      }
+      return out;
+    };
+    let s = '';
+    if (o.xmas) {
+      const pal = rnd(x, y, 432) < 0.5 ? XMAS : ['rgb(255,226,150)'];
+      spots(conifer ? 12 : 14).forEach(([px, py], i) => {
+        if (night) s += `<circle cx="${f(px)}" cy="${f(py)}" r=".55" fill="${pal[i % pal.length]}" opacity=".3"/>`;
+        s += `<circle cx="${f(px)}" cy="${f(py)}" r=".24" fill="${pal[i % pal.length]}"${night && i % 3 === 0 ? `><animate attributeName="opacity" values="1;.3;1" dur="${(1.1 + rnd(x, i, 433)).toFixed(1)}s" repeatCount="indefinite"/></circle>` : '/>'}`;
+      });
+      if (conifer) { const tp = V.p(x, y, 7 * (r / 1.9) * 1.05); s += star(tp[0], tp[1], 0.5); }
+    } else if (o.halloween && !conifer) {
+      const [px, py] = spots(3)[1];
+      s += `<line x1="${f(px)}" y1="${f(py - 0.9)}" x2="${f(px)}" y2="${f(py)}" stroke="#5d4037" stroke-width=".05"/>`
+        + `<g><animateTransform attributeName="transform" type="rotate" values="-8 ${f(px)} ${f(py - 0.9)};8 ${f(px)} ${f(py - 0.9)};-8 ${f(px)} ${f(py - 0.9)}" dur="3s" repeatCount="indefinite"/>`
+        + `<path d="M${f(px - 0.5)} ${f(py + 1.3)}q0 -1.6 .5 -1.6q.5 0 .5 1.6l-.17 -.22l-.16 .22l-.17 -.22l-.17 .22l-.16 -.22z" fill="#f5f5f5" opacity="${night ? 0.95 : 0.9}"/>`
+        + `<circle cx="${f(px - 0.17)}" cy="${f(py + 0.15)}" r=".07" fill="#212121"/><circle cx="${f(px + 0.17)}" cy="${f(py + 0.15)}" r=".07" fill="#212121"/></g>`;
+    } else if (o.valentines) {
+      spots(5).forEach(([px, py], i) => { s += heartAt(px, py, 0.45, ['rgb(236,64,122)', 'rgb(229,57,53)', 'rgb(244,143,177)'][i % 3]); });
+    } else if (o.easter && !conifer) {
+      const cols = ['rgb(255,138,128)', 'rgb(255,213,79)', 'rgb(129,212,250)', 'rgb(174,213,129)', 'rgb(206,147,216)'];
+      spots(7).forEach(([px, py], i) => {
+        s += `<line x1="${f(px)}" y1="${f(py - 0.4)}" x2="${f(px)}" y2="${f(py - 0.2)}" stroke="#795548" stroke-width=".04"/><ellipse cx="${f(px)}" cy="${f(py)}" rx=".22" ry=".3" fill="${cols[i % 5]}" stroke="#ffffff" stroke-width=".04"/>`;
+      });
+    } else if (o.cny && !conifer) {
+      spots(4).forEach(([px, py]) => {
+        if (night) s += `<circle cx="${f(px)}" cy="${f(py + 0.3)}" r=".9" fill="rgb(255,90,60)" opacity=".25"/>`;
+        s += `<line x1="${f(px)}" y1="${f(py - 0.3)}" x2="${f(px)}" y2="${f(py)}" stroke="#5d4037" stroke-width=".05"/><ellipse cx="${f(px)}" cy="${f(py + 0.3)}" rx=".38" ry=".42" fill="rgb(214,40,40)"/><rect x="${f(px - 0.2)}" y="${f(py - 0.08)}" width=".4" height=".08" fill="rgb(240,190,60)"/>`;
+      });
+    }
+    return s;
+  }
+
+  // A five-pointed star (gold), and a heart, at a point on the screen
+  function star(cx, cy, R) {
+    const pts = [];
+    for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? R * 0.45 : R; pts.push(`${f(cx + Math.cos(a) * rr)},${f(cy + Math.sin(a) * rr)}`); }
+    return (CTX.night ? `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(R * 2.4)}" fill="rgb(255,220,120)" opacity=".25"/>` : '') + `<polygon points="${pts.join(' ')}" fill="rgb(255,213,79)"/>`;
+  }
+  function heartAt(hx, hy, k, col) {
+    return `<path transform="translate(${f(hx)} ${f(hy)}) scale(${f(k * 1.6)})" d="M0 .35c-.6 -.45 -.9 -.75 -.9 -1.05c0 -.3 .25 -.5 .5 -.5c.2 0 .35 .1 .4 .25c.05 -.15 .2 -.25 .4 -.25c.25 0 .5 .2 .5 .5c0 .3 -.3 .6 -.9 1.05z" fill="${col}"/>`;
   }
 
   // A parked car: a body and a cabin, as boxes
@@ -511,6 +594,19 @@
     let s = `<line x1="${f(b[0])}" y1="${f(b[1])}" x2="${f(t[0])}" y2="${f(t[1])}" stroke="#454a52" stroke-width=".34"/>`
       + `<rect x="${f(t[0] - 0.5)}" y="${f(t[1] - 0.45)}" width="1" height=".55" rx=".18" fill="#383c44"/>`;
     if (CTX.night) s += `<circle cx="${f(t[0])}" cy="${f(t[1] + 0.3)}" r="1.6" fill="${LIGHT}" opacity=".35"/><circle cx="${f(t[0])}" cy="${f(t[1] + 0.25)}" r=".45" fill="${LIGHT2}"/>`;
+    const o = CTX.occ || {};
+    if (o.xmas) {
+      // (a garland wound up the post, a bow and a star on top)
+      for (let k = 0; k < 5; k++) { const p = V.p(x, y, 0.6 + k * 0.75); s += `<ellipse cx="${f(p[0])}" cy="${f(p[1])}" rx=".3" ry=".14" fill="none" stroke="#2e7d32" stroke-width=".14"/>`; }
+      const bw = V.p(x, y, 3.9);
+      s += `<path d="M${f(bw[0])} ${f(bw[1])}l-.4 -.25v.5zM${f(bw[0])} ${f(bw[1])}l.4 -.25v.5z" fill="rgb(229,57,53)"/>` + star(t[0], t[1] - 0.8, 0.45);
+    } else if (o.halloween) {
+      const p = V.p(x, y, 4.2);
+      s += `<path d="M${f(p[0] - 0.6)} ${f(p[1])}q.3 -.35 .6 0q.3 -.35 .6 0l-.6 .25z" fill="#311b4a"/>`;  // (a bat on the lamp)
+    } else if (o.cny) {
+      const p = V.p(x, y, 4.1);
+      s += `<line x1="${f(p[0] + 0.45)}" y1="${f(p[1])}" x2="${f(p[0] + 0.45)}" y2="${f(p[1] + 0.35)}" stroke="#5d4037" stroke-width=".05"/><ellipse cx="${f(p[0] + 0.45)}" cy="${f(p[1] + 0.75)}" rx=".38" ry=".42" fill="rgb(214,40,40)"/>`;
+    }
     return s;
   }
 
@@ -759,13 +855,83 @@
     return out + `<polygon points="${pts.join(' ')}" fill="rgb(255,213,79)"/>`;
   }
 
-  function pumpkin(V, x, y) {
-    const c = V.p(x, y, 0.35);
-    let s = `<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".5" ry=".4" fill="#f28c28"/><rect x="${f(c[0] - 0.06)}" y="${f(c[1] - 0.55)}" width=".12" height=".2" fill="#4e7a2a"/>`;
+  function pumpkin(V, x, y, k = 1.6) {
+    const c = V.p(x, y, 0.35 * k);
+    let s = `<g transform="translate(${f(c[0])} ${f(c[1])}) scale(${f(k)})">`
+      + `<ellipse cx="0" cy="0" rx=".5" ry=".4" fill="#f28c28"/><ellipse cx="0" cy="0" rx=".22" ry=".4" fill="#f7a046" opacity=".6"/><rect x="-.06" y="-.55" width=".12" height=".2" fill="#4e7a2a"/>`;
     // (its face lit at night)
     const lit = CTX.night ? 'rgb(255,220,90)' : '#5a3410';
-    s += `<path d="M${f(c[0] - 0.3)} ${f(c[1] - 0.08)}l.12 -.12l.1 .12zM${f(c[0] + 0.1)} ${f(c[1] - 0.08)}l.12 -.12l.1 .12zM${f(c[0] - 0.25)} ${f(c[1] + 0.1)}h.5l-.1 .12h-.3z" fill="${lit}"/>`;
-    if (CTX.night) s += `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="1.3" fill="rgb(255,170,60)" opacity=".25"/>`;
+    s += `<path d="M-.3 -.08l.12 -.12l.1 .12zM.1 -.08l.12 -.12l.1 .12zM-.25 .1h.5l-.1 .12h-.3z" fill="${lit}"/></g>`;
+    if (CTX.night) s += `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="${f(1.3 * k)}" fill="rgb(255,170,60)" opacity=".25"/>`;
+    return s;
+  }
+
+  // Presents, wrapped, piled up (under a tree, or by the door on your birthday)
+  function presents(V, x, y, seed, n = 3) {
+    const wraps = [['#e53935', '#ffd54f'], ['#1e88e5', '#ffffff'], ['#43a047', '#e53935'], ['#ffd54f', '#8e24aa'], ['#8e24aa', '#ffd54f'], ['#f5f5f5', '#e53935']];
+    let s = '';
+    for (let k = 0; k < n; k++) {
+      const [a, b] = wraps[(seed + k * 2) % wraps.length], sz = 0.55 + rnd(seed, k, 440) * 0.35;
+      const px = x + (k - (n - 1) / 2) * 0.75, py = y + (k % 2) * 0.45, ang = rnd(seed, k, 441);
+      s += box(V, px, py, ang, sz, sz, 0, sz * (0.7 + rnd(seed, k, 442) * 0.5), [a, mix(a, '#000000', 0.25)], mix(a, '#ffffff', 0.15));
+      const tp = V.p(px, py, sz * 1.25);
+      s += `<path d="M${f(tp[0])} ${f(tp[1])}c-.25 -.25 -.45 -.05 -.2 .1M${f(tp[0])} ${f(tp[1])}c.25 -.25 .45 -.05 .2 .1" stroke="${b}" stroke-width=".1" fill="none"/>`;
+    }
+    return s;
+  }
+
+  // A reindeer of white wire and lights (in a front garden at Christmas), facing ang
+  function reindeer(V, x, y, ang, seed) {
+    const col = rnd(seed, 1, 450) < 0.5 ? 'rgb(255,236,179)' : 'rgb(235,245,255)', u = [Math.cos(ang), Math.sin(ang)];
+    const P = (a, z) => V.p(x + u[0] * a, y + u[1] * a, z);
+    const seg = (p, q, w = 0.13) => `<line x1="${f(p[0])}" y1="${f(p[1])}" x2="${f(q[0])}" y2="${f(q[1])}" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>`;
+    let s = CTX.night ? `<ellipse cx="${f(P(0, 0.9)[0])}" cy="${f(P(0, 0.9)[1])}" rx="1.6" ry="1.2" fill="${col}" opacity=".22"/>` : '';
+    s += seg(P(-0.5, 0), P(-0.5, 0.75)) + seg(P(0.5, 0), P(0.5, 0.75)) + seg(P(-0.6, 0.8), P(0.6, 0.8), 0.35)
+      + seg(P(0.6, 0.85), P(0.85, 1.45)) + `<circle cx="${f(P(0.95, 1.5)[0])}" cy="${f(P(0.95, 1.5)[1])}" r=".2" fill="${col}"/>`
+      + seg(P(0.85, 1.6), P(0.7, 2.05), 0.07) + seg(P(0.78, 1.85), P(0.55, 1.95), 0.07) + seg(P(1.0, 1.6), P(1.15, 2.05), 0.07)
+      + `<circle cx="${f(P(1.12, 1.48)[0])}" cy="${f(P(1.12, 1.48)[1])}" r=".08" fill="rgb(229,57,53)"/>`;
+    return s;
+  }
+
+  function candyCane(V, x, y) {
+    const b = V.p(x, y, 0), t = V.p(x, y, 0.85);
+    return `<path d="M${f(b[0])} ${f(b[1])}L${f(t[0])} ${f(t[1])}q0 -.32 .25 -.32q.25 0 .25 .25" fill="none" stroke="#ffffff" stroke-width=".16" stroke-linecap="round"/>`
+      + `<path d="M${f(b[0])} ${f(b[1])}L${f(t[0])} ${f(t[1])}q0 -.32 .25 -.32q.25 0 .25 .25" fill="none" stroke="rgb(229,57,53)" stroke-width=".16" stroke-dasharray=".12 .12" stroke-linecap="round"/>`;
+  }
+
+  // A wreath on the front door (x, y: the front wall)
+  function wreath(V, x, y) {
+    const c = V.p(x, y, 1.6);
+    return `<circle cx="${f(c[0])}" cy="${f(c[1])}" r=".45" fill="none" stroke="#2e7d32" stroke-width=".26"/>`
+      + `<circle cx="${f(c[0] - 0.2)}" cy="${f(c[1] - 0.2)}" r=".06" fill="rgb(229,57,53)"/><circle cx="${f(c[0] + 0.25)}" cy="${f(c[1] + 0.05)}" r=".06" fill="rgb(229,57,53)"/>`
+      + `<path d="M${f(c[0])} ${f(c[1] + 0.34)}l-.18 -.12v.24zM${f(c[0])} ${f(c[1] + 0.34)}l.18 -.12v.24z" fill="rgb(229,57,53)"/>`;
+  }
+
+  function gravestone(V, x, y, ang, seed) {
+    const u = [Math.cos(ang), Math.sin(ang)], a = V.p(x - u[0] * 0.35, y - u[1] * 0.35, 0), b = V.p(x + u[0] * 0.35, y + u[1] * 0.35, 0), h = 0.75 + rnd(seed, 1, 452) * 0.3;
+    const at = V.p(x - u[0] * 0.35, y - u[1] * 0.35, h), bt = V.p(x + u[0] * 0.35, y + u[1] * 0.35, h), m = V.p(x, y, h * 0.6);
+    return `<path d="M${f(a[0])} ${f(a[1])}L${f(at[0])} ${f(at[1])}Q${f((at[0] + bt[0]) / 2)} ${f(Math.min(at[1], bt[1]) - 0.45)} ${f(bt[0])} ${f(bt[1])}L${f(b[0])} ${f(b[1])}z" fill="#9ea4aa" stroke="#6f767d" stroke-width=".06"/>`
+      + `<text x="${f(m[0])}" y="${f(m[1])}" font-size=".32" font-family="sans-serif" font-weight="700" fill="#5b6168" text-anchor="middle">RIP</text>`;
+  }
+
+  // An Easter bunny sitting in a garden
+  function bunny(V, x, y) {
+    const b = V.p(x, y, 0.4), h = V.p(x + 0.3, y, 0.85), col = '#f3ece4';
+    return `<ellipse cx="${f(b[0])}" cy="${f(b[1] + 0.3)}" rx=".6" ry=".2" fill="#000000" opacity=".15"/><ellipse cx="${f(b[0])}" cy="${f(b[1])}" rx=".5" ry=".42" fill="${col}"/>`
+      + `<circle cx="${f(b[0] - 0.48)}" cy="${f(b[1])}" r=".15" fill="#ffffff"/><circle cx="${f(h[0])}" cy="${f(h[1])}" r=".3" fill="${col}"/>`
+      + `<ellipse cx="${f(h[0] - 0.1)}" cy="${f(h[1] - 0.45)}" rx=".08" ry=".3" fill="${col}"/><ellipse cx="${f(h[0] + 0.1)}" cy="${f(h[1] - 0.47)}" rx=".08" ry=".3" fill="${col}"/>`
+      + `<ellipse cx="${f(h[0] + 0.1)}" cy="${f(h[1] - 0.45)}" rx=".04" ry=".2" fill="rgb(244,143,177)"/><circle cx="${f(h[0] + 0.12)}" cy="${f(h[1] - 0.03)}" r=".045" fill="#3e2723"/>`;
+  }
+
+  // Bunting: little flags on a string from a to b, z up
+  function bunting(V, a, b, z, cols) {
+    const p = V.p(a[0], a[1], z), q = V.p(b[0], b[1], z), n = Math.max(3, Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]) / 0.6));
+    let s = `<path d="M${f(p[0])} ${f(p[1])}Q${f((p[0] + q[0]) / 2)} ${f((p[1] + q[1]) / 2 + 0.6)} ${f(q[0])} ${f(q[1])}" fill="none" stroke="#5d4037" stroke-width=".04"/>`;
+    for (let k = 0; k < n; k++) {
+      const t0 = (k + 0.2) / n, t1 = (k + 0.8) / n, sag = (t) => 4 * t * (1 - t) * 0.3;
+      const x0 = p[0] + (q[0] - p[0]) * t0, y0 = p[1] + (q[1] - p[1]) * t0 + sag(t0), x1 = p[0] + (q[0] - p[0]) * t1, y1 = p[1] + (q[1] - p[1]) * t1 + sag(t1);
+      s += `<path d="M${f(x0)} ${f(y0)}L${f(x1)} ${f(y1)}L${f((x0 + x1) / 2)} ${f((y0 + y1) / 2 + 0.4)}z" fill="${cols[k % cols.length]}"/>`;
+    }
     return s;
   }
 
@@ -853,14 +1019,38 @@
       const l0 = -sd * 0.9, l1 = -sd * Math.max(1.2, hl * 0.9);
       ground.push(flowerBed(V, [PW(P, -hf - 1.1, l0), PW(P, -hf - 1.1, l1), PW(P, -hf - 0.2, l1), PW(P, -hf - 0.2, l0)], id + 1));
     }
-    // Christmas: a tree in the front garden of the houses with lights up (and yours)
-    if (CTX.occ && CTX.occ.xmas && (isHome || rnd(id, 35) < 0.4) && fr >= 1.6) {
-      const [x, y] = PW(P, -hf - Math.min(fr * 0.5, 1.6), -sd * Math.max(1.2, Math.min(hl * 0.6, w - 1)));
-      thing(x, y, xmasTree(V, x, y, id, isHome ? 1.4 : 1.1 + r(37) * 0.3));
+    // Christmas, at the houses with lights up (and yours), each its own way: a tree with presents
+    // under it, a wreath on the door, a light-up reindeer, candy canes along the path
+    const O = CTX.occ || {};
+    if (O.xmas && (isHome || rnd(id, 35) < 0.4)) {
+      const side = -sd * Math.max(1.2, Math.min(hl * 0.6, w - 1));
+      if (fr >= 1.6 && (isHome || r(43) < 0.75)) {
+        const [x, y] = PW(P, -hf - Math.min(fr * 0.5, 1.6), side);
+        thing(x, y, xmasTree(V, x, y, id, isHome ? 1.4 : 1.1 + r(37) * 0.3));
+        const [gx, gy] = PW(P, -hf - Math.min(fr * 0.5, 1.6) - 0.9, side + sd * 0.3);
+        thing(gx, gy, presents(V, gx, gy, id, isHome ? 3 : 2));
+      }
+      if (isHome || r(44) < 0.6) { const [x, y] = PW(P, -hf - 0.05, pl); thing(x, y, wreath(V, x, y)); }
+      if (fr >= 3 && (isHome || r(45) < 0.3)) {
+        const [x, y] = PW(P, -hf - fr * 0.55, -side * 0.9);
+        thing(x, y, reindeer(V, x, y, angU + (r(46) < 0.5 ? 0 : Math.PI), id));
+      }
+      if (fr >= 2 && r(47) < 0.3) {
+        for (let s0 = -hf - 0.8; s0 > -hf - fr + 0.4; s0 -= 1.1) for (const d of [-0.75, 0.75]) { const [x, y] = PW(P, s0, pl + d); thing(x, y, candyCane(V, x, y)); }
+      }
     }
-    if (CTX.occ && CTX.occ.halloween && (isHome || r(16) < 0.35) && fr >= 0.8) {
-      const [x, y] = PW(P, -hf - 0.7, pl + 0.95);
-      thing(x, y, pumpkin(V, x, y));
+    // Halloween: pumpkins by the path (lit at night), and gravestones in some front gardens
+    if (O.halloween && (isHome || r(16) < 0.4) && fr >= 0.8) {
+      for (let k = 0, n = 1 + Math.floor(r(48) * 3); k < n; k++) {
+        const [x, y] = PW(P, -hf - 0.7 - k * 0.15, pl + 1.0 + k * 0.85);
+        thing(x, y, pumpkin(V, x, y, 1.3 + r(49 + k) * 0.6));
+      }
+      if (fr >= 3 && r(52) < 0.45) {
+        for (let k = 0; k < 2 + Math.floor(r(53) * 2); k++) {
+          const [x, y] = PW(P, -hf - 1.2 - (k % 2) * 1.1, -sd * (1 + k * 1.0));
+          thing(x, y, gravestone(V, x, y, angU, id + k));
+        }
+      }
     }
     // the back
     if (bk >= 2) {
@@ -907,8 +1097,10 @@
       const cols = ['rgb(255,138,128)', 'rgb(255,213,79)', 'rgb(129,212,250)', 'rgb(174,213,129)', 'rgb(206,147,216)'];
       for (let k = 0; k < 3 + Math.floor(r(23) * 3); k++) {
         const [x, y] = PW(P, hb + 1 + r(24 + k) * (bk - 2), (r(30 + k) * 2 - 1) * (w - 0.8)), c = V.p(x, y, 0.2);
-        ground.push(`<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".42" ry=".56" fill="${cols[(k + id) % cols.length]}" stroke="#ffffff" stroke-width=".05"/>`);
+        ground.push(`<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".6" ry=".8" fill="${cols[(k + id) % cols.length]}" stroke="#ffffff" stroke-width=".08"/>`
+          + `<path d="M${f(c[0] - 0.55)} ${f(c[1])}q.28 -.2 .55 0t.55 0" fill="none" stroke="#ffffff" stroke-width=".1"/>`);
       }
+      if (isHome || r(54) < 0.4) { const [x, y] = PW(P, hb + bk * 0.45, (r(55) * 2 - 1) * (w - 1.2)); thing(x, y, bunny(V, x, y)); }
     }
     // Valentine's: a heart floating up from some houses (and yours) now and then
     if (CTX.occ && CTX.occ.valentines && (isHome || r(25) < 0.12)) {
@@ -931,6 +1123,10 @@
           + `<ellipse cx="${f(bx)}" cy="${f(by)}" rx=".55" ry=".7" fill="${col}"/><ellipse cx="${f(bx - 0.18)}" cy="${f(by - 0.25)}" rx=".12" ry=".2" fill="#ffffff" opacity=".6"/></g>`;
       });
       thing(x, y, s);
+      const [gx, gy] = PW(P, -hf - 1.1, Math.min(hl - 0.6, 1.6) - 1.2);
+      thing(gx, gy, presents(V, gx, gy, id + 7, 3));
+      const a = PW(P, -hf - 0.1, -hl * 0.95), b = PW(P, -hf - 0.1, hl * 0.95), m = PW(P, -hf - 0.2, 0);
+      thing(m[0], m[1], bunting(V, a, b, 2.6, ['rgb(239,83,80)', 'rgb(66,165,245)', 'rgb(255,202,40)', 'rgb(102,187,106)', 'rgb(171,71,188)']));
     }
     // your heat pump, beside the house at the back
     if (isHome && energy.heat !== null && energy.heat !== undefined) {
