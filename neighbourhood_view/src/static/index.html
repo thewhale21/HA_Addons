@@ -781,7 +781,8 @@ async function refreshScreen() {
   const s = d.screen || {};
   $('s-scr-on').checked = !!s.enabled;
   const views = d.views || [];
-  const opts = (extra) => extra + views.map((v) => `<option value="${esc(v.path)}">${esc(v.title)}</option>`).join('') + `<option value="${OWN}">Another (type its address)…</option>`;
+  // (each with its address too: two dashboards can have the same name, e.g. a copy of one)
+  const opts = (extra) => extra + views.map((v) => `<option value="${esc(v.path)}">${esc(v.title)} — ${esc(v.path)}</option>`).join('') + `<option value="${OWN}">Another (type its address)…</option>`;
   $('s-scr-map').innerHTML = opts(`<option value="">The Map dashboard (made for you)</option>`);
   $('s-scr-tap').innerHTML = opts(`<option value="ours">A dashboard made from my rooms</option>`);
   const pick = (sel, val, input, own) => {

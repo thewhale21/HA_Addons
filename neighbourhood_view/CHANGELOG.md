@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.1 — Which dashboard is which
+
+- **Fix:** Settings › Screensaver lists each view with its address (e.g.
+  Wall-Display-Large › Home — /wall-display-2/home), so two dashboards with
+  the same name (e.g. one copied from the other) can be told apart. Picking
+  the wrong one of two same-named dashboards sent taps to the other.
 ## 0.14.0 — A simpler, smarter screensaver
 
 - **Change:** the screensaver is one switch for everything: on, every screen
