@@ -130,7 +130,8 @@ def test_whats_happening_now():
     from src.live import compute, entities
     settings = {"weather_entity": "weather.home", "person_1": "person.matt", "person_3": "person.jo_bloggs", "person_2": ""}
     assert entities(settings) == {"weather": "weather.home", "people": ["person.matt", "person.jo_bloggs"], "sun": "sun.sun",
-                                  "energy": {"solar": "", "car": "", "heat": ""}}
+                                  "energy": {"solar": "", "car": "", "heat": ""},
+                                  "house": {"bins": "", "door": "", "garage": "", "lights": ""}}
     states = {
         "sun.sun": {"state": "below_horizon"},
         "weather.home": {"state": "rainy", "attributes": {"temperature": 9.4, "temperature_unit": "°C"}},
@@ -173,3 +174,28 @@ def test_occasions_settings(tmp_path):
         with pytest.raises(ValueError):
             s.update({"occasions": bad})
     s.update({"occasions": {"halloween": {"on": False, "from": "", "to": ""}}})  # (off: no days needed)
+
+
+def test_your_house_bins_door_garage_lights():
+    import datetime as dt
+    from src.live import bin_day, compute
+    morning, evening = dt.datetime(2026, 11, 27, 9), dt.datetime(2026, 11, 27, 19)
+    assert bin_day({"state": "Today"}, morning) and bin_day({"state": "on"}, morning) and bin_day({"state": "0"}, morning)
+    assert not bin_day({"state": "1"}, morning) and bin_day({"state": "1"}, evening)
+    assert not bin_day({"state": "tomorrow"}, morning) and bin_day({"state": "Tomorrow"}, evening)
+    assert bin_day({"state": "2026-11-27"}, morning) and not bin_day({"state": "2026-11-28"}, morning) and bin_day({"state": "2026-11-28"}, evening)
+    assert bin_day({"state": "off", "attributes": {"start_time": "2026-11-27 07:00:00"}}, morning)
+    assert not bin_day({"state": "3"}, evening) and not bin_day(None, morning)
+    s = {"door_entity": "binary_sensor.front", "garage_entity": "cover.garage", "garden_lights_entity": "light.garden"}
+    live = compute(s, {"binary_sensor.front": {"state": "on"}, "cover.garage": {"state": "closed"}, "light.garden": {"state": "on"}})
+    assert live["house"] == {"bins": None, "door": True, "garage": False, "lights": True}
+
+
+def test_your_houses_look():
+    from src.app_settings import AppSettings
+    s = AppSettings()
+    assert s.data["look"] == {"door": "", "plate": True}
+    s.update({"look": {"door": "Red", "plate": False}})
+    assert s.data["look"] == {"door": "red", "plate": False}
+    with pytest.raises(ValueError):
+        s.update({"look": {"door": "tartan"}})

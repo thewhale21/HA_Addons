@@ -15,6 +15,7 @@
     grass: '#9ed37c', wood: '#7dbf63', pitch: '#8cc96f', water: '#8fc6ec', paved: '#cdd1d7',
     road: '#62666e', roadLine: '#f5f5f5', pave: '#d9dbdf', kerb: '#b9bdc4', path: '#f2ede1', pathEdge: '#d6cfbd',
     rail: '#b2aca2', railLine: '#6f6a63', railTie: '#8d877e',
+    allot: '#b7c78a', bed: '#8d6a48',
     trunk: '#8c6a48', glass: '#4f6f92', glassLit: '#7fa3c9', door: '#7a5238',
     pin: '#2196f3', pinText: '#ffffff', text: '#6b6b6b',
   };
@@ -28,9 +29,15 @@
     commercial: [['#f4f4f2', '#d3d5d8', '#b7bdc6'], ['#f2ece1', '#d6cdbd', '#b5aea3'], ['#e6edf2', '#c6d0d8', '#a9b3bd']],
     industrial: [['#e3e7ed', '#c1c7d0', '#a8b0bc'], ['#dfe6dc', '#bfcabb', '#a3ad9f'], ['#e9e2d3', '#cbc2ae', '#aaa293'], ['#d8e2ee', '#b5c3d3', '#97a6b8']],
     small: [['#e8e3d8', '#c9c2b4', '#a9a8a4'], ['#d9cfc0', '#b8ad9c', '#8f8a84']],
+    garage: [['#e4ddd0', '#c4bcae', '#8f939a'], ['#d8cdbd', '#b7ab98', '#7d8188'], ['#dfe2e6', '#bfc4ca', '#888d94']],
     civic: [['#f3ede1', '#d9ceb8', '#bba98f'], ['#e9d6c4', '#cbb39d', '#a4927f']],
     large: [['#eef0f2', '#cfd3d9', '#bcc2cb'], ['#f1ebe0', '#d4cab9', '#b8b0a3']],
   };
+  // walls drawn as brick (mortar lines); the others rendered (a pebble-dash speckle on some)
+  const BRICK = new Set(['#c9765a', '#b9876a', '#d7a184']);
+  const CURTAINS = ['#c0392b', '#2e86c1', '#f4d03f', '#7d3c98', '#e8daef', '#d35400', '#1e8449', '#f5f5f5'];
+  const DOOR_COLS = {red: '#b3261e', blue: '#1f4e8c', green: '#1e5b3a', black: '#1d1f22', white: '#f2f2f2', yellow: '#e3b505', grey: '#5f666d', wood: '#8a5a33', purple: '#5b2a6e'};
+  const GARAGE_DOORS = ['#f2f2f2', '#e7e3da', '#2f5d3a', '#244a7a', '#8a8f96', '#7a5238'];
   const HOME = {walls: ['#e3f1fd', '#b7d8f5'], roof: ['#42a5f5', '#1e88e5'], flat: '#64b5f6'};
   const SHOPS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#8e24aa', '#fb8c00', '#00897b', '#d81b60'];
   const CARS = ['#e53935', '#f5f5f5', '#212121', '#1e88e5', '#9e9e9e', '#fdd835', '#43a047', '#3949ab', '#fb8c00', '#cfd8dc'];
@@ -162,7 +169,12 @@
   // Windows on a wall: rows (one a storey from z0, each storey sh high), every `every` m
   /* What's being drawn now: night (lights on in windows), how likely a window in the building
    * being drawn is lit (CTX.lit: 0..1), and whether your house's chimney smokes (someone's home). */
-  const CTX = {night: false, lit: 0, smoke: false, seed: 0, season: 'summer', snow: false, wet: false, windy: false, hail: false, leaves: 0};
+  const CTX = {night: false, lit: 0, smoke: false, seed: 0, season: 'summer', snow: false, wet: false, windy: false, hail: false, leaves: 0,
+    split: false, top: [], house: false, hour: 12, weekday: true, temp: null, look: null, number: '', home: null, steam: 0};
+  /* Drawn in layers (split; see islandDrawn): in the still layers the lights don't twinkle and the
+   * trees don't sway, but what has to move (smoke, falling leaves, a TV's flicker...) is marked to
+   * keep moving (fx): small, so the browser only draws that bit again. */
+  const fx = (svg) => (CTX.split && svg ? svg.replace(/<animate(?:Transform|Motion)?\b/g, '$& data-nvk="1"') : svg);
   const SNOW = '#f2f5f9';
   // (snow whitens things; a frost, below 5°C, just rimes them)
   const snowy = (c, k = 0.8) => (CTX.snow ? mix(c, SNOW, k) : CTX.frost ? mix(c, '#e3edf2', k * 0.5) : c);
@@ -188,9 +200,50 @@
         const c = (j + 0.5) / n, half = ww / 2 / len;
         const on = CTX.night && CTX.lit > 0 && rnd(p[0] + c * 7, p[1] + s * 3, CTX.seed + j) < CTX.lit;
         svg += onWall(V, p, q, c - half, c + half, zb, zb + wh, on ? (lit > 0.5 ? LIGHT : LIGHT2) : glass);
+        if (CTX.house && !LITE) svg += windowBits(V, p, q, c, half, zb, wh, s, on, rnd(p[0] + c * 11, p[1] + s * 5, CTX.seed + j + 500));
       }
     }
     return svg;
+  }
+
+  // A house's window's odds and ends: curtains half drawn, a window box of flowers under some on
+  // the ground floor, the odd cat on a sill, and at night a TV flickering in a few lit rooms
+  function windowBits(V, p, q, c, half, zb, wh, storey, lit, k) {
+    let s = '';
+    const at = (t, z) => V.p(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, z);
+    if (k < 0.32) {
+      const col = CURTAINS[Math.floor(k * 100) % CURTAINS.length], w = half * 0.42;
+      s += onWall(V, p, q, c - half, c - half + w, zb, zb + wh, col) + onWall(V, p, q, c + half - w, c + half, zb, zb + wh, col);
+    }
+    if (storey === 0 && k > 0.86 && !CTX.snow) {
+      s += onWall(V, p, q, c - half - 0.02, c + half + 0.02, zb - 0.28, zb, '#7a5a3a');
+      if (CTX.season !== 'winter') for (let i = 0; i < 4; i++) { const pt = at(c - half * 0.75 + half * 0.5 * i, zb + 0.02); s += `<circle cx="${f(pt[0])}" cy="${f(pt[1])}" r=".14" fill="${FLOWERS[(i + Math.floor(k * 50)) % FLOWERS.length]}"/>`; }
+    }
+    if (k > 0.5 && k < 0.53) {
+      const b = at(c, zb + 0.02), col = k < 0.515 ? '#2f2f33' : '#d99a4e';
+      s += `<ellipse cx="${f(b[0])}" cy="${f(b[1] - 0.16)}" rx=".2" ry=".16" fill="${col}"/><circle cx="${f(b[0] + 0.14)}" cy="${f(b[1] - 0.36)}" r=".12" fill="${col}"/>`
+        + `<path d="M${f(b[0] + 0.05)} ${f(b[1] - 0.42)}l.04 -.12l.05 .09zM${f(b[0] + 0.16)} ${f(b[1] - 0.45)}l.06 -.11l.03 .1z" fill="${col}"/>`;
+    }
+    if (lit && k > 0.7 && k < 0.8 && CTX.tv-- > 0) {
+      const pts = [at(c - half * 0.8, zb + wh * 0.1), at(c + half * 0.8, zb + wh * 0.1), at(c + half * 0.8, zb + wh * 0.9), at(c - half * 0.8, zb + wh * 0.9)];
+      s += fx(`<polygon points="${pts.map((q2) => f(q2[0]) + ',' + f(q2[1])).join(' ')}" fill="rgb(140,180,255)" opacity=".15"><animate attributeName="opacity" values=".1;.45;.2;.5;.15;.35" dur="${(2 + k * 3).toFixed(1)}s" repeatCount="indefinite"/></polygon>`);
+    }
+    return s;
+  }
+
+  // Brick (mortar lines) or render (a pebble-dash speckle) on a wall, faintly
+  function wallTexture(V, p, q, len, h, shade, brick, seed) {
+    if (LITE || len < 1.5) return '';
+    const at = (t, z) => V.p(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, z);
+    let s = '';
+    if (brick) {
+      const col = mix(shade, '#ffffff', 0.35);
+      for (let z = 0.45; z < h - 0.15; z += 0.6) { const a = at(0.02, z), b = at(0.98, z); s += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="${col}" stroke-width=".05" opacity=".55"/>`; }
+    } else if (rnd(seed, 1, 62) < 0.5) {
+      const col = mix(shade, '#000000', 0.16), n = Math.min(24, Math.round(len * h * 0.35));
+      for (let i = 0; i < n; i++) { const a = at(0.04 + 0.92 * rnd(seed, i, 63), 0.2 + (h - 0.4) * rnd(i, seed, 64)); s += `<circle cx="${f(a[0])}" cy="${f(a[1])}" r=".07" fill="${col}"/>`; }
+    }
+    return s;
   }
 
   function gableRoof(V, rect, h, rh, roof, hip) {
@@ -240,15 +293,29 @@
     const Ra = [(rect[3][0] + A[0]) / 2, (rect[3][1] + A[1]) / 2], Rb = [(B[0] + Cc[0]) / 2, (B[1] + Cc[1]) / 2];
     const gables = hip ? null : [null, V.p(Rb[0], Rb[1], h + rh), null, V.p(Ra[0], Ra[1], h + rh)];
     let doorDone = false;
+    const brick = !isHome && BRICK.has(wall), hh = CTX.home || {};
     const deco = (p, q, len, lit, i) => {
-      if (i % 2 === 1) return len > 4.5 ? windows(V, p, q, len, 0, storeys, sh, 1.0, 1.15, 3.4, lit) : '';  // (the ends)
-      let s = windows(V, p, q, len, 0, storeys, sh, 1.15, 1.25, 3.0, lit, !doorDone);
-      if (!doorDone) {
-        const half = 0.5 / len;
-        s += onWall(V, p, q, 0.5 - half, 0.5 + half, 0, 2.1, C.door);
-        doorDone = true;
-      }
-      return s;
+      const tex = isHome ? '' : wallTexture(V, p, q, len, h, mix(cols[0], cols[1], lit), brick, id + i);
+      CTX.house = true;
+      try {
+        if (i % 2 === 1) return tex + (len > 4.5 ? windows(V, p, q, len, 0, storeys, sh, 1.0, 1.15, 3.4, lit) : '');  // (the ends)
+        let s = tex + windows(V, p, q, len, 0, storeys, sh, 1.15, 1.25, 3.0, lit, !doorDone);
+        if (!doorDone) {
+          const half = 0.5 / len, look = isHome ? (CTX.look || {}) : {};
+          // (your door: your colour; open while your door sensor says so, lit inside at night)
+          const open = isHome && hh.door;
+          const col = open ? (CTX.night ? LIGHT : '#2a211b') : look.door && DOOR_COLS[look.door] ? DOOR_COLS[look.door] : C.door;
+          s += onWall(V, p, q, 0.5 - half, 0.5 + half, 0, 2.1, col);
+          if (isHome && look.plate !== false && CTX.number) {
+            // (its number on a plate beside it)
+            const a = V.p(p[0] + (q[0] - p[0]) * (0.5 + half + 0.35 / len), p[1] + (q[1] - p[1]) * (0.5 + half + 0.35 / len), 1.7);
+            s += `<rect x="${f(a[0] - 0.32)}" y="${f(a[1] - 0.2)}" width=".64" height=".4" rx=".06" fill="#fafafa" stroke="#37474f" stroke-width=".04"/>`
+              + `<text x="${f(a[0])}" y="${f(a[1] + 0.12)}" font-size=".32" font-family="sans-serif" font-weight="700" fill="#263238" text-anchor="middle">${esc(String(CTX.number).slice(0, 4))}</text>`;
+          }
+          doorDone = true;
+        }
+        return s;
+      } finally { CTX.house = false; }
     };
     let svg = walls(V, rect, 0, h, cols, gables, deco);
     const r = gableRoof(V, rect, h, rh, roof, hip);
@@ -261,14 +328,27 @@
       // someone's home: smoke from the chimney (by day; at night the lights say so)
       if (isHome && CTX.smoke) {
         const t = V.p(cx, cy, h + rh + 1);
+        let sm = '';
         for (let k = 0; k < 3; k++) {
-          chim += `<circle cx="${f(t[0])}" cy="${f(t[1])}" r="1" fill="#f2f2f2" opacity="0">`
+          sm += `<circle cx="${f(t[0])}" cy="${f(t[1])}" r="1" fill="#f2f2f2" opacity="0">`
             + `<animate attributeName="cy" from="${f(t[1])}" to="${f(t[1] - 9)}" dur="3.6s" begin="${k * 1.2}s" repeatCount="indefinite"/>`
             + `<animate attributeName="cx" from="${f(t[0])}" to="${f(t[0] + 2.5)}" dur="3.6s" begin="${k * 1.2}s" repeatCount="indefinite"/>`
             + `<animate attributeName="r" from=".7" to="2.6" dur="3.6s" begin="${k * 1.2}s" repeatCount="indefinite"/>`
             + `<animate attributeName="opacity" values="0;.85;0" dur="3.6s" begin="${k * 1.2}s" repeatCount="indefinite"/></circle>`;
         }
+        chim += fx(sm);
       }
+    }
+    // a frosty morning: steam from a vent on some roofs (the boilers going)
+    if (CTX.frost && !CTX.night && CTX.hour < 11 && CTX.steam > 0 && !isHome && rnd(id, 61) < 0.3) {
+      CTX.steam--;
+      const vx = (r.Ra[0] + r.Rb[0]) / 2 - r.ux * lng * 0.2, vy = (r.Ra[1] + r.Rb[1]) / 2 - r.uy * lng * 0.2, t = V.p(vx, vy, h + rh * 0.7 + 0.4);
+      let st = `<line x1="${f(t[0])}" y1="${f(t[1] + 0.4)}" x2="${f(t[0])}" y2="${f(t[1])}" stroke="#7d848c" stroke-width=".18"/>`, puff = '';
+      for (let k = 0; k < 2; k++) {
+        puff += `<circle cx="${f(t[0])}" cy="${f(t[1])}" r=".5" fill="#ffffff" opacity="0"><animate attributeName="cy" from="${f(t[1])}" to="${f(t[1] - 5)}" dur="4s" begin="${k * 2}s" repeatCount="indefinite"/>`
+          + `<animate attributeName="r" from=".4" to="1.8" dur="4s" begin="${k * 2}s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;.7;0" dur="4s" begin="${k * 2}s" repeatCount="indefinite"/></circle>`;
+      }
+      chim += st + fx(puff);
     }
     // (the chimney drawn before the roof if it's behind the ridge from here, after it if in front)
     svg += r.svg + roofBits(V, b, rect, h, rh, r, isHome, cols, roof) + chim;
@@ -369,6 +449,17 @@
     const shop = lm === 'pub' ? '#2e5d3a' : k === 'commercial' && !lm ? pick(SHOPS, rnd(id, 6)) : null;
     const deco = (p, q, len, lit) => {
       if (k === 'small') return '';
+      if (k === 'garage') {
+        // lock-ups: a row of up-and-over doors
+        const n = Math.floor(len / 2.8);
+        let s = '';
+        for (let j = 0; j < n; j++) {
+          const c = (j + 0.5) / n, hw = 1.15 / len, col = pick(GARAGE_DOORS, rnd(id, j, 66));
+          s += onWall(V, p, q, c - hw, c + hw, 0, Math.min(2.05, h - 0.3), col);
+          for (let z = 0.4; z < Math.min(2.05, h - 0.3); z += 0.45) s += onWall(V, p, q, c - hw, c + hw, z, z + 0.04, mix(col, '#000000', 0.15));
+        }
+        return s;
+      }
       if (k === 'industrial') return windows(V, p, q, len, h * 0.62, 1, h * 0.3, 2.4, 0.9, 6, lit);
       if (shop) {
         // a shop front: glass below, a coloured fascia, then windows above
@@ -384,7 +475,7 @@
     // things on the roof: an air conditioning unit or a stair tower on some bigger ones
     const [cx, cy] = centroid(b.p);
     if (lm) svg += landmarkBits(V, b, h, lm, cx, cy);
-    else if (k !== 'small' && Math.abs(b.p.length) && rnd(id, 7) < 0.55) {
+    else if (k !== 'small' && k !== 'garage' && Math.abs(b.p.length) && rnd(id, 7) < 0.55) {
       const ang = Math.atan2(b.p[1][1] - b.p[0][1], b.p[1][0] - b.p[0][0]);
       svg += box(V, cx + (rnd(id, 8) - 0.5) * 3, cy + (rnd(id, 9) - 0.5) * 3, ang, 2.6, 1.8, h, h + 1.3, ['#e9ecef', '#c3c8ce'], '#d5d9de');
     }
@@ -495,10 +586,10 @@
         const sx = c[0] + (rnd(x, y, 150 + i) - 0.5) * r * 1.4, sy = c[1] + (rnd(y, x, 160 + i) - 0.5) * r;
         const dx = (CTX.windy ? 9 : 2.5) * (0.5 + rnd(x, y, 170 + i)), dur = (4 + rnd(x, y, 180 + i) * 4).toFixed(1), begin = (rnd(x, y, 190 + i) * 8).toFixed(1);
         const col = bloom ? g[2] : g[i % 3];
-        svg += `<g opacity="0"><animateTransform attributeName="transform" type="translate" values="0 0;${f(dx * 0.4)} ${f(drop * 0.45)};${f(dx * 0.7)} ${f(drop * 0.75)};${f(dx)} ${f(drop)}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
+        svg += fx(`<g opacity="0"><animateTransform attributeName="transform" type="translate" values="0 0;${f(dx * 0.4)} ${f(drop * 0.45)};${f(dx * 0.7)} ${f(drop * 0.75)};${f(dx)} ${f(drop)}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
           + `<animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.1;.85;1" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
           + `<path d="M${f(sx - 0.35)} ${f(sy)}Q${f(sx)} ${f(sy - 0.3)} ${f(sx + 0.35)} ${f(sy)}Q${f(sx)} ${f(sy + 0.3)} ${f(sx - 0.35)} ${f(sy)}Z" fill="${col}">`
-          + `<animateTransform attributeName="transform" type="rotate" values="0 ${f(sx)} ${f(sy)};180 ${f(sx)} ${f(sy)};360 ${f(sx)} ${f(sy)}" dur="${(1.6 + rnd(x, y, 200 + i)).toFixed(1)}s" repeatCount="indefinite"/></path></g>`;
+          + `<animateTransform attributeName="transform" type="rotate" values="0 ${f(sx)} ${f(sy)};180 ${f(sx)} ${f(sy)};360 ${f(sx)} ${f(sy)}" dur="${(1.6 + rnd(x, y, 200 + i)).toFixed(1)}s" repeatCount="indefinite"/></path></g>`);
       }
     }
     return svg + treeDeco(V, x, y, kind, bare || thin ? null : c, r, trunkTop);
@@ -509,7 +600,7 @@
    * Easter, red lanterns at Chinese New Year. c: the crown's middle (null: bare branches). */
   function treeDeco(V, x, y, kind, c, r, trunkTop) {
     const o = CTX.occ;
-    if (!o || kind < 0.12 || rnd(x, y, 430) > 0.4) return '';
+    if (!o || kind < 0.12 || rnd(x, y, 430) > (LITE ? 0.15 : 0.4)) return '';
     const night = CTX.night, conifer = kind < 0.36;
     // (where things hang: round the crown, or up a conifer)
     const spots = (n) => {
@@ -735,7 +826,7 @@
   // footpath, park..., and between front gardens a low hedge or wall or nothing (many are open).
   // Along the pavement in front of a house it's left to the garden's own (with gaps for its path
   // and drive). In short pieces, each drawn in its place among the buildings, as plotBits' are.
-  function gardenFences(V, scene, on, inBuilding) {
+  function gardenFences(V, scene, on, inBuilding, onRoad = () => false) {
     const out = [], plots = new Map((scene.plots || []).map((P) => [P.id, P]));
     // (how far in front of (-) or behind (+) its house's front a point in a garden is)
     const depth = (id, x, y) => { const P = plots.get(id); return P ? (x - P.c[0]) * P.n[0] + (y - P.c[1]) * P.n[1] + P.hf : 1; };
@@ -747,7 +838,7 @@
           const e = 0.04 / Math.max(L, 0.1), t0 = Math.max(0, k / n - e), t1 = Math.min(1, (k + 1) / n + e);
           const p = [A[0] + (B[0] - A[0]) * t0, A[1] + (B[1] - A[1]) * t0], q = [A[0] + (B[0] - A[0]) * t1, A[1] + (B[1] - A[1]) * t1];
           const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
-          if (!on(p[0], p[1]) || !on(q[0], q[1]) || inBuilding(mx, my)) continue;
+          if (!on(p[0], p[1]) || !on(q[0], q[1]) || inBuilding(mx, my) || onRoad(mx, my, 0.1)) continue;
           const front = F.o.every((id) => depth(id, mx, my) < 0.3);
           let kind;
           if (F.k === 'street') {
@@ -795,11 +886,13 @@
     let s = `<line x1="${f(a0[0])}" y1="${f(a0[1])}" x2="${f(a1[0])}" y2="${f(a1[1])}" stroke="#8d939b" stroke-width=".14"/><line x1="${f(b0[0])}" y1="${f(b0[1])}" x2="${f(b1[0])}" y2="${f(b1[1])}" stroke="#8d939b" stroke-width=".14"/>`
       + `<line x1="${f(a1[0])}" y1="${f(a1[1])}" x2="${f(b1[0])}" y2="${f(b1[1])}" stroke="#e0e0e0" stroke-width=".06"/>`;
     if (CTX.wet || CTX.night) return s;  // (brought in)
+    let cl = '';
     for (let i = 1; i <= 4; i++) {
-      const t = i / 5, x = a1[0] + (b1[0] - a1[0]) * t, y = a1[1] + (b1[1] - a1[1]) * t;
-      s += `<rect x="${f(x - 0.28)}" y="${f(y)}" width=".56" height="${f(0.55 + rnd(seed, i, 340) * 0.35)}" fill="${pick(CLOTHES, rnd(seed, i, 341))}"/>`;
+      const t = i / 5, x = a1[0] + (b1[0] - a1[0]) * t, y = a1[1] + (b1[1] - a1[1]) * t, r = `<rect x="${f(x - 0.28)}" y="${f(y)}" width=".56" height="${f(0.55 + rnd(seed, i, 340) * 0.35)}" fill="${pick(CLOTHES, rnd(seed, i, 341))}"/>`;
+      // (on a windy day, blowing about)
+      cl += CTX.windy ? `<g>${r}<animateTransform attributeName="transform" type="rotate" values="-6 ${f(x)} ${f(y)};22 ${f(x)} ${f(y)};4 ${f(x)} ${f(y)};-6 ${f(x)} ${f(y)}" dur="${(1.1 + rnd(seed, i, 342) * 0.6).toFixed(2)}s" repeatCount="indefinite"/></g>` : r;
     }
-    return s;
+    return s + (CTX.windy ? fx(cl) : cl);
   }
 
   function snowman(V, x, y, seed) {
@@ -864,6 +957,40 @@
     s += `<path d="M-.3 -.08l.12 -.12l.1 .12zM.1 -.08l.12 -.12l.1 .12zM-.25 .1h.5l-.1 .12h-.3z" fill="${lit}"/></g>`;
     if (CTX.night) s += `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="${f(1.3 * k)}" fill="rgb(255,170,60)" opacity=".25"/>`;
     return s;
+  }
+
+  // A wheelie bin: grey (rubbish), green (garden), blue (recycling), black...
+  function wheelieBin(V, x, y, ang, col) {
+    return box(V, x, y, ang, 0.62, 0.72, 0.05, 1.05, [col, mix(col, '#000000', 0.3)], mix(col, '#000000', 0.15))
+      + (() => { const w = V.p(x, y, 0.08); return `<circle cx="${f(w[0])}" cy="${f(w[1])}" r=".14" fill="#1c1c1c"/>`; })();
+  }
+  const BINS = ['#5f6670', '#3f7d3a', '#2f6db3', '#2b2b2b'];
+
+  // A garden table under a parasol (summer), or just table and chairs
+  function gardenTable(V, x, y, ang, parasol, seed) {
+    let s = box(V, x, y, ang, 1.2, 1.2, 0.68, 0.75, ['#e6e2da', '#c6c1b6'], '#efece6');
+    for (const [a, b] of [[-0.95, 0], [0.95, 0], [0, -0.95], [0, 0.95]]) s += box(V, x + Math.cos(ang) * a - Math.sin(ang) * b, y + Math.sin(ang) * a + Math.cos(ang) * b, ang, 0.45, 0.45, 0.4, 0.46, ['#5d636b', '#43484f'], '#6b7179');
+    if (parasol) {
+      const b = V.p(x, y, 0.75), t = V.p(x, y, 2.4), col = pick(['#e53935', '#f5f5f5', '#1e88e5', '#fdd835', '#43a047'], rnd(seed, 1, 470));
+      s += `<line x1="${f(b[0])}" y1="${f(b[1])}" x2="${f(t[0])}" y2="${f(t[1])}" stroke="#7d848c" stroke-width=".08"/>`
+        + `<path d="M${f(t[0] - 1.5)} ${f(t[1] + 0.55)}Q${f(t[0])} ${f(t[1] - 0.6)} ${f(t[0] + 1.5)} ${f(t[1] + 0.55)}Z" fill="${col}" stroke="${mix(col, '#000000', 0.2)}" stroke-width=".05"/>`;
+    }
+    return s;
+  }
+  function paddlingPool(V, x, y) {
+    const c = V.p(x, y, 0.25);
+    return `<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx="1.3" ry="${f(1.3 * SE)}" fill="#4fc3f7" stroke="#e3f2fd" stroke-width=".22"/><ellipse cx="${f(c[0] - 0.3)}" cy="${f(c[1] - 0.1)}" rx=".5" ry="${f(0.5 * SE)}" fill="#b3e5fc" opacity=".7"/>`;
+  }
+  function barbecue(V, x, y) {
+    const g = V.p(x, y, 0), c = V.p(x, y, 0.9);
+    return `<line x1="${f(g[0] - 0.3)}" y1="${f(g[1])}" x2="${f(c[0])}" y2="${f(c[1])}" stroke="#2b2b2b" stroke-width=".07"/><line x1="${f(g[0] + 0.3)}" y1="${f(g[1])}" x2="${f(c[0])}" y2="${f(c[1])}" stroke="#2b2b2b" stroke-width=".07"/>`
+      + `<path d="M${f(c[0] - 0.45)} ${f(c[1])}a.45 .4 0 0 0 .9 0z" fill="#262626"/><path d="M${f(c[0] - 0.45)} ${f(c[1] - 0.02)}a.45 .35 0 0 1 .9 0z" fill="#3a3a3a"/>`
+      + `<circle cx="${f(c[0] + 0.2)}" cy="${f(c[1] - 0.7)}" r=".35" fill="#eeeeee" opacity=".45"/><circle cx="${f(c[0] + 0.45)}" cy="${f(c[1] - 1.3)}" r=".5" fill="#eeeeee" opacity=".3"/>`;
+  }
+  function gardenLight(V, x, y) {
+    const g = V.p(x, y, 0), t = V.p(x, y, 0.75);
+    return (CTX.night ? `<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="2.2" ry="${f(2.2 * SE)}" fill="${LIGHT}" opacity=".3"/><circle cx="${f(t[0])}" cy="${f(t[1])}" r=".7" fill="${LIGHT}" opacity=".35"/>` : '')
+      + `<line x1="${f(g[0])}" y1="${f(g[1])}" x2="${f(t[0])}" y2="${f(t[1])}" stroke="#3b3f45" stroke-width=".1"/><circle cx="${f(t[0])}" cy="${f(t[1])}" r=".16" fill="${CTX.night ? LIGHT2 : '#e8e3c8'}"/>`;
   }
 
   // Presents, wrapped, piled up (under a tree, or by the door on your birthday)
@@ -947,15 +1074,17 @@
     const c = V.p(x, y, 0.5);
     s += `<circle cx="${f(c[0])}" cy="${f(c[1])}" r=".32" fill="#5d636b"/>`;
     if (running) {
-      s += `<g><animateTransform attributeName="transform" type="rotate" from="0 ${f(c[0])} ${f(c[1])}" to="360 ${f(c[0])} ${f(c[1])}" dur=".8s" repeatCount="indefinite"/>`
+      let m = '';
+      m += `<g><animateTransform attributeName="transform" type="rotate" from="0 ${f(c[0])} ${f(c[1])}" to="360 ${f(c[0])} ${f(c[1])}" dur=".8s" repeatCount="indefinite"/>`
         + `<line x1="${f(c[0] - 0.28)}" y1="${f(c[1])}" x2="${f(c[0] + 0.28)}" y2="${f(c[1])}" stroke="#c9ced4" stroke-width=".1"/><line x1="${f(c[0])}" y1="${f(c[1] - 0.28)}" x2="${f(c[0])}" y2="${f(c[1] + 0.28)}" stroke="#c9ced4" stroke-width=".1"/></g>`;
       const t = V.p(x, y, 1.1);
       for (let k = 0; k < 3; k++) {
-        s += `<circle cx="${f(t[0])}" cy="${f(t[1])}" r=".4" fill="#f4f7fa" opacity="0">`
+        m += `<circle cx="${f(t[0])}" cy="${f(t[1])}" r=".4" fill="#f4f7fa" opacity="0">`
           + `<animate attributeName="cy" from="${f(t[1])}" to="${f(t[1] - 4)}" dur="3s" begin="${k}s" repeatCount="indefinite"/>`
           + `<animate attributeName="r" from=".3" to="1.4" dur="3s" begin="${k}s" repeatCount="indefinite"/>`
           + `<animate attributeName="opacity" values="0;.8;0" dur="3s" begin="${k}s" repeatCount="indefinite"/></circle>`;
       }
+      s += fx(m);
     }
     return s;
   }
@@ -965,20 +1094,23 @@
    * (some with a car, or a garage), a hedge or low wall; back: fences or hedges, a patio or a
    * conservatory, a shed, a trampoline, a washing line, bushes, flower beds. Your house: your car on
    * the drive (glowing while charging) and the heat pump. */
-  function plotBits(V, P, on, isHome, inBuilding = () => false, lots = false) {
+  function plotBits(V, P, on, isHome, inBuilding = () => false, lots = false, onRoad = () => false) {
     const ground = [], things = [], id = P.id || 0, r = (k) => rnd(id, k, 300), energy = isHome ? (CTX.energy || {}) : {};
-    // (kept to the island, and out of other buildings: e.g. a garden running into the house next door)
-    const thing = (x, y, svg) => { if (svg && on(x, y) && !inBuilding(x, y)) things.push([V.d(x, y), svg]); };
+    // (kept to the island, out of buildings (e.g. a garden running into the house next door), and
+    // off the streets, pavements and footpaths, all round it, rad m; kerb: only off the road itself)
+    const clear = (x, y, rad, kerb) => on(x, y) && !onRoad(x, y, rad, kerb)
+      && !inBuilding(x, y) && (!rad || [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([a, b]) => !inBuilding(x + a * rad, y + b * rad)));
+    const thing = (x, y, svg, rad = 0.5, kerb = false) => { if (svg && clear(x, y, rad, kerb)) things.push([V.d(x, y), svg]); };
     // A fence, wall or hedge in short pieces, each drawn in its place among the buildings (in front of
     // one, behind another), and none off the island's edge or through a building
-    const run = (a, b, kind) => {
+    const run = (a, b, kind) => {  // (not used for the gardens' own boundaries: see gardenFences)
       const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L / 4));
       for (let i = 0; i < n; i++) {
         const t0 = i / n, t1 = (i + 1) / n, e = 0.04 / Math.max(L, 0.1);
         const p = [a[0] + (b[0] - a[0]) * Math.max(0, t0 - e), a[1] + (b[1] - a[1]) * Math.max(0, t0 - e)];
         const q = [a[0] + (b[0] - a[0]) * Math.min(1, t1 + e), a[1] + (b[1] - a[1]) * Math.min(1, t1 + e)];
         const m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-        if (on(p[0], p[1]) && on(q[0], q[1])) thing(m[0], m[1], boundary(V, p, q, kind));
+        if (on(p[0], p[1]) && on(q[0], q[1])) thing(m[0], m[1], boundary(V, p, q, kind), 0);
       }
     };
     const angU = Math.atan2(P.u[1], P.u[0]), angN = Math.atan2(P.n[1], P.n[0]);
@@ -1019,6 +1151,45 @@
       const l0 = -sd * 0.9, l1 = -sd * Math.max(1.2, hl * 0.9);
       ground.push(flowerBed(V, [PW(P, -hf - 1.1, l0), PW(P, -hf - 1.1, l1), PW(P, -hf - 0.2, l1), PW(P, -hf - 0.2, l0)], id + 1));
     }
+    // wheelie bins beside the house (or by the front door), out at the kerb on bin day (your bin
+    // sensor: yours, and most of the street's)
+    const hs = CTX.home || {};
+    const binDay = hs.bins === true && (isHome || r(56) < 0.75);
+    if (fr >= 1 || binDay) {
+      const n = 2 + Math.floor(r(57) * 2), side2 = -sd, beside = w - hl >= 1.2;
+      for (let k = 0; k < n; k++) {
+        const col = BINS[(k + Math.floor(r(58) * 4)) % BINS.length];
+        const [x, y] = binDay ? PW(P, -hf - fr - 0.75, side2 * (hl * 0.6 + k * 0.8)) : beside ? PW(P, -hf + 0.5 + k * 0.8, side2 * (hl + 0.55)) : PW(P, -hf - 0.55, side2 * Math.max(0.3, hl - 0.5 - k * 0.75));
+        thing(x, y, wheelieBin(V, x, y, angU, col), 0.3, binDay);
+      }
+    }
+    // your garage, beside the house: its door up while your garage sensor says it's open
+    if (isHome && hs.garage != null && w - hl >= 3) {
+      const [x, y] = PW(P, -hf + 3, sd * (hl + 1.6));
+      let g = box(V, x, y, angN, 5.6, 2.8, 0, 2.4, ['#ebe5da', '#c9c1b2'], snowy('#8a8f96', 0.8));
+      const [, aw] = V.n(-P.n[0], -P.n[1]);
+      if (aw < 0) {
+        const a = PW(P, -hf + 0.2, sd * (hl + 1.6) - 1.15), b = PW(P, -hf + 0.2, sd * (hl + 1.6) + 1.15);
+        g += poly([V.p(a[0], a[1], 0), V.p(b[0], b[1], 0), V.p(b[0], b[1], 2.05), V.p(a[0], a[1], 2.05)], hs.garage ? (CTX.night ? LIGHT2 : '#2a2a2a') : '#f0f0f0', ' stroke="#9aa0a6" stroke-width=".06"');
+      }
+      thing(x, y, g, 0);
+    }
+    // the back garden through the year: a table and parasol in summer (a paddling pool in some, a
+    // barbecue on a warm day), a table and chairs in spring and autumn, all put away in winter
+    if (bk >= 4 && !CTX.snow && CTX.season !== 'winter') {
+      const sdx = r(11) < 0.5 ? 1 : -1, pd2 = Math.min(3, bk * 0.35);
+      const summer = CTX.season === 'summer', warm = CTX.temp != null && CTX.temp >= 18;
+      if (r(60) < (summer ? 0.22 : 0.12)) { const [x, y] = PW(P, hb + pd2 * 0.55, sdx * Math.max(0, hl * 0.4)); thing(x, y, gardenTable(V, x, y, angU, summer && !CTX.wet, id), 1.2); }
+      if (summer && !CTX.wet && !CTX.cold && bk >= 7 && r(61) < 0.07) { const [x, y] = PW(P, hb + bk * 0.6, -sdx * Math.max(0, w - 2.2)); thing(x, y, paddlingPool(V, x, y), 1.3); }
+      if (warm && !CTX.wet && !CTX.night && r(62) < 0.15) { const [x, y] = PW(P, hb + pd2 + 0.6, -sdx * Math.max(0, w - 1.5)); thing(x, y, barbecue(V, x, y), 0.5); }
+    }
+    // your garden lights, round the back garden, while they're on
+    if (isHome && hs.lights && bk >= 2) {
+      for (const [s0, l0] of [[0.35, 1], [0.35, -1], [0.85, 1], [0.85, -1]]) {
+        const [x, y] = PW(P, hb + bk * s0, l0 * Math.max(0.5, w - 0.5));
+        thing(x, y, gardenLight(V, x, y), 0.2);
+      }
+    }
     // Christmas, at the houses with lights up (and yours), each its own way: a tree with presents
     // under it, a wreath on the door, a light-up reindeer, candy canes along the path
     const O = CTX.occ || {};
@@ -1027,10 +1198,10 @@
       if (fr >= 1.6 && (isHome || r(43) < 0.75)) {
         const [x, y] = PW(P, -hf - Math.min(fr * 0.5, 1.6), side);
         thing(x, y, xmasTree(V, x, y, id, isHome ? 1.4 : 1.1 + r(37) * 0.3));
-        const [gx, gy] = PW(P, -hf - Math.min(fr * 0.5, 1.6) - 0.9, side + sd * 0.3);
-        thing(gx, gy, presents(V, gx, gy, id, isHome ? 3 : 2));
+        const [gx, gy] = PW(P, -hf - Math.max(0.6, Math.min(fr * 0.5, 1.6) - 0.6), side + sd * 1.1);
+        thing(gx, gy, presents(V, gx, gy, id, isHome ? 3 : 2), 0.4);
       }
-      if (isHome || r(44) < 0.6) { const [x, y] = PW(P, -hf - 0.05, pl); thing(x, y, wreath(V, x, y)); }
+      if (isHome || r(44) < 0.6) { const [x, y] = PW(P, -hf - 0.05, pl); thing(x, y, wreath(V, x, y), 0); }
       if (fr >= 3 && (isHome || r(45) < 0.3)) {
         const [x, y] = PW(P, -hf - fr * 0.55, -side * 0.9);
         thing(x, y, reindeer(V, x, y, angU + (r(46) < 0.5 ? 0 : Math.PI), id));
@@ -1108,8 +1279,8 @@
       for (let k = 0; k < (isHome ? 3 : 1); k++) {
         const dur = (4 + r(26 + k) * 2).toFixed(1), begin = (r(28 + k) * 4 + k * 1.4).toFixed(1), hx = t0[0] + (k - 1) * 1.2, hy = t0[1];
         const heart = `M${f(hx)} ${f(hy + 0.35)}c-.6 -.45 -.9 -.75 -.9 -1.05c0 -.3 .25 -.5 .5 -.5c.2 0 .35 .1 .4 .25c.05 -.15 .2 -.25 .4 -.25c.25 0 .5 .2 .5 .5c0 .3 -.3 .6 -.9 1.05z`;
-        things.push([V.d(x, y) - 0.01, `<path d="${heart}" fill="rgb(236,64,122)" opacity="0"><animateTransform attributeName="transform" type="translate" values="0 0;.6 -5" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
-          + `<animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.15;.7;1" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/></path>`]);
+        things.push([V.d(x, y) - 0.01, fx(`<path d="${heart}" fill="rgb(236,64,122)" opacity="0"><animateTransform attributeName="transform" type="translate" values="0 0;.6 -5" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
+          + `<animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.15;.7;1" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/></path>`)]);
       }
     }
     // a birthday: balloons tied up by your front door
@@ -1164,8 +1335,8 @@
       + `<rect x="${f(-len * 0.24)}" y="${f(-wid / 2 - 0.25)}" width="${f(len * 0.48)}" height="${f(wid - 0.3)}" rx=".3" fill="${glass}"/>`
       + (night ? `<circle cx="${f(len / 2)}" cy="${f(-0.4 - wid * 0.25)}" r=".3" fill="${LIGHT2}"/><circle cx="${f(len / 2)}" cy="${f(-0.4 + wid * 0.25)}" r=".3" fill="${LIGHT2}"/><ellipse cx="${f(len / 2 + 2)}" cy="-.4" rx="2" ry="1" fill="${LIGHT}" opacity=".25"/>` : '');
   }
-  function walker(seed) {
-    const top = pick(TOPS, rnd(seed, 1, 350)), skin = pick(SKIN, rnd(seed, 2, 351)), dog = rnd(seed, 3, 352) < 0.3;
+  function walker(seed, withDog = false) {
+    const top = pick(TOPS, rnd(seed, 1, 350)), skin = pick(SKIN, rnd(seed, 2, 351)), dog = withDog || rnd(seed, 3, 352) < 0.3;
     return `<line x1="-.12" y1="0" x2="-.12" y2="-.8" stroke="#37474f" stroke-width=".2"/><line x1=".12" y1="0" x2=".12" y2="-.8" stroke="#37474f" stroke-width=".2"/>`
       + `<rect x="-.32" y="-1.65" width=".64" height=".95" rx=".2" fill="${top}"/><circle cx="0" cy="-1.95" r=".3" fill="${skin}"/>`
       + (dog ? `<ellipse cx=".95" cy="-.32" rx=".45" ry=".22" fill="${pick(['#8d6e4c', '#3e2723', '#d7ccc8', '#f5f5f5'], rnd(seed, 4, 353))}"/><circle cx="1.38" cy="-.48" r=".16" fill="#5d4037"/><line x1=".25" y1="-1.1" x2="1.2" y2="-.5" stroke="#555555" stroke-width=".04"/>` : '');
@@ -1249,11 +1420,34 @@
     CTX.cold = (live.weather || {}).temperature != null && !Number.isNaN(temp) && temp < (fahr ? 41 : 5);
     CTX.frost = CTX.cold && !CTX.snow && !CTX.wet;
     CTX.windy = ['windy', 'windy-variant', 'pouring', 'lightning-rainy'].includes(wx);
-    CTX.leaves = LITE ? 20 : 90;  // (falling leaves on this map, at most)
+    CTX.leaves = LITE ? 20 : 50;  // (falling leaves on this map, at most)
     CTX.occ = occasion(opts.date ? new Date(opts.date) : new Date(), opts.occasions);
     CTX.energy = opts.isHome ? (live.energy || null) : null;
+    CTX.home = opts.isHome ? (live.house || {}) : {};
+    CTX.look = opts.isHome ? (opts.look || null) : null;
+    CTX.number = opts.isHome ? (scene.number || '') : '';
+    CTX.temp = (live.weather || {}).temperature != null && !Number.isNaN(temp) ? (fahr ? (temp - 32) * 5 / 9 : temp) : null;
+    const now = opts.date ? new Date(opts.date) : new Date();
+    CTX.hour = now.getHours() + now.getMinutes() / 60;
+    CTX.weekday = now.getDay() >= 1 && now.getDay() <= 5;
+    CTX.steam = 12; CTX.tv = LITE ? 3 : 8;
     const motion = opts.motion !== false;
     const out = [];
+    // Split into layers (opts.split): the ground, still; what moves on it (traffic, ripples...); the
+    // buildings, trees and gardens, still; and what moves over them. The page puts each in its own
+    // layer, so a moving car doesn't make the browser draw the whole map again every frame.
+    const split = !!opts.split;
+    CTX.split = split; CTX.top = [];
+    const gAnim = [], gAnim2 = [], ANIM = /<animate/;
+    const still = (s) => s.replace(/<animate(?:Transform|Motion)?\b(?![^>]*data-nvk)[^>]*\/>/g, '');
+    // (on the ground: still things in place; moving ones (or `mode` true) to the moving layer;
+    // `mode` 'still': kept in place, but not moving)
+    const P = (s, mode) => {
+      if (!split) out.push(s);
+      else if (mode === 'still') out.push(still(s));
+      else (mode || ANIM.test(s) ? gAnim : out).push(s);
+    };
+    const P2 = (s) => (split && ANIM.test(s) ? gAnim2 : out).push(s);
     // the chunk of ground, torn out: its earth sides (those facing the viewer, back ones first),
     // then its top, with a lip of turf
     const edge = outline(H, (scene.lat || 0) * 1000 + (scene.lon || 0) * 7000);
@@ -1293,12 +1487,12 @@
     const clip = 'nvclip' + Math.random().toString(36).slice(2, 8);
     out.push(`<clipPath id="${clip}"><polygon points="${pts(topPts)}"/></clipPath><g clip-path="url(#${clip})">`);
     const wid = 'nvw' + Math.random().toString(36).slice(2, 8);
-    out.push(`<defs><radialGradient id="${wid}"><stop offset="0" stop-color="#b4def6"/><stop offset=".7" stop-color="${C.water}"/><stop offset="1" stop-color="#6eaedb"/></radialGradient></defs>`);
+    P(`<defs><radialGradient id="${wid}"><stop offset="0" stop-color="#b4def6"/><stop offset=".7" stop-color="${C.water}"/><stop offset="1" stop-color="#6eaedb"/></radialGradient></defs>`);
     for (const a of scene.areas || []) {
-      const P = a.p.map(([x, y]) => V.p(x, y, 0));
-      if (a.k !== 'water') { out.push(poly(P, ['paved', 'yard'].includes(a.k) ? (C[a.k]) : snowy(C[a.k] || C.grass, 0.85))); continue; }
+      const Q = a.p.map(([x, y]) => V.p(x, y, 0));
+      if (a.k !== 'water') { P(poly(Q, ['paved', 'yard'].includes(a.k) ? (C[a.k]) : snowy(C[a.k] || C.grass, 0.85))); continue; }
       // ponds and lakes: a darker edge, lighter in the middle, and ripples spreading now and then
-      out.push(poly(P, `url(#${wid})`, ` stroke="#4e8dbf" stroke-width="1.1" stroke-linejoin="round"`));
+      P(poly(Q, `url(#${wid})`, ` stroke="#4e8dbf" stroke-width="1.1" stroke-linejoin="round"`));
       const xs = a.p.map((q) => q[0]), ys = a.p.map((q) => q[1]);
       const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
       const n = Math.min(4, Math.max(1, Math.round((x1 - x0) * (y1 - y0) / 500)));
@@ -1306,13 +1500,36 @@
         const x = x0 + (x1 - x0) * rnd(x0, tries, 80), y = y0 + (y1 - y0) * rnd(y0, tries, 81);
         if (!insideRing(x, y, a.p) || !insideRing(x, y, edge)) continue;
         const c = V.p(x, y, 0), dur = (3 + rnd(x, y, 82) * 3).toFixed(1), begin = (rnd(x, y, 83) * 4).toFixed(1);
-        out.push(`<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".5" ry="${f(0.5 * SE)}" fill="none" stroke="#ffffff" stroke-width=".3" opacity="0">`
+        P(`<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".5" ry="${f(0.5 * SE)}" fill="none" stroke="#ffffff" stroke-width=".3" opacity="0">`
           + `<animate attributeName="rx" values=".5;4" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/><animate attributeName="ry" values="${f(0.5 * SE)};${f(4 * SE)}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
           + `<animate attributeName="opacity" values=".8;0" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/></ellipse>`);
         k++;
       }
     }
     // parks and playing fields mown in stripes; reeds round ponds, and ducks on them
+    const allotSheds = [];
+    for (const a of scene.areas || []) {
+      if (a.k !== 'allot') continue;
+      // allotments: rows of beds (bare in winter), a path down the middle of each plot, the odd shed
+      const xs = a.p.map((q) => q[0]), ys = a.p.map((q) => q[1]);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      const cid = 'nva' + Math.random().toString(36).slice(2, 8), along = x1 - x0 >= y1 - y0, st = [];
+      for (let k = (along ? y0 : x0) + 0.8; k < (along ? y1 : x1); k += 2.6) {
+        const q = along ? [[x0, k], [x1, k], [x1, k + 1.5], [x0, k + 1.5]] : [[k, y0], [k + 1.5, y0], [k + 1.5, y1], [k, y1]];
+        st.push(poly(q.map(([x, y]) => V.p(x, y, 0)), snowy(C.bed, 0.85)));
+        if (CTX.season !== 'winter' && !CTX.snow) {
+          const g = along ? [[x0, k + 0.5], [x1, k + 0.5], [x1, k + 1.0], [x0, k + 1.0]] : [[k + 0.5, y0], [k + 1.0, y0], [k + 1.0, y1], [k + 0.5, y1]];
+          st.push(poly(g.map(([x, y]) => V.p(x, y, 0)), pick(['#5fa143', '#7bb85a', '#4e8f37'], rnd(k, x0, 480)), ' opacity=".9"'));
+        }
+      }
+      P(`<clipPath id="${cid}"><polygon points="${pts(a.p.map(([x, y]) => V.p(x, y, 0)))}"/></clipPath><g clip-path="url(#${cid})">${st.join('')}</g>`);
+      for (let k = 0, tries = 0; k < 3 && tries < 12; tries++) {
+        const x = x0 + 2 + (x1 - x0 - 4) * rnd(x0, tries, 481), y = y0 + 2 + (y1 - y0 - 4) * rnd(y0, tries, 482);
+        if (insideRing(x, y, a.p) && insideRing(x + 1.5, y + 1.5, a.p) && insideRing(x - 1.5, y - 1.5, a.p)) {
+          allotSheds.push([x, y, rnd(x, y, 483) < 0.5 ? ['#6f8f4e', '#55703a'] : ['#9b7a55', '#7d5f40']]); k++;
+        }
+      }
+    }
     for (const a of scene.areas || []) {
       if (!['grass', 'pitch', 'water'].includes(a.k)) continue;
       const xs = a.p.map((q) => q[0]), ys = a.p.map((q) => q[1]);
@@ -1325,7 +1542,7 @@
           const q = [[k, -R], [k + 4, -R], [k + 4, R], [k, R]].map(([u, v]) => V.p(cx + u * ca - v * sa, cy + u * sa + v * ca, 0));
           st.push(poly(q, mix(C[a.k] || C.grass, '#ffffff', 0.12)));
         }
-        out.push(`<clipPath id="${cid}"><polygon points="${pts(a.p.map(([x, y]) => V.p(x, y, 0)))}"/></clipPath><g clip-path="url(#${cid})" opacity=".55">${st.join('')}</g>`);
+        P(`<clipPath id="${cid}"><polygon points="${pts(a.p.map(([x, y]) => V.p(x, y, 0)))}"/></clipPath><g clip-path="url(#${cid})" opacity=".55">${st.join('')}</g>`);
         continue;
       }
       // reeds along the edge here and there
@@ -1342,7 +1559,7 @@
           }
         }
       }
-      out.push(rs);
+      P(rs);
       if (motion && !CTX.snow && (x1 - x0) * (y1 - y0) > 150) {
         for (let k = 0, tries = 0; k < 3 && tries < 20; tries++) {
           const cx = x0 + (x1 - x0) * rnd(x0, tries, 384), cy = y0 + (y1 - y0) * rnd(y0, tries, 385), rr = 1.5 + rnd(cx, cy, 386) * 2;
@@ -1350,26 +1567,26 @@
           const loop = [];
           for (let j = 0; j <= 16; j++) loop.push([cx + Math.cos(j / 16 * 6.283) * rr, cy + Math.sin(j / 16 * 6.283) * rr]);
           if (!loop.every(([x, y]) => insideRing(x, y, a.p))) continue;
-          out.push(mover(spath(V, loop) + 'Z', 25 + rnd(cx, cy, 387) * 20, -rnd(cy, cx, 388) * 40, duck(cx + cy)));
+          P(mover(spath(V, loop) + 'Z', 25 + rnd(cx, cy, 387) * 20, -rnd(cy, cx, 388) * 40, duck(cx + cy)));
           k++;
         }
       }
     }
-    for (const w of scene.water || []) out.push(`<path d="${line(V, w.p)}" fill="none" stroke="${C.water}" stroke-width="${f(w.w)}" stroke-linecap="round" stroke-linejoin="round"/>`
-      + `<path d="${line(V, w.p)}" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="${f(Math.max(0.3, w.w * 0.12))}" stroke-dasharray="1.5 5" stroke-linecap="round"><animate attributeName="stroke-dashoffset" from="0" to="-13" dur="4s" repeatCount="indefinite"/></path>`);
+    for (const w of scene.water || []) P(`<path d="${line(V, w.p)}" fill="none" stroke="${C.water}" stroke-width="${f(w.w)}" stroke-linecap="round" stroke-linejoin="round"/>`
+      + `<path d="${line(V, w.p)}" fill="none" stroke="#ffffff" stroke-opacity=".45" stroke-width="${f(Math.max(0.3, w.w * 0.12))}" stroke-dasharray="1.5 5" stroke-linecap="round"><animate attributeName="stroke-dashoffset" from="0" to="-13" dur="4s" repeatCount="indefinite"/></path>`, 'still');
     const roads = scene.roads || [];
     const paths = roads.filter((r) => r.k === 'path'), cars = roads.filter((r) => r.k !== 'path');
-    for (const r of paths) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.pathEdge}" stroke-width="${f(r.w + 0.8)}" stroke-linecap="round" stroke-linejoin="round"/>`);
-    for (const r of paths) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.path}" stroke-width="${f(r.w)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of paths) P(`<path d="${line(V, r.p)}" fill="none" stroke="${C.pathEdge}" stroke-width="${f(r.w + 0.8)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of paths) P(`<path d="${line(V, r.p)}" fill="none" stroke="${C.path}" stroke-width="${f(r.w)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     // streets: a pavement each side (with its kerb), the road, its markings
     const streets = cars.filter((r) => r.k !== 'service');
-    for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.kerb}" stroke-width="${f(r.w + pv(r) * 2 + 0.6)}" stroke-linecap="round" stroke-linejoin="round"/>`);
-    for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.pave}" stroke-width="${f(r.w + pv(r) * 2)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of streets) P(`<path d="${line(V, r.p)}" fill="none" stroke="${C.kerb}" stroke-width="${f(r.w + pv(r) * 2 + 0.6)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of streets) P(`<path d="${line(V, r.p)}" fill="none" stroke="${C.pave}" stroke-width="${f(r.w + pv(r) * 2)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     // (a grass verge between the pavement and the kerb on residential streets)
-    for (const r of streets.filter((r) => r.k === 'minor' && pv(r) >= 2.5)) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${snowy(C.verge, 0.85)}" stroke-width="${f(r.w + 2.4)}" stroke-linecap="round" stroke-linejoin="round"/>`);
-    for (const r of cars) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${mix(C.road, '#ffffff', 0.35)}" stroke-width="${f(r.w + 0.5)}" stroke-linecap="round" stroke-linejoin="round"/>`);
-    for (const r of cars) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.road}" stroke-width="${f(r.w)}" stroke-linecap="round" stroke-linejoin="round"/>`);
-    for (const r of streets) out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.roadLine}" stroke-width="${r.k === 'major' ? '.45' : '.3'}" stroke-dasharray="${r.k === 'major' ? '4 3' : '2.5 4'}" opacity=".85"/>`);
+    for (const r of streets.filter((r) => r.k === 'minor' && pv(r) >= 2.5)) P(`<path d="${line(V, r.p)}" fill="none" stroke="${snowy(C.verge, 0.85)}" stroke-width="${f(r.w + 2.4)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of cars) P(`<path d="${line(V, r.p)}" fill="none" stroke="${mix(C.road, '#ffffff', 0.35)}" stroke-width="${f(r.w + 0.5)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of cars) P(`<path d="${line(V, r.p)}" fill="none" stroke="${C.road}" stroke-width="${f(r.w)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    for (const r of streets) P(`<path d="${line(V, r.p)}" fill="none" stroke="${C.roadLine}" stroke-width="${r.k === 'major' ? '.45' : '.3'}" stroke-dasharray="${r.k === 'major' ? '4 3' : '2.5 4'}" opacity=".85"/>`);
     // zebra crossings on each street just back from where streets meet (a shared point, one
     // street's end on another, or two crossing)
     const segs = [];
@@ -1418,7 +1635,52 @@
         }
       }
     }
-    if (zebra.length) out.push(`<g opacity=".9">${zebra.join('')}</g>`);
+    if (zebra.length) P(`<g opacity=".9">${zebra.join('')}</g>`);
+    // wear on the roads: patched tarmac now and then, drain covers by the kerbs, and faded give-way
+    // lines where a side street meets another
+    {
+      const wear = [];
+      for (const r of streets) {
+        let acc = 8 + rnd(r.p[0][0], r.p[0][1], 490) * 16, dacc = 5 + rnd(r.p[0][1], r.p[0][0], 491) * 10, side = 1;
+        for (let i = 0; i < r.p.length - 1; i++) {
+          const [ax, ay] = r.p[i], [bx, by] = r.p[i + 1], L = Math.hypot(bx - ax, by - ay);
+          if (!L) continue;
+          const ux = (bx - ax) / L, uy = (by - ay) / L, vx = -uy, vy = ux;
+          while (acc < L) {
+            const k = rnd(ax + acc, ay, 492), ln = 1.6 + k * 2.6, wd = 1.1 + rnd(ay, acc, 493) * 1.2, off = (rnd(acc, ax, 494) - 0.5) * Math.max(0, r.w - wd - 0.6);
+            const cx = ax + ux * acc + vx * off, cy = ay + uy * acc + vy * off;
+            if (insideRing(cx, cy, edge)) {
+              const q = [[-ln / 2, -wd / 2], [ln / 2, -wd / 2], [ln / 2, wd / 2], [-ln / 2, wd / 2]].map(([s, o]) => V.p(cx + ux * s + vx * o, cy + uy * s + vy * o, 0));
+              wear.push(poly(q, k < 0.5 ? mix(C.road, '#000000', 0.12) : mix(C.road, '#ffffff', 0.08)));
+            }
+            acc += 18 + rnd(ax, acc, 495) * 22;
+          }
+          while (dacc < L) {
+            const o = side * (r.w / 2 - 0.35), cx = ax + ux * dacc + vx * o, cy = ay + uy * dacc + vy * o;
+            if (insideRing(cx, cy, edge)) {
+              const q = [[-0.25, -0.18], [0.25, -0.18], [0.25, 0.18], [-0.25, 0.18]].map(([s, o2]) => V.p(cx + ux * s + vx * o2, cy + uy * s + vy * o2, 0));
+              wear.push(poly(q, '#3c4047', ' stroke="#7d828a" stroke-width=".05"'));
+            }
+            side = -side; dacc += 16 + rnd(ay, dacc, 496) * 10;
+          }
+          acc -= L; dacc -= L;
+        }
+      }
+      for (const {P: J, legs, w} of joins.values()) {
+        if (legs.length < 3) continue;
+        for (const g of legs) {
+          if (legs.filter((o) => o.ri === g.ri).length > 1 || g.len < w / 2 + 4) continue;  // (the road through: no lines)
+          const d = w / 2 + 0.5, vx = -g.uy, vy = g.ux;
+          for (const e of [0, 0.4]) {
+            const a = [J[0] + g.ux * (d + e) - vx * g.w / 2 * 0.95, J[1] + g.uy * (d + e) - vy * g.w / 2 * 0.95], b = [J[0] + g.ux * (d + e) + vx * g.w / 2 * 0.95, J[1] + g.uy * (d + e) + vy * g.w / 2 * 0.95];
+            if (!insideRing(a[0], a[1], edge) || !insideRing(b[0], b[1], edge)) continue;
+            const pa = V.p(a[0], a[1], 0), pb = V.p(b[0], b[1], 0);
+            wear.push(`<line x1="${f(pa[0])}" y1="${f(pa[1])}" x2="${f(pb[0])}" y2="${f(pb[1])}" stroke="${C.roadLine}" stroke-width=".18" stroke-dasharray=".6 .45" opacity=".55"/>`);
+          }
+        }
+      }
+      if (wear.length) P(wear.join(''));
+    }
     // wet: puddles by the kerbs and on the pavements, raindrops rippling some of them
     if (CTX.wet) {
       const pud = [];
@@ -1457,12 +1719,12 @@
           acc -= L;
         }
       }
-      out.push(pud.join(''));
+      P(pud.join(''));
     }
     for (const r of scene.rails || []) {
-      out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.rail}" stroke-width="${f(r.w)}" stroke-linecap="butt" stroke-linejoin="round"/>`);
-      out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railTie}" stroke-width="${f(r.w * 0.55)}" stroke-dasharray=".6 1.4"/>`);
-      out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railLine}" stroke-width=".35"/>`);
+      P(`<path d="${line(V, r.p)}" fill="none" stroke="${C.rail}" stroke-width="${f(r.w)}" stroke-linecap="butt" stroke-linejoin="round"/>`);
+      P(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railTie}" stroke-width="${f(r.w * 0.55)}" stroke-dasharray=".6 1.4"/>`);
+      P(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railLine}" stroke-width=".35"/>`);
     }
     // (on the island: well inside it for sure, else by its torn edge; the edge is never more than
     // about 25 m in, and its corners are rounded 34 m)
@@ -1481,16 +1743,34 @@
     const inBuilding = (x, y) => (bgrid.get(Math.floor(x / bcell) + ',' + Math.floor(y / bcell)) || [])
       .some(([bx, p]) => x >= bx[0] - 0.3 && x <= bx[2] + 0.3 && y >= bx[1] - 0.3 && y <= bx[3] + 0.3 && insideRing(x, y, p));
     // gardens: their paths, drives, patios and flower beds now; fences, sheds... with the buildings
+    // (whether a point's on a street, its pavements or a footpath, within pad m; kerb: the road only)
+    const rcell = 20, rgrid = new Map();
+    for (const r of roads) {
+      const half = r.w / 2, pave = r.k === 'path' || r.k === 'service' ? 0 : pv(r);
+      for (let i = 0; i < r.p.length - 1; i++) {
+        const [ax, ay] = r.p[i], [bx, by] = r.p[i + 1], m = half + pave + 2;
+        for (let gx = Math.floor((Math.min(ax, bx) - m) / rcell); gx <= Math.floor((Math.max(ax, bx) + m) / rcell); gx++)
+          for (let gy = Math.floor((Math.min(ay, by) - m) / rcell); gy <= Math.floor((Math.max(ay, by) + m) / rcell); gy++) {
+            const k = gx + ',' + gy;
+            if (!rgrid.has(k)) rgrid.set(k, []);
+            rgrid.get(k).push([ax, ay, bx, by, half, pave]);
+          }
+      }
+    }
+    const onRoad = (x, y, pad = 0, kerb = false) => (rgrid.get(Math.floor(x / rcell) + ',' + Math.floor(y / rcell)) || []).some(([ax, ay, bx, by, half, pave]) => {
+      const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy || 1, tt = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / l2));
+      return Math.hypot(ax + vx * tt - x, ay + vy * tt - y) < half + (kerb ? 0 : pave) + pad;
+    });
     const plotThings = [];
-    for (const P of scene.plots || []) {
-      if (!on(P.c[0], P.c[1])) continue;
-      const bits = plotBits(V, P, on, !!opts.isHome && P.id === home.id, inBuilding, !!scene.fences);
-      out.push(bits.ground.join(''));
+    for (const Pl of scene.plots || []) {
+      if (!on(Pl.c[0], Pl.c[1])) continue;
+      const bits = plotBits(V, Pl, on, !!opts.isHome && Pl.id === home.id, inBuilding, !!scene.fences, onRoad);
+      P(bits.ground.join(''));
       plotThings.push(...bits.things);
     }
-    if (scene.fences) plotThings.push(...gardenFences(V, scene, on, inBuilding));
+    if (scene.fences) plotThings.push(...gardenFences(V, scene, on, inBuilding, onRoad));
     // schools' playgrounds
-    for (const b of scene.buildings || []) if (b.lm === 'school' && b.p.every(([x, y]) => on(x, y))) out.push(playground(V, b));
+    for (const b of scene.buildings || []) if (b.lm === 'school' && b.p.every(([x, y]) => on(x, y))) P(playground(V, b));
     // the cars parked at the kerbs, on the road, so the traffic drives past them: those on the far
     // side of their street drawn before it, those on the near side after (in front of it)
     const parked = (scene.cars || []).filter((c) => on(c[0], c[1])).sort((a, b) => V.d(b[0], b[1]) - V.d(a[0], a[1]));
@@ -1504,48 +1784,58 @@
       return V.d(c[0], c[1]) < best[1];
     };
     const nearCars = [];
-    out.push(parked.filter((c) => (nearSide(c) ? (nearCars.push(c), false) : true)).map((c) => car(V, c)).join(''));
+    P(parked.filter((c) => (nearSide(c) ? (nearCars.push(c), false) : true)).map((c) => car(V, c)).join(''));
     if (motion) {
       // traffic: a few cars (and a bus) driving on the left, a train now and then, people walking
       const drives = streets.filter((r) => plen(r.p) >= 50);
-      const nCars = Math.min(drives.length * 2, CTX.night ? 3 : 7);
+      // (busier on a school run, weekdays about 8:15 to 9 and 3 to 3:45)
+      const schoolRun = CTX.weekday && ((CTX.hour >= 8.25 && CTX.hour < 9) || (CTX.hour >= 15 && CTX.hour < 15.75));
+      const nCars = Math.min(drives.length * (schoolRun ? 3 : 2), CTX.night ? 3 : schoolRun ? 12 : 7);
       for (let i = 0; i < nCars && drives.length; i++) {
         const r = drives[Math.floor(rnd(i, H, 310) * drives.length)], back = rnd(i, H, 311) < 0.5;
         // (on the left, between the middle and the cars parked at the kerb)
         // (clear of the parked cars: a car's width and a bit in from them, but not over the middle)
         const p = offsetLine(back ? r.p.slice().reverse() : r.p, Math.min(r.w / 4, Math.max(0.55, r.w / 2 - 2.95))), L = plen(p);
-        out.push(mover(spath(V, p), L / 9, -rnd(i, H, 312) * L / 9, carSprite(CARS[Math.floor(rnd(i, H, 313) * 10) % 10]), ' rotate="auto"'));
+        P(mover(spath(V, p), L / 9, -rnd(i, H, 312) * L / 9, carSprite(CARS[Math.floor(rnd(i, H, 313) * 10) % 10]), ' rotate="auto"'));
       }
       if (drives.length && !CTX.night) {
         const r = drives.slice().sort((a, b) => b.w - a.w || plen(b.p) - plen(a.p))[0], p = offsetLine(r.p, Math.min(r.w / 4, Math.max(0.8, r.w / 2 - 3.2))), L = plen(p);
-        out.push(mover(spath(V, p), L / 7 + 20, -rnd(H, 1, 314) * L / 7, carSprite('#c62828', 10, 2.1, '#cfe3ee'), ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(L / 7 / (L / 7 + 20)).toFixed(3)};1" calcMode="linear"`));
+        P(mover(spath(V, p), L / 7 + 20, -rnd(H, 1, 314) * L / 7, carSprite('#c62828', 10, 2.1, '#cfe3ee'), ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(L / 7 / (L / 7 + 20)).toFixed(3)};1" calcMode="linear"`));
       }
       if (CTX.cold && drives.length) {
         // below 5°C: the gritter out on the biggest street (then round again a while later)
         const r = drives.slice().sort((a, b) => b.w - a.w || plen(b.p) - plen(a.p))[Math.min(1, drives.length - 1)], back = rnd(H, 3, 317) < 0.5;
         const p = offsetLine(back ? r.p.slice().reverse() : r.p, Math.min(r.w / 4, Math.max(0.8, r.w / 2 - 3.2))), L = plen(p), run = L / 6;
-        out.push(mover(spath(V, p), run + 40, -rnd(H, 4, 318) * run, gritterSprite(), ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(run / (run + 40)).toFixed(3)};1" calcMode="linear"`));
+        P(mover(spath(V, p), run + 40, -rnd(H, 4, 318) * run, gritterSprite(), ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(run / (run + 40)).toFixed(3)};1" calcMode="linear"`));
       }
       for (const r of scene.rails || []) {
         const L = plen(r.p);
         if (L < 80) continue;
         const run = L / 16, dur = run * 2 + 30, back = rnd(L, 1, 315) < 0.5, p = back ? r.p.slice().reverse() : r.p;
         for (let k = 0; k < 4; k++) {
-          out.push(mover(spath(V, p), dur, k * 13 / 16 - rnd(L, 2, 316) * dur, carSprite(k ? '#3f51b5' : '#283593', 12, 2.6, '#cfe3ee'),
+          P(mover(spath(V, p), dur, k * 13 / 16 - rnd(L, 2, 316) * dur, carSprite(k ? '#3f51b5' : '#283593', 12, 2.6, '#cfe3ee'),
             ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(run / dur).toFixed(3)};1" calcMode="linear"`));
         }
       }
-      const walks = streets.filter((r) => plen(r.p) >= 30), nPeople = Math.min(walks.length * 3, CTX.night ? 4 : CTX.wet ? 6 : 14);
+      // early morning (5 to 8): a milk float or a delivery van doing the rounds
+      if (drives.length && CTX.hour >= 5 && CTX.hour < 8) {
+        const r = drives[Math.floor(rnd(H, 7, 497) * drives.length)], p = offsetLine(r.p, Math.min(r.w / 4, Math.max(0.55, r.w / 2 - 2.95))), L = plen(p);
+        const sprite = rnd(H, now.getDate(), 498) < 0.5 ? carSprite('#f5f5f5', 3.6, 1.5, '#7ec8a0') : carSprite('#eceff1', 5, 1.9, '#90a4ae');
+        P(mover(spath(V, p), L / 4 + 15, -rnd(H, 8, 499) * L / 4, sprite, ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(L / 4 / (L / 4 + 15)).toFixed(3)};1" calcMode="linear"`));
+      }
+      const walks = streets.filter((r) => plen(r.p) >= 30), nPeople = Math.min(walks.length * 3, CTX.night ? 4 : CTX.wet ? 6 : (schoolRun ? 20 : 14) - (LITE ? 6 : 0));
+      // (evenings, 5 to 9, when it's dry: people out walking their dogs)
+      const dogs = !CTX.wet && CTX.hour >= 17 && CTX.hour < 21 ? 4 : 0;
       for (let i = 0; i < nPeople && walks.length; i++) {
         const r = walks[Math.floor(rnd(i, H, 320) * walks.length)], side = rnd(i, H, 321) < 0.5 ? 1 : -1;
         const p = offsetLine(r.p, side * (r.w / 2 + pv(r) * 0.5)), L = plen(p), s0 = rnd(i, H, 322) * Math.max(0, L - 30);
         const bit = stretch(p, s0, Math.min(L, s0 + 30));
         if (bit.length < 2) continue;
         const walk = plen(bit) / 1.3;
-        out.push(mover(spath(V, bit), walk * 2, -rnd(i, H, 323) * walk * 2, walker(i + H), ' keyPoints="0;1;0" keyTimes="0;.5;1" calcMode="linear"'));
+        P(mover(spath(V, bit), walk * 2, -rnd(i, H, 323) * walk * 2, walker(i + H, i < dogs), ' keyPoints="0;1;0" keyTimes="0;.5;1" calcMode="linear"'));
       }
     }
-    out.push(nearCars.map((c) => car(V, c)).join(''));
+    P(nearCars.map((c) => car(V, c)).join(''), true);
     // shadows: each building's and tree's, cast on the ground (soft by day; none at night)
     if (!CTX.night) {
       // (from the real sun when Home Assistant says where it is, else from behind on the left)
@@ -1564,7 +1854,7 @@
         sh.push(`<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx="${f(r)}" ry="${f(r * SE)}" fill="#24401f"/>`);
       }
       // (faint under a grey sky)
-      out.push(`<g opacity="${/rain|pour|cloudy$|fog|snow|hail|lightning/.test(wx) && wx !== 'partlycloudy' ? '.07' : '.2'}">${sh.join('')}</g>`);
+      P(`<g opacity="${/rain|pour|cloudy$|fog|snow|hail|lightning/.test(wx) && wx !== 'partlycloudy' ? '.07' : '.2'}">${sh.join('')}</g>`);
     }
     // street lamps along the bigger streets, every 34 m or so, either side in turn
     const lamps = [];
@@ -1583,13 +1873,13 @@
       }
     }
     const gid = 'nvg' + Math.random().toString(36).slice(2, 8);
-    out.push(`<defs><radialGradient id="${gid}"><stop offset="0" stop-color="${LIGHT}" stop-opacity=".6"/><stop offset=".55" stop-color="${LIGHT}" stop-opacity=".22"/><stop offset="1" stop-color="${LIGHT}" stop-opacity="0"/></radialGradient></defs>`);
-    if (CTX.night) for (const [x, y] of lamps) { const g = V.p(x, y, 0); out.push(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="8" ry="${f(8 * SE)}" fill="url(#${gid})"/>`); }
+    P(`<defs><radialGradient id="${gid}"><stop offset="0" stop-color="${LIGHT}" stop-opacity=".6"/><stop offset=".55" stop-color="${LIGHT}" stop-opacity=".22"/><stop offset="1" stop-color="${LIGHT}" stop-opacity="0"/></radialGradient></defs>`);
+    if (CTX.night) for (const [x, y] of lamps) { const g = V.p(x, y, 0); P(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="8" ry="${f(8 * SE)}" fill="url(#${gid})"/>`); }
     // your house: a ring pulsing out on the ground round it, so it's easy to spot
     if (opts.isHome) {
       const g = V.p(home.x || 0, home.y || 0, 0), pc0 = opts.pinColour || C.pin;
       for (const k of [0, 1.6]) {
-        out.push(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="6" ry="${f(6 * SE)}" fill="none" stroke="${pc0}" stroke-width=".9" opacity="0">`
+        P(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="6" ry="${f(6 * SE)}" fill="none" stroke="${pc0}" stroke-width=".9" opacity="0">`
           + `<animate attributeName="rx" values="6;17" dur="3.2s" begin="${k}s" repeatCount="indefinite"/><animate attributeName="ry" values="${f(6 * SE)};${f(17 * SE)}" dur="3.2s" begin="${k}s" repeatCount="indefinite"/>`
           + `<animate attributeName="opacity" values=".8;0" dur="3.2s" begin="${k}s" repeatCount="indefinite"/></ellipse>`);
       }
@@ -1618,7 +1908,7 @@
               for (let k = 0; k < 3; k++) {
                 s2 += `<circle cx="${f(bot[0] + (k - 1) * ww)}" cy="${f(bot[1] - 1)}" r="${f(ww)}" fill="#ffffff" opacity=".3"><animate attributeName="r" values="${f(ww * 0.8)};${f(ww * 1.6)};${f(ww * 0.8)}" dur="${2 + k * 0.4}s" repeatCount="indefinite"/></circle>`;
               }
-              out.push(s2);
+              P2(s2);
             }
           }
           prev = [x, y, inn];
@@ -1645,6 +1935,7 @@
       const g = V.p(home.x || 0, home.y || 0, 0);
       out.push(`<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="18" ry="${f(18 * SE)}" fill="url(#${gid})"/>`);
     }
+    const cut1 = out.length;
     // the buildings and trees, back to front
     const things = [];
     let pin = null;
@@ -1661,9 +1952,10 @@
       if (!on(t[0], t[1])) continue;
       const s = tree(V, t);
       // (on a windy day, swaying, each in its own time)
-      things.push([V.d(t[0], t[1]), CTX.windy ? `<g class="nvsway" style="animation-delay:-${(rnd(t[0], t[1], 210) * 3).toFixed(2)}s">${s}</g>` : s]);
+      things.push([V.d(t[0], t[1]), CTX.windy && !split ? `<g class="nvsway" style="animation-delay:-${(rnd(t[0], t[1], 210) * 3).toFixed(2)}s">${s}</g>` : s]);
     }
     for (const L of lamps) things.push([V.d(L[0], L[1]), lamp(V, L)]);
+    for (const [x, y, cols] of allotSheds) if (on(x, y)) things.push([V.d(x, y), box(V, x, y, 0, 2, 1.6, 0, 2, cols, snowy('#5d4a3a', 0.85))]);
     things.push(...plotThings);
     // street furniture: OpenStreetMap's bus stops, benches, post boxes and bins, and more besides:
     // benches along footpaths (some with a bin), post boxes at some street corners
@@ -1710,7 +2002,8 @@
     }
     for (const [x, y, k, ang] of furn) if (on(x, y)) things.push([V.d(x, y), furniture(V, x, y, k, ang ?? nearAng(x, y))]);
     things.sort((a, b) => b[0] - a[0]);
-    for (const t of things) out.push(t[1]);
+    for (const t of things) out.push(split ? still(t[1]) : t[1]);
+    const cut2 = out.length;
     // rain splashing on the ground all over (or hailstones lying about)
     if ((CTX.wet && !LITE) || CTX.hail) {
       const sp = [];
@@ -1729,8 +2022,8 @@
     // night: everything darker and bluer, but the lit windows
     if (CTX.night) {
       const cache = {};
-      for (let i = 0; i < out.length; i++) {
-        out[i] = out[i].replace(/#[0-9a-f]{6}/gi, (c) => (c === LIGHT || c === LIGHT2 ? c : (cache[c] = cache[c] || mix(c, '#0b1736', 0.6))));
+      for (const L of [out, gAnim, gAnim2, CTX.top]) {
+        for (let i = 0; i < L.length; i++) L[i] = L[i].replace(/#[0-9a-f]{6}/gi, (c) => (c === LIGHT || c === LIGHT2 ? c : (cache[c] = cache[c] || mix(c, '#0b1736', 0.6))));
       }
     }
     // the pin over your home (or the place's middle), and who's there over it
@@ -1764,7 +2057,12 @@
     for (const [x, y, dp] of edge) corners.push(V.p(x, y, 0), V.p(x, y, -dp));
     const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]).concat([top - fs * 3.5, pin[1] - PIN_H * 0.2 / zs], low > -Infinity ? [low + 2] : []);
     const m = H * 0.04, x0 = Math.min(...xs) - m, y0 = Math.min(...ys) - m, w = Math.max(...xs) - x0 + m, h = Math.max(...ys) - y0 + m * 2.2;
-    return {svg: out.join(''), box: [x0, y0, w, h], pin: [pin[0], pin[1] - PIN_H * 0.06 / zs], ends};
+    // (split: [the ground, still; what moves on it, under the clip the ground has; the buildings,
+    // trees and gardens, still; what moves over them, then the pins])
+    const layers = split ? [out.slice(0, cut1).join(''), `<g clip-path="url(#${clip})">${gAnim.join('')}</g>${gAnim2.join('')}`,
+      out.slice(cut1, cut2).join(''), CTX.top.join('') + out.slice(cut2).join('')] : [out.join(''), '', '', ''];
+    CTX.split = false; CTX.top = [];
+    return {svg: layers.join(''), layers, box: [x0, y0, w, h], pin: [pin[0], pin[1] - PIN_H * 0.06 / zs], ends};
   }
 
   // A point's place on a map (metres from its middle), from latitude and longitude
@@ -1879,16 +2177,20 @@
     const keep = all.map((pl, i) => whoAll.places[i].at.length + whoAll.places[i].map.length > 0);
     const places = all.filter((pl, i) => keep[i]);
     const who = {...whoAll, places: whoAll.places.filter((x, i) => keep[i])};
-    const homeI = island(scene, {...opts, isHome: true, atPin: who.home, onMap: who.homeMap});
+    const split = !!opts.split && !opts.pick;
+    const homeI = island(scene, {...opts, split, isHome: true, atPin: who.home, onMap: who.homeMap});
     const [hx, hy, hw, hh] = homeI.box;
     const gap = hw * 0.025;
-    const groups = [`<g class="nvisl" data-f="" data-k="">${homeI.svg}</g>`], bridges = [];
+    // (each map's layers, in the page's layers: see islandDrawn)
+    const groups = [[], [], [], []], bridges = [];
+    const addIsl = (I, attrs) => I.layers.forEach((s, L) => { if (s || !L) groups[L].push(`<g class="nvisl"${attrs}>${s}</g>`); });
+    addIsl(homeI, ' data-f="" data-k=""');
     const hc = [hx + hw / 2, hy + hh / 2];
     const boxes = [[hx, hy, hx + hw, hy + hh]];
     const PLACE_PINS = ['#7e57c2', '#00897b', '#f4511e', '#6d4c41', '#c2185b', '#3949ab'];
     const bySide = {left: [], right: [], up: [], down: []};
     places.forEach((pl, i) => {
-      const I = island(pl.scene, {rot: opts.rot, zoom: opts.zoom, live, month: opts.month, date: opts.date, motion: opts.motion, occasions: opts.occasions, isHome: false, label: String(pl.name || 'PLACE').toUpperCase(),
+      const I = island(pl.scene, {split, rot: opts.rot, zoom: opts.zoom, live, month: opts.month, date: opts.date, motion: opts.motion, occasions: opts.occasions, isHome: false, label: String(pl.name || 'PLACE').toUpperCase(),
         pinColour: PLACE_PINS[i % PLACE_PINS.length], atPin: who.places[i].at, onMap: who.places[i].map});
       I.key = String(pl.zone || pl.name || i);
       (bySide[pl.side] || bySide.left).push(I);
@@ -1896,7 +2198,7 @@
     const place = (I, tx, ty, sc) => {
       const [bx, by, bw, bh] = I.box;
       const dx = tx - bx * sc, dy = ty - by * sc;
-      groups.push(`<g class="nvisl" data-k="${esc(I.key)}" data-f="${f(dx + I.pin[0] * sc)} ${f(dy + I.pin[1] * sc)}" transform="translate(${f(dx)} ${f(dy)}) scale(${sc.toFixed(4)})">${I.svg}</g>`);
+      addIsl(I, ` data-k="${esc(I.key)}" data-f="${f(dx + I.pin[0] * sc)} ${f(dy + I.pin[1] * sc)}" transform="translate(${f(dx)} ${f(dy)}) scale(${sc.toFixed(4)})"`);
       boxes.push([tx, ty, tx + bw * sc, ty + bh * sc]);
       // a bridge from the nearest of your streets to the nearest of its
       const ends = I.ends.map((p) => [dx + p[0] * sc, dy + p[1] * sc, p[2], p[3], p[4]]);
@@ -1949,7 +2251,13 @@
       };
       birds = `<g class="nvbirds" pointer-events="none">${flock(5, 0.3, 40, 3, 1)}${flock(3, 0.62, 55, 24, -1)}</g>`;
     }
-    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;position:relative" role="img" aria-label="The streets around your home">${groups.join('')}${bridges.join('')}${birds}${live.night && occasion(opts.date ? new Date(opts.date) : new Date(), opts.occasions).fireworks ? fireworks(x0, y0, w, h) : ''}</svg>`, away: who.away};
+    const fw = live.night && occasion(opts.date ? new Date(opts.date) : new Date(), opts.occasions).fireworks ? fireworks(x0, y0, w, h) : '';
+    const vb = `${f(x0)} ${f(y0)} ${f(w)} ${f(h)}`;
+    const svgEl = (L, body, first) => `<svg xmlns="http://www.w3.org/2000/svg" class="nvlayer${first ? '' : ' up'}" viewBox="${vb}" data-box="${vb}"`
+      + (first ? ` data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" role="img" aria-label="The streets around your home"` : ' aria-hidden="true"')
+      + ` preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;position:${first ? 'relative' : 'absolute'};left:0;top:0${L === 0 || L === 2 ? ';will-change:transform' : ''}">${body}</svg>`;
+    if (!split) return {svg: svgEl(0, groups[0].join('') + bridges.join('') + birds + fw, true), away: who.away};
+    return {svg: svgEl(0, groups[0].join(''), true) + svgEl(1, groups[1].join('')) + svgEl(2, groups[2].join('') + bridges.join('')) + svgEl(3, groups[3].join('') + birds + fw), away: who.away};
   }
 
   /* Fits the drawing to its box: all of it where the box is about its shape; in a much narrower
@@ -1957,7 +2265,7 @@
    * rather than tiny in the middle. Done again as the box changes size. */
   const MAX_ZOOM = 2.4, MAX_TOTAL = 10;
   function fit(el) {
-    const svg = el.querySelector('svg');
+    const svg = el.querySelector('svg.nvlayer');
     if (!svg) return;
     // (round your house, or the place you tapped while it's still shown)
     const fg = el._nvFocus ? [...svg.querySelectorAll('.nvisl')].find((g) => g.dataset.k === el._nvFocus) : null;
@@ -1973,7 +2281,8 @@
     let vw, vh;
     if (boxAr < ar) { vw = w / z; vh = vw / boxAr; } else { vh = h / z; vw = vh * boxAr; }
     const clampTo = (c, size, lo, full) => (size >= full ? lo + (full - size) / 2 : Math.min(lo + full - size, Math.max(lo, c - size / 2)));
-    svg.setAttribute('viewBox', `${f(clampTo(px, vw, x0, w))} ${f(clampTo(py, vh, y0, h))} ${f(vw)} ${f(vh)}`);
+    const vb = `${f(clampTo(px, vw, x0, w))} ${f(clampTo(py, vh, y0, h))} ${f(vw)} ${f(vh)}`;
+    for (const s of el.querySelectorAll('svg.nvlayer')) s.setAttribute('viewBox', vb);
   }
 
   function personColour(key) {
@@ -2058,6 +2367,10 @@
     .nvsky.night .st{display:block}
     @keyframes nvdrift{from{transform:translateX(0)}to{transform:translateX(33.3%)}}
     @keyframes nvtwinkle{from{opacity:.55}to{opacity:1}}
+    .nvlayer.up{pointer-events:none}
+    .nv-paused *{animation-play-state:paused!important}
+    .nvmoon{position:absolute;left:9%;top:7%;width:46px;height:46px}
+    .nvbow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 78% 105%,transparent 55%,rgba(255,0,0,.13) 57%,rgba(255,165,0,.13) 59%,rgba(255,255,0,.13) 61%,rgba(0,200,0,.12) 63%,rgba(0,120,255,.12) 65%,rgba(120,0,200,.1) 67%,transparent 69%)}
     .nvvig{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 75% 70% at 50% 48%,transparent 60%,rgba(8,16,36,.26) 100%)}
     .nvcredit{position:absolute;left:10px;bottom:6px;font:11px/1.2 sans-serif;color:rgba(20,40,60,.6);pointer-events:none}
     .nvcredit.dark{color:rgba(255,255,255,.55)}
@@ -2103,7 +2416,11 @@
     const golden = !live.night && live.sun && live.sun.el != null && live.sun.el < 10 && live.sun.el > -4 && !grey;
     const sky = live.night ? 'night' : grey ? 'grey' : golden ? 'golden' : '';
     const glow = golden ? `<div class="nvfx nv-golden" style="opacity:${Math.max(0.25, Math.min(1, 1 - live.sun.el / 10)).toFixed(2)}"></div>` : '';
-    el.innerHTML = `<div class="nvsky ${sky}"><div class="st"></div><div class="cl b"></div><div class="cl"></div></div>` + d.svg + glow + '<div class="nvvig"></div>'
+    // (a rainbow when the sun comes out after rain, for up to 45 minutes)
+    const when = (opts || {}).date ? new Date(opts.date) : new Date();
+    if (/rain|pour|lightning|hail/.test(st)) LAST_WET = when.getTime();
+    const bow = !live.night && /sunny|partlycloudy|clear/.test(st) && ((opts || {}).rainbow || (LAST_WET && when.getTime() - LAST_WET < 45 * 60000)) ? '<div class="nvbow"></div>' : '';
+    el.innerHTML = `<div class="nvsky ${sky}"><div class="st"></div>${live.night && !grey ? moon(when) : ''}<div class="cl b"></div><div class="cl"></div></div>` + bow + d.svg + glow + '<div class="nvvig"></div>'
       + overlays(live, (() => {  // (a birthday today: a chip saying so)
         const b = occasion((opts || {}).date ? new Date(opts.date) : new Date(), (opts || {}).occasions).birthday;
         return b ? '\u{1F382} Happy birthday' + (b.filter(Boolean).length ? ', ' + esc(b.filter(Boolean).join(' & ')) : '') + '!' : '';
@@ -2126,6 +2443,34 @@
       el._nvObserver = new ResizeObserver(() => fit(el));
       el._nvObserver.observe(el);
     }
+    // (nothing moves while it's out of sight: scrolled off, another tab, the screen off)
+    if (!el._nvPause) {
+      el._nvSeen = true;
+      el._nvPause = () => {
+        const paused = document.hidden || !el._nvSeen;
+        el.classList.toggle('nv-paused', paused);
+        for (const s of el.querySelectorAll('svg.nvlayer')) { try { if (paused) s.pauseAnimations(); else s.unpauseAnimations(); } catch (e) { /* (not SMIL) */ } }
+      };
+      document.addEventListener('visibilitychange', el._nvPause);
+      if (window.IntersectionObserver) new IntersectionObserver((es) => { el._nvSeen = es[es.length - 1].isIntersecting; el._nvPause(); }).observe(el);
+    }
+    el._nvPause();
+  }
+
+  // The moon at night, in its phase (from the date: a new moon on 6 January 2000, every 29.53 days)
+  let LAST_WET = 0;
+  function moonPhase(d) {
+    const p = ((d.getTime() / 86400000 - 10962.76) / 29.530588853) % 1;
+    return p < 0 ? p + 1 : p;
+  }
+  function moon(d) {
+    const p = moonPhase(d), r = 20, k = Math.cos(2 * Math.PI * p);
+    if (p < 0.03 || p > 0.97) return '';
+    // (the dark side: the half away from the sun, then the terminator back as an ellipse)
+    const dark = `M0 ${-r}A${r} ${r} 0 0 0 0 ${r}A${f(Math.abs(k) * r)} ${r} 0 0 ${k > 0 ? 0 : 1} 0 ${-r}Z`;
+    return `<svg class="nvmoon" viewBox="-24 -24 48 48" aria-hidden="true"><circle r="${r + 3}" fill="rgba(255,250,220,.12)"/><circle r="${r}" fill="#f3efd6"/>`
+      + `<circle cx="-6" cy="-5" r="4" fill="#e2dcbf"/><circle cx="7" cy="6" r="3" fill="#e2dcbf"/><circle cx="3" cy="-9" r="2" fill="#e2dcbf"/>`
+      + `<path d="${dark}" fill="#0c1a3b" opacity=".92"${p > 0.5 ? ' transform="scale(-1 1)"' : ''}/></svg>`;
   }
 
   // Zoom (the + and − buttons): steps in from the whole square, remembered on each device
@@ -2166,15 +2511,42 @@
     const en = ents.energy || {};
     out.energy = {solar: en.solar ? active(states[en.solar]) : null, car: !!en.car, charging: en.car ? active(states[en.car]) : false,
       heat: en.heat ? active(states[en.heat]) : null};
+    const ho = ents.house || {}, open = (e) => ['on', 'open', 'opening', 'unlocked', 'unlocking', 'true'].includes(String((states[e] || {}).state || '').toLowerCase());
+    out.house = {bins: ho.bins ? binDay(states[ho.bins]) : null, door: ho.door ? open(ho.door) : false, garage: ho.garage ? open(ho.garage) : null, lights: ho.lights ? open(ho.lights) : false};
     return out;
+  }
+
+  // Whether it's bin day (the same as src/live.py bin_day()): today, or tomorrow from 6pm
+  function binDay(st, now = new Date()) {
+    if (!st) return false;
+    const s = String(st.state || '').trim().toLowerCase(), a = st.attributes || {}, late = now.getHours() >= 18;
+    const day = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const today = day(now), tomorrow = day(new Date(now.getTime() + 86400000));
+    if (['on', 'true', 'today'].includes(s)) return true;
+    if (s === 'tomorrow') return late;
+    if (s !== '' && !Number.isNaN(Number(s))) return Number(s) === 0 || (Number(s) === 1 && late);
+    return [s, String(a.start_time || '').toLowerCase()].some((v) => v.slice(0, 10) === today || (late && v.slice(0, 10) === tomorrow));
   }
 
   /* live, steadied against what was last drawn (prev): a phone's location wanders by a few metres
    * every few seconds, and each change would draw the whole map again (clouds and traffic starting
    * over), so someone who's moved less than STEADY_M keeps the place they were drawn at. */
-  const STEADY_M = 40;
+  const STEADY_M = 40, SETTLE_MS = 60000, SEEN = {};
   function steady(live, prev) {
-    if (!live || !prev || !live.people) return live;
+    if (!live) return live;
+    // (the temperature to the degree it's shown at; your solar, car and heat pump changed only once
+    // they've said so for a minute, so a power hovering near the line doesn't draw it all again)
+    if (live.weather && live.weather.temperature != null && !Number.isNaN(Number(live.weather.temperature))) live = {...live, weather: {...live.weather, temperature: Math.round(Number(live.weather.temperature))}};
+    if (prev && prev.energy && live.energy) {
+      const e = {...live.energy}, now = Date.now();
+      for (const k of ['solar', 'charging', 'heat']) {
+        if (e[k] === prev.energy[k]) { delete SEEN[k]; continue; }
+        if (!SEEN[k] || SEEN[k][0] !== e[k]) SEEN[k] = [e[k], now];
+        if (now - SEEN[k][1] < SETTLE_MS) e[k] = prev.energy[k];
+      }
+      live = {...live, energy: e};
+    }
+    if (!prev || !live.people) return live;
     const was = new Map((prev.people || []).map((p) => [p.entity_id, p]));
     return {...live, people: live.people.map((p) => {
       const o = was.get(p.entity_id);
@@ -2197,7 +2569,7 @@
     return v > (['kw', 'kwh'].includes(String(a.unit_of_measurement || '').toLowerCase()) ? 0.02 : 20);
   }
 
-  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, occasion, autoRange, steady, version: VERSION};
+  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, occasion, autoRange, steady, binDay, moonPhase, version: VERSION};
 
   // ---------- the dashboard card ----------
   if (!window.customElements || customElements.get('neighbourhood-view-card')) return;
@@ -2394,6 +2766,7 @@
         this._scene = d.scene;
         this._places = d.places || [];
         this._occasions = d.occasions || null;
+        this._look = d.look || null;
         this._screen = d.screen || null;  // (the screensaver, if the status sensor's not there)
         this._root.querySelector('.map').classList.toggle('tap', !!this._tap());
         // (the entities to follow: the card's own weather / people, else the add-on's Settings)
@@ -2410,11 +2783,14 @@
       if (!this._scene) return;
       const s = this._scene, label = this._config.label || (s.number ? `NO. ${s.number}` : 'HOME');
       const live = now || (this._ents && this._hass ? steady(liveFrom(this._hass.states || {}, this._ents), this._live) : null);
+      // (what made it draw again, in the browser's console with its "Verbose" level on)
+      if (this._live && live) console.debug('neighbourhood-view-card: drawn again for', Object.keys(live).filter((k) => JSON.stringify(live[k]) !== JSON.stringify(this._live[k])).join(', ') || 'the map');
       this._live = live;
       this._liveKey = JSON.stringify(live);
       LITE = this._config.effects === 'lite' ? true : this._config.effects === 'full' ? false : SLOW;
       render(this._root.querySelector('.map'), s, {rot: getRot(), zoom: zoomStep(0), label: String(label).toUpperCase(), live, places: this._places,
-        motion: this._config.motion !== false, date: this._config.date || undefined, occasions: this._occasions});
+        motion: this._config.motion !== false, date: this._config.date || undefined, occasions: this._occasions, look: this._look,
+        split: this._config.layers !== false, rainbow: !!this._config.rainbow});
       this._msg('');
     }
   }

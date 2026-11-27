@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.22.0 — Smoother, and more to see
+
+- **Improvement:** the map is drawn in layers: the still ground, what
+  moves on it, the still buildings and gardens, and what moves over them.
+  A moving car or a twinkling light no longer makes the browser draw the
+  whole map again each frame, which was what made it stutter. In the still
+  layers lights don't twinkle and trees don't sway (smoke, falling leaves
+  and the like still move). The card's `layers: false` goes back to one
+  picture.
+- **Improvement:** nothing moves while the map is out of sight (scrolled
+  off, another tab, the screen off).
+- **Fix:** the map is drawn again less often: the temperature only when
+  it changes by a degree, and your solar, car and heat pump only once
+  they've changed for a minute (a power hovering round 20 W kept drawing it
+  all again). The card says what made it draw again in the browser's
+  console (its verbose level).
+- **Fix:** garden things (trees, presents, bins, sheds, garages, fences...)
+  are no longer drawn on streets, pavements, footpaths or buildings.
+- **Fix:** the add-on's page no longer rewrites parts of itself every second
+  or two when nothing has changed.
+- **Feature:** brick courses and pebble-dash on walls; curtains, window
+  boxes, the odd cat and flickering TVs at windows.
+- **Feature:** wheelie bins, out at the kerb on bin day (Settings › Your
+  house › Bins: a bin collection sensor, calendar or switch).
+- **Feature:** garden furniture through the year: parasols and paddling
+  pools in summer, barbecues on warm days, tables in spring and autumn.
+- **Feature:** worn roads: patches, drain covers, faded give-way lines.
+- **Feature:** allotments (rows of beds and sheds) and garages with
+  up-and-over doors, from OpenStreetMap (maps are redrawn once, from the
+  kept copy).
+- **Feature:** your door's colour and your number on a plate by it
+  (Settings › Your house).
+- **Feature:** washing blowing on windy days, a rainbow after rain, steam
+  from roofs on frosty mornings.
+- **Feature:** busier school runs, a milk float or delivery van early on,
+  dog walkers in the evening.
+- **Feature:** the moon at night, in its phase.
+- **Feature:** your front door open, your garage door up and your garden
+  lights on while your sensors say so (Settings › Your house).
 ## 0.21.0 — More decorations, easier to see
 
 - **Feature:** each house that joins in decorates its own way, and the

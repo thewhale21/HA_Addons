@@ -379,13 +379,24 @@
       </div>
       <div class="card">
         <h2>Your house</h2>
-        <div class="note" style="margin:0 0 6px">Your energy on the map, each from an entity of yours (leave any out).</div>
+        <div class="note" style="margin:0 0 6px">Your house on the map: your energy and things of yours, each from an entity of yours (leave any out).</div>
         <div class="row" style="margin-top:0"><div class="grow">Solar panels<div class="note" style="margin:0">On your roof; they glint while this says they're producing (a power sensor over 20 W, or on).</div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="solar_entity" data-domain="sensor,binary_sensor" data-none="None"></span></div>
         <div class="row"><div class="grow">Car<div class="note" style="margin:0">Your car on the drive (or outside), glowing while this says it's charging (on, charging, or a charging power over 20 W).</div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="car_entity" data-domain="sensor,binary_sensor,switch,input_boolean" data-none="None"></span></div>
         <div class="row"><div class="grow">Heat pump<div class="note" style="margin:0">Beside the house; its fan turns and it puffs while this says it's running (on, heating, a thermostat heating or cooling, or a power over 20 W).</div></div></div>
         <div class="row" style="margin-top:6px"><span class="picker" data-key="heat_pump_entity" data-domain="sensor,binary_sensor,switch,input_boolean,climate,water_heater" data-none="None"></span></div>
+        <div class="row"><div class="grow">Bins<div class="note" style="margin:0">Your bins (and most of the street's) out at the kerb on bin day: a bin collection sensor (today; tomorrow, or 1 day to go, from 6pm; or the date), a calendar's event, or a switch.</div></div></div>
+        <div class="row" style="margin-top:6px"><span class="picker" data-key="bins_entity" data-domain="sensor,binary_sensor,calendar,input_boolean,input_datetime" data-none="None"></span></div>
+        <div class="row"><div class="grow">Front door<div class="note" style="margin:0">Open on the map while this says it's open (a door sensor on, or a lock unlocked), lit inside at night.</div></div></div>
+        <div class="row" style="margin-top:6px"><span class="picker" data-key="door_entity" data-domain="binary_sensor,lock,cover" data-none="None"></span></div>
+        <div class="row"><div class="grow">Garage<div class="note" style="margin:0">A garage beside your house (where there's room), its door up while this says it's open.</div></div></div>
+        <div class="row" style="margin-top:6px"><span class="picker" data-key="garage_entity" data-domain="cover,binary_sensor" data-none="None"></span></div>
+        <div class="row"><div class="grow">Garden lights<div class="note" style="margin:0">Lights round your back garden, on while this is.</div></div></div>
+        <div class="row" style="margin-top:6px"><span class="picker" data-key="garden_lights_entity" data-domain="light,switch,input_boolean" data-none="None"></span></div>
+        <div class="row"><div class="grow">Door colour<div class="note" style="margin:0">Your front door's colour on the map.</div></div>
+          <select id="s-door" aria-label="Door colour"><option value="">The usual</option><option value="red">Red</option><option value="blue">Blue</option><option value="green">Green</option><option value="black">Black</option><option value="white">White</option><option value="yellow">Yellow</option><option value="grey">Grey</option><option value="wood">Wood</option><option value="purple">Purple</option></select></div>
+        <div class="row"><span class="grow">Your number on a plate by the door</span><label class="switch"><input type="checkbox" id="s-plate" aria-label="Your number on a plate by the door"><span></span></label></div>
       </div>
     </div>
     <div class="section-title">Other places</div>
@@ -711,6 +722,7 @@ async function loadMap() {
   nv.scene = d.scene;
   nv.places = d.places || [];
   nv.occasions = d.occasions || null;
+  nv.look = d.look || null;
   if (!d.scene) { $('o-map').innerHTML = ''; showMsg(d.message); $('o-top').hidden = true; return; }
   drawMap();
 }
@@ -722,7 +734,7 @@ function drawMap() {
   if (!sc || !window.NeighbourhoodView) return;
   nv.live = liveNow();
   nv.liveKey = JSON.stringify(nv.live || {});
-  NeighbourhoodView.render($('o-map'), sc, {rot: getRot(), zoom: NeighbourhoodView.zoom(0), live: nv.live, places: nv.places, occasions: nv.occasions, label: sc.number ? `NO. ${sc.number}`.toUpperCase() : 'HOME', pick: true, hideLabel: nv.picking});
+  NeighbourhoodView.render($('o-map'), sc, {rot: getRot(), zoom: NeighbourhoodView.zoom(0), live: nv.live, places: nv.places, occasions: nv.occasions, look: nv.look, label: sc.number ? `NO. ${sc.number}`.toUpperCase() : 'HOME', pick: true, hideLabel: nv.picking});
   showMsg('');
   $('o-top').hidden = false;
   $('o-addr').textContent = [sc.number, sc.postcode].filter(Boolean).join(', ');
@@ -733,10 +745,10 @@ function drawMapStatus() {
   if (s.status === 'Making the map' && !nv.scene) showMsg('Making the map from OpenStreetMap…');
   if (s.error && !nv.scene) showMsg(s.error);
   if ($('s-map-status')) {
-    $('s-map-status').innerHTML = s.error ? `<span class="chip err">Problem</span> ${esc(s.error)}`
+    setHTML($('s-map-status'), s.error ? `<span class="chip err">Problem</span> ${esc(s.error)}`
       : s.status === 'Making the map' ? '<span class="chip warn">Making the map…</span>'
       : s.made ? `<span class="chip ok">Map ready</span> ${s.buildings} buildings · made ${dateTime(s.made)}`
-      : '<span class="muted">No address yet</span>';
+      : '<span class="muted">No address yet</span>');
   }
 }
 function setPicking(on) {
@@ -770,6 +782,9 @@ async function refreshAddress() {
   if (document.activeElement !== $('s-postcode')) $('s-postcode').value = st.postcode || '';
   if (document.activeElement !== $('s-number')) $('s-number').value = st.house_number || '';
   if (document.activeElement !== $('s-radius')) $('s-radius').value = st.radius ?? 150;
+  const lk = st.look || {};
+  if (document.activeElement !== $('s-door')) $('s-door').value = lk.door || '';
+  $('s-plate').checked = lk.plate !== false;
   if (!nvPlaces.dirty) { nvPlaces.list = JSON.parse(JSON.stringify(st.places || [])); drawPlaces(); }
   drawMapStatus();
 }
@@ -782,20 +797,25 @@ function drawCard() {
     ...(c.detail ? [['Why', esc(c.detail)]] : []),
     ['Resource', c.url ? `<code>${esc(c.url)}</code><div class="sub">JavaScript module${c.status === 'manual' ? ': add it under Settings › Dashboards › ⋮ › Resources' : ''}</div>` : '—'],
   ]);
-  if ($('s-card').innerHTML !== html) $('s-card').innerHTML = html;
+  setHTML($('s-card'), html);
 }
 $('s-save').addEventListener('click', async () => {
   const body = {postcode: $('s-postcode').value.trim(), house_number: $('s-number').value.trim(), radius: Number($('s-radius').value) || 150};
   if (await post('address', body)) { toast(body.postcode ? 'Saved: making the map…' : 'Address cleared'); refreshAddress(); }
 });
 ['s-postcode', 's-number'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('s-save').click(); }));
+const saveLook = async () => {
+  if (await post('settings', {look: {door: $('s-door').value, plate: $('s-plate').checked}})) { toast('Saved'); loadMap(); }
+};
+$('s-door').addEventListener('change', saveLook);
+$('s-plate').addEventListener('change', saveLook);
 $('s-card-token').addEventListener('click', async () => {
   if (await post('card/token')) toast('New name: cards read it in a few seconds');
 });
 setInterval(() => {
   const x = (state || {}).extra || {};
   const el = $('s-card-file');
-  if (el) el.innerHTML = x.map_file_error ? `<span class="chip warn">Problem</span> ${esc(x.map_file_error)}` : x.map_url ? 'Map file ready for the card' : 'Writing the map file…';
+  setHTML(el, x.map_file_error ? `<span class="chip warn">Problem</span> ${esc(x.map_file_error)}` : x.map_url ? 'Map file ready for the card' : 'Writing the map file…');
 }, 2000);
 
 // ---------- Settings › Occasions ----------
@@ -1363,13 +1383,14 @@ function rowList(section, title, rows, intro) {
   // (the boxes the cards were in, now empty, go)
   parents.forEach((p) => { if (p !== sec && p.isConnected && !p.children.length) p.remove(); });
 }
+// (only written when it's changed: each write makes the browser lay the page out again)
+function setHTML(el, html) { if (el && el._nvHTML !== html) { el._nvHTML = html; el.innerHTML = html; } }
 function drawRowSums() {
   for (const [d, sum] of rowSums) {
     if (d.closest('section') && d.closest('section').hidden) continue;
     let html = '';
     try { html = sum ? sum(d) : ''; } catch (e) {}
-    const el = d.querySelector('.rs');
-    if (el.innerHTML !== html) el.innerHTML = html;
+    setHTML(d.querySelector('.rs'), html);
   }
 }
 
@@ -1397,8 +1418,8 @@ function setupRows() {
       return ps.length ? esc(ps.map((p) => `${p.name}: ${p.state === 'home' ? 'home' : p.state === 'not_home' ? 'away' : p.state ?? '—'}`).join(' · ')) : '<span class="chip">Not set</span>Nobody yet';
     }},
     {t: 'Your house', id: 'energy', icon: 'bolt', sum: () => {
-      const ents = (sim.data || {}).entities || {}, bits = [['solar_entity', 'Solar'], ['car_entity', 'Car'], ['heat_pump_entity', 'Heat pump']].filter(([k]) => ents[k]);
-      return bits.length ? esc(bits.map(([k, n]) => `${n}: ${ents[k].state ?? '—'}`).join(' · ')) : '<span class="chip">Not set</span>Solar panels, your car, a heat pump';
+      const ents = (sim.data || {}).entities || {}, bits = [['solar_entity', 'Solar'], ['car_entity', 'Car'], ['heat_pump_entity', 'Heat pump'], ['bins_entity', 'Bins'], ['door_entity', 'Door'], ['garage_entity', 'Garage'], ['garden_lights_entity', 'Garden lights']].filter(([k]) => ents[k]);
+      return bits.length ? esc(bits.map(([k, n]) => `${n}: ${ents[k].state ?? '—'}`).join(' · ')) : '<span class="chip">Not set</span>Solar panels, your car, a heat pump, bins, door, garage, garden lights';
     }},
   ]);
   rowList('tab-settings', 'Other places', [

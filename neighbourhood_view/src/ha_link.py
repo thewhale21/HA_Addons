@@ -34,7 +34,8 @@ SUPERVISOR_WS = "ws://supervisor/core/websocket"
 SUPERVISOR_API = "http://supervisor/core/api"
 RECONNECT_DELAYS = (2, 5, 10, 20, 30, 60)
 ENTITY_LIST_TTL_S = 30
-PICKER_DOMAINS = ("weather", "person", "device_tracker", "sensor", "binary_sensor", "switch", "input_boolean", "climate", "water_heater")
+PICKER_DOMAINS = ("weather", "person", "device_tracker", "sensor", "binary_sensor", "switch", "input_boolean", "climate", "water_heater",
+                  "calendar", "cover", "light", "lock", "input_datetime")
 
 # The entity pickers on the Settings tab: key -> domain(s) allowed
 # (the weather, and up to MAX_PEOPLE people: Settings › Weather, People)
@@ -45,7 +46,13 @@ ENTITY_KEYS = {"weather_entity": ("weather",),
                # glows while charging, the heat pump puffs while running (src/live.py energy)
                "solar_entity": ("sensor", "binary_sensor"),
                "car_entity": ("sensor", "binary_sensor", "switch", "input_boolean"),
-               "heat_pump_entity": ("sensor", "binary_sensor", "switch", "input_boolean", "climate", "water_heater")}
+               "heat_pump_entity": ("sensor", "binary_sensor", "switch", "input_boolean", "climate", "water_heater"),
+               # and things of yours (Settings › Your house): your bins out at the kerb on bin day, your
+               # front door and garage open while they are, your garden lights on (src/live.py house)
+               "bins_entity": ("sensor", "binary_sensor", "calendar", "input_boolean", "input_datetime"),
+               "door_entity": ("binary_sensor", "lock", "cover"),
+               "garage_entity": ("cover", "binary_sensor"),
+               "garden_lights_entity": ("light", "switch", "input_boolean")}
 ALWAYS_WATCHED = ("sun.sun",)  # (day or night, for the house lights)
 
 

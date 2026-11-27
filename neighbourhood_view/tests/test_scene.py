@@ -52,7 +52,8 @@ def test_building_kinds_and_heights():
     assert S.building_kind({"building": "yes"}, 80) == "house" and S.building_kind({"building": "yes"}, 900) == "large"
     assert S.building_kind({"building": "apartments"}, 500) == "flats"
     assert S.building_kind({"building": "yes", "shop": "bakery"}, 100) == "commercial"
-    assert S.building_kind({"building": "garage"}, 15) == "small"
+    assert S.building_kind({"building": "garage"}, 15) == "garage" and S.building_kind({"building": "shed"}, 15) == "small"
+    assert S._area_kind({"landuse": "allotments"}) == "allot"
     assert S.building_height({"building:levels": "4"}, "flats") == 12
     assert S.building_height({"height": "15 m", "roof:height": "3"}, "flats") == 12
     # (a house with no height: mostly 2 storeys, some bungalows and 3 storeys; the same each time)

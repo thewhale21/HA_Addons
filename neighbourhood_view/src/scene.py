@@ -25,7 +25,8 @@ import math
 import re
 from typing import Optional
 
-SCENE_V = 4  # 4: whole gardens (fences: the plots shared out, as on a satellite photo); 2: gardens (plots), landmarks (lm), street furniture (poi); 3: gardens not overlapping, cars at the kerb
+SCENE_V = 5  # 5: allotments ("allot" areas) and garages ("garage" buildings);
+#  4: whole gardens (fences: the plots shared out, as on a satellite photo); 2: gardens (plots), landmarks (lm), street furniture (poi); 3: gardens not overlapping, cars at the kerb
 HALF = 150.0  # metres each way from your home (Settings › Address › Map size): a 300 m square by default
 EARTH_R = 6371008.8
 
@@ -39,7 +40,7 @@ SMALL_TYPES = {"garage", "garages", "shed", "carport", "roof", "hut", "greenhous
 CIVIC_TYPES = {"school", "college", "university", "hospital", "church", "chapel", "mosque", "temple", "synagogue",
                "public", "civic", "government", "train_station", "transportation", "fire_station", "police",
                "library", "community_centre", "sports_hall", "sports_centre", "stadium"}
-HEIGHTS = {"house": 6.0, "flats": 12.0, "commercial": 8.0, "industrial": 8.5, "small": 2.8, "civic": 10.0, "large": 9.0}
+HEIGHTS = {"house": 6.0, "flats": 12.0, "commercial": 8.0, "industrial": 8.5, "small": 2.8, "garage": 2.5, "civic": 10.0, "large": 9.0}
 HOUSE_MAX_AREA = 220.0  # m²: "yes"/"residential" buildings up to this are drawn as houses (pitched roofs)
 LEVEL_M = 3.0
 
@@ -52,7 +53,7 @@ ROAD_WIDTHS = {"motorway": 16, "trunk": 13, "primary": 11, "secondary": 9.5, "te
 PATH_TYPES = {"footway", "path", "cycleway", "steps", "bridleway", "track", "corridor"}
 RAIL_TYPES = {"rail": 4.5, "light_rail": 4, "subway": 4, "narrow_gauge": 3, "tram": 2.5, "preserved": 3}
 GRASS = {"grass", "meadow", "village_green", "recreation_ground", "park", "garden", "playground", "dog_park",
-         "cemetery", "grave_yard", "allotments", "farmland", "orchard", "common", "nature_reserve", "golf_course",
+         "cemetery", "grave_yard", "farmland", "orchard", "common", "nature_reserve", "golf_course",
          "greenfield", "plant_nursery", "flowerbed"}
 WOOD = {"forest", "wood", "scrub", "heath"}
 WATER = {"water", "reservoir", "basin", "riverbank", "pond", "swimming_pool"}
@@ -306,6 +307,8 @@ def building_kind(tags: dict, a: float) -> str:
         return "commercial"
     if b in INDUSTRIAL_TYPES:
         return "industrial"
+    if b in ("garage", "garages"):
+        return "garage"  # (drawn with up-and-over doors: a row of them on a block of lock-ups)
     if b in SMALL_TYPES:
         return "small"
     if b in CIVIC_TYPES or tags.get("amenity") in ("school", "place_of_worship", "hospital"):
@@ -357,6 +360,8 @@ def _area_kind(tags: dict) -> Optional[str]:
     vals = {str(tags.get(k) or "").lower() for k in ("landuse", "leisure", "natural", "amenity", "railway", "water")}
     if vals & WATER:
         return "water"
+    if "allotments" in vals:
+        return "allot"  # (drawn as rows of beds, with the odd shed)
     if vals & WOOD:
         return "wood"
     if vals & PITCH:
@@ -526,7 +531,7 @@ def _make_room(buildings: list, roads: list) -> list:
 
     bboxes = [box(b["p"]) for b in buildings]
     streets = [r for r in roads if r["k"] != "path"]
-    big = [abs(area(b["p"])) > 400 or b.get("k") not in ("house", "small", "flats") for b in buildings]
+    big = [abs(area(b["p"])) > 400 or b.get("k") not in ("house", "small", "garage", "flats") for b in buildings]
     # the streets: pavements, then the road, narrowed to clear the buildings by them
     for r in streets:
         rb = box(r["p"], r["w"] / 2 + PAVE + 1)
@@ -851,7 +856,7 @@ def _lots(buildings: list, roads: list, areas: list, plots: list, half: float) -
     # what gardens don't go over: streets (with their pavements) and footpaths, parks, car parks,
     # yards, water and pitches, and buildings other than houses and sheds
     for a in areas:
-        if a["k"] in ("paved", "yard", "water", "pitch", "wood") or (a["k"] == "grass" and abs(area(a["p"])) > 2500):
+        if a["k"] in ("paved", "yard", "water", "pitch", "wood", "allot") or (a["k"] == "grass" and abs(area(a["p"])) > 2500):
             fill_poly(a["p"], OTHER)
     for r in roads:
         pad = r["w"] / 2 + (r.get("pv", PAVE) if r["k"] != "path" else 0.4)
@@ -870,7 +875,7 @@ def _lots(buildings: list, roads: list, areas: list, plots: list, half: float) -
                             own[j * n + i] = ROAD
     houses = [b for b in buildings if b.get("k") == "house"]
     for b in buildings:
-        if b.get("k") not in ("house", "small"):
+        if b.get("k") not in ("house", "small", "garage"):
             fill_poly(b["p"], OTHER)
     # the houses, then out from each, the nearest taking each bit of ground
     dist = [math.inf] * (n * n)

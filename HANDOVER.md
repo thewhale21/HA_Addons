@@ -5,7 +5,7 @@ subscription. `CLAUDE.md` has the working rules; this file has the
 background: what each add-on does, how the owner uses them, what was
 decided and why, and what's still open.
 
-**Last updated:** 27 Nov 2026 (neighbourhood_view 0.21.0).
+**Last updated:** 27 Nov 2026 (neighbourhood_view 0.22.0).
 
 **Keep this file current.** Whoever changes the repository (any AI agent
 or person) updates this file in the same commit when the change affects
@@ -64,7 +64,7 @@ anything below, and bumps the "Last updated" line.
 | `octopus_charge_pack` | 0.10.8 | Octopus API helpers; 0.10.8 drops old `device_id`/`poll_seconds` options via the Supervisor API (`POST http://supervisor/addons/self/options`). |
 | `sigenergy_evdc_soc_range_manager` | 0.44.0 | "SigEnergy DC Charger": keeps the EVDC car between limits on a weekly schedule. Limits are named **Maximum charge** and **Keep at least**; an entry can be Maximum charge / Keep at least / Both / Charge only / Discharge only (one-way entries stay within the limits); entries may overlap; start == end means 24 hours; the week view has three lanes (one-way entries in the middle). The Overview's Car SoC chart shows charge/discharge only as a coloured strip along the bottom (0.43.0; points in `soc_history.json` carry a 6th value, "charge"/"discharge", only then). Notifications (0.44.0): the notify service box suggests HA's notify services (`/api/notify_services`) with a Test button; **What to send** (`notify_level`: info = everything incl. starts/stops, warning, error, none; default info); warnings/errors in its log are sent too (`src/log_notify.py`, ported from OCPP's). about 105 tests (test_api needs pytest-asyncio; one notify test needs aiohttp). |
 | `tigo_solar` | 0.7.0 | Tigo panel data: roof view (reclaimed in brackets), drag-to-select chart, quick-select per string, per-panel estimates every minute (system power shared by interpolated reading shares), backfill of real 15-minute per-panel readings via Tigo's `lastvalue` (`resourceId=lastValue-{date}-{pin|reclaimedPower}-{HH:MM}`, about 2 requests per slot, 3 s apart; trusted after 3 answers within 35%/30 W of system power, off after 3 misses), fixed scale, hover tooltip, reclaimed %, "By the time of day" and "Through the year" heatmap / 3D surface with Month/Year and 3D zoom. 22 tests. |
-| `neighbourhood_view` | 0.21.0 | New (26 Nov 2026): an isometric SVG drawing of the streets (150 m by default, a setting) around your home from OpenStreetMap (postcodes.io for the postcode, Overpass for buildings/roads/areas/trees and the house-number lookup), as the add-on's page and a dashboard card. See "Neighbourhood View" below. |
+| `neighbourhood_view` | 0.22.0 | New (26 Nov 2026): an isometric SVG drawing of the streets (150 m by default, a setting) around your home from OpenStreetMap (postcodes.io for the postcode, Overpass for buildings/roads/areas/trees and the house-number lookup), as the add-on's page and a dashboard card. See "Neighbourhood View" below. |
 | `heat_loss_calculator`, `predbat_dashboard`, `stellantis_ev_stats` | 0.7.1, 0.3.2, 0.3.2 | Not worked on recently. |
 | `addon_template` | 0.1.7 | Start new add-ons with `python scripts/new_addon.py`. |
 
@@ -377,6 +377,28 @@ quarter turns are allowed), about 250 m around, add-on and card together.
   box()/mix() don't parse rgb()), `wreath()`, `reindeer()`, `candyCane()`; halloween 1-3 bigger
   `pumpkin(V, x, y, k)` + `gravestone()`; easter eggs .6x.8 striped + `bunny()`; birthday presents +
   `bunting()`. Helpers `star()`, `heartAt()`. shot5.py runs xmasday/xmasclose/hallday/easterday/valday.
+- 0.22.0 (owner: add all 11 extras + the performance items; then: things drawn over roads/paths/
+  buildings again, and the 5-second stutter): LAYERS: islandDrawn(opts.split) returns `layers`
+  [still ground, moving ground (gAnim: anything with <animate, plus the near-side parked cars, under
+  the island's clip; gAnim2 the waterfall), still things (still() strips SMIL except elements fx()
+  marked data-nvk: smoke, leaves, hearts, TV flicker, heat pump, steam, windy washing), top (rain
+  splashes, pins)]; draw() puts each in its own <svg class="nvlayer"> (0 and 2 will-change:transform;
+  .up ones pointer-events:none); fit() sets every layer's viewBox; split is off in pick mode (the
+  add-on page's Overview) and with card `layers: false`. P()/P2() route ground pushes; rivers are
+  'still' (shimmer stripped). Trees don't sway in split. render() pauses SMIL/CSS (nv-paused) when
+  hidden or off-screen (IntersectionObserver). steady(): temperature rounded, energy flags must hold
+  SETTLE_MS 60 s; the card console.debug()s what changed. index.html setHTML() only writes changed
+  HTML (rows every 1 s, card-file every 2 s were rewriting). GUARDS: plotBits thing(x, y, svg, rad,
+  kerb) checks onRoad (grid of roads + pavements + paths) and inBuilding at rad round it; fences too.
+  EXTRAS: wallTexture (BRICK colours: courses; else pebble-dash 50%), windowBits (curtains, window
+  boxes, cats, TVs ≤ CTX.tv), wheelieBin (bin day from live.house.bins: src/live.py bin_day / card
+  binDay), gardenTable/paddlingPool/barbecue by season/CTX.temp, road wear + give-way (legs whose ri
+  is alone at the junction), scene "allot" areas and "garage" buildings (SCENE_V 5), settings
+  `look` {door, plate} (app_settings DOORS; payload "look"), steam (CTX.frost, hour < 11), rainbow
+  (LAST_WET within 45 min, or card `rainbow: true`), school run / milk float / dog walkers by
+  CTX.hour, moon(when) by moonPhase (hidden when grey), house: door/garage/lights from
+  ENTITY_KEYS bins/door/garage/garden_lights (PICKER_DOMAINS + calendar, cover, light, lock,
+  input_datetime).
 - Ideas not done: road names, building colours from OSM tags, live overlays (e.g. the car, the
   battery).
 

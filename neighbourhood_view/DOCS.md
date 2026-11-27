@@ -61,7 +61,20 @@ Settings › **On the map**:
     charging, or a power over 20 W).
   - **A heat pump** beside the house: its fan turns and it puffs while it
     says it's running (on, heating, a thermostat heating or cooling, or a
-    power over 20 W).
+    power over 20 W). Solar, car and heat pump only change on the map once
+    they've said so for a minute, so a power hovering round 20 W doesn't
+    keep drawing the map again.
+  - **Bins:** your bins (and most of the street's) out at the kerb on bin
+    day, from a bin collection sensor (today; tomorrow, or 1 day to go,
+    from 6pm; or the date), a calendar's event, or a switch. Otherwise
+    they stand beside the house.
+  - **Front door:** open while a door sensor says so (or a lock's
+    unlocked), lit inside at night. Its colour (Settings: Door colour) and
+    your number on a plate beside it are yours to choose.
+  - **Garage:** a garage beside your house (where there's room), its door
+    up while a cover or sensor says it's open.
+  - **Garden lights:** lights round your back garden while a light or
+    switch is on, glowing at night.
 
 ## Other places
 
@@ -100,13 +113,18 @@ trees it has, drawn like a video game's town:
   tiled, slate or clay roof, gabled or hipped, its ridge running along the
   nearest street (as a terrace's or a semi's does), a chimney on some, windows
   on every storey and a front door. Where OpenStreetMap has no height, most
-  are 2 storeys, some bungalows and some 3 storeys.
+  are 2 storeys, some bungalows and some 3 storeys. Brick walls show their
+  courses, some rendered ones a pebble-dash; windows have curtains half
+  drawn in some, window boxes under some, the odd cat on a sill, and at
+  night a TV flickering in a few.
 - **Other buildings:** flats and offices with rows of windows, shops with
   a glass front and a coloured fascia, warehouses with high windows, and
   things on their flat roofs. Heights from OpenStreetMap (3 m a storey),
   else by type (flats 12 m, shops 8 m, garages 2.8 m...).
 - **The ground** is lawn, as gardens mostly are; shops', offices' and
   industrial land is hard standing, and car parks are grey.
+- **Allotments** as rows of beds (bare in winter) with the odd shed, and
+  **garages** (lock-up blocks too) with a row of up-and-over doors.
 - **Streets** have a pavement each side with its kerb (and a grass verge
   on residential streets), and white lines down the middle; footpaths are
   drawn on their own. Houses are never drawn on a street, its pavements or
@@ -130,8 +148,13 @@ trees it has, drawn like a video game's town:
   wall or hedge (or nothing: many are open). At the front:
   a path to the door, a driveway on about half (many with a car, some
   leading to a garage), a hedge or low wall along the pavement, flowers
-  under the window. At the back: patios, the odd conservatory, sheds, trampolines, washing lines (brought
-  in when it's wet or dark), bushes and flower beds.
+  under the window, wheelie bins (grey, green, blue). At the back: patios,
+  the odd conservatory, sheds, trampolines, washing lines (brought in when
+  it's wet or dark, blowing about when it's windy), bushes and flower
+  beds; through the year, tables under parasols and the odd paddling pool
+  in summer, a barbecue on a warm day (18°C or more), a table and chairs
+  in spring and autumn, all put away in winter. Nothing in a garden is
+  drawn on a street, pavement, footpath or building.
 - **Roofs:** skylights, dormers and satellite dishes on some.
 - **Greenery:** parks and playing fields mown in stripes, reeds round
   ponds.
@@ -141,10 +164,17 @@ trees it has, drawn like a video game's town:
 - **Landmarks** from what OpenStreetMap says a building is: churches (a
   tower and spire), schools (a flag and a playground) and pubs (a hanging
   sign and picnic benches).
-- **Life:** cars and a bus driving the streets (on the left), a train now
-  and then on a railway, people walking the pavements (some with a dog;
-  fewer at night or in the rain), ducks paddling on ponds, and a waterfall
-  where a river runs off the front edge. The card's `motion: false`
+- **Roads** wear: patched tarmac now and then, drain covers by the kerbs,
+  and faded give-way lines where a side street meets another.
+- **Life:** cars and a bus driving the streets (on the left; busier on
+  the school run, weekdays about 8:15 to 9 and 3 to 3:45), a milk float or
+  delivery van early in the morning (5 to 8), a train now and then on a
+  railway, people walking the pavements (some with a dog, more walking
+  dogs on dry evenings, 5 to 9; fewer at night or in the rain), ducks
+  paddling on ponds, and a waterfall where a river runs off the front edge.
+- **Sky:** the moon at night in its phase (unless it's cloudy), and a
+  rainbow when the sun comes out after rain (for up to 45 minutes).
+  Steam from some roofs on a frosty morning. The card's `motion: false`
   option keeps all this still.
 
 - **The edge:** the square looks torn out of the ground, with a ragged
@@ -298,7 +328,8 @@ Options:
 | `weather` | A weather entity for this card, instead of the add-on's |
 | `people` | People for this card, instead of the add-on's, e.g. `[person.matt, person.jo]` |
 | `motion` | `false`: nothing moves (traffic, people, ducks, a train), e.g. on a slow tablet |
-| `effects` | `lite`: one layer of rain or snow, no drifting cloud, no splashes or puddle ripples, fewer falling leaves; `full`: all of it. Left out: lite on slower devices (4 cores or fewer, or 2 GB or less), full on the rest |
+| `layers` | `false`: draw the map as one picture, as before 0.22.0 (it's drawn in layers, so what moves doesn't make the browser draw the whole map again each frame) |
+| `effects` | `lite`: one layer of rain or snow, no drifting cloud, no splashes or puddle ripples, fewer falling leaves, plainer walls and windows, fewer decorated trees and people walking; `full`: all of it. Left out: lite on slower devices (4 cores or fewer, or 2 GB or less), full on the rest |
 | `tap_navigate` | Where tapping the map goes, instead of Settings › Screensaver, e.g. `/wall-display-2/home` (`''`: nowhere) |
 
 Any signed-in Home Assistant user can see the card, kiosk and other

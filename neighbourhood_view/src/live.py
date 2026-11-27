@@ -4,12 +4,16 @@ page; the dashboard card builds the same from Home Assistant's states itself
 (liveFrom() in static/neighbourhood-view-card.js), from the entities in entities()."""
 from __future__ import annotations
 
+import datetime
 from typing import Optional
 
 from src.ha_link import ENTITY_KEYS
 
 
 ENERGY_KEYS = {"solar": "solar_entity", "car": "car_entity", "heat": "heat_pump_entity"}
+HOUSE_KEYS = {"bins": "bins_entity", "door": "door_entity", "garage": "garage_entity", "lights": "garden_lights_entity"}
+OPEN_WORDS = {"on", "open", "opening", "unlocked", "unlocking", "true"}
+EVENING = 18  # bins go out the evening before
 ON_WORDS = {"on", "charging", "heating", "heat", "cooling", "cool", "running", "true", "active", "producing", "heat_pump", "eco", "performance"}
 
 
@@ -18,7 +22,38 @@ def entities(settings: dict) -> dict:
     "energy": {"solar", "car", "heat"}: entity or ""}."""
     people = [settings.get(k) for k in sorted(ENTITY_KEYS) if k.startswith("person_") and settings.get(k)]
     return {"weather": settings.get("weather_entity") or "", "people": people, "sun": "sun.sun",
-            "energy": {k: settings.get(v) or "" for k, v in ENERGY_KEYS.items()}}
+            "energy": {k: settings.get(v) or "" for k, v in ENERGY_KEYS.items()},
+            "house": {k: settings.get(v) or "" for k, v in HOUSE_KEYS.items()}}
+
+
+def bin_day(st: Optional[dict], now: Optional[datetime.datetime] = None) -> bool:
+    """Whether the bins are out: a bin-collection entity saying it's today (on, "today", 0 days, or
+    today's date), or tomorrow from EVENING (1 day, "tomorrow", tomorrow's date); a calendar's
+    event on now, or starting today. The same as binDay() in the card."""
+    if not st:
+        return False
+    now = now or datetime.datetime.now()
+    s = str(st.get("state") or "").strip().lower()
+    a = st.get("attributes") or {}
+    late = now.hour >= EVENING
+    today, tomorrow = now.date().isoformat(), (now.date() + datetime.timedelta(days=1)).isoformat()
+    if s in ("on", "true", "today"):
+        return True
+    if s == "tomorrow":
+        return late
+    try:
+        days = float(s)
+        return days == 0 or (days == 1 and late)
+    except ValueError:
+        pass
+    for v in (s, str(a.get("start_time") or "").lower()):
+        if v[:10] == today or (late and v[:10] == tomorrow):
+            return True
+    return False
+
+
+def is_open(st: Optional[dict]) -> bool:
+    return bool(st) and str(st.get("state") or "").lower() in OPEN_WORDS
 
 
 def active(st: Optional[dict]) -> bool:
@@ -75,4 +110,9 @@ def compute(settings: dict, states: dict) -> dict:
     energy = {"solar": active(states.get(en.get("solar"))) if en.get("solar") else None,
               "car": bool(en.get("car")), "charging": active(states.get(en.get("car"))) if en.get("car") else False,
               "heat": active(states.get(en.get("heat"))) if en.get("heat") else None}
-    return {"night": night, "weather": weather, "people": people, "sun": sun_at, "energy": energy}
+    ho = ents.get("house") or {}
+    house = {"bins": bin_day(states.get(ho["bins"])) if ho.get("bins") else None,
+             "door": is_open(states.get(ho.get("door"))) if ho.get("door") else False,
+             "garage": is_open(states.get(ho.get("garage"))) if ho.get("garage") else None,
+             "lights": is_open(states.get(ho.get("lights"))) if ho.get("lights") else False}
+    return {"night": night, "weather": weather, "people": people, "sun": sun_at, "energy": energy, "house": house}

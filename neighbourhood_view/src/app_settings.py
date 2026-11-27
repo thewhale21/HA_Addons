@@ -42,7 +42,11 @@ DEFAULTS = {"log_level": "info", "postcode": "", "house_number": "",
             # occasions on the map, each on or off between two days of the year ("MM-DD", either way
             # round a new year); Easter and Chinese New Year by the calendar (auto) unless set; and
             # birthdays: [{"date": "MM-DD", "name"}] (the static/neighbourhood-view-card.js occasion())
-            "occasions": {k: dict(v) for k, v in OCCASIONS.items()}}
+            "occasions": {k: dict(v) for k, v in OCCASIONS.items()},
+            # your house on the map: its front door's colour (one of DOORS, "" for the usual) and
+            # whether it has its number on a plate by the door
+            "look": {"door": "", "plate": True}}
+DOORS = ("", "red", "blue", "green", "black", "white", "yellow", "grey", "wood", "purple")
 SIDES = ("left", "right", "up", "down")
 MAX_PLACES = 6
 MAX_ROOMS = 30
@@ -197,6 +201,14 @@ class AppSettings:
                 if c["on"] and not c.get("auto") and not (c["from"] and c["to"]):
                     raise ValueError(f"{k}: choose the first and last day it's on")
             out["occasions"] = clean
+        if "look" in body:
+            lk = body["look"]
+            if not isinstance(lk, dict):
+                raise ValueError("look must be {door, plate}")
+            door = str(lk.get("door") or "").lower()
+            if door not in DOORS:
+                raise ValueError("The door's colour must be one of: " + ", ".join(d for d in DOORS if d))
+            out["look"] = {"door": door, "plate": bool(lk.get("plate", True))}
         if "picked" in body:
             p = body["picked"]
             if p is not None:
