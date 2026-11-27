@@ -19,9 +19,15 @@ DEFAULTS = {"log_level": "info", "postcode": "", "house_number": "",
             "picked": None,
             # how far round your house the map goes (m), and other places shown beside it:
             # [{"zone": "zone.work", "side": "left"|"right"|"up"|"down", "radius": m}]
-            "radius": 150, "places": []}
+            "radius": 150, "places": [],
+            # the map as a screensaver: tapping it goes to a dashboard ("none", "own": path, "ours":
+            # one made from the rooms chosen, areas), and a device left alone `idle` s comes back
+            # (0: never) (src/screen.py)
+            "screen": {"target": "none", "path": "", "idle": 120, "areas": []}}
 SIDES = ("left", "right", "up", "down")
 MAX_PLACES = 6
+MAX_ROOMS = 30
+PATH_RE = re.compile(r"^/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*/?$")
 NUMBER_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z /-]{0,11}$")
 
 
@@ -84,6 +90,33 @@ class AppSettings:
                     raise ValueError("A place's size is 30 to 400 m round it")
                 clean.append({"zone": str(pl["zone"]).strip(), "side": side, "radius": r})
             out["places"] = clean
+        if "screen" in body:
+            s = body["screen"]
+            if not isinstance(s, dict):
+                raise ValueError("screen must be an object")
+            target = str(s.get("target") or "none")
+            if target not in ("none", "own", "ours"):
+                raise ValueError("Tapping the map goes to: none, own or ours")
+            path = str(s.get("path") or "").strip()
+            if target == "own":
+                if not path:
+                    raise ValueError("Choose the dashboard tapping the map goes to (e.g. /wall-display-2/home)")
+                if not path.startswith("/"):
+                    path = "/" + path
+                if not PATH_RE.match(path):
+                    raise ValueError("A dashboard's path is like /wall-display-2/home")
+            try:
+                idle = int(float(s.get("idle", 120)))
+            except (TypeError, ValueError):
+                raise ValueError("The time before coming back to the map is a number of seconds") from None
+            if idle and not 30 <= idle <= 3600:
+                raise ValueError("Back to the map after 30 s to an hour (or never)")
+            areas = s.get("areas") or []
+            if not isinstance(areas, list) or len(areas) > MAX_ROOMS or not all(isinstance(a, str) and a for a in areas):
+                raise ValueError(f"Up to {MAX_ROOMS} rooms")
+            if target == "ours" and not areas:
+                raise ValueError("Choose at least one room for the dashboard")
+            out["screen"] = {"target": target, "path": path, "idle": idle, "areas": list(dict.fromkeys(areas))}
         if "picked" in body:
             p = body["picked"]
             if p is not None:

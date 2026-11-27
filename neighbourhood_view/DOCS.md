@@ -139,6 +139,49 @@ OpenStreetMap's addresses within 400 m with your house number and postcode.
 Not every house has its address in OpenStreetMap; then it's centred on the
 postcode and the pin's on the building nearest it, until you pick yours.
 
+## Screensaver
+
+Settings › **Screensaver** makes the map a screensaver, e.g. for a wall
+display.
+
+- **Tapping the map goes to** a dashboard of your choosing:
+  - **Nowhere**: the map stays put.
+  - **My own dashboard**: pick one, or type its path, e.g.
+    `/wall-display-2/home` for a view.
+  - **A dashboard made from my rooms**: tick the rooms (Home Assistant's
+    areas). A **Home** dashboard is made with a Home view (the clock, the
+    weather, who's in, a button for each room and one back to the map),
+    and a view for each room with its lights, switches, fans, blinds,
+    locks, media players, heating and cooling, and temperature, humidity
+    and door/window/motion sensors. It's made again each time you save,
+    so changes made to it by hand are lost: copy it (its ⋮ menu › Raw
+    configuration editor) to make your own.
+- **Save and make the dashboards** also makes a **Map** dashboard (the
+  map filling the screen, at `/neighbourhood-map/map`) and the
+  **Neighbourhood View** theme: glassy dark cards over a blue sky by day,
+  or a night sky in dark mode, the same as the map. Both made dashboards
+  use it; to use it on your own, pick it in a view's settings (Theme) or
+  your profile. Home Assistant has to read your `themes` folder: if the
+  page says it doesn't, add this to `configuration.yaml` and restart:
+
+  ```yaml
+  frontend:
+    themes: !include_dir_merge_named themes
+  ```
+
+- **Back to the map after being left alone** (1 to 30 minutes, or
+  never): only on devices you choose. Open the Map dashboard on that
+  device and press **🖵** on the map's buttons (it turns blue). Then,
+  wherever it's left on another dashboard, it comes back to the map after
+  that long with nobody touching it (not while editing a dashboard, or in
+  Home Assistant's settings). Press 🖵 again there to stop.
+
+The card's own options `tap_navigate: /path` (or `''` for nowhere) and
+`idle_return: seconds` override these for that card.
+
+The card reads the map through the add-on, so the wall display's user
+has to be an administrator.
+
 ## The dashboard card
 
 The add-on puts the card in Home Assistant's `www` folder
@@ -170,6 +213,8 @@ Options:
 | `url` | Read the map from this address instead of through Home Assistant (e.g. `http://homeassistant.local:8099/`) |
 | `weather` | A weather entity for this card, instead of the add-on's |
 | `people` | People for this card, instead of the add-on's, e.g. `[person.matt, person.jo]` |
+| `tap_navigate` | Where tapping the map goes, instead of Settings › Screensaver, e.g. `/wall-display-2/home` (`''`: nowhere) |
+| `idle_return` | Seconds left alone before a device with 🖵 on comes back to the map, instead of the add-on's |
 
 The card reads the map from the add-on through Home Assistant's ingress, as
 the add-on's page does, so it needs an **administrator** account. It reads

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.0 — The map as a screensaver
+
+- **Feature:** Settings › Screensaver: tapping the map on a dashboard goes to
+  another dashboard, your own (e.g. `/wall-display-2/home`) or a **Home**
+  dashboard made from the rooms (Home Assistant areas) you choose, with a
+  view for each room.
+- **Feature:** a device told to (the 🖵 button on the map) comes back to the
+  map after being left alone for a time you choose.
+- **Feature:** a **Map** dashboard (the map filling the screen) and a
+  **Neighbourhood View** theme (glassy dark cards over the map's sky, a night
+  sky in dark mode) are made for you.
+- **Feature:** card options `tap_navigate` and `idle_return`.
 ## 0.11.1 — Bridges that line up
 
 - **Fix:** each end of a bridge is now as wide as the street it joins (the

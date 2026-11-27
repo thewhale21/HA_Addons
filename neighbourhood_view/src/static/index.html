@@ -385,6 +385,28 @@
         <div class="row" style="margin-top:8px"><div class="grow note" style="margin:0" id="s-places-status"></div><button class="btn small" id="s-place-add">Add a place</button><button class="btn small primary" id="s-places-save">Save</button></div>
       </div>
     </div>
+    <div class="section-title">Screensaver</div>
+    <div class="masonry">
+      <div class="card">
+        <h2>Screensaver</h2>
+        <div class="note" style="margin:0 0 8px">Use the map as a screensaver, e.g. on a wall display: tapping it takes you to a dashboard, and a device left alone comes back to the map. Saving makes a <b>Map</b> dashboard (the map filling the screen) and the <b>Neighbourhood View</b> theme, so your dashboards can look like the map.</div>
+        <div class="row" style="margin-top:6px"><span class="grow">Tapping the map goes to</span>
+          <select id="s-scr-target" aria-label="Tapping the map goes to"><option value="none">Nowhere (it stays the map)</option><option value="own">My own dashboard</option><option value="ours">A dashboard made from my rooms</option></select></div>
+        <div id="s-scr-own" hidden style="margin-top:8px">
+          <div class="row"><span class="grow">Dashboard</span><input id="s-scr-path" list="s-scr-boards" placeholder="/wall-display-2/home" style="width:220px" aria-label="Dashboard path"></div>
+          <datalist id="s-scr-boards"></datalist>
+          <div class="note" style="margin:4px 0 0">Pick one, or type its address after your Home Assistant's, e.g. <code>/wall-display-2/home</code> for a view.</div>
+        </div>
+        <div id="s-scr-ours" hidden style="margin-top:8px">
+          <div class="note" style="margin:0 0 6px">The rooms (Home Assistant's areas) to put on it. It gets a Home view (the clock, the weather, who's in, a button a room and one back to the map) and a view a room with its lights, switches, heating and sensors, in the map's theme. It's made again each time you save here, so changes made to it by hand are lost: copy it first to make your own.</div>
+          <div id="s-scr-areas" style="display:flex;flex-wrap:wrap;gap:6px 14px"></div>
+        </div>
+        <div class="row" style="margin-top:10px"><span class="grow">Back to the map after being left alone</span>
+          <select id="s-scr-idle" aria-label="Back to the map after"><option value="0">Never</option><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="1800">30 minutes</option></select></div>
+        <div class="note" style="margin:4px 0 0">Only on devices you choose: open the Map dashboard on the device (e.g. the wall display) and press <b>🖵</b> on the map's buttons. Tap it again there to stop.</div>
+        <div class="row" style="margin-top:10px"><div class="grow note" style="margin:0" id="s-scr-status"></div><button class="btn small primary" id="s-scr-save">Save and make the dashboards</button></div>
+      </div>
+    </div>
     <div class="section-title">Dashboard card</div>
     <div class="masonry">
       <div class="card">
@@ -736,6 +758,50 @@ $('s-save').addEventListener('click', async () => {
   if (await post('address', body)) { toast(body.postcode ? 'Saved: making the map…' : 'Address cleared'); refreshAddress(); }
 });
 ['s-postcode', 's-number'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('s-save').click(); }));
+// ---------- Settings › Screensaver ----------
+const nvScr = {loaded: false, dirty: false, data: null};
+async function refreshScreen() {
+  let d;
+  try { d = await api('screen'); } catch (e) { $('s-scr-status').textContent = e.message; return; }
+  nvScr.data = d; nvScr.loaded = true;
+  if (nvScr.dirty) return;
+  const s = d.screen || {};
+  $('s-scr-target').value = s.target || 'none';
+  $('s-scr-path').value = s.path || '';
+  $('s-scr-idle').value = String(s.idle ?? 120);
+  if (![...$('s-scr-idle').options].some((o) => o.value === String(s.idle))) $('s-scr-idle').insertAdjacentHTML('beforeend', `<option value="${esc(String(s.idle))}">${esc(String(s.idle))} s</option>`), $('s-scr-idle').value = String(s.idle);
+  $('s-scr-boards').innerHTML = (d.dashboards || []).map((b) => `<option value="/${esc(b.url_path)}">${esc(b.title)}</option>`).join('');
+  const chosen = new Set(s.areas || []);
+  $('s-scr-areas').innerHTML = (d.areas || []).length ? d.areas.map((a) => `<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" value="${esc(a.area_id)}"${chosen.has(a.area_id) ? ' checked' : ''}>${esc(a.name)}</label>`).join('')
+    : `<span class="note">${esc(d.error || 'No rooms in Home Assistant yet: add areas in its Settings › Areas.')}</span>`;
+  drawScreen(d.result);
+}
+function drawScreen(result) {
+  const t = $('s-scr-target').value;
+  $('s-scr-own').hidden = t !== 'own';
+  $('s-scr-ours').hidden = t !== 'ours';
+  if (result === undefined) return;
+  const r = result || {};
+  const link = (p, name) => `<a href="${esc(p)}" target="_top">${esc(name)}</a>`;
+  $('s-scr-status').innerHTML = !result ? '' : [r.map ? 'Made: ' + link(r.map, 'Map') : '', r.home ? link(r.home, `Home (${r.rooms} room${r.rooms === 1 ? '' : 's'})`) : '',
+    r.theme === 'manual' ? `<span class="chip warn">Theme</span> ${esc(r.theme_detail || '')}` : 'theme ready'].filter(Boolean).join(' · ');
+}
+$('s-scr-target').addEventListener('change', () => { nvScr.dirty = true; drawScreen(); });
+['s-scr-path', 's-scr-idle'].forEach((id) => $(id).addEventListener('change', () => { nvScr.dirty = true; }));
+$('s-scr-areas').addEventListener('change', () => { nvScr.dirty = true; });
+$('s-scr-save').addEventListener('click', async () => {
+  const screen = {target: $('s-scr-target').value, path: $('s-scr-path').value.trim(), idle: Number($('s-scr-idle').value),
+    areas: [...$('s-scr-areas').querySelectorAll('input:checked')].map((i) => i.value)};
+  $('s-scr-save').disabled = true; $('s-scr-status').textContent = 'Making the dashboards…';
+  try {
+    const d = await api('screen', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({screen})});
+    nvScr.dirty = false;
+    if (d.message) $('s-scr-status').textContent = d.message; else drawScreen(d.result);
+    toast('Saved');
+  } catch (e) { $('s-scr-status').textContent = e.message; toast('Failed: ' + e.message); }
+  $('s-scr-save').disabled = false;
+});
+
 // ---------- Settings › Other places ----------
 const nvPlaces = {list: [], zones: null, dirty: false};
 const SIDE_NAMES = {left: 'Left', right: 'Right', up: 'Above', down: 'Below'};
@@ -982,7 +1048,7 @@ $('d-bundle').addEventListener('click', async () => {
 
 // ---------- refresh loop ----------
 function refreshTab(full) {
-  if (activeTab === 'settings') { refreshAddress(); refreshSensors(full); }
+  if (activeTab === 'settings') { refreshAddress(); refreshSensors(full); if (full || !nvScr.loaded) refreshScreen(); }
   else if (activeTab === 'health') refreshHealth();
   else if (activeTab === 'debug') refreshDebug();
 }
@@ -1137,6 +1203,13 @@ function setupRows() {
     {t: 'Other places', id: 'places', icon: 'layers', sum: () => {
       const st = ((state || {}).extra || {}).places || [];
       return st.length ? esc(st.map((p) => p.name).join(' · ')) : '<span class="chip">None</span>Maps of other places beside yours';
+    }},
+  ]);
+  rowList('tab-settings', 'Screensaver', [
+    {t: 'Screensaver', id: 'screen', icon: 'sched', sum: () => {
+      const s = ((nvScr.data || {}).screen) || {};
+      const to = s.target === 'own' ? esc(s.path) : s.target === 'ours' ? `a dashboard of ${(s.areas || []).length} room${(s.areas || []).length === 1 ? '' : 's'}` : '';
+      return to ? `Tap → ${to}${s.idle ? ` · back after ${s.idle >= 60 ? Math.round(s.idle / 60) + ' min' : s.idle + ' s'}` : ''}` : '<span class="chip">Off</span>Tapping the map does nothing';
     }},
   ]);
   rowList('tab-settings', 'Dashboard card', [

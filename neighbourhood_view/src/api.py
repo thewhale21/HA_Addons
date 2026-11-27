@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -47,6 +48,9 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app.router.add_post("/api/refresh", handle_refresh)
     app.router.add_post("/api/places", handle_places)
     app.router.add_get("/api/zones", handle_zones)
+    # Settings › Screensaver (src/screen.py)
+    app.router.add_get("/api/screen", handle_get_screen)
+    app.router.add_post("/api/screen", handle_set_screen)
     app.router.add_get("/api/state", handle_get_state)
     app.router.add_get("/api/events", handle_events)
     app.router.add_get("/api/health", handle_health)
@@ -124,7 +128,12 @@ async def handle_scene(request: web.Request) -> web.Response:
         psc = pstore.get(pl["zone"]) if pstore is not None else None
         if psc:
             pls.append({"zone": pl["zone"], "side": pl["side"], "name": psc.get("name") or pl["zone"], "scene": psc})
-    return web.json_response({"scene": sc, "places": pls, "message": message, "status": state.status, "entities": ents, "live": state.live},
+    from src import screen as SC
+    scr = settings.data.get("screen") if settings is not None else {}
+    # (for the dashboard card: where a tap goes, and when a device left alone comes back)
+    scr_out = {"tap": SC.tap_path(scr), "idle": int((scr or {}).get("idle") or 0), "map": SC.MAP_PATH}
+    return web.json_response({"scene": sc, "places": pls, "message": message, "status": state.status, "entities": ents, "live": state.live,
+                              "screen": scr_out},
                              dumps=lambda d: json.dumps(d, separators=(",", ":")))
 
 
@@ -188,6 +197,56 @@ async def handle_zones(request: web.Request) -> web.Response:
     zones = [{"entity_id": st["entity_id"], "name": (st.get("attributes") or {}).get("friendly_name") or st["entity_id"]}
              for st in states if str(st.get("entity_id", "")).startswith("zone.")]
     return web.json_response({"zones": sorted(zones, key=lambda z: z["name"].lower())})
+
+
+async def handle_get_screen(request: web.Request) -> web.Response:
+    """Settings › Screensaver: the settings, the rooms (Home Assistant's areas) and dashboards to
+    choose from, and what happened when last saved."""
+    settings, link, state = request.app["app_settings"], request.app["ha_link"], request.app["shared_state"]
+    if settings is None:
+        return _unavailable()
+    areas, boards, err = [], [], None
+    if link is not None and link.connected:
+        try:
+            areas = [{"area_id": a["area_id"], "name": a.get("name") or a["area_id"], "icon": a.get("icon")}
+                     for a in await link.query({"type": "config/area_registry/list"}) or []]
+            areas.sort(key=lambda a: a["name"].lower())
+            boards = [{"url_path": b.get("url_path"), "title": b.get("title") or b.get("url_path")}
+                      for b in await link.query({"type": "lovelace/dashboards/list"}) or [] if b.get("url_path")]
+        except Exception as e:  # (shown on the page)
+            err = f"Couldn't read Home Assistant's rooms and dashboards: {e}"
+    else:
+        err = "Not connected to Home Assistant"
+    return web.json_response({"screen": settings.data.get("screen"), "areas": areas, "dashboards": boards, "error": err,
+                              "result": state.extra.get("screen_result")})
+
+
+async def handle_set_screen(request: web.Request) -> web.Response:
+    """{"screen": {...}}: saved; then the theme and dashboards made (or brought up to date)."""
+    from src import screen as SC
+    from src.card_install import HA_CONFIG
+    settings, link, state = request.app["app_settings"], request.app["ha_link"], request.app["shared_state"]
+    if settings is None:
+        return _unavailable()
+    try:
+        body = await request.json()
+        settings.update({"screen": (body or {}).get("screen")})
+    except ValueError as err:
+        return _bad_request(err)
+    scr = settings.data["screen"]
+    if link is None or not link.connected:
+        return web.json_response({"status": "ok", "screen": scr, "result": None,
+                                  "message": "Saved. The dashboards are made when the add-on's connected to Home Assistant: save again then."})
+    from src.live import entities
+    ents = entities(link.settings)
+    try:
+        result = await SC.apply(link.query, scr, weather=ents.get("weather") or None, people=ents.get("people") or [],
+                                states=None, config_dir=HA_CONFIG if os.path.isdir(HA_CONFIG) else None)
+    except Exception as err:
+        logger.warning("Screensaver dashboards: %s", err)
+        return web.json_response({"status": "error", "message": f"Saved, but the dashboards couldn't be made: {err}"}, status=502)
+    state.extra["screen_result"] = result
+    return web.json_response({"status": "ok", "screen": scr, "result": result})
 
 
 async def handle_refresh(request: web.Request) -> web.Response:

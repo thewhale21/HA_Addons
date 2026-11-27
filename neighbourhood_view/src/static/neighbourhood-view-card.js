@@ -1143,6 +1143,32 @@
   const getRot = () => { try { return Number(localStorage.getItem(ROT_KEY)) || 0; } catch (e) { return 0; } };
   const setRot = (r) => { try { localStorage.setItem(ROT_KEY, String(r)); } catch (e) { /* (not kept) */ } };
 
+  /* The map as a screensaver: tapping it goes to another dashboard; a device told to (the 🖵 button)
+   * comes back to the map after being left alone. This file's loaded on every dashboard (it's one of
+   * your dashboards' resources), so the watcher runs wherever the device is. */
+  const SAVER_KEY = 'neighbourhood-view-screensaver';
+  function saver() { try { return JSON.parse(localStorage.getItem(SAVER_KEY) || 'null'); } catch (e) { return null; } }
+  function setSaver(v) { try { if (v) localStorage.setItem(SAVER_KEY, JSON.stringify(v)); else localStorage.removeItem(SAVER_KEY); } catch (e) { /* (not kept) */ } }
+  function navigate(path) {
+    history.pushState(null, '', path);
+    window.dispatchEvent(new CustomEvent('location-changed', {detail: {replace: false}}));
+  }
+  const MONITOR = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M21 16H3V4h18m0-2H3c-1.11 0-2 .89-2 2v12a2 2 0 0 0 2 2h7v2H8v2h8v-2h-2v-2h7a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z"/></svg>';
+  if (!window.__neighbourhoodViewIdle) {
+    window.__neighbourhoodViewIdle = true;
+    let last = Date.now();
+    const poke = () => { last = Date.now(); };
+    for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']) window.addEventListener(ev, poke, {capture: true, passive: true});
+    setInterval(() => {
+      const s = saver();
+      if (!s || !s.idle || !s.map) return;
+      const here = location.pathname.replace(/\/$/, ''), map = String(s.map).replace(/\/$/, '');
+      // (not while on the map, editing a dashboard, or in Home Assistant's settings)
+      if (here === map || /[?&]edit=1/.test(location.search) || /^\/(config|developer-tools|hassio|profile|history|logbook)(\/|$)/.test(here)) { last = Date.now(); return; }
+      if (Date.now() - last > s.idle * 1000) { last = Date.now(); navigate(s.map); }
+    }, 5000);
+  }
+
   class NeighbourhoodViewCard extends HTMLElement {
     setConfig(config) {
       this._config = {...(config || {})};
@@ -1190,16 +1216,60 @@
         .tools button { width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer; font-size: 17px; line-height: 1;
           background: transparent; color: #fff; }
         .tools button:hover { background: rgba(255,255,255,.16); }
+        .tools button.saver { display: none; align-items: center; justify-content: center; opacity: .55; }
+        .tools button.saver.show { display: flex; }
+        .tools button.saver.on { opacity: 1; color: #64b5f6; }
+        .toast { position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%); padding: 8px 14px; border-radius: 999px;
+          background: rgba(18,22,30,.88); color: #fff; font: 13px/1.3 sans-serif; pointer-events: none; opacity: 0; transition: opacity .25s; max-width: 80%; text-align: center; }
+        .toast.show { opacity: 1; }
+        .map.tap { cursor: pointer; }
       </style><ha-card><div class="map"></div><div class="msg">Reading the map…</div>
-        <div class="tools"><button data-z="-1" title="Zoom out" aria-label="Zoom out">−</button><button data-z="1" title="Zoom in" aria-label="Zoom in">+</button><button data-r="-1" title="Turn left" aria-label="Turn left">⟲</button><button data-r="1" title="Turn right" aria-label="Turn right">⟳</button></div></ha-card>`;
+        <div class="tools"><button data-z="-1" title="Zoom out" aria-label="Zoom out">−</button><button data-z="1" title="Zoom in" aria-label="Zoom in">+</button><button data-r="-1" title="Turn left" aria-label="Turn left">⟲</button><button data-r="1" title="Turn right" aria-label="Turn right">⟳</button><button class="saver" data-s="1" title="Screensaver on this device" aria-label="Screensaver on this device">${MONITOR}</button></div><div class="toast"></div></ha-card>`;
       this._root.querySelector('.tools').addEventListener('click', (e) => {
-        const d = (e.target && e.target.dataset) || {}, r = Number(d.r), z = Number(d.z);
+        const btn = e.target && e.target.closest ? e.target.closest('button') : null;
+        const d = (btn && btn.dataset) || {}, r = Number(d.r), z = Number(d.z);
+        if (d.s) { this._toggleSaver(); return; }
         if (r) setRot((getRot() + r + 4) % 4);
         else if (z) zoomStep(z);
         else return;
         this._draw();
       });
+      // tapping the map goes to the dashboard set (Settings › Screensaver, or the card's tap_navigate)
+      this._root.querySelector('.map').addEventListener('click', (e) => {
+        const to = this._screen && this._screen.tap;
+        if (!to) return;
+        e.stopPropagation();
+        navigate(to);
+      }, true);
       this._size();
+    }
+
+    // This device comes back to the map when left alone (or no longer)
+    _toggleSaver() {
+      const s = saver(), idle = (this._screen && this._screen.idle) || 0;
+      if (s && s.map === location.pathname) {
+        setSaver(null);
+        this._toast('Screensaver off on this device');
+      } else {
+        setSaver({map: location.pathname, idle});
+        this._toast(`This device comes back here after ${idle >= 60 ? Math.round(idle / 60) + ' min' : idle + ' s'} left alone`);
+      }
+      this._saverButton();
+    }
+
+    _saverButton() {
+      const b = this._root.querySelector('.saver'), s = saver(), idle = (this._screen && this._screen.idle) || 0;
+      b.classList.toggle('show', idle > 0);
+      b.classList.toggle('on', !!(s && s.map === location.pathname));
+      this._root.querySelector('.map').classList.toggle('tap', !!(this._screen && this._screen.tap));
+    }
+
+    _toast(text) {
+      const t = this._root.querySelector('.toast');
+      t.textContent = text;
+      t.classList.add('show');
+      clearTimeout(this._toastT);
+      this._toastT = setTimeout(() => t.classList.remove('show'), 3500);
     }
 
     // As tall as the screen (less the header) in a panel view, else config.height or 4:3
@@ -1250,6 +1320,13 @@
         if (!d.scene) { this._scene = null; this._msg(d.message || 'Set your postcode and house number in the Neighbourhood View add-on.'); return; }
         this._scene = d.scene;
         this._places = d.places || [];
+        // (where a tap goes and how long before a device comes back: the card's own, else the add-on's)
+        const cc = this._config;
+        this._screen = {...(d.screen || {}), ...(cc.tap_navigate !== undefined ? {tap: cc.tap_navigate || ''} : {}),
+          ...(cc.idle_return !== undefined ? {idle: Number(cc.idle_return) || 0} : {})};
+        const sv = saver();
+        if (sv && sv.map === location.pathname && sv.idle !== this._screen.idle) setSaver({...sv, idle: this._screen.idle});
+        this._saverButton();
         // (the entities to follow: the card's own weather / people, else the add-on's Settings)
         const c = this._config;
         this._ents = {...(d.entities || {}), ...(c.weather ? {weather: c.weather} : {}), ...(c.people ? {people: [].concat(c.people)} : {})};
