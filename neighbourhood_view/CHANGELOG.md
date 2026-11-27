@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.1 — Lint
+
+- **Fix:** removed the empty `options` and `schema` from `config.yaml` (they're
+  Home Assistant's defaults; the add-on linter failed on them).
 ## 0.15.0 — A living neighbourhood
 
 - **Feature:** gardens: front paths, driveways (with cars, some to a garage),
