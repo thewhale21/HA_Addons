@@ -1074,6 +1074,20 @@
     }
     // schools' playgrounds
     for (const b of scene.buildings || []) if (b.lm === 'school' && b.p.every(([x, y]) => on(x, y))) out.push(playground(V, b));
+    // the cars parked at the kerbs, on the road, so the traffic drives past them: those on the far
+    // side of their street drawn before it, those on the near side after (in front of it)
+    const parked = (scene.cars || []).filter((c) => on(c[0], c[1])).sort((a, b) => V.d(b[0], b[1]) - V.d(a[0], a[1]));
+    const nearSide = (c) => {
+      let best = [Infinity, 0];
+      for (const r of cars) for (let i = 0; i < r.p.length - 1; i++) {
+        const [ax, ay] = r.p[i], [bx, by] = r.p[i + 1], vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy || 1;
+        const tt = Math.max(0, Math.min(1, ((c[0] - ax) * vx + (c[1] - ay) * vy) / l2)), qx = ax + vx * tt, qy = ay + vy * tt, d = Math.hypot(qx - c[0], qy - c[1]);
+        if (d < best[0]) best = [d, V.d(qx, qy)];
+      }
+      return V.d(c[0], c[1]) < best[1];
+    };
+    const nearCars = [];
+    out.push(parked.filter((c) => (nearSide(c) ? (nearCars.push(c), false) : true)).map((c) => car(V, c)).join(''));
     if (motion) {
       // traffic: a few cars (and a bus) driving on the left, a train now and then, people walking
       const drives = streets.filter((r) => plen(r.p) >= 50);
@@ -1081,11 +1095,12 @@
       for (let i = 0; i < nCars && drives.length; i++) {
         const r = drives[Math.floor(rnd(i, H, 310) * drives.length)], back = rnd(i, H, 311) < 0.5;
         // (on the left, between the middle and the cars parked at the kerb)
-        const p = offsetLine(back ? r.p.slice().reverse() : r.p, Math.max(0.8, r.w / 4 - 0.25)), L = plen(p);
+        // (clear of the parked cars: a car's width and a bit in from them, but not over the middle)
+        const p = offsetLine(back ? r.p.slice().reverse() : r.p, Math.min(r.w / 4, Math.max(0.55, r.w / 2 - 2.95))), L = plen(p);
         out.push(mover(spath(V, p), L / 9, -rnd(i, H, 312) * L / 9, carSprite(CARS[Math.floor(rnd(i, H, 313) * 10) % 10]), ' rotate="auto"'));
       }
       if (drives.length && !CTX.night) {
-        const r = drives.slice().sort((a, b) => b.w - a.w || plen(b.p) - plen(a.p))[0], p = offsetLine(r.p, Math.max(1, r.w / 4 - 0.1)), L = plen(p);
+        const r = drives.slice().sort((a, b) => b.w - a.w || plen(b.p) - plen(a.p))[0], p = offsetLine(r.p, Math.min(r.w / 4, Math.max(0.8, r.w / 2 - 3.2))), L = plen(p);
         out.push(mover(spath(V, p), L / 7 + 20, -rnd(H, 1, 314) * L / 7, carSprite('#c62828', 10, 2.1, '#cfe3ee'), ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(L / 7 / (L / 7 + 20)).toFixed(3)};1" calcMode="linear"`));
       }
       for (const r of scene.rails || []) {
@@ -1107,6 +1122,7 @@
         out.push(mover(spath(V, bit), walk * 2, -rnd(i, H, 323) * walk * 2, walker(i + H), ' keyPoints="0;1;0" keyTimes="0;.5;1" calcMode="linear"'));
       }
     }
+    out.push(nearCars.map((c) => car(V, c)).join(''));
     // shadows: each building's and tree's, cast on the ground (soft by day; none at night)
     if (!CTX.night) {
       // (from the real sun when Home Assistant says where it is, else from behind on the left)
@@ -1224,7 +1240,6 @@
       // (on a windy day, swaying, each in its own time)
       things.push([V.d(t[0], t[1]), CTX.windy ? `<g class="nvsway" style="animation-delay:-${(rnd(t[0], t[1], 210) * 3).toFixed(2)}s">${s}</g>` : s]);
     }
-    for (const c of scene.cars || []) if (on(c[0], c[1])) things.push([V.d(c[0], c[1]), car(V, c)]);
     for (const L of lamps) things.push([V.d(L[0], L[1]), lamp(V, L)]);
     things.push(...plotThings);
     // street furniture: OpenStreetMap's bus stops, benches, post boxes and bins, and more besides:

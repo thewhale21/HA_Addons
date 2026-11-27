@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.2 — Traffic past the parked cars
+
+- **Fix:** the traffic no longer seems to drive under the parked cars: it
+  keeps a car's width in from them (nearer the middle of the road), and the
+  parked cars on the near side of a street are drawn in front of it, those
+  on the far side behind it.
 ## 0.16.1 — Lighter rain and snow, pickers not cut off
 
 - **Improvement:** fewer raindrops and snowflakes, and the rain's layer is
