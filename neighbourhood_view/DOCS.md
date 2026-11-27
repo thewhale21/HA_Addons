@@ -64,10 +64,18 @@ Settings › **On the map**:
     power over 20 W). Solar, car and heat pump only change on the map once
     they've said so for a minute, so a power hovering round 20 W doesn't
     keep drawing the map again.
-  - **Bins:** your bins (and most of the street's) out at the kerb on bin
-    day, from a bin collection sensor (today; tomorrow, or 1 day to go,
-    from 6pm; or the date), a calendar's event, or a switch. Otherwise
-    they stand beside the house.
+  - **Bins:** your bins (and most of the street's) are put out at the kerb
+    from 6pm the evening before collection day and brought back in at 7pm
+    on the day, with the bin lorry doing the rounds that morning (7am to
+    1pm). Otherwise they stand beside the house. From a bin calendar (e.g.
+    a calendar with an all-day event on each collection day, or the Waste
+    Collection Schedule integration's calendar), a bin collection sensor
+    (today, tomorrow, "Recycling in 2 days", days to go, or the date), or a
+    switch. Only the bins its words name go out: general (rubbish, refuse,
+    black, grey), recycling (blue, paper, plastic), garden (green, brown,
+    compost), food (a caddy) and glass; with none named, all of them. Each
+    house has a general and a recycling bin, some a garden bin, a food
+    caddy or a glass box.
   - **Front door:** open while a door sensor says so (or a lock's
     unlocked), lit inside at night. Its colour (Settings: Door colour) and
     your number on a plate beside it are yours to choose.

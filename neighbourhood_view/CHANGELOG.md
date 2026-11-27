@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.23.0 — Bin day from your calendar
+
+- **Feature:** a bin calendar (or a sensor) sets bin day: the bins go out
+  to the kerb at 6pm the evening before and come back in at 7pm on the day,
+  and a bin lorry does the rounds that morning (7am to 1pm). Only the bins
+  the event names go out (e.g. "Recycling and food waste": the blue bin and
+  the food caddy); otherwise all of them.
+- **Improvement:** each house has its own set of bins: general and
+  recycling, some a garden bin, a food caddy or a glass box.
+- **Improvement:** bin sensors that say "Recycling in 2 days" or "Today:
+  General waste" (as the Waste Collection Schedule integration's can) are
+  understood, as is a `daysTo` attribute.
 ## 0.22.2 — Bridges off the edge
 
 - **Fix:** a bridge to another place's map no longer starts at a

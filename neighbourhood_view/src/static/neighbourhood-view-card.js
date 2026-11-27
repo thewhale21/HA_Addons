@@ -964,7 +964,8 @@
     return box(V, x, y, ang, 0.62, 0.72, 0.05, 1.05, [col, mix(col, '#000000', 0.3)], mix(col, '#000000', 0.15))
       + (() => { const w = V.p(x, y, 0.08); return `<circle cx="${f(w[0])}" cy="${f(w[1])}" r=".14" fill="#1c1c1c"/>`; })();
   }
-  const BINS = ['#5f6670', '#3f7d3a', '#2f6db3', '#2b2b2b'];
+  // (each house's: general and recycling, some a garden bin, a food caddy, a glass box)
+  const BIN_COLS = {general: '#3a3d42', recycling: '#2f6db3', garden: '#3f7d3a', food: '#6d4c41', glass: '#7b1fa2'};
 
   // A garden table under a parasol (summer), or just table and chairs
   function gardenTable(V, x, y, ang, parasol, seed) {
@@ -1154,13 +1155,18 @@
     // wheelie bins beside the house (or by the front door), out at the kerb on bin day (your bin
     // sensor: yours, and most of the street's)
     const hs = CTX.home || {};
+    // (only the bins being collected go out: those the calendar or sensor names, else all of them)
     const binDay = hs.bins === true && (isHome || r(56) < 0.75);
     if (fr >= 1 || binDay) {
-      const n = 2 + Math.floor(r(57) * 2), side2 = -sd, beside = w - hl >= 1.2;
-      for (let k = 0; k < n; k++) {
-        const col = BINS[(k + Math.floor(r(58) * 4)) % BINS.length];
-        const [x, y] = binDay ? PW(P, -hf - fr - 0.75, side2 * (hl * 0.6 + k * 0.8)) : beside ? PW(P, -hf + 0.5 + k * 0.8, side2 * (hl + 0.55)) : PW(P, -hf - 0.55, side2 * Math.max(0.3, hl - 0.5 - k * 0.75));
-        thing(x, y, wheelieBin(V, x, y, angU, col), 0.3, binDay);
+      const mine = ['general', 'recycling'].concat(r(57) < 0.5 ? ['garden'] : [], r(58) < 0.6 ? ['food'] : [], r(59) < 0.2 ? ['glass'] : []);
+      const kinds = hs.bin_kinds || [], side2 = -sd, beside = w - hl >= 1.2;
+      let kIn = 0, kOut = 0;
+      for (const kind of mine) {
+        const out = binDay && (!kinds.length || kinds.includes(kind)), small = kind === 'food' || kind === 'glass';
+        const k = out ? kOut++ : kIn++;
+        const [x, y] = out ? PW(P, -hf - fr - 0.75, side2 * (hl * 0.6 + k * 0.8)) : beside ? PW(P, -hf + 0.5 + k * 0.8, side2 * (hl + 0.55)) : PW(P, -hf - 0.55, side2 * Math.max(0.3, hl - 0.5 - k * 0.75));
+        const col = BIN_COLS[kind];
+        thing(x, y, small ? box(V, x, y, angU, 0.4, 0.34, 0, 0.42, [col, mix(col, '#000000', 0.3)], mix(col, '#000000', 0.15)) : wheelieBin(V, x, y, angU, col), 0.3, out);
       }
     }
     // your garage, beside the house: its door up while your garage sensor says it's open
@@ -1816,6 +1822,11 @@
           P(mover(spath(V, p), dur, k * 13 / 16 - rnd(L, 2, 316) * dur, carSprite(k ? '#3f51b5' : '#283593', 12, 2.6, '#cfe3ee'),
             ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(run / dur).toFixed(3)};1" calcMode="linear"`));
         }
+      }
+      // collection day (your bin sensor or calendar), 7am to 1pm: the bin lorry doing the rounds
+      if (drives.length && (CTX.home || {}).bin_today && CTX.hour >= 7 && CTX.hour < 13) {
+        const r = drives.filter((d) => d.k === 'minor')[0] || drives[0], p = offsetLine(r.p, Math.min(r.w / 4, Math.max(0.8, r.w / 2 - 3.2))), L = plen(p);
+        P(mover(spath(V, p), L / 2.5 + 20, -rnd(H, 9, 500) * L / 2.5, carSprite('#2e7d32', 8.5, 2.4, '#e8f5e9'), ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(L / 2.5 / (L / 2.5 + 20)).toFixed(3)};1" calcMode="linear"`));
       }
       // early morning (5 to 8): a milk float or a delivery van doing the rounds
       if (drives.length && CTX.hour >= 5 && CTX.hour < 8) {
@@ -2537,21 +2548,39 @@
     out.energy = {solar: en.solar ? active(states[en.solar]) : null, car: !!en.car, charging: en.car ? active(states[en.car]) : false,
       heat: en.heat ? active(states[en.heat]) : null};
     const ho = ents.house || {}, open = (e) => ['on', 'open', 'opening', 'unlocked', 'unlocking', 'true'].includes(String((states[e] || {}).state || '').toLowerCase());
-    out.house = {bins: ho.bins ? binDay(states[ho.bins]) : null, door: ho.door ? open(ho.door) : false, garage: ho.garage ? open(ho.garage) : null, lights: ho.lights ? open(ho.lights) : false};
+    const bi = ho.bins ? bins(states[ho.bins]) : null;
+    out.house = {bins: bi ? bi.out : null, bin_today: !!(bi && bi.today), bin_kinds: bi ? bi.kinds : [], door: ho.door ? open(ho.door) : false, garage: ho.garage ? open(ho.garage) : null, lights: ho.lights ? open(ho.lights) : false};
     return out;
   }
 
   // Whether it's bin day (the same as src/live.py bin_day()): today, or tomorrow from 6pm
-  function binDay(st, now = new Date()) {
-    if (!st) return false;
-    const s = String(st.state || '').trim().toLowerCase(), a = st.attributes || {}, late = now.getHours() >= 18;
-    const day = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const today = day(now), tomorrow = day(new Date(now.getTime() + 86400000));
-    if (['on', 'true', 'today'].includes(s)) return true;
-    if (s === 'tomorrow') return late;
-    if (s !== '' && !Number.isNaN(Number(s))) return Number(s) === 0 || (Number(s) === 1 && late);
-    return [s, String(a.start_time || '').toLowerCase()].some((v) => v.slice(0, 10) === today || (late && v.slice(0, 10) === tomorrow));
+  // A bin collection sensor's or calendar's say (the same as src/live.py bins()): {out (from 6pm
+  // the day before until 7pm on the day), today (collection day: the lorry's about), kinds}
+  const BIN_WORDS = {recycling: ['recycl', 'blue', 'paper', 'card', 'plastic', 'tins', 'cans', 'mixed dry'], garden: ['garden', 'green waste', 'green bin', 'brown bin', 'compost'],
+    food: ['food', 'caddy'], glass: ['glass', 'bottle'], general: ['general', 'rubbish', 'refuse', 'residual', 'landfill', 'black', 'grey', 'household']};
+  function binWhen(text, now) {
+    const s = String(text || '').trim().toLowerCase();
+    if (!s) return null;
+    if (['on', 'true'].includes(s) || s.includes('today')) return 0;
+    if (s.includes('tomorrow')) return 1;
+    let m = s.match(/\bin (\d+) days?\b|^(\d+)(?:\.0+)?$/);
+    if (m) return Number(m[1] || m[2]);
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return Math.round((new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+    return null;
   }
+  function bins(st, now = new Date()) {
+    const out = {out: false, today: false, kinds: []};
+    if (!st) return out;
+    const a = st.attributes || {};
+    let days = null;
+    for (const v of [st.state, a.start_time, a.daysTo]) { days = binWhen(v == null ? '' : v, now); if (days !== null) break; }
+    if (days === 0 && now.getHours() < 19) { out.out = true; out.today = true; } else if (days === 1 && now.getHours() >= 18) out.out = true;
+    const words = [a.message, a.description, st.state, a.types, a.friendly_name].filter(Boolean).map(String).join(' ').toLowerCase();
+    out.kinds = Object.keys(BIN_WORDS).filter((k) => BIN_WORDS[k].some((w) => words.includes(w)));
+    return out;
+  }
+  const binDay = (st, now) => bins(st, now).out;
 
   /* live, steadied against what was last drawn (prev): a phone's location wanders by a few metres
    * every few seconds, and each change would draw the whole map again (clouds and traffic starting
@@ -2594,7 +2623,7 @@
     return v > (['kw', 'kwh'].includes(String(a.unit_of_measurement || '').toLowerCase()) ? 0.02 : 20);
   }
 
-  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, occasion, autoRange, steady, binDay, moonPhase, getRot: () => getRot(), setRot: (r) => setRot(r), version: VERSION};
+  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, occasion, autoRange, steady, binDay, bins, moonPhase, getRot: () => getRot(), setRot: (r) => setRot(r), version: VERSION};
 
   // ---------- the dashboard card ----------
   if (!window.customElements || customElements.get('neighbourhood-view-card')) return;

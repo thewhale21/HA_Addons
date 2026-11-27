@@ -5,6 +5,7 @@ page; the dashboard card builds the same from Home Assistant's states itself
 from __future__ import annotations
 
 import datetime
+import re
 from typing import Optional
 
 from src.ha_link import ENTITY_KEYS
@@ -26,30 +27,62 @@ def entities(settings: dict) -> dict:
             "house": {k: settings.get(v) or "" for k, v in HOUSE_KEYS.items()}}
 
 
-def bin_day(st: Optional[dict], now: Optional[datetime.datetime] = None) -> bool:
-    """Whether the bins are out: a bin-collection entity saying it's today (on, "today", 0 days, or
-    today's date), or tomorrow from EVENING (1 day, "tomorrow", tomorrow's date); a calendar's
-    event on now, or starting today. The same as binDay() in the card."""
-    if not st:
-        return False
+BACK_IN = 19  # ...and come back in at 7pm on the day
+BIN_WORDS = {"recycling": ("recycl", "blue", "paper", "card", "plastic", "tins", "cans", "mixed dry"),
+             "garden": ("garden", "green waste", "green bin", "brown bin", "compost"),
+             "food": ("food", "caddy"),
+             "glass": ("glass", "bottle"),
+             "general": ("general", "rubbish", "refuse", "residual", "landfill", "black", "grey", "household")}
+
+
+def _when(text: str, now: datetime.datetime) -> Optional[int]:
+    """Days until a collection, from a state or a date: 0 today, 1 tomorrow, None not known."""
+    s = text.strip().lower()
+    if not s:
+        return None
+    if s in ("on", "true") or "today" in s:
+        return 0
+    if "tomorrow" in s:
+        return 1
+    m = re.search(r"\bin (\d+) days?\b|^(\d+)(?:\.0+)?$", s)
+    if m:
+        return int(m.group(1) or m.group(2))
+    m = re.match(r"(\d{4}-\d{2}-\d{2})", s)
+    if m:
+        try:
+            return (datetime.date.fromisoformat(m.group(1)) - now.date()).days
+        except ValueError:
+            return None
+    return None
+
+
+def bins(st: Optional[dict], now: Optional[datetime.datetime] = None) -> dict:
+    """A bin-collection sensor's or calendar's say: {"out": whether the bins are out at the kerb
+    (from EVENING the day before until BACK_IN on the day), "today": it's collection day and they're
+    out (the lorry's about), "kinds": which bins, from its words (e.g. a calendar event "Recycling
+    and food": ["recycling", "food"]; [] all of them)}. The same as bins() in the card."""
     now = now or datetime.datetime.now()
-    s = str(st.get("state") or "").strip().lower()
+    out = {"out": False, "today": False, "kinds": []}
+    if not st:
+        return out
     a = st.get("attributes") or {}
-    late = now.hour >= EVENING
-    today, tomorrow = now.date().isoformat(), (now.date() + datetime.timedelta(days=1)).isoformat()
-    if s in ("on", "true", "today"):
-        return True
-    if s == "tomorrow":
-        return late
-    try:
-        days = float(s)
-        return days == 0 or (days == 1 and late)
-    except ValueError:
-        pass
-    for v in (s, str(a.get("start_time") or "").lower()):
-        if v[:10] == today or (late and v[:10] == tomorrow):
-            return True
-    return False
+    days = None
+    for v in (str(st.get("state") or ""), str(a.get("start_time") or ""), str(a.get("daysTo") if a.get("daysTo") is not None else "")):
+        days = _when(v, now)
+        if days is not None:
+            break
+    if days == 0 and now.hour < BACK_IN:
+        out["out"] = out["today"] = True
+    elif days == 1 and now.hour >= EVENING:
+        out["out"] = True
+    words = " ".join(str(x) for x in (a.get("message"), a.get("description"), st.get("state"), a.get("types"), a.get("friendly_name")) if x).lower()
+    out["kinds"] = [k for k, ws in BIN_WORDS.items() if any(w in words for w in ws)]
+    return out
+
+
+def bin_day(st: Optional[dict], now: Optional[datetime.datetime] = None) -> bool:
+    """Whether the bins are out (see bins())."""
+    return bins(st, now)["out"]
 
 
 def is_open(st: Optional[dict]) -> bool:
@@ -111,7 +144,8 @@ def compute(settings: dict, states: dict) -> dict:
               "car": bool(en.get("car")), "charging": active(states.get(en.get("car"))) if en.get("car") else False,
               "heat": active(states.get(en.get("heat"))) if en.get("heat") else None}
     ho = ents.get("house") or {}
-    house = {"bins": bin_day(states.get(ho["bins"])) if ho.get("bins") else None,
+    bi = bins(states.get(ho["bins"])) if ho.get("bins") else None
+    house = {"bins": bi["out"] if bi else None, "bin_today": bool(bi and bi["today"]), "bin_kinds": bi["kinds"] if bi else [],
              "door": is_open(states.get(ho.get("door"))) if ho.get("door") else False,
              "garage": is_open(states.get(ho.get("garage"))) if ho.get("garage") else None,
              "lights": is_open(states.get(ho.get("lights"))) if ho.get("lights") else False}

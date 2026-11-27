@@ -188,7 +188,23 @@ def test_your_house_bins_door_garage_lights():
     assert not bin_day({"state": "3"}, evening) and not bin_day(None, morning)
     s = {"door_entity": "binary_sensor.front", "garage_entity": "cover.garage", "garden_lights_entity": "light.garden"}
     live = compute(s, {"binary_sensor.front": {"state": "on"}, "cover.garage": {"state": "closed"}, "light.garden": {"state": "on"}})
-    assert live["house"] == {"bins": None, "door": True, "garage": False, "lights": True}
+    assert live["house"] == {"bins": None, "bin_today": False, "bin_kinds": [], "door": True, "garage": False, "lights": True}
+
+
+def test_bins_from_a_calendar_or_sensor():
+    import datetime as dt
+    from src.live import bins
+    cal = {"state": "off", "attributes": {"message": "Recycling and food waste", "all_day": True, "start_time": "2026-11-28 00:00:00", "end_time": "2026-11-29 00:00:00"}}
+    # (the evening before: out; the morning of: out, the lorry's about; that evening: back in)
+    assert bins(cal, dt.datetime(2026, 11, 27, 12)) == {"out": False, "today": False, "kinds": ["recycling", "food"]}
+    assert bins(cal, dt.datetime(2026, 11, 27, 19))["out"] is True and bins(cal, dt.datetime(2026, 11, 27, 19))["today"] is False
+    on = dict(cal, state="on")
+    assert bins(on, dt.datetime(2026, 11, 28, 8)) == {"out": True, "today": True, "kinds": ["recycling", "food"]}
+    assert bins(on, dt.datetime(2026, 11, 28, 20))["out"] is False
+    assert bins({"state": "Garden waste in 1 day"}, dt.datetime(2026, 11, 27, 18))["kinds"] == ["garden"]
+    assert bins({"state": "Garden waste in 1 day"}, dt.datetime(2026, 11, 27, 18))["out"] is True
+    assert bins({"state": "Today: General waste"}, dt.datetime(2026, 11, 27, 7)) == {"out": True, "today": True, "kinds": ["general"]}
+    assert bins({"state": "5", "attributes": {"friendly_name": "Bins"}}, dt.datetime(2026, 11, 27, 19))["out"] is False
 
 
 def test_your_houses_look():
