@@ -42,10 +42,10 @@
    * wall, [brick, render, stone] out of 1, and the roofs (indexes into ROOFS: some more than once)
    * — each still varies house to house. */
   const HOUSE_STYLES = {
-    brick: {walls: [0.82, 0.15, 0.03], roofs: [2, 2, 5, 5, 3, 0, 4, 6]},
+    brick: {walls: [0.92, 0.07, 0.01], roofs: [2, 2, 5, 5, 3, 0, 4, 6]},
     render: {walls: [0.2, 0.78, 0.02], roofs: [0, 1, 2, 5, 3, 6]},
     stone: {walls: [0.15, 0.1, 0.75], roofs: [2, 5, 5, 3, 2]},
-    mixed: {walls: [0.4, 0.45, 0.15], roofs: [0, 1, 2, 3, 4, 5, 6]},
+    mixed: {walls: [0.55, 0.35, 0.1], roofs: [0, 1, 2, 3, 4, 5, 6]},
   };
   function houseLook(id) {
     const st = HOUSE_STYLES[CTX.houses] || HOUSE_STYLES.brick, k = rnd(id, 1);
@@ -217,7 +217,7 @@
         const c = (j + 0.5) / n, half = ww / 2 / len;
         const on = CTX.night && CTX.lit > 0 && rnd(p[0] + c * 7, p[1] + s * 3, CTX.seed + j) < CTX.lit;
         svg += onWall(V, p, q, c - half, c + half, zb, zb + wh, on ? (lit > 0.5 ? LIGHT : LIGHT2) : glass);
-        if (CTX.house && !LITE) svg += windowBits(V, p, q, c, half, zb, wh, s, on, rnd(p[0] + c * 11, p[1] + s * 5, CTX.seed + j + 500));
+        if (CTX.house) svg += windowBits(V, p, q, c, half, zb, wh, s, on, rnd(p[0] + c * 11, p[1] + s * 5, CTX.seed + j + 500));
       }
     }
     return svg;
@@ -249,19 +249,44 @@
   }
 
   // Brick (mortar lines) or render (a pebble-dash speckle) on a wall, faintly
-  function wallTexture(V, p, q, len, h, shade, brick, seed) {
-    if (LITE || len < 1.5) return '';
+  /* Brickwork in stretcher bond, as British houses are: courses of bricks with light mortar between,
+   * each course's joints half a brick along from the last, a darker plinth at the bottom, and the
+   * odd brick a shade off. (Bricks drawn bigger than life, so they read on the map: 1 m by 0.4 m.)
+   * gable: the height of a gable over the wall (an end wall), so the brickwork goes up into it.
+   * All the mortar as one path, so a wall is a few shapes, not hundreds. */
+  const COURSE = 0.4, BRICK_L = 1.0;
+  function wallTexture(V, p, q, len, h, shade, brick, seed, gable = 0) {
+    if (len < 1.5) return '';  // (drawn once, in a still layer: kept in lite mode too)
     const at = (t, z) => V.p(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, z);
+    const top = (t) => (gable ? h + gable * (1 - Math.abs(2 * t - 1)) : h);
     let s = '';
     if (brick) {
-      // (mortar courses, a darker plinth, and the odd brick a shade off)
-      const col = mix(shade, '#efe3d3', 0.45);
-      s += poly([at(0, 0), at(1, 0), at(1, 0.45), at(0, 0.45)], mix(shade, '#000000', 0.12));
-      for (let z = 0.45; z < h - 0.15; z += 0.45) { const a = at(0.01, z), b = at(0.99, z); s += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="${col}" stroke-width=".06" opacity=".7"/>`; }
-      for (let i = 0, n = Math.min(14, Math.round(len * h * 0.25)); i < n; i++) {
-        const t0 = 0.03 + 0.9 * rnd(seed, i, 65), z = 0.5 + Math.floor(rnd(i, seed, 66) * (h - 0.8) / 0.45) * 0.45, w = 0.25 / Math.max(len, 1);
-        s += poly([at(t0, z + 0.05), at(t0 + w, z + 0.05), at(t0 + w, z + 0.4), at(t0, z + 0.4)], mix(shade, rnd(seed, i, 67) < 0.5 ? '#000000' : '#ffffff', 0.12));
+      const mortar = mix(shade, '#efe6d8', 0.6), joints = len * h < 140;  // (a big block: courses only)
+      s += poly([at(0, 0), at(1, 0), at(1, COURSE), at(0, COURSE)], mix(shade, '#000000', 0.14));
+      // (the odd brick a shade darker or lighter)
+      for (let i = 0, n = Math.min(16, Math.round(len * h * 0.3)); i < n; i++) {
+        const row = 1 + Math.floor(rnd(i, seed, 66) * Math.max(1, (h - COURSE * 2) / COURSE)), off = row % 2 ? BRICK_L / 2 : 0;
+        const j = Math.floor(rnd(seed, i, 65) * len / BRICK_L), t0 = (off + j * BRICK_L) / len, t1 = Math.min(1, t0 + BRICK_L / len), z = row * COURSE;
+        if (t0 >= 1 || z + COURSE > h) continue;
+        s += poly([at(t0, z), at(t1, z), at(t1, z + COURSE), at(t0, z + COURSE)], mix(shade, rnd(seed, i, 67) < 0.5 ? '#000000' : '#ffffff', 0.1));
       }
+      let d = '';
+      for (let row = 1, z = COURSE; z < h + gable - 0.15; row++, z += COURSE) {
+        // (a course's bed joint: across the wall, or the part of the gable this high)
+        const k = gable && z > h ? (z - h) / gable : 0, t0 = k / 2, t1 = 1 - k / 2;
+        if (t1 - t0 < 0.02) break;
+        const a = at(t0 + 0.004, z), b = at(t1 - 0.004, z);
+        d += `M${f(a[0])} ${f(a[1])}L${f(b[0])} ${f(b[1])}`;
+        if (!joints) continue;
+        // (and the joints between the bricks in the course below it, staggered)
+        for (let u = (row % 2 ? BRICK_L / 2 : 0) + BRICK_L; u < len - 0.15; u += BRICK_L) {
+          const tt = u / len;
+          if (top(tt) < z) continue;
+          const b0 = at(tt, z - COURSE);
+          d += `M${f(b0[0])} ${f(b0[1])}v${f(-COURSE * CE)}`;
+        }
+      }
+      if (d) s += `<path d="${d}" fill="none" stroke="${mortar}" stroke-width=".08" stroke-linecap="butt"/>`;
     } else if (rnd(seed, 1, 62) < 0.5) {
       const col = mix(shade, '#000000', 0.16), n = Math.min(24, Math.round(len * h * 0.35));
       for (let i = 0; i < n; i++) { const a = at(0.04 + 0.92 * rnd(seed, i, 63), 0.2 + (h - 0.4) * rnd(i, seed, 64)); s += `<circle cx="${f(a[0])}" cy="${f(a[1])}" r=".07" fill="${col}"/>`; }
@@ -318,7 +343,7 @@
     let doorDone = false;
     const brick = !isHome && BRICK.has(wall), hh = CTX.home || {};
     const deco = (p, q, len, lit, i) => {
-      const tex = isHome ? '' : wallTexture(V, p, q, len, h, mix(cols[0], cols[1], lit), brick, id + i);
+      const tex = isHome ? '' : wallTexture(V, p, q, len, h, mix(cols[0], cols[1], lit), brick, id + i, gables && i % 2 === 1 ? rh : 0);
       CTX.house = true;
       try {
         if (i % 2 === 1) return tex + (len > 4.5 ? windows(V, p, q, len, 0, storeys, sh, 1.0, 1.15, 3.4, lit) : '');  // (the ends)

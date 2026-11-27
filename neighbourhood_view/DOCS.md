@@ -130,8 +130,10 @@ trees it has, drawn like a video game's town:
   mostly brick, the default, as most British houses are; mostly rendered;
   mostly stone; or a mix), each still in its own shade with its own roof,
   and a few different; with mostly brick, some flats and bigger buildings
-  are brick too. Brick walls show their courses, a darker plinth and the odd
-  brick a shade off, some rendered ones a pebble-dash; windows have curtains half
+  are brick too. Brick walls are laid in stretcher bond, as British houses are:
+  courses of bricks with light mortar between, each course's joints half a
+  brick along, up into the gables, with a darker plinth and the odd brick a
+  shade off (the bricks drawn a little bigger than life so they show), some rendered ones a pebble-dash; windows have curtains half
   drawn in some, window boxes under some, the odd cat on a sill, and at
   night a TV flickering in a few.
 - **Other buildings:** flats and offices with rows of windows, shops with
@@ -348,7 +350,7 @@ Options:
 | `people` | People for this card, instead of the add-on's, e.g. `[person.matt, person.jo]` |
 | `motion` | `false`: nothing moves (traffic, people, ducks, a train), e.g. on a slow tablet |
 | `layers` | `false`: draw the map as one picture, as before 0.22.0 (it's drawn in layers, so what moves doesn't make the browser draw the whole map again each frame) |
-| `effects` | `lite`: one layer of rain or snow, no drifting cloud, no splashes or puddle ripples, fewer falling leaves, plainer walls and windows, fewer decorated trees and people walking; `full`: all of it. Left out: lite on slower devices (4 cores or fewer, or 2 GB or less), full on the rest |
+| `effects` | `lite`: one layer of rain or snow, no drifting cloud, no splashes or puddle ripples, fewer falling leaves, fewer decorated trees and people walking (brickwork and windows are the same: they're drawn once); `full`: all of it. Left out: lite on slower devices (4 cores or fewer, or 2 GB or less), full on the rest |
 | `tap_navigate` | Where tapping the map goes, instead of Settings › Screensaver, e.g. `/wall-display-2/home` (`''`: nowhere) |
 
 Any signed-in Home Assistant user can see the card, kiosk and other

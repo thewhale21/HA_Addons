@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.25.0 — Proper brickwork
+
+- **Feature:** brick houses are laid in stretcher bond like real British
+  brickwork: courses of bricks with light mortar joints between, each
+  course's joints half a brick along from the last, carried up into the
+  gable ends, with a darker plinth and the odd brick a shade off.
+- **Fix:** tablets and phones with 4 cores or fewer (and older devices) never
+  showed the brick texture, window curtains and the like: they were left
+  out in lite mode. They're drawn once, in the still layer, so they're now
+  always drawn.
+- **Change:** "Mostly brick" makes more of the houses brick (about 9 in
+  10); "A mix" has a few more too.
 ## 0.24.1 — Nothing in front of your house
 
 - **Fix:** no tree within a few metres of your house (4 m plus its crown),
