@@ -9,7 +9,11 @@ as the add-on's page and as a dashboard card.
 2. **Settings › Address:** your **postcode** (UK) and **house number**,
    then **Save** (or Enter). The map's made straight away, usually in a few
    seconds, and kept: it's made again every 30 days, when you change your
-   address, or now with **Refresh**. **Map size** (beside them) is how far
+   address, or now with **Refresh**. What OpenStreetMap sent is kept too,
+   so after an add-on update that draws the map differently it's redrawn
+   from that copy without asking OpenStreetMap again, and if OpenStreetMap
+   can't be reached (busy, or no connection) the map's made from the last
+   copy instead (the log says so, with its date). **Map size** (beside them) is how far
    the map goes each way from your house: 150 m by default (a 300 m
    square), anything from 50 to 500 m. A bigger map takes longer to make
    and draw.
@@ -318,7 +322,8 @@ Your postcode goes to postcodes.io, and the location of your postcode (or
 house), and of your other places' zones, to OpenStreetMap's Overpass
 servers, when the maps are made. People's locations stay in Home
 Assistant: they're only used to draw them. Nothing
-else leaves Home Assistant. The map's kept in the add-on's own data.
+else leaves Home Assistant. The map, and what OpenStreetMap and postcodes.io
+sent for it, are kept in the add-on's own data.
 
 ## Diagnostics
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.19.0 — OpenStreetMap's data kept
+
+- **Feature:** what OpenStreetMap (and postcodes.io) sent is kept. After an
+  update that draws the map differently, the map is redrawn from that copy
+  straight away, without asking OpenStreetMap again; and when OpenStreetMap
+  can't be reached (busy, or no connection), the map is made from the last
+  copy instead of the update waiting. The same for your other places' maps.
+- **Fix:** when OpenStreetMap doesn't answer in time, the log and page now
+  say so, instead of an empty "Couldn't read OpenStreetMap:".
 ## 0.18.0 — Whole gardens, like the street really is
 
 - **Feature:** gardens fit together as they do on a satellite photo. The

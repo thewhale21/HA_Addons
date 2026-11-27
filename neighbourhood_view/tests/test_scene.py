@@ -285,3 +285,60 @@ def test_houses_kept_off_streets_and_footpaths():
     assert len(paths) == 2  # (either side of the house)
     for r in paths:
         assert all(not S.inside(q, b3["p"]) for q in r["p"])
+
+
+def test_openstreetmaps_answers_kept_and_used_when_it_cant_be_read(tmp_path, monkeypatch):
+    import asyncio as aio
+    from src import places as PL
+
+    monkeypatch.setattr(PL, "_timeout", lambda s: None)
+
+    calls = []
+
+    class Resp:
+        def __init__(self, data):
+            self.data, self.status = data, 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        def raise_for_status(self):
+            pass
+
+        async def json(self, content_type=None):
+            return self.data
+
+    class Session:
+        down = False
+
+        def _go(self, data):
+            calls.append(1)
+            if self.down:
+                raise aio.TimeoutError()
+            return Resp(data)
+
+        def get(self, url, **kw):
+            return self._go({"result": {"latitude": LAT0, "longitude": LON0}})
+
+        def post(self, url, data=None, **kw):
+            return self._go(address_answer() if "addr:housenumber" in data["data"] else sample())
+
+    cache, ses = PL.OsmCache(str(tmp_path)), Session()
+    sc = aio.run(PL.fetch_scene(ses, "RG41 2AB", "12", cache=cache))
+    n = len(calls)
+    assert n >= 2 and len(list((tmp_path / "osm").iterdir())) == n and cache.used_copy is None
+    # redrawn after an update: nothing asked
+    again = aio.run(PL.fetch_scene(ses, "RG41 2AB", "12", cache=cache, offline_first=True))
+    assert len(calls) == n and len(again["buildings"]) == len(sc["buildings"])
+    # OpenStreetMap down: the copy kept, dated when it was fetched
+    ses.down = True
+    down = aio.run(PL.fetch_scene(ses, "RG41 2AB", "12", cache=cache))
+    assert len(calls) > n and cache.used_copy and down["made"] == cache.used_copy
+    # ...and with nothing kept, a clear error
+    with pytest.raises(PL.PlaceError, match="didn't answer in time"):
+        aio.run(PL.overpass(ses, "something else"))
+    with pytest.raises(PL.PlaceError, match="didn't answer in time"):
+        aio.run(PL.overpass(ses, "something else", PL.OsmCache(str(tmp_path / "empty"))))

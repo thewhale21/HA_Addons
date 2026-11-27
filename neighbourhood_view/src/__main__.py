@@ -32,7 +32,8 @@ MAP_RETRY_S = 15 * 60  # after it couldn't be made (e.g. OpenStreetMap busy): tr
 MAP_CHECK_S = 6 * 3600  # ...and looked at this often anyway (made again once it's 30 days old)
 
 
-async def make_places(session, state: SharedState, settings: AppSettings, pstore: places.PlaceStore, link: HaLink) -> None:
+async def make_places(session, state: SharedState, settings: AppSettings, pstore: places.PlaceStore, link: HaLink,
+                      cache: Optional[places.OsmCache] = None) -> None:
     """The other places' maps (Settings › Other places), round their Home Assistant zones. Returns
     whether they all are."""
     wanted = settings.data.get("places") or []
@@ -56,7 +57,8 @@ async def make_places(session, state: SharedState, settings: AppSettings, pstore
         lat, lon = float(a["latitude"]), float(a["longitude"])
         if not pstore.fits(pl["zone"], lat, lon, pl["radius"]):
             try:
-                sc = await places.fetch_area(session, lat, lon, pl["radius"])
+                # (only redrawn after an update: from OpenStreetMap's answer kept, not asked again)
+                sc = await places.fetch_area(session, lat, lon, pl["radius"], cache, offline_first=pstore.fits(pl["zone"], lat, lon, pl["radius"], version=False))
                 pstore.put(pl["zone"], sc)
                 logger.info("Map made for %s: %d buildings", name, len(sc["buildings"]))
                 await asyncio.sleep(2)  # (gently, for OpenStreetMap's servers)
@@ -71,7 +73,8 @@ async def make_places(session, state: SharedState, settings: AppSettings, pstore
 
 
 async def map_maker(state: SharedState, settings: AppSettings, store: places.SceneStore, wake: asyncio.Event,
-                    pstore: Optional[places.PlaceStore] = None, link: Optional[HaLink] = None) -> None:
+                    pstore: Optional[places.PlaceStore] = None, link: Optional[HaLink] = None,
+                    cache: Optional[places.OsmCache] = None) -> None:
     """Makes the map for your address (src/places.py) when there's none for it (or it's old, or
     Refresh was pressed: wake with state.extra["force"]), and keeps the page's state up to date."""
     async with aiohttp.ClientSession() as session:
@@ -85,7 +88,10 @@ async def map_maker(state: SharedState, settings: AppSettings, store: places.Sce
             elif force or not store.fits(s["postcode"], s["house_number"], s["picked"], s["radius"]):
                 state.status, state.error = "Making the map", None
                 try:
-                    store.save(await places.fetch_scene(session, s["postcode"], s["house_number"], s["picked"], half=s["radius"]))
+                    # (only redrawn after an update: from OpenStreetMap's answers kept, not asked again)
+                    redraw = not force and store.fits(s["postcode"], s["house_number"], s["picked"], s["radius"], version=False)
+                    store.save(await places.fetch_scene(session, s["postcode"], s["house_number"], s["picked"], half=s["radius"],
+                                                        cache=cache, offline_first=redraw))
                 except places.PlaceError as err:
                     state.error = str(err)
                     wait = MAP_RETRY_S
@@ -105,7 +111,7 @@ async def map_maker(state: SharedState, settings: AppSettings, store: places.Sce
                 state.made, state.buildings, state.home_found, state.address = None, 0, None, None
             if pstore is not None and link is not None and s["postcode"]:
                 try:
-                    if not await make_places(session, state, settings, pstore, link):
+                    if not await make_places(session, state, settings, pstore, link, cache):
                         wait = MAP_RETRY_S  # (e.g. Home Assistant's zones not read yet: soon again)
                 except Exception:
                     logger.warning("The other places' maps couldn't be made", exc_info=True)
@@ -196,7 +202,7 @@ async def run() -> None:
         except NotImplementedError:  # Windows, when run by hand
             pass
 
-    tasks = [asyncio.create_task(link.run()), asyncio.create_task(map_maker(state, settings, store, wake, pstore, link)),
+    tasks = [asyncio.create_task(link.run()), asyncio.create_task(map_maker(state, settings, store, wake, pstore, link, places.OsmCache(data_dir))),
              asyncio.create_task(card_setup(state, link, health.version)),
              asyncio.create_task(card_data_loop(state, settings, store, pstore, link, cdata))]
     try:
