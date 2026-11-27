@@ -1916,20 +1916,33 @@
       }
     }
     // (points along the streets, on the screen: where a bridge to another map can start)
+    // (only where a street runs off the edge, leaving it the way it's going: not a cul-de-sac's end
+    // or a street in the middle, so a bridge never runs back across the map)
     const ends = [];
     for (const r of streets) {
       for (let i = 0; i < r.p.length - 1; i++) {
-        const [ax, ay] = r.p[i], [bx, by] = r.p[i + 1], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 6));
+        const [ax, ay] = r.p[i], [bx, by] = r.p[i + 1], L = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.ceil(L / 3));
+        if (!L) continue;
+        const ux = (bx - ax) / L, uy = (by - ay) / L;
         // (with the street's way on the screen, so a bridge can leave along it)
         const sa = V.p(ax, ay, 0), sb = V.p(bx, by, 0), sl = Math.hypot(sb[0] - sa[0], sb[1] - sa[1]) || 1;
         const ddx = (sb[0] - sa[0]) / sl, ddy = (sb[1] - sa[1]) / sl;
         for (let k = 0; k <= n; k++) {
           const x = ax + (bx - ax) * k / n, y = ay + (by - ay) * k / n;
-          if (insideRing(x, y, edge)) ends.push(V.p(x, y, 0).concat([ddx, ddy, r.w]));
+          if (!insideRing(x, y, edge)) continue;
+          for (const sg of [1, -1]) {
+            if (!insideRing(x + ux * sg * 7, y + uy * sg * 7, edge)) ends.push(V.p(x, y, 0).concat([ddx * sg, ddy * sg, r.w, 1]));
+          }
         }
       }
     }
-    if (!ends.length) for (const [x, y] of edge) ends.push(V.p(x * 0.97, y * 0.97, 0).concat([0, 0, 6]));
+    // (and the edge all round: where a bridge lands on the grass, leaving straight out, when no
+    // street runs off the side facing the other map)
+    const edgeEnds = [], c0 = V.p(0, 0, 0);
+    for (const [x, y] of edge) {
+      const q = V.p(x * 0.97, y * 0.97, 0), l = Math.hypot(q[0] - c0[0], q[1] - c0[1]) || 1;
+      edgeEnds.push(q.concat([(q[0] - c0[0]) / l, (q[1] - c0[1]) / l, 6, 1]));
+    }
     // (at night, with someone home: a warm glow on the ground round your house)
     if (opts.isHome && CTX.night && CTX.homeLit && people.length) {
       const g = V.p(home.x || 0, home.y || 0, 0);
@@ -2062,7 +2075,7 @@
     const layers = split ? [out.slice(0, cut1).join(''), `<g clip-path="url(#${clip})">${gAnim.join('')}</g>${gAnim2.join('')}`,
       out.slice(cut1, cut2).join(''), CTX.top.join('') + out.slice(cut2).join('')] : [out.join(''), '', '', ''];
     CTX.split = false; CTX.top = [];
-    return {svg: layers.join(''), layers, box: [x0, y0, w, h], pin: [pin[0], pin[1] - PIN_H * 0.06 / zs], ends};
+    return {svg: layers.join(''), layers, box: [x0, y0, w, h], pin: [pin[0], pin[1] - PIN_H * 0.06 / zs], ends, edgeEnds};
   }
 
   // A point's place on a map (metres from its middle), from latitude and longitude
@@ -2106,7 +2119,7 @@
     const way = (p, tx, ty) => {
       let dx = p[2] || 0, dy = p[3] || 0;
       if (!dx && !dy) { dx = tx; dy = ty; }
-      if (dx * tx + dy * ty < 0) { dx = -dx; dy = -dy; }
+      if (!p[5] && dx * tx + dy * ty < 0) { dx = -dx; dy = -dy; }  // (p[5]: it leaves the edge this way: kept)
       // (straight on from the street, so its kerbs carry on; eased towards the other end only
       // when the street runs nearly across the gap)
       const along = dx * tx + dy * ty;
@@ -2153,7 +2166,18 @@
 
   /* The nearest pair of points between two sets (a bridge's ends): each cut to those nearest the
    * other's middle first, so it's quick. */
-  function nearestPair(A, B, ca, cb) {
+  function nearestPair(A, B, ca, cb, EA = [], EB = []) {
+    // (streets that run off their map on the side facing the other one; none: its edge there, so
+    // a bridge never sets off away from the other map and back across its own)
+    const facing = (list, edges, from, to) => {
+      const ux = to[0] - from[0], uy = to[1] - from[1], l = Math.hypot(ux, uy) || 1;
+      const ok = (p) => (p[2] * ux + p[3] * uy) / l > 0.35;
+      const f2 = list.filter(ok);
+      if (f2.length) return f2;
+      const e2 = edges.filter(ok);
+      return e2.length ? e2 : edges.length ? edges : list;
+    };
+    A = facing(A, EA, ca, cb); B = facing(B, EB, cb, ca);
     const near = (list, c) => list.map((p) => [Math.hypot(p[0] - c[0], p[1] - c[1]), p]).sort((x, y) => x[0] - y[0]).slice(0, 160).map((x) => x[1]);
     const a = near(A, cb), b = near(B, ca);
     let best = null, bd = Infinity;
@@ -2201,8 +2225,9 @@
       addIsl(I, ` data-k="${esc(I.key)}" data-f="${f(dx + I.pin[0] * sc)} ${f(dy + I.pin[1] * sc)}" transform="translate(${f(dx)} ${f(dy)}) scale(${sc.toFixed(4)})"`);
       boxes.push([tx, ty, tx + bw * sc, ty + bh * sc]);
       // a bridge from the nearest of your streets to the nearest of its
-      const ends = I.ends.map((p) => [dx + p[0] * sc, dy + p[1] * sc, p[2], p[3], p[4]]);
-      const pair = nearestPair(homeI.ends, ends, hc, [tx + bw * sc / 2, ty + bh * sc / 2]);
+      const ends = I.ends.map((p) => [dx + p[0] * sc, dy + p[1] * sc, p[2], p[3], p[4], p[5]]);
+      const edges = I.edgeEnds.map((p) => [dx + p[0] * sc, dy + p[1] * sc, p[2], p[3], p[4], p[5]]);
+      const pair = nearestPair(homeI.ends, ends, hc, [tx + bw * sc / 2, ty + bh * sc / 2], homeI.edgeEnds, edges);
       if (pair) bridges.push(bridge(pair[0], pair[1], 1, sc, !!live.night));
     };
     // (left and right: a column as tall as your map, shared; above and below: a row as wide)

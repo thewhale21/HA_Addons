@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.22.2 — Bridges off the edge
+
+- **Fix:** a bridge to another place's map no longer starts at a
+  cul-de-sac's end (or anywhere in the middle of a map) and runs back across
+  the map over the houses. It starts only where a street runs off the edge
+  on the side facing the other map, heading out the way the street goes;
+  with no street there, it starts from the grass at the edge.
 ## 0.22.1 — Turn by 45°
 
 - **Change:** ⟲ and ⟳ turn the map 45° at a time instead of 90° (on the
