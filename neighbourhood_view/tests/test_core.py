@@ -156,3 +156,20 @@ def test_the_sun_and_your_energy():
     assert live["energy"] == {"solar": True, "car": True, "charging": False, "heat": False}  # (in heat mode, but idle)
     assert not active({"state": "12", "attributes": {"unit_of_measurement": "W"}}) and active({"state": "350"})
     assert active({"state": "idle", "attributes": {"hvac_action": "heating"}}) and not active({"state": "unavailable"})
+
+
+def test_occasions_settings(tmp_path):
+    import pytest
+    from src.app_settings import OCCASIONS, AppSettings
+    s = AppSettings(str(tmp_path))
+    assert s.data["occasions"] == OCCASIONS
+    s.update({"occasions": {"xmas": {"on": True, "from": "12-10", "to": "01-02"}, "easter": {"on": True, "auto": False, "from": "04-01", "to": "04-08"},
+                            "birthdays": {"on": True, "dates": [{"date": "2000-11-27", "name": "Laura"}, "03-14"]}, "gone": {"on": True}}})
+    o = AppSettings(str(tmp_path)).data["occasions"]
+    assert o["xmas"]["from"] == "12-10" and o["easter"]["auto"] is False and o["cny"]["auto"] is True
+    assert o["birthdays"]["dates"] == [{"date": "11-27", "name": "Laura"}, {"date": "03-14", "name": ""}] and "gone" not in o
+    for bad in ({"xmas": {"on": True, "from": "13-01", "to": "01-01"}}, {"halloween": {"on": True, "from": "", "to": ""}},
+                {"birthdays": {"dates": ["31st"]}}):
+        with pytest.raises(ValueError):
+            s.update({"occasions": bad})
+    s.update({"occasions": {"halloween": {"on": False, "from": "", "to": ""}}})  # (off: no days needed)

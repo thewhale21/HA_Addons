@@ -163,7 +163,8 @@
    * being drawn is lit (CTX.lit: 0..1), and whether your house's chimney smokes (someone's home). */
   const CTX = {night: false, lit: 0, smoke: false, seed: 0, season: 'summer', snow: false, wet: false, windy: false, hail: false, leaves: 0};
   const SNOW = '#f2f5f9';
-  const snowy = (c, k = 0.8) => (CTX.snow ? mix(c, SNOW, k) : c);
+  // (snow whitens things; a frost, below 5°C, just rimes them)
+  const snowy = (c, k = 0.8) => (CTX.snow ? mix(c, SNOW, k) : CTX.frost ? mix(c, '#e3edf2', k * 0.5) : c);
   // the season, from the month (Northern Hemisphere): trees turn in autumn, go bare-ish in winter,
   // and some blossom in spring
   function season(month) {
@@ -307,6 +308,18 @@
         s += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(c[0])}" y2="${f(c[1])}" stroke="#9aa0a6" stroke-width=".08"/><ellipse cx="${f(a[0])}" cy="${f(a[1])}" rx=".45" ry=".38" fill="#d3d7db" stroke="#9aa0a6" stroke-width=".06"/>`;
       }
     }
+    if (CTX.occ && CTX.occ.cny && (isHome || rnd(id, 37) < 0.35)) {
+      // red lanterns hanging from the eaves (lit at night)
+      const n = Math.max(2, Math.min(4, Math.floor(len / 3)));
+      for (let k = 1; k <= n; k++) {
+        const q = FP(k / (n + 1), 0, -0.2), cy = q[1] + 0.9;
+        s += `<line x1="${f(q[0])}" y1="${f(q[1])}" x2="${f(q[0])}" y2="${f(cy - 0.45)}" stroke="#5d4037" stroke-width=".06"/>`
+          + (CTX.night ? `<circle cx="${f(q[0])}" cy="${f(cy)}" r="1.1" fill="rgb(255,90,60)" opacity=".25"/>` : '')
+          + `<ellipse cx="${f(q[0])}" cy="${f(cy)}" rx=".42" ry=".48" fill="${CTX.night ? 'rgb(255,70,50)' : 'rgb(214,40,40)'}"/>`
+          + `<rect x="${f(q[0] - 0.22)}" y="${f(cy - 0.54)}" width=".44" height=".1" fill="rgb(240,190,60)"/><rect x="${f(q[0] - 0.22)}" y="${f(cy + 0.44)}" width=".44" height=".1" fill="rgb(240,190,60)"/>`
+          + `<line x1="${f(q[0])}" y1="${f(cy + 0.54)}" x2="${f(q[0])}" y2="${f(cy + 0.85)}" stroke="rgb(240,190,60)" stroke-width=".08"/>`;
+      }
+    }
     if (CTX.occ && CTX.occ.xmas && (isHome || rnd(id, 35) < 0.4)) {
       // lights along the eaves (twinkling at night)
       const n = Math.max(3, Math.floor(len / 0.6));
@@ -404,6 +417,7 @@
     else if (CTX.season === 'winter' && turn < 0.65) g = pick(WINTER, rnd(x, y, 14));
     else if (CTX.season === 'spring' && turn < 0.16) g = pick(BLOSSOM, rnd(x, y, 14));
     if (CTX.snow) g = g.map((c) => mix(c, SNOW, 0.45));
+    else if (CTX.frost) g = g.map((c) => mix(c, '#e3edf2', 0.15));
     if (kind < 0.12) {  // a bush
       const r = 1.3 * s, c = V.p(x, y, r * 0.7);
       return `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="${f(r)}" fill="${g[1]}"/><circle cx="${f(c[0] - r * 0.2)}" cy="${f(c[1] - r * 0.25)}" r="${f(r * 0.7)}" fill="${g[0]}"/>`;
@@ -520,12 +534,43 @@
   const SKIN = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
   const TOPS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#6d4c41', '#37474f', '#eeeeee', '#8e24aa', '#ff7043'];
 
-  // What's on today: Christmas lights (December to Twelfth Night), pumpkins (the week to Halloween),
-  // fireworks (Bonfire Night, New Year's Eve and Day)
-  function occasion(d) {
-    const m = d.getMonth() + 1, day = d.getDate();
-    return {xmas: m === 12 || (m === 1 && day <= 6), halloween: m === 10 && day >= 24,
-      fireworks: (m === 11 && day >= 4 && day <= 6) || (m === 12 && day === 31) || (m === 1 && day === 1)};
+  /* What's on today, by the add-on's Settings › Occasions (each on between two days of the year;
+   * Easter and Chinese New Year by the calendar unless set): Christmas lights, New Year and
+   * Bonfire Night fireworks, Valentine's hearts, Chinese New Year lanterns, Easter eggs, Halloween
+   * pumpkins, and balloons for a birthday. No settings (an older add-on): the defaults. */
+  const OCC_DEFAULTS = {xmas: {on: true, from: '12-01', to: '01-06'}, newyear: {on: true, from: '12-31', to: '01-01'},
+    valentines: {on: true, from: '02-14', to: '02-14'}, cny: {on: true, auto: true}, easter: {on: true, auto: true},
+    halloween: {on: true, from: '10-24', to: '10-31'}, bonfire: {on: true, from: '11-04', to: '11-06'}, birthdays: {on: true, dates: []}};
+  // Chinese New Year's day (the first of the first lunar month), by year
+  const CNY = {2025: '01-29', 2026: '02-17', 2027: '02-06', 2028: '01-26', 2029: '02-13', 2030: '02-03', 2031: '01-23',
+    2032: '02-11', 2033: '01-31', 2034: '02-19', 2035: '02-08', 2036: '01-28', 2037: '02-15', 2038: '02-04', 2039: '01-24', 2040: '02-12'};
+  function easterSunday(y) {  // (the Gregorian calendar's, by the anonymous algorithm)
+    const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f2 = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f2 + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(y, month - 1, day);
+  }
+  const mdOf = (d) => String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const between = (md, a, b) => !!a && !!b && (a <= b ? md >= a && md <= b : md >= a || md <= b);
+  // (the calendar's dates for Easter and Chinese New Year, this year: [first day, last day] as MM-DD)
+  function autoRange(k, y) {
+    const add = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+    if (k === 'easter') { const e = easterSunday(y); return [mdOf(add(e, -2)), mdOf(add(e, 1))]; }
+    if (k === 'cny' && CNY[y]) { const [mm, dd] = CNY[y].split('-').map(Number), c = new Date(y, mm - 1, dd); return [mdOf(add(c, -1)), mdOf(add(c, 14))]; }
+    return [null, null];
+  }
+  function occasion(d, cfg) {
+    const md = mdOf(d), y = d.getFullYear(), c = {...OCC_DEFAULTS, ...(cfg || {})};
+    const on = (k) => {
+      const o = c[k] || {};
+      if (!o.on) return false;
+      const [a, b] = o.auto ? autoRange(k, y) : [o.from, o.to];
+      return between(md, a, b);
+    };
+    const bd = (c.birthdays || {}).on ? ((c.birthdays || {}).dates || []).filter((x) => (x.date || x) === md).map((x) => x.name || '') : [];
+    return {xmas: on('xmas'), halloween: on('halloween'), valentines: on('valentines'), easter: on('easter'), cny: on('cny'),
+      fireworks: on('newyear') || on('bonfire'), birthday: bd.length ? bd : null};
   }
 
   // Where shadows fall from the real sun (Home Assistant's sun: azimuth, elevation), per metre of height
@@ -608,6 +653,36 @@
     for (let i = 1; i <= 4; i++) {
       const t = i / 5, x = a1[0] + (b1[0] - a1[0]) * t, y = a1[1] + (b1[1] - a1[1]) * t;
       s += `<rect x="${f(x - 0.28)}" y="${f(y)}" width=".56" height="${f(0.55 + rnd(seed, i, 340) * 0.35)}" fill="${pick(CLOTHES, rnd(seed, i, 341))}"/>`;
+    }
+    return s;
+  }
+
+  function snowman(V, x, y, seed) {
+    return `<g transform="translate(${f(V.p(x, y, 0)[0] * -0.5)} ${f(V.p(x, y, 0)[1] * -0.5)}) scale(1.5)">${snowmanAt(V, x, y, seed)}</g>`;
+  }
+  function snowmanAt(V, x, y, seed) {
+    const b = V.p(x, y, 0.55), h = V.p(x, y, 1.35), g = V.p(x, y, 0);
+    const scarf = pick(['rgb(229,57,53)', 'rgb(30,136,229)', 'rgb(67,160,71)', 'rgb(253,216,53)'], rnd(seed, 1, 410));
+    return `<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx=".8" ry="${f(0.8 * SE)}" fill="#c9d6de" opacity=".6"/>`
+      + `<circle cx="${f(b[0])}" cy="${f(b[1])}" r=".62" fill="#fbfdff" stroke="#d5dee5" stroke-width=".05"/>`
+      + `<circle cx="${f(h[0])}" cy="${f(h[1])}" r=".4" fill="#fbfdff" stroke="#d5dee5" stroke-width=".05"/>`
+      + `<path d="M${f(h[0] - 0.4)} ${f(h[1] + 0.3)}q.4 .15 .8 0" stroke="${scarf}" stroke-width=".16" fill="none"/>`
+      + `<rect x="${f(h[0] - 0.28)}" y="${f(h[1] - 0.82)}" width=".56" height=".42" fill="#263238"/><rect x="${f(h[0] - 0.4)}" y="${f(h[1] - 0.42)}" width=".8" height=".08" fill="#263238"/>`
+      + `<circle cx="${f(h[0] - 0.13)}" cy="${f(h[1] - 0.08)}" r=".05" fill="#263238"/><circle cx="${f(h[0] + 0.13)}" cy="${f(h[1] - 0.08)}" r=".05" fill="#263238"/>`
+      + `<path d="M${f(h[0])} ${f(h[1] + 0.03)}l.32 .06l-.32 .07z" fill="rgb(251,140,0)"/>`
+      + `<line x1="${f(b[0] - 0.55)}" y1="${f(b[1] - 0.15)}" x2="${f(b[0] - 1)}" y2="${f(b[1] - 0.55)}" stroke="#6d4c41" stroke-width=".06"/><line x1="${f(b[0] + 0.55)}" y1="${f(b[1] - 0.15)}" x2="${f(b[0] + 1)}" y2="${f(b[1] - 0.55)}" stroke="#6d4c41" stroke-width=".06"/>`;
+  }
+
+  // The gritter: an orange lorry spreading salt behind it, its beacon flashing (on its path, facing along it)
+  function gritterSprite() {
+    let s = `<rect x="-3.2" y="-1.55" width="4.6" height="2.3" rx=".2" fill="#f57c00"/><rect x="-3" y="-1.35" width="4.2" height="1.9" fill="#ef6c00"/>`
+      + `<rect x="1.45" y="-1.55" width="1.9" height="2.3" rx=".35" fill="#fb8c00"/><rect x="2.4" y="-1.3" width=".8" height="1.8" rx=".2" fill="#cfe3ee"/>`
+      + `<circle cx="1.9" cy="-.4" r=".32" fill="rgb(255,193,7)"><animate attributeName="opacity" values="1;.2;1" dur=".7s" repeatCount="indefinite"/></circle>`
+      + `<path d="M-3.4 -1.2l-.4 -.2v2l.4 -.2z" fill="#424242"/>`;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 7 - 0.5) * 2.2, dx = -4 - Math.cos(a) * 2.2, dy = -0.4 + Math.sin(a) * 2.2;
+      s += `<circle cx="-3.8" cy="-.4" r=".12" fill="#ffffff" opacity="0"><animate attributeName="cx" values="-3.8;${f(dx)}" dur=".6s" begin="${(k * 0.07).toFixed(2)}s" repeatCount="indefinite"/>`
+        + `<animate attributeName="cy" values="-.4;${f(dy)}" dur=".6s" begin="${(k * 0.07).toFixed(2)}s" repeatCount="indefinite"/><animate attributeName="opacity" values=".95;0" dur=".6s" begin="${(k * 0.07).toFixed(2)}s" repeatCount="indefinite"/></circle>`;
     }
     return s;
   }
@@ -732,6 +807,41 @@
         }
       }
     }
+    // snow: a snowman in some gardens (and yours)
+    if (CTX.snow && (isHome || r(40) < 0.15)) {
+      const [x, y] = bk >= 4 ? PW(P, hb + bk * 0.5, (r(41) * 2 - 1) * (w - 1.5)) : fr >= 3 ? PW(P, -hf - fr * 0.5, -sd * Math.max(0.8, hl * 0.6)) : [null, null];
+      if (x !== null) thing(x, y, snowman(V, x, y, id));
+    }
+    // Easter: eggs hidden about the back garden
+    if (CTX.occ && CTX.occ.easter && !CTX.snow && bk >= 3 && (isHome || r(22) < 0.35)) {
+      const cols = ['rgb(255,138,128)', 'rgb(255,213,79)', 'rgb(129,212,250)', 'rgb(174,213,129)', 'rgb(206,147,216)'];
+      for (let k = 0; k < 3 + Math.floor(r(23) * 3); k++) {
+        const [x, y] = PW(P, hb + 1 + r(24 + k) * (bk - 2), (r(30 + k) * 2 - 1) * (w - 0.8)), c = V.p(x, y, 0.2);
+        ground.push(`<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".42" ry=".56" fill="${cols[(k + id) % cols.length]}" stroke="#ffffff" stroke-width=".05"/>`);
+      }
+    }
+    // Valentine's: a heart floating up from some houses (and yours) now and then
+    if (CTX.occ && CTX.occ.valentines && (isHome || r(25) < 0.12)) {
+      const [x, y] = PW(P, 0, 0), t0 = V.p(x, y, 9);
+      for (let k = 0; k < (isHome ? 3 : 1); k++) {
+        const dur = (4 + r(26 + k) * 2).toFixed(1), begin = (r(28 + k) * 4 + k * 1.4).toFixed(1), hx = t0[0] + (k - 1) * 1.2, hy = t0[1];
+        const heart = `M${f(hx)} ${f(hy + 0.35)}c-.6 -.45 -.9 -.75 -.9 -1.05c0 -.3 .25 -.5 .5 -.5c.2 0 .35 .1 .4 .25c.05 -.15 .2 -.25 .4 -.25c.25 0 .5 .2 .5 .5c0 .3 -.3 .6 -.9 1.05z`;
+        things.push([V.d(x, y) - 0.01, `<path d="${heart}" fill="rgb(236,64,122)" opacity="0"><animateTransform attributeName="transform" type="translate" values="0 0;.6 -5" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
+          + `<animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.15;.7;1" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/></path>`]);
+      }
+    }
+    // a birthday: balloons tied up by your front door
+    if (isHome && CTX.occ && CTX.occ.birthday) {
+      const [x, y] = PW(P, -hf - 0.5, Math.min(hl - 0.6, 1.6)), g = V.p(x, y, 0), cols = ['rgb(239,83,80)', 'rgb(66,165,245)', 'rgb(255,202,40)', 'rgb(171,71,188)', 'rgb(102,187,106)'];
+      let s = '';
+      cols.forEach((col, k) => {
+        const bx = g[0] + (k - 2) * 0.55, by = g[1] - 5 - (k % 2) * 0.8, dur = (2.4 + k * 0.3).toFixed(1);
+        s += `<g><animateTransform attributeName="transform" type="translate" values="0 0;${(k % 2 ? 0.25 : -0.25)} -.35;0 0" dur="${dur}s" repeatCount="indefinite"/>`
+          + `<path d="M${f(g[0])} ${f(g[1])}Q${f((g[0] + bx) / 2 + 0.3)} ${f((g[1] + by) / 2)} ${f(bx)} ${f(by + 0.7)}" fill="none" stroke="#9e9e9e" stroke-width=".05"/>`
+          + `<ellipse cx="${f(bx)}" cy="${f(by)}" rx=".55" ry=".7" fill="${col}"/><ellipse cx="${f(bx - 0.18)}" cy="${f(by - 0.25)}" rx=".12" ry=".2" fill="#ffffff" opacity=".6"/></g>`;
+      });
+      thing(x, y, s);
+    }
     // your heat pump, beside the house at the back
     if (isHome && energy.heat !== null && energy.heat !== undefined) {
       const [x, y] = w - hl > 1.2 ? PW(P, hb - 1.2, hl + 0.55) : PW(P, hb + 0.6, hl * 0.55);
@@ -847,9 +957,13 @@
     CTX.snow = ['snowy', 'snowy-rainy'].includes(wx);
     CTX.wet = ['rainy', 'pouring', 'lightning-rainy', 'hail', 'snowy-rainy'].includes(wx);
     CTX.hail = wx === 'hail';
+    // cold: below 5°C (41°F) by the weather entity: a frost (not when it's snowing or raining) and a gritter out
+    const temp = Number((live.weather || {}).temperature), fahr = /F/i.test((live.weather || {}).unit || '');
+    CTX.cold = (live.weather || {}).temperature != null && !Number.isNaN(temp) && temp < (fahr ? 41 : 5);
+    CTX.frost = CTX.cold && !CTX.snow && !CTX.wet;
     CTX.windy = ['windy', 'windy-variant', 'pouring', 'lightning-rainy'].includes(wx);
     CTX.leaves = LITE ? 20 : 90;  // (falling leaves on this map, at most)
-    CTX.occ = occasion(opts.date ? new Date(opts.date) : new Date());
+    CTX.occ = occasion(opts.date ? new Date(opts.date) : new Date(), opts.occasions);
     CTX.energy = opts.isHome ? (live.energy || null) : null;
     const motion = opts.motion !== false;
     const out = [];
@@ -1102,6 +1216,12 @@
       if (drives.length && !CTX.night) {
         const r = drives.slice().sort((a, b) => b.w - a.w || plen(b.p) - plen(a.p))[0], p = offsetLine(r.p, Math.min(r.w / 4, Math.max(0.8, r.w / 2 - 3.2))), L = plen(p);
         out.push(mover(spath(V, p), L / 7 + 20, -rnd(H, 1, 314) * L / 7, carSprite('#c62828', 10, 2.1, '#cfe3ee'), ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(L / 7 / (L / 7 + 20)).toFixed(3)};1" calcMode="linear"`));
+      }
+      if (CTX.cold && drives.length) {
+        // below 5°C: the gritter out on the biggest street (then round again a while later)
+        const r = drives.slice().sort((a, b) => b.w - a.w || plen(b.p) - plen(a.p))[Math.min(1, drives.length - 1)], back = rnd(H, 3, 317) < 0.5;
+        const p = offsetLine(back ? r.p.slice().reverse() : r.p, Math.min(r.w / 4, Math.max(0.8, r.w / 2 - 3.2))), L = plen(p), run = L / 6;
+        out.push(mover(spath(V, p), run + 40, -rnd(H, 4, 318) * run, gritterSprite(), ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(run / (run + 40)).toFixed(3)};1" calcMode="linear"`));
       }
       for (const r of scene.rails || []) {
         const L = plen(r.p);
@@ -1452,7 +1572,7 @@
     const PLACE_PINS = ['#7e57c2', '#00897b', '#f4511e', '#6d4c41', '#c2185b', '#3949ab'];
     const bySide = {left: [], right: [], up: [], down: []};
     places.forEach((pl, i) => {
-      const I = island(pl.scene, {rot: opts.rot, zoom: opts.zoom, live, month: opts.month, date: opts.date, motion: opts.motion, isHome: false, label: String(pl.name || 'PLACE').toUpperCase(),
+      const I = island(pl.scene, {rot: opts.rot, zoom: opts.zoom, live, month: opts.month, date: opts.date, motion: opts.motion, occasions: opts.occasions, isHome: false, label: String(pl.name || 'PLACE').toUpperCase(),
         pinColour: PLACE_PINS[i % PLACE_PINS.length], atPin: who.places[i].at, onMap: who.places[i].map});
       I.key = String(pl.zone || pl.name || i);
       (bySide[pl.side] || bySide.left).push(I);
@@ -1513,7 +1633,7 @@
       };
       birds = `<g class="nvbirds" pointer-events="none">${flock(5, 0.3, 40, 3, 1)}${flock(3, 0.62, 55, 24, -1)}</g>`;
     }
-    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;position:relative" role="img" aria-label="The streets around your home">${groups.join('')}${bridges.join('')}${birds}${live.night && occasion(opts.date ? new Date(opts.date) : new Date()).fireworks ? fireworks(x0, y0, w, h) : ''}</svg>`, away: who.away};
+    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;position:relative" role="img" aria-label="The streets around your home">${groups.join('')}${bridges.join('')}${birds}${live.night && occasion(opts.date ? new Date(opts.date) : new Date(), opts.occasions).fireworks ? fireworks(x0, y0, w, h) : ''}</svg>`, away: who.away};
   }
 
   /* Fits the drawing to its box: all of it where the box is about its shape; in a much narrower
@@ -1629,7 +1749,7 @@
     @keyframes nvsway{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
     @media (prefers-reduced-motion: reduce){.nvfx,.nvfx *,.nvsky .cl,.nvsky .st,.nvsway{animation:none!important}}`;
 
-  function overlays(live) {
+  function overlays(live, note) {
     const w = (live && live.weather) || null, st = w && w.state;
     let fx = '';
     const cloud = (light) => `<div class="nvfx"><div class="nv-cloud${light ? ' light' : ''}"></div></div>`;
@@ -1643,7 +1763,7 @@
     if (st === 'partlycloudy') fx += cloud(true);
     if (st === 'sunny' && !(live && live.night)) fx += '<div class="nvfx nv-sun"></div>';
     if (['lightning', 'lightning-rainy'].includes(st)) fx += '<div class="nvfx nv-flash"></div>';
-    let chips = '';
+    let chips = note ? `<div class="nvchip wx">${note}</div>` : '';
     if (w && st && st !== 'unavailable' && st !== 'unknown') {
       const [icon, text] = WEATHER[st] || ['', st];
       const t = w.temperature != null && w.temperature !== '' ? ` ${Math.round(Number(w.temperature))}${esc(w.unit || '°C')}` : '';
@@ -1667,7 +1787,11 @@
     const golden = !live.night && live.sun && live.sun.el != null && live.sun.el < 10 && live.sun.el > -4 && !grey;
     const sky = live.night ? 'night' : grey ? 'grey' : golden ? 'golden' : '';
     const glow = golden ? `<div class="nvfx nv-golden" style="opacity:${Math.max(0.25, Math.min(1, 1 - live.sun.el / 10)).toFixed(2)}"></div>` : '';
-    el.innerHTML = `<div class="nvsky ${sky}"><div class="st"></div><div class="cl b"></div><div class="cl"></div></div>` + d.svg + glow + '<div class="nvvig"></div>' + overlays(live)
+    el.innerHTML = `<div class="nvsky ${sky}"><div class="st"></div><div class="cl b"></div><div class="cl"></div></div>` + d.svg + glow + '<div class="nvvig"></div>'
+      + overlays(live, (() => {  // (a birthday today: a chip saying so)
+        const b = occasion((opts || {}).date ? new Date(opts.date) : new Date(), (opts || {}).occasions).birthday;
+        return b ? '\u{1F382} Happy birthday' + (b.filter(Boolean).length ? ', ' + esc(b.filter(Boolean).join(' & ')) : '') + '!' : '';
+      })())
       + `<div class="nvcredit${live.night ? ' dark' : ''}">\u00a9 OpenStreetMap contributors</div>`;
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
     fit(el);
@@ -1742,7 +1866,7 @@
     return v > (['kw', 'kwh'].includes(String(a.unit_of_measurement || '').toLowerCase()) ? 0.02 : 20);
   }
 
-  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, version: VERSION};
+  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, occasion, autoRange, version: VERSION};
 
   // ---------- the dashboard card ----------
   if (!window.customElements || customElements.get('neighbourhood-view-card')) return;
@@ -1938,6 +2062,7 @@
         if (!d.scene) { this._scene = null; this._msg(d.message || 'Set your postcode and house number in the Neighbourhood View add-on.'); return; }
         this._scene = d.scene;
         this._places = d.places || [];
+        this._occasions = d.occasions || null;
         this._screen = d.screen || null;  // (the screensaver, if the status sensor's not there)
         this._root.querySelector('.map').classList.toggle('tap', !!this._tap());
         // (the entities to follow: the card's own weather / people, else the add-on's Settings)
@@ -1957,7 +2082,7 @@
       this._liveKey = JSON.stringify(live);
       LITE = this._config.effects === 'lite' ? true : this._config.effects === 'full' ? false : SLOW;
       render(this._root.querySelector('.map'), s, {rot: getRot(), zoom: zoomStep(0), label: String(label).toUpperCase(), live, places: this._places,
-        motion: this._config.motion !== false, date: this._config.date || undefined});
+        motion: this._config.motion !== false, date: this._config.date || undefined, occasions: this._occasions});
       this._msg('');
     }
   }

@@ -37,7 +37,7 @@ def payload(settings_data: Optional[dict], store_scene: Optional[dict], place_sc
         psc = place_scene(pl["zone"]) if place_scene else None
         if psc:
             pls.append({"zone": pl["zone"], "side": pl["side"], "name": psc.get("name") or pl["zone"], "scene": psc})
-    return {"scene": sc, "places": pls, "entities": ents,
+    return {"scene": sc, "places": pls, "entities": ents, "occasions": s.get("occasions"),
             # (where a tap goes, and when a screen left alone comes back)
             "screen": SC.saver(s.get("screen"))}
 

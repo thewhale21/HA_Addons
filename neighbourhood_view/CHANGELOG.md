@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.17.0 — Occasions you choose, snowmen and frost
+
+- **Feature:** Settings › **Occasions**: turn each decoration on or off and
+  choose the days it's on (a day and a month, either way round the new
+  year).
+- **Feature:** new occasions: Valentine's Day (hearts floating up), Chinese
+  New Year (red lanterns), Easter (eggs in the gardens) and birthdays (as
+  many dates as you like, with names: balloons by your front door and a
+  happy birthday chip). Easter and Chinese New Year follow the calendar
+  unless you set their days. New Year and Bonfire Night's fireworks are
+  set separately.
+- **Feature:** snowmen in some gardens when it snows.
+- **Feature:** below 5°C: a frost on the lawns, roofs and trees, and a
+  gritter spreading salt along the streets.
 ## 0.16.2 — Traffic past the parked cars
 
 - **Fix:** the traffic no longer seems to drive under the parked cars: it

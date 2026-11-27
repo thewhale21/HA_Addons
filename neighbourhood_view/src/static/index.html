@@ -397,6 +397,18 @@
         <div class="row" style="margin-top:8px"><div class="grow note" style="margin:0" id="s-places-status"></div><button class="btn small" id="s-place-add">Add a place</button><button class="btn small primary" id="s-places-save">Save</button></div>
       </div>
     </div>
+    <div class="section-title">Occasions</div>
+    <div class="masonry">
+      <div class="card">
+        <h2>Occasions</h2>
+        <div class="note" style="margin:0 0 8px">Decorations on the map at times of the year: each on or off, and the days it's on (either way round the new year). Easter and Chinese New Year can follow the calendar, as their dates move each year.</div>
+        <div id="s-occ"></div>
+        <div style="margin-top:12px"><b>Birthdays</b> <span class="note" style="margin:0">Balloons by your front door, and a chip wishing them happy birthday.</span></div>
+        <div class="row" style="margin-top:4px"><span class="grow">On</span><label class="switch"><input type="checkbox" id="s-bd-on" aria-label="Birthdays"><span></span></label></div>
+        <div id="s-bd"></div>
+        <div class="row" style="margin-top:8px"><div class="grow note" style="margin:0" id="s-occ-status"></div><button class="btn small" id="s-bd-add">Add a birthday</button><button class="btn small primary" id="s-occ-save">Save</button></div>
+      </div>
+    </div>
     <div class="section-title">Screensaver</div>
     <div class="masonry">
       <div class="card">
@@ -698,6 +710,7 @@ async function loadMap() {
   try { d = await api('scene'); } catch (e) { return; }
   nv.scene = d.scene;
   nv.places = d.places || [];
+  nv.occasions = d.occasions || null;
   if (!d.scene) { $('o-map').innerHTML = ''; showMsg(d.message); $('o-top').hidden = true; return; }
   drawMap();
 }
@@ -706,7 +719,7 @@ function drawMap() {
   const sc = nv.scene;
   if (!sc || !window.NeighbourhoodView) return;
   nv.liveKey = JSON.stringify((state || {}).live || {});
-  NeighbourhoodView.render($('o-map'), sc, {rot: getRot(), zoom: NeighbourhoodView.zoom(0), live: (state || {}).live, places: nv.places, label: sc.number ? `NO. ${sc.number}`.toUpperCase() : 'HOME', pick: true, hideLabel: nv.picking});
+  NeighbourhoodView.render($('o-map'), sc, {rot: getRot(), zoom: NeighbourhoodView.zoom(0), live: (state || {}).live, places: nv.places, occasions: nv.occasions, label: sc.number ? `NO. ${sc.number}`.toUpperCase() : 'HOME', pick: true, hideLabel: nv.picking});
   showMsg('');
   $('o-top').hidden = false;
   $('o-addr').textContent = [sc.number, sc.postcode].filter(Boolean).join(', ');
@@ -781,6 +794,87 @@ setInterval(() => {
   const el = $('s-card-file');
   if (el) el.innerHTML = x.map_file_error ? `<span class="chip warn">Problem</span> ${esc(x.map_file_error)}` : x.map_url ? 'Map file ready for the card' : 'Writing the map file…';
 }, 2000);
+
+// ---------- Settings › Occasions ----------
+const OCC = [['xmas', 'Christmas', 'Lights along the eaves (twinkling at night)'], ['newyear', 'New Year', 'Fireworks at night'],
+  ['valentines', "Valentine's Day", 'Hearts floating up'], ['cny', 'Chinese New Year', 'Red lanterns on the houses', 'New Year to the Lantern Festival'],
+  ['easter', 'Easter', 'Eggs hidden in the gardens', 'Good Friday to Easter Monday'], ['halloween', 'Halloween', 'Pumpkins by the doors (lit at night)'],
+  ['bonfire', 'Bonfire Night', 'Fireworks at night']];
+const nvOcc = {data: null, dirty: false};
+// A day of the year: a day and a month (no year), as MM-DD
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function mdPick(f, md, label) {
+  const [m, d] = (md || '01-01').split('-').map(Number);
+  return `<span class="md" data-f="${f}" style="display:inline-flex;gap:4px"><select data-p="d" aria-label="${esc(label)} day">${Array.from({length: 31}, (_, i) => `<option${i + 1 === d ? ' selected' : ''}>${i + 1}</option>`).join('')}</select>`
+    + `<select data-p="m" aria-label="${esc(label)} month">${MONTHS.map((n, i) => `<option value="${i + 1}"${i + 1 === m ? ' selected' : ''}>${n}</option>`).join('')}</select></span>`;
+}
+const mdRead = (span) => String(span.querySelector('[data-p="m"]').value).padStart(2, '0') + '-' + String(span.querySelector('[data-p="d"]').value).padStart(2, '0');
+const mdText = (md) => (md ? new Date('2000-' + md + 'T12:00:00').toLocaleDateString([], {day: 'numeric', month: 'short'}) : '—');
+async function refreshOccasions() {
+  if (nvOcc.dirty) return;
+  let d;
+  try { d = await api('settings'); } catch (e) { return; }
+  nvOcc.data = JSON.parse(JSON.stringify(d.occasions || {}));
+  drawOccasions();
+}
+function drawOccasions() {
+  const o = nvOcc.data || {}, y = new Date().getFullYear();
+  $('s-occ').innerHTML = OCC.map(([k, name, what, autoText]) => {
+    const c = o[k] || {}, auto = !!c.auto;
+    const cal = autoText && window.NeighbourhoodView ? NeighbourhoodView.autoRange(k, y) : null;
+    return `<div class="nv-occ" data-k="${k}" style="border:1px solid var(--divider);border-radius:10px;padding:8px 10px;margin:6px 0">
+      <div class="row" style="gap:8px"><div class="grow"><b>${esc(name)}</b> <span class="note" style="margin:0">${esc(what)}</span></div>
+        <label class="switch"><input type="checkbox" data-f="on"${c.on ? ' checked' : ''} aria-label="${esc(name)}"><span></span></label></div>
+      ${autoText ? `<div class="row" style="margin-top:6px;gap:8px"><select data-f="auto" aria-label="${esc(name)} dates"><option value="1"${auto ? ' selected' : ''}>By the calendar: ${esc(autoText)}${cal && cal[0] ? ` (${mdText(cal[0])} – ${mdText(cal[1])} this year)` : ''}</option><option value="0"${auto ? '' : ' selected'}>Days I choose</option></select></div>` : ''}
+      ${!autoText || !auto ? `<div class="row" style="margin-top:6px;gap:8px"><span class="note" style="margin:0">From</span>${mdPick('from', c.from, name + ' from')}
+        <span class="note" style="margin:0">to</span>${mdPick('to', c.to, name + ' to')}</div>` : ''}
+    </div>`;
+  }).join('');
+  const b = o.birthdays || {on: true, dates: []};
+  $('s-bd-on').checked = !!b.on;
+  $('s-bd').innerHTML = (b.dates || []).map((x, i) => `<div class="row" data-i="${i}" style="margin-top:6px;gap:8px">
+      <input type="text" data-f="name" value="${esc(x.name || '')}" placeholder="Name (optional)" style="width:160px" aria-label="Name">
+      ${mdPick('date', x.date, 'Birthday')}
+      <button class="btn small" data-f="remove" title="Remove">✕</button></div>`).join('') || '<div class="note" style="margin:6px 0 0">None yet.</div>';
+}
+$('s-occ').addEventListener('change', (e) => {
+  const box = e.target.closest('.nv-occ'); if (!box) return;
+  const c = nvOcc.data[box.dataset.k] = nvOcc.data[box.dataset.k] || {}, span = e.target.closest('.md'), fld = span ? span.dataset.f : e.target.dataset.f;
+  if (fld === 'on') c.on = e.target.checked;
+  else if (fld === 'auto') {
+    c.auto = e.target.value === '1';
+    // (your own days: starting from this year's)
+    if (!c.auto && !(c.from && c.to) && window.NeighbourhoodView) [c.from, c.to] = NeighbourhoodView.autoRange(box.dataset.k, new Date().getFullYear());
+    drawOccasions();
+  }
+  else if (fld === 'from' || fld === 'to') c[fld] = mdRead(span);
+  nvOcc.dirty = true;
+});
+['input', 'change'].forEach((ev) => $('s-bd').addEventListener(ev, (e) => {
+  const row = e.target.closest('[data-i]'); if (!row) return;
+  const x = nvOcc.data.birthdays.dates[Number(row.dataset.i)];
+  if (e.target.dataset.f === 'name') x.name = e.target.value;
+  if (e.target.closest('.md')) x.date = mdRead(e.target.closest('.md'));
+  nvOcc.dirty = true;
+}));
+$('s-bd').addEventListener('click', (e) => {
+  if (e.target.dataset.f !== 'remove') return;
+  nvOcc.data.birthdays.dates.splice(Number(e.target.closest('[data-i]').dataset.i), 1);
+  nvOcc.dirty = true; drawOccasions();
+});
+$('s-bd-on').addEventListener('change', (e) => { (nvOcc.data.birthdays = nvOcc.data.birthdays || {dates: []}).on = e.target.checked; nvOcc.dirty = true; });
+$('s-bd-add').addEventListener('click', () => {
+  const b = nvOcc.data.birthdays = nvOcc.data.birthdays || {on: true, dates: []};
+  if ((b.dates || []).length >= 20) { toast('Up to 20 birthdays'); return; }
+  const now = new Date();
+  b.dates.push({date: String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0'), name: ''});
+  nvOcc.dirty = true; drawOccasions();
+});
+$('s-occ-save').addEventListener('click', async () => {
+  const bad = (nvOcc.data.birthdays.dates || []).some((x) => !x.date);
+  if (bad) { toast('Choose a date for each birthday'); return; }
+  if (await post('settings', {occasions: nvOcc.data})) { nvOcc.dirty = false; toast('Saved'); refreshOccasions(); loadMap(); }
+});
 
 // ---------- Settings › Screensaver ----------
 const nvScr = {loaded: false, dirty: false, data: null, areas: [], picks: {}, open: new Set()};
@@ -1149,7 +1243,7 @@ $('d-bundle').addEventListener('click', async () => {
 
 // ---------- refresh loop ----------
 function refreshTab(full) {
-  if (activeTab === 'settings') { refreshAddress(); refreshSensors(full); if (full || !nvScr.loaded) refreshScreen(); }
+  if (activeTab === 'settings') { refreshAddress(); refreshSensors(full); if (full || !nvScr.loaded) refreshScreen(); if (full || !nvOcc.data) refreshOccasions(); }
   else if (activeTab === 'health') refreshHealth();
   else if (activeTab === 'debug') refreshDebug();
 }
@@ -1308,6 +1402,13 @@ function setupRows() {
     {t: 'Other places', id: 'places', icon: 'layers', sum: () => {
       const st = ((state || {}).extra || {}).places || [];
       return st.length ? esc(st.map((p) => p.name).join(' · ')) : '<span class="chip">None</span>Maps of other places beside yours';
+    }},
+  ]);
+  rowList('tab-settings', 'Occasions', [
+    {t: 'Occasions', id: 'occasions', icon: 'sched', sum: () => {
+      const o = nvOcc.data || {}, on = OCC.filter(([k]) => (o[k] || {}).on).map(([, n]) => n);
+      const bd = ((o.birthdays || {}).on ? (o.birthdays.dates || []).length : 0);
+      return esc(on.length ? on.join(' · ') : 'None') + (bd ? ` · ${bd} birthday${bd === 1 ? '' : 's'}` : '');
     }},
   ]);
   rowList('tab-settings', 'Screensaver', [

@@ -138,11 +138,23 @@ trees it has, drawn like a video game's town:
 - **The sun:** with Home Assistant's sun (`sun.sun`), shadows fall away
   from where it really is, long in the evening, and near sunrise and
   sunset the sky and the map turn golden.
-- **Occasions:** Christmas lights along the eaves of many houses (and
-  yours) from December to Twelfth Night, twinkling at night; pumpkins by
-  front doors the week before Halloween, lit at night; fireworks over the
-  map at night on Bonfire Night (4 to 6 November) and New Year's Eve and
-  Day.
+- **Occasions** (Settings › **Occasions**: each on or off, and the days
+  it's on, as a day and a month, either way round the new year):
+  - **Christmas** (1 December to 6 January): lights along the eaves of many
+    houses and yours, twinkling at night.
+  - **New Year** (31 December to 1 January) and **Bonfire Night** (4 to 6
+    November): fireworks over the map at night.
+  - **Valentine's Day** (14 February): hearts floating up from some houses
+    and yours.
+  - **Chinese New Year**: red lanterns along the eaves, glowing at night.
+    By the calendar (the day before New Year to the Lantern Festival, its
+    dates each year to 2040), or days you choose.
+  - **Easter**: coloured eggs hidden in the back gardens. By the calendar
+    (Good Friday to Easter Monday), or days you choose.
+  - **Halloween** (24 to 31 October): pumpkins by front doors, lit at night.
+  - **Birthdays**: as many dates as you like, each with a name if you
+    want. On the day, balloons by your front door and a chip wishing them
+    happy birthday.
 - **Light:** by day buildings and trees cast soft shadows, and the maps
   float in a blue sky with clouds drifting behind (grey when it's wet). At
   night the sky's dark with stars, and street lamps along the bigger
@@ -162,7 +174,11 @@ trees it has, drawn like a video game's town:
     pavements go dark and wet, puddles lie by the kerbs and on the
     pavements with raindrops rippling them, and rain splashes all over.
   - **Hail:** wet roads and puddles, with hailstones lying about.
-  - **Snow:** roofs, lawns, parks and trees turn white (roads stay clear).
+  - **Snow:** roofs, lawns, parks and trees turn white (roads stay clear),
+    and snowmen stand in some gardens (and yours).
+  - **Below 5°C** (41°F, by the weather entity's temperature): a frost
+    rimes the lawns, roofs and trees (when it isn't snowing or raining),
+    and an orange gritter drives the streets now and then, spreading salt.
   - **Wind** (and heavy rain, thunderstorms): the trees sway, and falling
     leaves are blown further.
   - Under a grey sky shadows fade; with sun they're crisp.

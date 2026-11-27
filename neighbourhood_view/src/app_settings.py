@@ -14,6 +14,19 @@ from src.scene import norm_postcode
 logger = logging.getLogger(__name__)
 
 LEVELS = ("debug", "info", "warning", "error")
+OCCASIONS = {
+    "xmas": {"on": True, "from": "12-01", "to": "01-06"},        # lights on the houses
+    "newyear": {"on": True, "from": "12-31", "to": "01-01"},     # fireworks (at night)
+    "valentines": {"on": True, "from": "02-14", "to": "02-14"},  # hearts
+    "cny": {"on": True, "auto": True, "from": "", "to": ""},     # lanterns (Chinese New Year to the Lantern Festival)
+    "easter": {"on": True, "auto": True, "from": "", "to": ""},  # eggs in the gardens (Good Friday to Easter Monday)
+    "halloween": {"on": True, "from": "10-24", "to": "10-31"},   # pumpkins
+    "bonfire": {"on": True, "from": "11-04", "to": "11-06"},     # fireworks (at night)
+    "birthdays": {"on": True, "dates": []},                      # balloons at your house
+}
+AUTO_OCCASIONS = ("cny", "easter")
+MAX_BIRTHDAYS = 20
+MD_RE = re.compile(r"^(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
 DEFAULTS = {"log_level": "info", "postcode": "", "house_number": "",
             # your house picked on the Overview: {"id": OpenStreetMap way id, "lat", "lon"}, or None
             "picked": None,
@@ -25,7 +38,11 @@ DEFAULTS = {"log_level": "info", "postcode": "", "house_number": "",
             # goes to a view ("own": path) or a dashboard made from rooms ("ours": areas, in order,
             # and the things ticked in each, entities {area: [entity, ...]}, all if not there); and
             # any screen left alone `idle` s comes back to it
-            "screen": {"enabled": False, "map": "", "target": "own", "path": "", "idle": 120, "areas": [], "entities": {}}}
+            "screen": {"enabled": False, "map": "", "target": "own", "path": "", "idle": 120, "areas": [], "entities": {}},
+            # occasions on the map, each on or off between two days of the year ("MM-DD", either way
+            # round a new year); Easter and Chinese New Year by the calendar (auto) unless set; and
+            # birthdays: [{"date": "MM-DD", "name"}] (the static/neighbourhood-view-card.js occasion())
+            "occasions": {k: dict(v) for k, v in OCCASIONS.items()}}
 SIDES = ("left", "right", "up", "down")
 MAX_PLACES = 6
 MAX_ROOMS = 30
@@ -145,6 +162,41 @@ class AppSettings:
                 raise ValueError("Tapping the map can't go to the map's own view")
             out["screen"] = {"enabled": enabled, "map": map_at, "target": target, "path": path, "idle": idle,
                              "areas": areas, "entities": picked}
+        if "occasions" in body:
+            occ = body["occasions"]
+            if not isinstance(occ, dict):
+                raise ValueError("occasions must be {name: {on, from, to}}")
+            clean = {k: dict(v) for k, v in OCCASIONS.items()}
+            for k, v in occ.items():
+                if k not in OCCASIONS:
+                    continue  # (one no longer known)
+                if not isinstance(v, dict):
+                    raise ValueError(f"{k} must be {{on, from, to}}")
+                c = clean[k]
+                c["on"] = bool(v.get("on", c["on"]))
+                if k == "birthdays":
+                    dates = v.get("dates") or []
+                    if not isinstance(dates, list) or len(dates) > MAX_BIRTHDAYS:
+                        raise ValueError(f"Up to {MAX_BIRTHDAYS} birthdays")
+                    out_dates = []
+                    for d in dates:
+                        d = d if isinstance(d, dict) else {"date": d}
+                        md = str(d.get("date") or "").strip()[-5:]
+                        if not MD_RE.match(md):
+                            raise ValueError("A birthday is a day of the year, e.g. 03-14 for 14 March")
+                        out_dates.append({"date": md, "name": str(d.get("name") or "").strip()[:24]})
+                    c["dates"] = out_dates
+                    continue
+                if k in AUTO_OCCASIONS:
+                    c["auto"] = bool(v.get("auto", True))
+                for end in ("from", "to"):
+                    md = str(v.get(end) or "").strip()[-5:]
+                    if md and not MD_RE.match(md):
+                        raise ValueError(f"{k}: a day of the year is MM-DD, e.g. 12-01")
+                    c[end] = md
+                if c["on"] and not c.get("auto") and not (c["from"] and c["to"]):
+                    raise ValueError(f"{k}: choose the first and last day it's on")
+            out["occasions"] = clean
         if "picked" in body:
             p = body["picked"]
             if p is not None:
