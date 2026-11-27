@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.120.2 — Saving sessions and the automatic schedule's charging
+
+- **Fix:** a saving session found over the automatic schedule's charging
+  moved it to the hour before (drawn purple, as a moved slot), even with
+  Plug in before a session off, often into a time it had marked as a high
+  export. Now the session's time is just taken out of it, and the automatic
+  schedule plans again around the session, by the rates. Your own slots are
+  still moved as before.
 ## 2.120.1 — The plan's table after coming back to the page
 
 - **Fix:** coming back to the add-on's page with the plan's table open,

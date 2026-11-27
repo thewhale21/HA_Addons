@@ -5,7 +5,7 @@ subscription. `CLAUDE.md` has the working rules; this file has the
 background: what each add-on does, how the owner uses them, what was
 decided and why, and what's still open.
 
-**Last updated:** 26 Nov 2026 (neighbourhood_view 0.16.0).
+**Last updated:** 27 Nov 2026 (ocpp_charge_proxy 2.120.2).
 
 **Keep this file current.** Whoever changes the repository (any AI agent
 or person) updates this file in the same commit when the change affects
@@ -60,7 +60,7 @@ anything below, and bumps the "Last updated" line.
 
 | Folder | Version | Notes |
 |---|---|---|
-| `ocpp_charge_proxy` | 2.120.1 | The main one: below. |
+| `ocpp_charge_proxy` | 2.120.2 | The main one: below. |
 | `octopus_charge_pack` | 0.10.8 | Octopus API helpers; 0.10.8 drops old `device_id`/`poll_seconds` options via the Supervisor API (`POST http://supervisor/addons/self/options`). |
 | `sigenergy_evdc_soc_range_manager` | 0.44.0 | "SigEnergy DC Charger": keeps the EVDC car between limits on a weekly schedule. Limits are named **Maximum charge** and **Keep at least**; an entry can be Maximum charge / Keep at least / Both / Charge only / Discharge only (one-way entries stay within the limits); entries may overlap; start == end means 24 hours; the week view has three lanes (one-way entries in the middle). The Overview's Car SoC chart shows charge/discharge only as a coloured strip along the bottom (0.43.0; points in `soc_history.json` carry a 6th value, "charge"/"discharge", only then). Notifications (0.44.0): the notify service box suggests HA's notify services (`/api/notify_services`) with a Test button; **What to send** (`notify_level`: info = everything incl. starts/stops, warning, error, none; default info); warnings/errors in its log are sent too (`src/log_notify.py`, ported from OCPP's). about 105 tests (test_api needs pytest-asyncio; one notify test needs aiohttp). |
 | `tigo_solar` | 0.7.0 | Tigo panel data: roof view (reclaimed in brackets), drag-to-select chart, quick-select per string, per-panel estimates every minute (system power shared by interpolated reading shares), backfill of real 15-minute per-panel readings via Tigo's `lastvalue` (`resourceId=lastValue-{date}-{pin|reclaimedPower}-{HH:MM}`, about 2 requests per slot, 3 s apart; trusted after 3 answers within 35%/30 W of system power, off after 3 misses), fixed scale, hover tooltip, reclaimed %, "By the time of day" and "Through the year" heatmap / 3D surface with Month/Year and 3D zoom. 22 tests. |
@@ -133,6 +133,7 @@ anything below, and bumps the "Last updated" line.
 
 ### Known limitations (deliberate, or left for now)
 
+- **Saving sessions vs the automatic schedule** (2.120.2): `_move_for_session` doesn't move a stretch whose plug-in has source `auto_schedule` (`replanned`): like "bank" it only takes the session's time out, adds no moved parts (no purple), and the auto plan (key reset by sync) plans again around the session. Owner had seen the hour before a session drawn purple (a moved part) with Plug in before a session off.
 - **Automatic schedule card layout** (2.120): status line `#as-sum` + Plan again now, the table fold `#as-plan`, then `details.sec` sections (`#as-sec-charge`, `-batt`, `-house`, `-rates`, `-show`), each with a summary line filled by `asSummaries()` (called from `drawAutoSched`); open state in localStorage. `drawAutoSched` returns until both `sim.edit` and `auto.data` are in (2.120.1: else on page load it looked off and wrote "Off: reading the rates…" over the table); with no plan it resets `planTableAt` so the table is read again when one comes. New settings go in the matching section, with a short note and detail behind `details.more`.
 - **Axle export event bonus** (2.119): setting `auto_axle_bonus_p` (default 100p/kWh) → `Automation.axle_bonus_p`; `_with_axle` adds it to the export rates (known and estimated, after the estimate is made) in Axle's export events (`saving_sessions` with supplier starting "Axle", not free). In the plan key (`how["axle"]`).
 - **Slot moved to have started** (2.117): `set_schedule` / `set_skips` (un-skip) note `in_plug_window()` before the change; if after it there's a window that wasn't (`_note_started`), `started_now` is set and `automation_loop` plugs in (and sets the ready time), as `turned_on` does. The slot's plug key goes in `auto_plan["yours"]` so the automatic schedule doesn't skip it again. An edit to a slot already going doesn't trigger it (so a hand unplug stays). 2.118: the reverse, `ended_now`: a change that ends the window going (end before now, skipped, deleted) unplugs at once unless a charge window is going.

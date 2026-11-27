@@ -492,7 +492,9 @@ events are saving sessions, handled as this card says.
   the time the session takes out of it. For example, a 15:30–21:30 slot with
   an 18:00–19:00 session becomes 14:30–18:00 and 19:00–21:30; a 17:30–18:30
   slot with a 17:00–19:00 session becomes 16:00–17:00. If that meets an
-  earlier slot they join. If starting earlier would be in the past (e.g.
+  earlier slot they join. The automatic schedule's own charging isn't
+  moved: the session's time is taken out of it and it plans again around
+  the session, by the rates. If starting earlier would be in the past (e.g.
   the session is found at 14:40), the slot starts at the next half hour
   instead (if that's before its own start) and ends later by what's left:
   15:00–18:00 and 19:00–22:00 (found at 15:10, it keeps its 15:30 start:

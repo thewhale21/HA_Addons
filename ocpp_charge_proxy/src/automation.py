@@ -2187,7 +2187,11 @@ class Automation:
             mode = self._free_mode(r)
             move_after = mode == "after"
             banked = mode == "bank"
-            if banked:
+            # The automatic schedule's own charging isn't moved: the session's time is just taken
+            # out of it, and it plans again around the session, choosing where the time goes by
+            # the rates (moved, it would go to the hour before, often one it marked high export)
+            replanned = src == AUTO_SCHED_SOURCE and not banked
+            if banked or replanned:
                 # (the session's time taken out of it, nothing moved: it charges in the session anyway)
                 segs = [(x, y) for x, y in minus([(c if running else hit["start"], hit["end"])], [(sa, sb)]) if y > x]
                 later_end = False
@@ -2246,6 +2250,7 @@ class Automation:
             span = ", ".join(f"{x.strftime('%H:%M')}–{y.strftime('%H:%M')}" for x, y in parts)
             note = (f"the {hit['start'].strftime('%H:%M')}–{hit['end'].strftime('%H:%M')} slot is now {span}"
                     + (" (the session's time banked: it charges in the session anyway)" if banked else "")
+                    + (" (the automatic schedule plans the rest again around it)" if replanned else "")
                     + (" (joined with the slot before)" if earlier is not None else "")
                     + (" (joined with the next slot)" if after is not None else "")
                     + ((" (ends later: it had begun)" if running else

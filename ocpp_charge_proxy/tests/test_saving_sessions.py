@@ -632,3 +632,25 @@ def test_banked_while_the_slot_is_going():
     a.sync_saving_sessions([_free(5, 15, 16)], block=True, free_move="bank")
     w = [(x.strftime("%H:%M"), y.strftime("%H:%M")) for x, y in a.windows() if y > _at(5, 14)]
     assert w[:2] == [("14:30", "15:11"), ("16:00", "17:00")]  # (unplugs now, back after it, same end)
+
+
+def test_the_automatic_schedules_charging_isnt_moved_before_a_session():
+    """2.120.2: a session found over the automatic schedule's charging (15:00-16:00) took it to the
+    hour before (14:00-15:00, drawn purple), often a high export time. Now the session's time is just
+    taken out of it, nothing is moved, and the automatic schedule plans again around the session."""
+    a, _ = _automation(start=_at(5, 11, 0))
+    a.set_schedule(enabled=True, entries=[
+        {"time": "12:00", "action": "plug", "date": "2026-10-05", "source": "auto_schedule"},
+        {"time": "14:00", "action": "unplug", "date": "2026-10-05", "source": "auto_schedule"},
+        {"time": "15:00", "action": "plug", "date": "2026-10-05", "source": "auto_schedule"},
+        {"time": "16:30", "action": "unplug", "date": "2026-10-05", "source": "auto_schedule"}])
+    assert a.sync_saving_sessions([_session(5, 15, 16)], block=True)
+    assert _windows(a)[:2] == [("05 12:00", "05 14:00"), ("05 16:00", "05 16:30")]
+    snap = a.saving_snapshot()[0]
+    assert snap["moved_parts"] == [] and snap["pre_window"] is None
+    assert "plans the rest again" in a.saving_sessions[0]["notes"][0]
+    # (your own slot is still moved, as before)
+    b, _ = _automation(start=_at(5, 11, 0))
+    b.set_schedule(enabled=True, entries=[{"time": "15:00", "action": "plug"}, {"time": "16:00", "action": "unplug"}])
+    b.sync_saving_sessions([_session(5, 15, 16)], block=True)
+    assert _windows(b)[0] == ("05 14:00", "05 15:00")
