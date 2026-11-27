@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.26.0 — Your house, as it's built
+
+- **Feature:** Settings › Your house › **Your house**: keep it highlighted
+  in blue (the default), or draw it as it's built: red, brown or buff
+  brick (with the brickwork), white or cream render, stone or grey stone,
+  and **Your roof**: slate, or grey, red, brown or orange tiles. The pin and
+  the ring round it still show which is yours, and your door colour,
+  number plate, solar panels and the rest still show.
 ## 0.25.0 — Proper brickwork
 
 - **Feature:** brick houses are laid in stretcher bond like real British

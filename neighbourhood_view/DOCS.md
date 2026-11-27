@@ -76,6 +76,11 @@ Settings › **On the map**:
     compost), food (a caddy) and glass; with none named, all of them. Each
     house has a general and a recycling bin, some a garden bin, a food
     caddy or a glass box.
+  - **Your house's look:** highlighted in light blue with a blue roof (the
+    default, so it stands out), or as it's built: red, brown or buff brick,
+    white or cream render, or stone or grey stone, with a slate or grey, red,
+    brown or orange tiled roof (Settings › Your house). The pin and the
+    ring round it still show which is yours.
   - **Front door:** open while a door sensor says so (or a lock's
     unlocked), lit inside at night. Its colour (Settings: Door colour) and
     your number on a plate beside it are yours to choose.

@@ -47,6 +47,15 @@
     stone: {walls: [0.15, 0.1, 0.75], roofs: [2, 5, 5, 3, 2]},
     mixed: {walls: [0.55, 0.35, 0.1], roofs: [0, 1, 2, 3, 4, 5, 6]},
   };
+  /* Your house's own look (Settings › Your house › Your house): highlighted (the default: light blue,
+   * a blue roof, so it stands out), or as built: its walls and roof. */
+  const HOME_WALLS = {red_brick: '#b5583c', brown_brick: '#8f4a36', buff_brick: '#d4b07a', white_render: '#f6f4ee', cream_render: '#f1e3c4', stone: '#d8c79f', grey_stone: '#b0a595'};
+  const HOME_ROOFS = {slate: ['#5f646b', '#474b51'], grey_tile: ['#7d8996', '#5f6a77'], red_tile: ['#d65a4c', '#ae4339'], brown_tile: ['#a3694c', '#83513b'], orange_tile: ['#ea8253', '#c8643c']};
+  function homeLook() {
+    const lk = CTX.look || {}, w = HOME_WALLS[lk.walls];
+    if (!w) return null;
+    return {wall: w, roof: HOME_ROOFS[lk.roof] || HOME_ROOFS.slate, brick: /brick/.test(lk.walls)};
+  }
   function houseLook(id) {
     const st = HOUSE_STYLES[CTX.houses] || HOUSE_STYLES.brick, k = rnd(id, 1);
     const set = k < st.walls[0] ? BRICK_WALLS : k < st.walls[0] + st.walls[1] ? RENDER_WALLS : STONE_WALLS;
@@ -331,9 +340,10 @@
     CTX.lit = isHome ? (CTX.homeLit ? 0.85 : 0) : (rnd(id, 40) < 0.55 ? 0.45 : 0);
     CTX.seed = id % 997;
     const storeys = Math.max(1, Math.round(h / 2.9)), sh = h / storeys;
-    const lk = houseLook(id), wall = isHome ? HOME.walls[0] : lk.wall;
-    const cols = isHome ? HOME.walls : [wall, mix(wall, '#000000', 0.16)];
-    const roof = (isHome ? HOME.roof : lk.roof).map((c) => snowy(c, isHome ? 0.6 : 0.8));
+    const own = isHome ? homeLook() : null, plain = isHome && !own;  // (plain: your house highlighted)
+    const lk = own || houseLook(id), wall = plain ? HOME.walls[0] : lk.wall;
+    const cols = plain ? HOME.walls : [wall, mix(wall, '#000000', 0.16)];
+    const roof = (plain ? HOME.roof : lk.roof).map((c) => snowy(c, isHome ? 0.6 : 0.8));
     const hip = rnd(id, 3) < 0.38;
     const rect = b.rect, [A, B, Cc] = rect;
     const lng = Math.hypot(B[0] - A[0], B[1] - A[1]), short = Math.hypot(Cc[0] - B[0], Cc[1] - B[1]);
@@ -341,9 +351,9 @@
     const Ra = [(rect[3][0] + A[0]) / 2, (rect[3][1] + A[1]) / 2], Rb = [(B[0] + Cc[0]) / 2, (B[1] + Cc[1]) / 2];
     const gables = hip ? null : [null, V.p(Rb[0], Rb[1], h + rh), null, V.p(Ra[0], Ra[1], h + rh)];
     let doorDone = false;
-    const brick = !isHome && BRICK.has(wall), hh = CTX.home || {};
+    const brick = !plain && (own ? own.brick : BRICK.has(wall)), hh = CTX.home || {};
     const deco = (p, q, len, lit, i) => {
-      const tex = isHome ? '' : wallTexture(V, p, q, len, h, mix(cols[0], cols[1], lit), brick, id + i, gables && i % 2 === 1 ? rh : 0);
+      const tex = plain ? '' : wallTexture(V, p, q, len, h, mix(cols[0], cols[1], lit), brick, id + i, gables && i % 2 === 1 ? rh : 0);
       CTX.house = true;
       try {
         if (i % 2 === 1) return tex + (len > 4.5 ? windows(V, p, q, len, 0, storeys, sh, 1.0, 1.15, 3.4, lit) : '');  // (the ends)
@@ -490,7 +500,8 @@
     CTX.lit = isHome ? (CTX.homeLit ? 0.85 : 0) : k === 'industrial' ? 0.1 : k === 'flats' ? 0.5 : 0.3;
     CTX.seed = id % 997;
     const lm = isHome ? null : b.lm;
-    const set = isHome ? [HOME.walls[0], HOME.walls[1], HOME.flat] : lm === 'church' ? ['#e2d8c6', '#bfb29c', '#6b6f75']
+    const own = isHome ? homeLook() : null;
+    const set = own ? [own.wall, mix(own.wall, '#000000', 0.16), own.roof[1]] : isHome ? [HOME.walls[0], HOME.walls[1], HOME.flat] : lm === 'church' ? ['#e2d8c6', '#bfb29c', '#6b6f75']
       : lm === 'school' ? ['#f0dcc4', '#d1b99f', '#8b9196'] : lm === 'pub' ? ['#f3ead6', '#d7c8a8', '#5f646b']
       : ['flats', 'civic', 'large'].includes(k) && (CTX.houses || 'brick') === 'brick' && rnd(id, 3) < 0.6 ? (() => { const w = pick(BRICK_WALLS.slice(0, 8), rnd(id, 4)); return [w, mix(w, '#000000', 0.16), pick(['#7d8996', '#5f646b', '#8f939a'], rnd(id, 5))]; })()
       : pick(KIND[k] || KIND.large, rnd(id, 1));
@@ -517,7 +528,7 @@
         if (storeys > 1) s += windows(V, p, q, len, 3.3, storeys - 1, (h - 3.3) / (storeys - 1), 1.4, 1.4, 3.2, lit);
         return s;
       }
-      return (BRICK.has(set[0]) && !isHome ? wallTexture(V, p, q, len, h, mix(cols[0], cols[1], lit), true, id) : '')
+      return ((own ? own.brick : BRICK.has(set[0]) && !isHome) ? wallTexture(V, p, q, len, h, mix(cols[0], cols[1], lit), true, id) : '')
         + windows(V, p, q, len, 0, storeys, sh, k === 'flats' ? 1.4 : 1.6, 1.45, k === 'flats' ? 3.0 : 3.6, lit);
     };
     let svg = walls(V, b.p, 0, h, cols, null, deco);

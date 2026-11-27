@@ -46,8 +46,11 @@ DEFAULTS = {"log_level": "info", "postcode": "", "house_number": "",
             # your house on the map: its front door's colour (one of DOORS, "" for the usual) and
             # whether it has its number on a plate by the door; and the houses round here (one of
             # HOUSE_STYLES: mostly brick, render or stone, or a mix)
-            "look": {"door": "", "plate": True, "houses": "brick"}}
+            # and your own house: its walls (one of HOME_WALLS, "" highlighted in blue) and roof
+            "look": {"door": "", "plate": True, "houses": "brick", "walls": "", "roof": ""}}
 HOUSE_STYLES = ("brick", "render", "stone", "mixed")
+HOME_WALLS = ("", "red_brick", "brown_brick", "buff_brick", "white_render", "cream_render", "stone", "grey_stone")
+HOME_ROOFS = ("", "slate", "grey_tile", "red_tile", "brown_tile", "orange_tile")
 DOORS = ("", "red", "blue", "green", "black", "white", "yellow", "grey", "wood", "purple")
 SIDES = ("left", "right", "up", "down")
 MAX_PLACES = 6
@@ -213,7 +216,12 @@ class AppSettings:
             houses = str(lk.get("houses") or "brick").lower()
             if houses not in HOUSE_STYLES:
                 raise ValueError("The houses must be one of: " + ", ".join(HOUSE_STYLES))
-            out["look"] = {"door": door, "plate": bool(lk.get("plate", True)), "houses": houses}
+            walls, roof = str(lk.get("walls") or "").lower(), str(lk.get("roof") or "").lower()
+            if walls not in HOME_WALLS:
+                raise ValueError("Your house's walls must be one of: " + ", ".join(w for w in HOME_WALLS if w))
+            if roof not in HOME_ROOFS:
+                raise ValueError("Your house's roof must be one of: " + ", ".join(r for r in HOME_ROOFS if r))
+            out["look"] = {"door": door, "plate": bool(lk.get("plate", True)), "houses": houses, "walls": walls, "roof": roof}
         if "picked" in body:
             p = body["picked"]
             if p is not None:
