@@ -37,10 +37,9 @@ def payload(settings_data: Optional[dict], store_scene: Optional[dict], place_sc
         psc = place_scene(pl["zone"]) if place_scene else None
         if psc:
             pls.append({"zone": pl["zone"], "side": pl["side"], "name": psc.get("name") or pl["zone"], "scene": psc})
-    scr = s.get("screen") or {}
     return {"scene": sc, "places": pls, "entities": ents,
-            # (where a tap goes, and when a device left alone comes back)
-            "screen": {"tap": SC.tap_path(scr), "idle": int(scr.get("idle") or 0), "map": SC.MAP_PATH}}
+            # (where a tap goes, and when a screen left alone comes back)
+            "screen": SC.saver(s.get("screen"))}
 
 
 class CardData:

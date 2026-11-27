@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.14.0 — A simpler, smarter screensaver
+
+- **Change:** the screensaver is one switch for everything: on, every screen
+  left alone on another dashboard comes back to the map; off, the map stays
+  the map. The 🖵 button and the card's `idle_return` option are gone. (Saved
+  settings carry over: on if tapping the map went somewhere.)
+- **Feature:** **The map is on**: the view the map's on, picked from your
+  dashboards' views (e.g. Wall display › Map); the add-on's Map dashboard is
+  only made when it's chosen.
+- **Feature:** **Tapping the map goes to** is picked from your dashboards'
+  views too (or typed).
+- **Feature:** the made Home dashboard groups the rooms by floor (Home
+  Assistant's floors, bottom floor first), and you choose what each room
+  shows (**Things**) and the rooms' order (**↑ ↓**).
+- **Improvement:** scrolling starts the wait again too (as well as a touch,
+  a tap, a key or the mouse).
 ## 0.13.0 — The card for every user (kiosk too)
 
 - **Feature:** any signed-in user can see the dashboard card, kiosk and

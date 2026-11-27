@@ -142,49 +142,49 @@ postcode and the pin's on the building nearest it, until you pick yours.
 ## Screensaver
 
 Settings › **Screensaver** makes the map a screensaver, e.g. for a wall
-display.
+display. It's on or off for everything (every screen, every user):
 
-- **Tapping the map goes to** a dashboard of your choosing:
-  - **Nowhere**: the map stays put.
-  - **My own dashboard**: pick one, or type its path, e.g.
-    `/wall-display-2/home` for a view.
-  - **A dashboard made from my rooms**: tick the rooms (Home Assistant's
-    areas). A **Home** dashboard is made with a Home view (the clock, the
-    weather, who's in, a button for each room and one back to the map),
-    and a view for each room with its lights, switches, fans, blinds,
-    locks, media players, heating and cooling, and temperature, humidity
-    and door/window/motion sensors. It's made again each time you save,
-    so changes made to it by hand are lost: copy it (its ⋮ menu › Raw
-    configuration editor) to make your own.
-- **Save and make the dashboards** also makes a **Map** dashboard (the
-  map filling the screen, at `/neighbourhood-map/map`) and the
-  **Neighbourhood View** theme: glassy dark cards over a blue sky by day,
-  or a night sky in dark mode, the same as the map. Both made dashboards
-  use it; to use it on your own, pick it in a view's settings (Theme) or
-  your profile. Home Assistant has to read your `themes` folder: if the
-  page says it doesn't, add this to `configuration.yaml` and restart:
+- **The map is on:** the view the map's on, picked from your dashboards'
+  views (e.g. **Wall display › Map**, `/wall-display-2/map`), or **the Map
+  dashboard** the add-on makes for you (`/neighbourhood-map/map`, made only
+  when it's chosen).
+- **Tapping the map goes to:** one of your views (e.g. **Wall display ›
+  Home**), any address typed in, or **a dashboard made from my rooms**:
+  - Tick the rooms (Home Assistant's areas, shown by floor). Under each,
+    **Things** lists what's in it (lights, switches, fans, blinds, locks,
+    media players, heating and cooling, and temperature, humidity and
+    door/window/motion sensors): untick what you don't want. **↑ ↓** put
+    the rooms in order on their floor.
+  - It makes a **Home** dashboard: a Home view (the clock, the weather,
+    who's in, the rooms grouped by floor, bottom floor first, and a button
+    back to the map), and a view for each room. It's made again each time
+    you save, so changes made to it by hand are lost: copy it (its ⋮ menu ›
+    Raw configuration editor) to make your own.
+- **Back to the map after being left alone** (1 to 30 minutes): any screen
+  on another dashboard with nobody using it goes back to the map. Using it
+  (a tap, a touch, a scroll, a key, the mouse) starts the wait again, so it
+  only goes while nobody's there; a dialog left open goes too. It doesn't
+  happen while editing a dashboard, in Home Assistant's settings or on the
+  add-on's page.
 
-  ```yaml
-  frontend:
-    themes: !include_dir_merge_named themes
-  ```
+Saving also makes the **Neighbourhood View** theme: glassy dark cards over a
+blue sky by day, or a night sky in dark mode, the same as the map. The
+dashboards made here use it; to use it on your own, pick it in a view's
+settings (Theme). Home Assistant has to read your `themes` folder: if the
+page says it doesn't, add this to `configuration.yaml` and restart:
 
-- **Back to the map after being left alone** (1 to 30 minutes, or
-  never): only on devices you choose. Open the Map dashboard on that
-  device and press **🖵** on the map's buttons (it turns blue). Then,
-  wherever it's left on another dashboard, it comes back to the map after
-  that long with nobody touching it (not while editing a dashboard, or in
-  Home Assistant's settings). Press 🖵 again there to stop.
+```yaml
+frontend:
+  themes: !include_dir_merge_named themes
+```
 
-The card's own options `tap_navigate: /path` (or `''` for nowhere) and
-`idle_return: seconds` override these for that card.
+The card's own option `tap_navigate: /path` (or `''` for nowhere)
+overrides where tapping it goes.
 
-Any signed-in user can see the map, so a kiosk user's home page can be
-a view with the card on it. For example, to keep your wall display's user
-on your own dashboard: give the map a view of its own there (a panel view,
-say `/wall-display-2/map`, as the user's default page), set **Tapping the
-map goes to** your own dashboard, `/wall-display-2/home`, and press 🖵 on
-that device.
+**A kiosk wall display**, kept on your own dashboard: add the map as the
+dashboard's first view (a panel view with the card, path `map`), then in
+Settings › Screensaver choose **The map is on** › that view and **Tapping
+the map goes to** › your home view.
 
 ## The dashboard card
 
@@ -218,7 +218,6 @@ Options:
 | `weather` | A weather entity for this card, instead of the add-on's |
 | `people` | People for this card, instead of the add-on's, e.g. `[person.matt, person.jo]` |
 | `tap_navigate` | Where tapping the map goes, instead of Settings › Screensaver, e.g. `/wall-display-2/home` (`''`: nowhere) |
-| `idle_return` | Seconds left alone before a device with 🖵 on comes back to the map, instead of the add-on's |
 
 Any signed-in Home Assistant user can see the card, kiosk and other
 non-administrator users too. The add-on keeps what the card draws in a

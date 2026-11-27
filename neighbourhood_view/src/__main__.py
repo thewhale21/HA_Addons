@@ -126,6 +126,8 @@ async def card_data_loop(state: SharedState, settings: AppSettings, store: place
     """Keeps the dashboard card's map file up to date (src/card_data.py), for any user."""
     while True:
         try:
+            from src import screen as SC
+            state.extra["screensaver"] = SC.saver(settings.data.get("screen"))
             err = cd.write(card_data.payload(settings.data, store.scene, pstore.get, live.entities(link.settings)))
             state.extra["map_url"] = None if err else cd.url
             state.extra["map_file_error"] = err

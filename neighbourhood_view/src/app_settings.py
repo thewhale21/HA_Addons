@@ -20,10 +20,12 @@ DEFAULTS = {"log_level": "info", "postcode": "", "house_number": "",
             # how far round your house the map goes (m), and other places shown beside it:
             # [{"zone": "zone.work", "side": "left"|"right"|"up"|"down", "radius": m}]
             "radius": 150, "places": [],
-            # the map as a screensaver: tapping it goes to a dashboard ("none", "own": path, "ours":
-            # one made from the rooms chosen, areas), and a device left alone `idle` s comes back
-            # (0: never) (src/screen.py)
-            "screen": {"target": "none", "path": "", "idle": 120, "areas": []}}
+            # the map as a screensaver (src/screen.py), for every device and user, or not (enabled):
+            # the map's on a view (map: a path, or "" for the Map dashboard made here); tapping it
+            # goes to a view ("own": path) or a dashboard made from rooms ("ours": areas, in order,
+            # and the things ticked in each, entities {area: [entity, ...]}, all if not there); and
+            # any screen left alone `idle` s comes back to it
+            "screen": {"enabled": False, "map": "", "target": "own", "path": "", "idle": 120, "areas": [], "entities": {}}}
 SIDES = ("left", "right", "up", "down")
 MAX_PLACES = 6
 MAX_ROOMS = 30
@@ -94,29 +96,55 @@ class AppSettings:
             s = body["screen"]
             if not isinstance(s, dict):
                 raise ValueError("screen must be an object")
-            target = str(s.get("target") or "none")
-            if target not in ("none", "own", "ours"):
-                raise ValueError("Tapping the map goes to: none, own or ours")
-            path = str(s.get("path") or "").strip()
-            if target == "own":
-                if not path:
-                    raise ValueError("Choose the dashboard tapping the map goes to (e.g. /wall-display-2/home)")
-                if not path.startswith("/"):
-                    path = "/" + path
-                if not PATH_RE.match(path):
-                    raise ValueError("A dashboard's path is like /wall-display-2/home")
+            target = str(s.get("target") or "own")
+            # (before 0.14.0: target "none" was off, the others on)
+            enabled = bool(s["enabled"]) if "enabled" in s else target != "none"
+            if target == "none":
+                target = "own"
+            if target not in ("own", "ours"):
+                raise ValueError("Tapping the map goes to: own or ours")
+
+            def a_path(raw, what):
+                p = str(raw or "").strip()
+                if not p:
+                    return ""
+                if not p.startswith("/"):
+                    p = "/" + p
+                if not PATH_RE.match(p):
+                    raise ValueError(f"{what} is a dashboard view's address, like /wall-display-2/home")
+                return p.rstrip("/")
+            path = a_path(s.get("path"), "Where tapping the map goes")
+            map_at = a_path(s.get("map"), "Where the map is")
             try:
                 idle = int(float(s.get("idle", 120)))
             except (TypeError, ValueError):
                 raise ValueError("The time before coming back to the map is a number of seconds") from None
-            if idle and not 30 <= idle <= 3600:
-                raise ValueError("Back to the map after 30 s to an hour (or never)")
+            if idle == 0:
+                idle = 120  # (before 0.14.0, 0 was "never": now it's on or off as a whole)
+            if not 30 <= idle <= 3600:
+                raise ValueError("Back to the map after 30 s to an hour")
             areas = s.get("areas") or []
             if not isinstance(areas, list) or len(areas) > MAX_ROOMS or not all(isinstance(a, str) and a for a in areas):
                 raise ValueError(f"Up to {MAX_ROOMS} rooms")
-            if target == "ours" and not areas:
+            areas = list(dict.fromkeys(areas))
+            ents = s.get("entities") or {}
+            if not isinstance(ents, dict):
+                raise ValueError("entities must be {room: [entity, ...]}")
+            picked = {}
+            for area, lst in ents.items():
+                if area not in areas:
+                    continue  # (a room no longer ticked)
+                if not isinstance(lst, list) or len(lst) > 60 or not all(isinstance(e, str) and "." in e for e in lst):
+                    raise ValueError("A room's things are up to 60 entities")
+                picked[area] = list(dict.fromkeys(lst))
+            if enabled and target == "own" and not path:
+                raise ValueError("Choose where tapping the map goes (e.g. /wall-display-2/home)")
+            if enabled and target == "ours" and not areas:
                 raise ValueError("Choose at least one room for the dashboard")
-            out["screen"] = {"target": target, "path": path, "idle": idle, "areas": list(dict.fromkeys(areas))}
+            if enabled and map_at and path and map_at == path:
+                raise ValueError("Tapping the map can't go to the map's own view")
+            out["screen"] = {"enabled": enabled, "map": map_at, "target": target, "path": path, "idle": idle,
+                             "areas": areas, "entities": picked}
         if "picked" in body:
             p = body["picked"]
             if p is not None:

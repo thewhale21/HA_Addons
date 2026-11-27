@@ -27,7 +27,10 @@ REFRESH_S = 300  # everything posted again at least this often, even unchanged
 def attributes(state) -> dict:
     """Attributes that change, by the sensor's key: the status's map_url, where the dashboard card
     reads the map (src/card_data.py)."""
-    return {"status": {"map_url": (state.extra or {}).get("map_url")}}
+    x = state.extra or {}
+    # (and the screensaver: where the map is, where a tap goes, how long left alone before coming
+    # back; read by the card's file on every dashboard)
+    return {"status": {"map_url": x.get("map_url"), "screensaver": x.get("screensaver")}}
 
 
 def values(state) -> dict:

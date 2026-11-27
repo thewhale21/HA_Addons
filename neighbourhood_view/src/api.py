@@ -202,25 +202,31 @@ async def handle_zones(request: web.Request) -> web.Response:
 
 
 async def handle_get_screen(request: web.Request) -> web.Response:
-    """Settings › Screensaver: the settings, the rooms (Home Assistant's areas) and dashboards to
-    choose from, and what happened when last saved."""
+    """Settings › Screensaver: the settings; Home Assistant's floors and rooms (areas), with each
+    room's things to choose from; every dashboard's views; and what happened when last saved."""
+    from src import screen as SC
     settings, link, state = request.app["app_settings"], request.app["ha_link"], request.app["shared_state"]
     if settings is None:
         return _unavailable()
-    areas, boards, err = [], [], None
+    floors, areas, views, err = [], [], [], None
     if link is not None and link.connected:
         try:
-            areas = [{"area_id": a["area_id"], "name": a.get("name") or a["area_id"], "icon": a.get("icon")}
-                     for a in await link.query({"type": "config/area_registry/list"}) or []]
+            reg = await SC.registries(link.query)
+            floors = [{"floor_id": f.get("floor_id"), "name": f.get("name") or f.get("floor_id"), "icon": f.get("icon"), "level": f.get("level")}
+                      for f in SC.floors_in_order(reg["floors"])]
+            names = {k: ((v.get("attributes") or {}).get("friendly_name") or k) for k, v in reg["states"].items()}
+            for a in reg["areas"]:
+                found = SC.area_entities(a["area_id"], reg["entities"], reg["devices"], reg["states"])
+                areas.append({"area_id": a["area_id"], "name": a.get("name") or a["area_id"], "icon": a.get("icon"), "floor_id": a.get("floor_id"),
+                              "things": [{"entity_id": e, "name": names.get(e, e), "kind": k} for k in ("controls", "climate", "sensors") for e in found[k]]})
             areas.sort(key=lambda a: a["name"].lower())
-            boards = [{"url_path": b.get("url_path"), "title": b.get("title") or b.get("url_path")}
-                      for b in await link.query({"type": "lovelace/dashboards/list"}) or [] if b.get("url_path")]
+            views = await SC.views_list(link.query)
         except Exception as e:  # (shown on the page)
             err = f"Couldn't read Home Assistant's rooms and dashboards: {e}"
     else:
         err = "Not connected to Home Assistant"
-    return web.json_response({"screen": settings.data.get("screen"), "areas": areas, "dashboards": boards, "error": err,
-                              "result": state.extra.get("screen_result")})
+    return web.json_response({"screen": settings.data.get("screen"), "floors": floors, "areas": areas, "views": views, "error": err,
+                              "result": state.extra.get("screen_result"), "map_default": SC.MAP_PATH, "home_path": SC.HOME_PATH})
 
 
 async def handle_set_screen(request: web.Request) -> web.Response:
@@ -236,6 +242,7 @@ async def handle_set_screen(request: web.Request) -> web.Response:
     except ValueError as err:
         return _bad_request(err)
     scr = settings.data["screen"]
+    state.extra["screensaver"] = SC.saver(scr)  # (for the cards and every dashboard, straight away)
     if link is None or not link.connected:
         return web.json_response({"status": "ok", "screen": scr, "result": None,
                                   "message": "Saved. The dashboards are made when the add-on's connected to Home Assistant: save again then."})
