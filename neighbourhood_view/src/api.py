@@ -24,7 +24,7 @@ LIVE_FIELDS: set = set()
 
 
 def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_settings=None,
-                   store=None, wake=None, pstore=None) -> web.Application:
+                   store=None, wake=None, pstore=None, card_data=None) -> web.Application:
     app = web.Application()
     app["shared_state"] = shared_state  # src.shared_state.SharedState
     app["ha_link"] = ha_link  # src.ha_link.HaLink, or None
@@ -33,6 +33,7 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app["app_settings"] = app_settings  # src.app_settings.AppSettings, or None
     app["store"] = store  # src.places.SceneStore, or None
     app["pstore"] = pstore  # src.places.PlaceStore (the other places' maps), or None
+    app["card_data"] = card_data  # src.card_data.CardData: the dashboard card's map file, or None
     app["wake"] = wake  # asyncio.Event: the map maker looks again (src/__main__.py)
     app["events_stop"] = asyncio.Event()
     app["event_clients"] = {"gui": 0}
@@ -48,6 +49,7 @@ def create_api_app(shared_state, *, ha_link=None, health=None, debug=None, app_s
     app.router.add_post("/api/refresh", handle_refresh)
     app.router.add_post("/api/places", handle_places)
     app.router.add_get("/api/zones", handle_zones)
+    app.router.add_post("/api/card/token", handle_card_token)
     # Settings › Screensaver (src/screen.py)
     app.router.add_get("/api/screen", handle_get_screen)
     app.router.add_post("/api/screen", handle_set_screen)
@@ -117,24 +119,24 @@ async def handle_scene(request: web.Request) -> web.Response:
     if sc is None:
         message = state.error or ("Set your postcode and house number in the add-on's Settings."
                                   if not (settings and settings.data["postcode"]) else "Making the map…")
-    link = app["ha_link"]
+    link, pstore = app["ha_link"], app["pstore"]
+    from src.card_data import payload
     from src.live import entities
-    # (the entities the dashboard card follows itself, and what they are now, for this page)
-    ents = entities(link.settings) if link is not None else None
-    # the other places, in the order set, with their maps (once made)
-    pls = []
-    pstore = app["pstore"]
-    for pl in (settings.data.get("places") or []) if settings is not None else []:
-        psc = pstore.get(pl["zone"]) if pstore is not None else None
-        if psc:
-            pls.append({"zone": pl["zone"], "side": pl["side"], "name": psc.get("name") or pl["zone"], "scene": psc})
-    from src import screen as SC
-    scr = settings.data.get("screen") if settings is not None else {}
-    # (for the dashboard card: where a tap goes, and when a device left alone comes back)
-    scr_out = {"tap": SC.tap_path(scr), "idle": int((scr or {}).get("idle") or 0), "map": SC.MAP_PATH}
-    return web.json_response({"scene": sc, "places": pls, "message": message, "status": state.status, "entities": ents, "live": state.live,
-                              "screen": scr_out},
-                             dumps=lambda d: json.dumps(d, separators=(",", ":")))
+    # (the same as the dashboard card's file: src/card_data.py; and, for this page, what's happening now)
+    out = payload(settings.data if settings is not None else None, sc, pstore.get if pstore is not None else None,
+                  entities(link.settings) if link is not None else None)
+    out.update(message=message, status=state.status, live=state.live)
+    return web.json_response(out, dumps=lambda d: json.dumps(d, separators=(",", ":")))
+
+
+async def handle_card_token(request: web.Request) -> web.Response:
+    """A new private name for the card's map file (src/card_data.py): the old one stops working."""
+    cd = request.app["card_data"]
+    if cd is None:
+        return _unavailable()
+    cd.new_token()
+    _wake(request.app)
+    return web.json_response({"status": "ok"})
 
 
 async def handle_address(request: web.Request) -> web.Response:

@@ -52,8 +52,9 @@ on a phone, tablet or wall screen.
 - **"That postcode wasn't found":** check it on the Settings tab.
 - **"OpenStreetMap's server is busy":** it tries again in 15 minutes, or
   press **Refresh**.
-- **The card says it needs an administrator account:** it reads the map
-  through the add-on, which Home Assistant only allows administrators.
+- **The card says it's waiting for the add-on:** update the add-on to
+  0.13.0 or later and start it; it then writes the map for the card (any
+  user can see it).
 - **Asking for help:** **Diagnostics › Debug** has the log and a
   diagnostics bundle to download. Attach it to a
   [GitHub issue](https://github.com/thewhale21/HA_Addons/issues).

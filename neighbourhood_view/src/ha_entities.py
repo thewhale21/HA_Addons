@@ -24,6 +24,12 @@ ALL_SENSORS = [entity_id for entity_id, _ in SENSORS.values()]
 REFRESH_S = 300  # everything posted again at least this often, even unchanged
 
 
+def attributes(state) -> dict:
+    """Attributes that change, by the sensor's key: the status's map_url, where the dashboard card
+    reads the map (src/card_data.py)."""
+    return {"status": {"map_url": (state.extra or {}).get("map_url")}}
+
+
 def values(state) -> dict:
     """The value of each sensor (by its key in SENSORS) from the shared state."""
     return {
@@ -45,13 +51,16 @@ class SensorPublisher:
 
     def due(self, state, now: float) -> list[tuple[str, str, dict]]:
         out = []
+        extra = attributes(state)
         for key, value in values(state).items():
             entity_id, attrs = SENSORS[key]
+            attrs = {**attrs, **(extra.get(key) or {})}
             text = "unknown" if value is None else str(value)
+            sig = text + repr(sorted(attrs.items()))
             last = self._sent.get(entity_id)
-            if last is None or last[0] != text or now - last[1] >= REFRESH_S:
-                self._sent[entity_id] = (text, now)
-                out.append((entity_id, text, dict(attrs)))
+            if last is None or last[0] != sig or now - last[1] >= REFRESH_S:
+                self._sent[entity_id] = (sig, now)
+                out.append((entity_id, text, attrs))
         return out
 
     @staticmethod

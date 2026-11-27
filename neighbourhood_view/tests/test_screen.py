@@ -92,3 +92,30 @@ def test_making_the_dashboards(tmp_path):
     saves = {p["url_path"]: p["config"] for p in sent if p["type"] == "lovelace/config/save"}
     assert saves[S.MAP_URL]["views"][0]["cards"][0]["type"] == "custom:neighbourhood-view-card"
     assert saves[S.HOME_URL]["views"][1]["path"] == "lounge"
+
+
+def test_the_cards_map_file(tmp_path):
+    from src.card_data import CardData, payload
+    data, cfg = tmp_path / "data", tmp_path / "ha"
+    data.mkdir(); cfg.mkdir()
+    cd = CardData(str(data), str(cfg))
+    assert len(cd.token) >= 32 and CardData(str(data), str(cfg)).token == cd.token  # (kept)
+    body = payload({"postcode": "RG1 1AA", "places": [{"zone": "zone.work", "side": "left"}], "screen": {"target": "own", "path": "/x/home", "idle": 60}},
+                   {"postcode": "RG1 1AA", "buildings": []}, {"zone.work": {"name": "Work"}}.get, {"weather": ""})
+    assert body["places"][0]["name"] == "Work" and body["screen"] == {"tap": "/x/home", "idle": 60, "map": "/neighbourhood-map/map"}
+    assert payload({"postcode": "RG2 2BB"}, {"postcode": "RG1 1AA"}, None, None)["scene"] is None  # (the old address's)
+    assert cd.write(body) is None
+    first = cfg / "www" / "neighbourhood-view" / cd.name
+    assert first.exists() and cd.url.endswith(cd.name)
+    cd.new_token()
+    assert cd.write(body) is None and not first.exists()  # (the old name's gone)
+
+
+def test_the_status_sensor_says_where_the_map_is():
+    from src.ha_entities import SensorPublisher
+    from src.shared_state import SharedState
+    pub, state = SensorPublisher(), SharedState(status="Ready")
+    assert pub.due(state, 0)[0][2]["map_url"] is None
+    state.extra["map_url"] = "/local/neighbourhood-view/map-abc.json"
+    (eid, value, attrs), = pub.due(state, 1)
+    assert value == "Ready" and attrs["map_url"].endswith("map-abc.json")

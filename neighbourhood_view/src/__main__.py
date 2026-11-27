@@ -11,7 +11,7 @@ from typing import Optional
 import aiohttp
 from aiohttp import web
 
-from src import card_install, live, log_filters, places
+from src import card_data, card_install, live, log_filters, places
 from src.api import create_api_app
 from src.app_settings import AppSettings
 from src.config import load_config
@@ -118,6 +118,24 @@ async def map_maker(state: SharedState, settings: AppSettings, store: places.Sce
                 pass
 
 
+CARD_DATA_S = 15  # how often the card's map file is checked
+
+
+async def card_data_loop(state: SharedState, settings: AppSettings, store: places.SceneStore,
+                         pstore: places.PlaceStore, link: HaLink, cd: card_data.CardData) -> None:
+    """Keeps the dashboard card's map file up to date (src/card_data.py), for any user."""
+    while True:
+        try:
+            err = cd.write(card_data.payload(settings.data, store.scene, pstore.get, live.entities(link.settings)))
+            state.extra["map_url"] = None if err else cd.url
+            state.extra["map_file_error"] = err
+            if err:
+                logger.debug("Card map file: %s", err)
+        except Exception:
+            logger.warning("The card's map file couldn't be written", exc_info=True)
+        await asyncio.sleep(CARD_DATA_S)
+
+
 async def card_setup(state: SharedState, link: HaLink, version: str) -> None:
     """Puts the dashboard card in place and adds it to your dashboards' resources, once Home
     Assistant's connected (src/card_install.py)."""
@@ -152,6 +170,7 @@ async def run() -> None:
     store = places.SceneStore(data_dir)
     pstore = places.PlaceStore(data_dir)
     wake = asyncio.Event()
+    cdata = card_data.CardData(data_dir, card_install.HA_CONFIG)
 
     async def entity_changed(entity_id: str, st) -> None:
         """The weather, someone's home/away or the sun changed: drawn over the map."""
@@ -161,7 +180,7 @@ async def run() -> None:
     debug = DebugTools(config=config, log_buffer=log_buffer, settings=settings)
 
     app = create_api_app(state, ha_link=link, health=health, debug=debug, app_settings=settings,
-                         store=store, wake=wake, pstore=pstore)
+                         store=store, wake=wake, pstore=pstore, card_data=cdata)
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", PORT).start()
@@ -176,7 +195,8 @@ async def run() -> None:
             pass
 
     tasks = [asyncio.create_task(link.run()), asyncio.create_task(map_maker(state, settings, store, wake, pstore, link)),
-             asyncio.create_task(card_setup(state, link, health.version))]
+             asyncio.create_task(card_setup(state, link, health.version)),
+             asyncio.create_task(card_data_loop(state, settings, store, pstore, link, cdata))]
     try:
         await stop.wait()
         logger.info("Stopping")

@@ -1191,10 +1191,12 @@
         const live = liveFrom(hass.states || {}, this._ents), key = JSON.stringify(live);
         if (key !== this._liveKey) { this._liveKey = key; this._draw(); }
       }
+      // (the add-on's map file renamed or first written: read it again)
+      if (this._started && this._mapUrl() !== this._fileUrl) this._load();
       if (!this._started && hass) {
         this._started = true;
         this._load();
-        this._timer = setInterval(() => this._load(), 30 * 60000);
+        this._timer = setInterval(() => this._load(), 2 * 60000);  // (a new map, places or settings)
       }
     }
 
@@ -1311,12 +1313,41 @@
       return this._ingress;
     }
 
+    // Where the add-on keeps the map for the card: a private file any signed-in user can read
+    // (its name's on the add-on's status sensor), so kiosk and other non-admin users see it too
+    _mapUrl() {
+      if (this._config.url) return null;  // (the add-on's own address, given: read from it)
+      const st = this._hass && this._hass.states && this._hass.states[this._config.status_entity || 'sensor.neighbourhood_view_status'];
+      return (st && st.attributes && st.attributes.map_url) || null;
+    }
+
+    async _fetchData() {
+      const file = this._mapUrl();
+      if (file) {
+        // (checked with the server each time, so it's only downloaded again when it's changed)
+        const r = await fetch(file, {credentials: 'same-origin', cache: 'no-cache'});
+        if (r.ok) {
+          const text = await r.text();
+          if (text === this._lastText && this._scene) return null;  // (the same: nothing to draw again)
+          this._lastText = text;
+          return JSON.parse(text);
+        }
+        // (not there yet, e.g. just renamed: through the add-on, for administrators)
+        if (!(this._hass.user && this._hass.user.is_admin)) throw new Error(`The map couldn't be read (${r.status}): is the Neighbourhood View add-on running?`);
+      } else if (this._hass.user && this._hass.user.is_admin === false) {
+        throw new Error('Waiting for the Neighbourhood View add-on (update and start it).');
+      }
+      const base = await this._base();
+      const r = await fetch(base + 'api/scene', {credentials: 'same-origin', cache: 'no-store'});
+      if (!r.ok) throw new Error(`The add-on answered ${r.status}`);
+      return r.json();
+    }
+
     async _load() {
       try {
-        const base = await this._base();
-        const r = await fetch(base + 'api/scene', {credentials: 'same-origin', cache: 'no-store'});
-        if (!r.ok) throw new Error(`The add-on answered ${r.status}`);
-        const d = await r.json();
+        this._fileUrl = this._mapUrl();
+        const d = await this._fetchData();
+        if (!d) return;
         if (!d.scene) { this._scene = null; this._msg(d.message || 'Set your postcode and house number in the Neighbourhood View add-on.'); return; }
         this._scene = d.scene;
         this._places = d.places || [];
@@ -1333,8 +1364,7 @@
         this._liveKey = null;
         this._draw();
       } catch (e) {
-        const admin = this._hass && this._hass.user && this._hass.user.is_admin;
-        this._msg((e && e.message ? e.message : String(e)) + (admin === false ? ' (The card needs an administrator account to read the add-on.)' : ''));
+        this._msg(e && e.message ? e.message : String(e));
       }
     }
 

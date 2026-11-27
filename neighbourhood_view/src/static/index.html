@@ -411,8 +411,10 @@
     <div class="masonry">
       <div class="card">
         <h2>Dashboard card</h2>
-        <div class="note" style="margin:0 0 8px">The same drawing as a card for your dashboards. It fills the screen in a <b>panel</b> view (one card on the page), and fits phones, tablets and wall screens. <details class="more"><summary>How</summary><div> Edit a dashboard, add a view with the view type <b>Panel (single card)</b>, and give it a <b>Manual</b> card with:<pre style="margin:6px 0;white-space:pre-wrap"><code>type: custom:neighbourhood-view-card</code></pre>Optional: <code>label: HOME</code> (the pin's text; your house number by default), <code>height: 500px</code> (outside a panel view). The card reads the map from this add-on, so it needs an administrator account.</div></details></div>
+        <div class="note" style="margin:0 0 8px">The same drawing as a card for your dashboards. It fills the screen in a <b>panel</b> view (one card on the page), and fits phones, tablets and wall screens. <details class="more"><summary>How</summary><div> Edit a dashboard, add a view with the view type <b>Panel (single card)</b>, and give it a <b>Manual</b> card with:<pre style="margin:6px 0;white-space:pre-wrap"><code>type: custom:neighbourhood-view-card</code></pre>Optional: <code>label: HOME</code> (the pin's text; your house number by default), <code>height: 500px</code> (outside a panel view). Any signed-in user can see it, kiosk and other non-administrator users too.</div></details></div>
         <dl class="kv" id="s-card"></dl>
+        <div class="note" style="margin:8px 0 0">The add-on keeps the map for the card in a file in Home Assistant's <code>www</code> folder with a long, private name, which only signed-in users are told. If you think the name's got out (e.g. in a screenshot of the status sensor), make a new one: cards pick it up by themselves.</div>
+        <div class="row" style="margin-top:8px"><div class="grow note" style="margin:0" id="s-card-file"></div><button class="btn small" id="s-card-token">New private name</button></div>
       </div>
     </div>
     <label class="live" style="display:none"><input type="checkbox" id="sim-all" checked> Show all entities in the lists</label>
@@ -758,6 +760,15 @@ $('s-save').addEventListener('click', async () => {
   if (await post('address', body)) { toast(body.postcode ? 'Saved: making the map…' : 'Address cleared'); refreshAddress(); }
 });
 ['s-postcode', 's-number'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('s-save').click(); }));
+$('s-card-token').addEventListener('click', async () => {
+  if (await post('card/token')) toast('New name: cards read it in a few seconds');
+});
+setInterval(() => {
+  const x = (state || {}).extra || {};
+  const el = $('s-card-file');
+  if (el) el.innerHTML = x.map_file_error ? `<span class="chip warn">Problem</span> ${esc(x.map_file_error)}` : x.map_url ? 'Map file ready for the card' : 'Writing the map file…';
+}, 2000);
+
 // ---------- Settings › Screensaver ----------
 const nvScr = {loaded: false, dirty: false, data: null};
 async function refreshScreen() {

@@ -179,8 +179,12 @@ display.
 The card's own options `tap_navigate: /path` (or `''` for nowhere) and
 `idle_return: seconds` override these for that card.
 
-The card reads the map through the add-on, so the wall display's user
-has to be an administrator.
+Any signed-in user can see the map, so a kiosk user's home page can be
+a view with the card on it. For example, to keep your wall display's user
+on your own dashboard: give the map a view of its own there (a panel view,
+say `/wall-display-2/map`, as the user's default page), set **Tapping the
+map goes to** your own dashboard, `/wall-display-2/home`, and press 🖵 on
+that device.
 
 ## The dashboard card
 
@@ -216,9 +220,16 @@ Options:
 | `tap_navigate` | Where tapping the map goes, instead of Settings › Screensaver, e.g. `/wall-display-2/home` (`''`: nowhere) |
 | `idle_return` | Seconds left alone before a device with 🖵 on comes back to the map, instead of the add-on's |
 
-The card reads the map from the add-on through Home Assistant's ingress, as
-the add-on's page does, so it needs an **administrator** account. It reads
-it again every 30 minutes. The weather, people and day or night it follows
+Any signed-in Home Assistant user can see the card, kiosk and other
+non-administrator users too. The add-on keeps what the card draws in a
+file in Home Assistant's `www` folder with a long, private name
+(`/local/neighbourhood-view/map-….json`), and tells signed-in users the
+name in the `map_url` attribute of `sensor.neighbourhood_view_status`.
+Files in `www` are served without signing in, so the name is what keeps
+it private: **Settings › Dashboard card › New private name** makes a new
+one if you think it's got out (cards pick it up by themselves). The card
+looks for changes every 2 minutes (only downloading it when it's
+changed). The weather, people and day or night it follows
 straight from Home Assistant, as they change. The card's file has nothing about you in it.
 
 **Dashboards in YAML mode:** the add-on can't add the resource; add it to

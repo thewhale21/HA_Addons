@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.0 — The card for every user (kiosk too)
+
+- **Feature:** any signed-in user can see the dashboard card, kiosk and
+  other non-administrator users too, so the map can be a kiosk user's home
+  page. The add-on writes what the card draws to a file in Home Assistant's
+  `www` folder with a long, private name, given to signed-in users in
+  `sensor.neighbourhood_view_status`'s `map_url` attribute.
+- **Feature:** Settings › Dashboard card › **New private name** for that file.
+- **Improvement:** the card looks for a new map, places or settings every
+  2 minutes (was 30), downloading only when something's changed.
 ## 0.12.0 — The map as a screensaver
 
 - **Feature:** Settings › Screensaver: tapping the map on a dashboard goes to
