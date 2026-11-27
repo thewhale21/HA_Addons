@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.24.0 — Brick houses, and fences kept off buildings
+
+- **Feature:** Settings › Your house › **Houses round here**: mostly brick
+  (the default), mostly rendered, mostly stone, or a mix. Each house still
+  has its own shade and roof, and a few are different. With brick, some
+  flats and bigger buildings are brick too.
+- **Improvement:** brick walls look like brick: red and brown (and some
+  buff) bricks, clearer mortar courses, a darker plinth and the odd brick a
+  shade off; mostly slate or dark tiled roofs.
+- **Fix:** garden fences, walls and hedges are no longer drawn through or
+  against buildings, or on streets and footpaths: each run is checked every
+  half metre and only the clear bits are drawn (before, a 3 m piece was kept
+  if its middle was clear).
 ## 0.23.0 — Bin day from your calendar
 
 - **Feature:** a bin calendar (or a sensor) sets bin day: the bins go out

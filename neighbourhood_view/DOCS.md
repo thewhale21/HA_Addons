@@ -125,8 +125,13 @@ trees it has, drawn like a video game's town:
   tiled, slate or clay roof, gabled or hipped, its ridge running along the
   nearest street (as a terrace's or a semi's does), a chimney on some, windows
   on every storey and a front door. Where OpenStreetMap has no height, most
-  are 2 storeys, some bungalows and some 3 storeys. Brick walls show their
-  courses, some rendered ones a pebble-dash; windows have curtains half
+  are 2 storeys, some bungalows and some 3 storeys. What most of them are
+  built of is yours to choose (Settings › Your house › Houses round here:
+  mostly brick, the default, as most British houses are; mostly rendered;
+  mostly stone; or a mix), each still in its own shade with its own roof,
+  and a few different; with mostly brick, some flats and bigger buildings
+  are brick too. Brick walls show their courses, a darker plinth and the odd
+  brick a shade off, some rendered ones a pebble-dash; windows have curtains half
   drawn in some, window boxes under some, the odd cat on a sill, and at
   night a TV flickering in a few.
 - **Other buildings:** flats and offices with rows of windows, shops with

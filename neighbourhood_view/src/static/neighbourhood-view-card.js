@@ -34,7 +34,24 @@
     large: [['#eef0f2', '#cfd3d9', '#bcc2cb'], ['#f1ebe0', '#d4cab9', '#b8b0a3']],
   };
   // walls drawn as brick (mortar lines); the others rendered (a pebble-dash speckle on some)
-  const BRICK = new Set(['#c9765a', '#b9876a', '#d7a184']);
+  const BRICK_WALLS = ['#b5583c', '#a5523a', '#c06a4a', '#9c4a35', '#b96f52', '#a8614a', '#8f4a36', '#c4785a', '#d4b07a', '#c9a06a'];
+  const RENDER_WALLS = ['#f4ead2', '#f8f6f0', '#efe8dc', '#e8dcc2', '#dfe2e6', '#f1e3c4'];
+  const STONE_WALLS = ['#d8c79f', '#cdb98d', '#c2ae84', '#b0a595', '#a9a39a'];
+  const BRICK = new Set(['#c9765a', '#b9876a', '#d7a184', ...BRICK_WALLS]);
+  /* The houses round here (Settings › Your house › Houses round here): how many of each kind of
+   * wall, [brick, render, stone] out of 1, and the roofs (indexes into ROOFS: some more than once)
+   * — each still varies house to house. */
+  const HOUSE_STYLES = {
+    brick: {walls: [0.82, 0.15, 0.03], roofs: [2, 2, 5, 5, 3, 0, 4, 6]},
+    render: {walls: [0.2, 0.78, 0.02], roofs: [0, 1, 2, 5, 3, 6]},
+    stone: {walls: [0.15, 0.1, 0.75], roofs: [2, 5, 5, 3, 2]},
+    mixed: {walls: [0.4, 0.45, 0.15], roofs: [0, 1, 2, 3, 4, 5, 6]},
+  };
+  function houseLook(id) {
+    const st = HOUSE_STYLES[CTX.houses] || HOUSE_STYLES.brick, k = rnd(id, 1);
+    const set = k < st.walls[0] ? BRICK_WALLS : k < st.walls[0] + st.walls[1] ? RENDER_WALLS : STONE_WALLS;
+    return {wall: pick(set, rnd(id, 11)), roof: ROOFS[st.roofs[Math.floor(rnd(id, 2) * st.roofs.length) % st.roofs.length]]};
+  }
   const CURTAINS = ['#c0392b', '#2e86c1', '#f4d03f', '#7d3c98', '#e8daef', '#d35400', '#1e8449', '#f5f5f5'];
   const DOOR_COLS = {red: '#b3261e', blue: '#1f4e8c', green: '#1e5b3a', black: '#1d1f22', white: '#f2f2f2', yellow: '#e3b505', grey: '#5f666d', wood: '#8a5a33', purple: '#5b2a6e'};
   const GARAGE_DOORS = ['#f2f2f2', '#e7e3da', '#2f5d3a', '#244a7a', '#8a8f96', '#7a5238'];
@@ -237,8 +254,14 @@
     const at = (t, z) => V.p(p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, z);
     let s = '';
     if (brick) {
-      const col = mix(shade, '#ffffff', 0.35);
-      for (let z = 0.45; z < h - 0.15; z += 0.6) { const a = at(0.02, z), b = at(0.98, z); s += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="${col}" stroke-width=".05" opacity=".55"/>`; }
+      // (mortar courses, a darker plinth, and the odd brick a shade off)
+      const col = mix(shade, '#efe3d3', 0.45);
+      s += poly([at(0, 0), at(1, 0), at(1, 0.45), at(0, 0.45)], mix(shade, '#000000', 0.12));
+      for (let z = 0.45; z < h - 0.15; z += 0.45) { const a = at(0.01, z), b = at(0.99, z); s += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="${col}" stroke-width=".06" opacity=".7"/>`; }
+      for (let i = 0, n = Math.min(14, Math.round(len * h * 0.25)); i < n; i++) {
+        const t0 = 0.03 + 0.9 * rnd(seed, i, 65), z = 0.5 + Math.floor(rnd(i, seed, 66) * (h - 0.8) / 0.45) * 0.45, w = 0.25 / Math.max(len, 1);
+        s += poly([at(t0, z + 0.05), at(t0 + w, z + 0.05), at(t0 + w, z + 0.4), at(t0, z + 0.4)], mix(shade, rnd(seed, i, 67) < 0.5 ? '#000000' : '#ffffff', 0.12));
+      }
     } else if (rnd(seed, 1, 62) < 0.5) {
       const col = mix(shade, '#000000', 0.16), n = Math.min(24, Math.round(len * h * 0.35));
       for (let i = 0; i < n; i++) { const a = at(0.04 + 0.92 * rnd(seed, i, 63), 0.2 + (h - 0.4) * rnd(i, seed, 64)); s += `<circle cx="${f(a[0])}" cy="${f(a[1])}" r=".07" fill="${col}"/>`; }
@@ -283,9 +306,9 @@
     CTX.lit = isHome ? (CTX.homeLit ? 0.85 : 0) : (rnd(id, 40) < 0.55 ? 0.45 : 0);
     CTX.seed = id % 997;
     const storeys = Math.max(1, Math.round(h / 2.9)), sh = h / storeys;
-    const wall = isHome ? HOME.walls[0] : pick(HOUSE_WALLS, rnd(id, 1));
+    const lk = houseLook(id), wall = isHome ? HOME.walls[0] : lk.wall;
     const cols = isHome ? HOME.walls : [wall, mix(wall, '#000000', 0.16)];
-    const roof = (isHome ? HOME.roof : pick(ROOFS, rnd(id, 2))).map((c) => snowy(c, isHome ? 0.6 : 0.8));
+    const roof = (isHome ? HOME.roof : lk.roof).map((c) => snowy(c, isHome ? 0.6 : 0.8));
     const hip = rnd(id, 3) < 0.38;
     const rect = b.rect, [A, B, Cc] = rect;
     const lng = Math.hypot(B[0] - A[0], B[1] - A[1]), short = Math.hypot(Cc[0] - B[0], Cc[1] - B[1]);
@@ -443,7 +466,9 @@
     CTX.seed = id % 997;
     const lm = isHome ? null : b.lm;
     const set = isHome ? [HOME.walls[0], HOME.walls[1], HOME.flat] : lm === 'church' ? ['#e2d8c6', '#bfb29c', '#6b6f75']
-      : lm === 'school' ? ['#f0dcc4', '#d1b99f', '#8b9196'] : lm === 'pub' ? ['#f3ead6', '#d7c8a8', '#5f646b'] : pick(KIND[k] || KIND.large, rnd(id, 1));
+      : lm === 'school' ? ['#f0dcc4', '#d1b99f', '#8b9196'] : lm === 'pub' ? ['#f3ead6', '#d7c8a8', '#5f646b']
+      : ['flats', 'civic', 'large'].includes(k) && (CTX.houses || 'brick') === 'brick' && rnd(id, 3) < 0.6 ? (() => { const w = pick(BRICK_WALLS.slice(0, 8), rnd(id, 4)); return [w, mix(w, '#000000', 0.16), pick(['#7d8996', '#5f646b', '#8f939a'], rnd(id, 5))]; })()
+      : pick(KIND[k] || KIND.large, rnd(id, 1));
     const cols = [set[0], set[1]];
     const storeys = Math.max(1, Math.round(h / 3.1)), sh = h / storeys;
     const shop = lm === 'pub' ? '#2e5d3a' : k === 'commercial' && !lm ? pick(SHOPS, rnd(id, 6)) : null;
@@ -467,7 +492,8 @@
         if (storeys > 1) s += windows(V, p, q, len, 3.3, storeys - 1, (h - 3.3) / (storeys - 1), 1.4, 1.4, 3.2, lit);
         return s;
       }
-      return windows(V, p, q, len, 0, storeys, sh, k === 'flats' ? 1.4 : 1.6, 1.45, k === 'flats' ? 3.0 : 3.6, lit);
+      return (BRICK.has(set[0]) && !isHome ? wallTexture(V, p, q, len, h, mix(cols[0], cols[1], lit), true, id) : '')
+        + windows(V, p, q, len, 0, storeys, sh, k === 'flats' ? 1.4 : 1.6, 1.45, k === 'flats' ? 3.0 : 3.6, lit);
     };
     let svg = walls(V, b.p, 0, h, cols, null, deco);
     const roofCol = snowy(set[2]);
@@ -821,6 +847,28 @@
     return poly([p0, p1, q1, q0], col) + `<line x1="${f(q0[0])}" y1="${f(q0[1])}" x2="${f(q1[0])}" y2="${f(q1[1])}" stroke="${snowy('#86653f', 0.85)}" stroke-width=".14"/>`;
   }
 
+  /* A run of fence from a to b cut into pieces (each up to `most` m, so it's drawn in its place among
+   * the buildings), leaving out the bits that aren't ok(x, y) (in or right up against a building, on
+   * a street or path, off the island), looked at every half metre: [[p, q], ...]. */
+  function clearPieces(a, b, ok, most = 3) {
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L / 0.5)), at = (t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    const out = [];
+    let s = null;
+    const close = (k) => {
+      if (s === null) return;
+      const m = Math.max(1, Math.ceil((k - s) * 0.5 / most));
+      for (let j = 0; j < m; j++) out.push([at((s + (k - s) * j / m) / n), at((s + (k - s) * (j + 1) / m) / n)]);
+      s = null;
+    };
+    for (let k = 0; k < n; k++) {
+      const [mx, my] = at((k + 0.5) / n);
+      if (ok(mx, my)) { if (s === null) s = k; } else close(k);
+    }
+    close(n);
+    return out.filter(([p, q]) => Math.hypot(q[0] - p[0], q[1] - p[1]) > 0.3);
+  }
+  const nearBuilding = (inBuilding, x, y, pad = 0.4) => inBuilding(x, y) || inBuilding(x + pad, y) || inBuilding(x - pad, y) || inBuilding(x, y + pad) || inBuilding(x, y - pad);
+
   // The gardens' boundaries (scene.fences: each house's whole plot, worked out by the add-on):
   // between back gardens a fence (some a hedge), a fence or wall where one backs onto a street,
   // footpath, park..., and between front gardens a low hedge or wall or nothing (many are open).
@@ -832,13 +880,10 @@
     const depth = (id, x, y) => { const P = plots.get(id); return P ? (x - P.c[0]) * P.n[0] + (y - P.c[1]) * P.n[1] + P.hf : 1; };
     for (const F of scene.fences || []) {
       const [a, b] = F.o, h = rnd(a || 0, b || 0, 340);
+      const ok = (x, y) => on(x, y) && !nearBuilding(inBuilding, x, y) && !onRoad(x, y, 0.1);
       for (let i = 0; i < F.p.length - 1; i++) {
-        const A = F.p[i], B = F.p[i + 1], L = Math.hypot(B[0] - A[0], B[1] - A[1]), n = Math.max(1, Math.ceil(L / 3));
-        for (let k = 0; k < n; k++) {
-          const e = 0.04 / Math.max(L, 0.1), t0 = Math.max(0, k / n - e), t1 = Math.min(1, (k + 1) / n + e);
-          const p = [A[0] + (B[0] - A[0]) * t0, A[1] + (B[1] - A[1]) * t0], q = [A[0] + (B[0] - A[0]) * t1, A[1] + (B[1] - A[1]) * t1];
+        for (const [p, q] of clearPieces(F.p[i], F.p[i + 1], ok)) {
           const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
-          if (!on(p[0], p[1]) || !on(q[0], q[1]) || inBuilding(mx, my) || onRoad(mx, my, 0.1)) continue;
           const front = F.o.every((id) => depth(id, mx, my) < 0.3);
           let kind;
           if (F.k === 'street') {
@@ -1104,14 +1149,11 @@
     const thing = (x, y, svg, rad = 0.5, kerb = false) => { if (svg && clear(x, y, rad, kerb)) things.push([V.d(x, y), svg]); };
     // A fence, wall or hedge in short pieces, each drawn in its place among the buildings (in front of
     // one, behind another), and none off the island's edge or through a building
-    const run = (a, b, kind) => {  // (not used for the gardens' own boundaries: see gardenFences)
-      const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L / 4));
-      for (let i = 0; i < n; i++) {
-        const t0 = i / n, t1 = (i + 1) / n, e = 0.04 / Math.max(L, 0.1);
-        const p = [a[0] + (b[0] - a[0]) * Math.max(0, t0 - e), a[1] + (b[1] - a[1]) * Math.max(0, t0 - e)];
-        const q = [a[0] + (b[0] - a[0]) * Math.min(1, t1 + e), a[1] + (b[1] - a[1]) * Math.min(1, t1 + e)];
-        const m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-        if (on(p[0], p[1]) && on(q[0], q[1])) thing(m[0], m[1], boundary(V, p, q, kind), 0);
+    const run = (a, b, kind) => {  // (the front hedge; the gardens' own boundaries: see gardenFences)
+      const ok = (x, y) => on(x, y) && !nearBuilding(inBuilding, x, y) && !onRoad(x, y, 0.1);
+      for (const [p, q] of clearPieces(a, b, ok)) {
+        const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+        things.push([V.d(mx, my), boundary(V, p, q, kind)]);
       }
     };
     const angU = Math.atan2(P.u[1], P.u[0]), angN = Math.atan2(P.n[1], P.n[0]);
@@ -1431,6 +1473,7 @@
     CTX.energy = opts.isHome ? (live.energy || null) : null;
     CTX.home = opts.isHome ? (live.house || {}) : {};
     CTX.look = opts.isHome ? (opts.look || null) : null;
+    CTX.houses = (opts.look || {}).houses || 'brick';
     CTX.number = opts.isHome ? (scene.number || '') : '';
     CTX.temp = (live.weather || {}).temperature != null && !Number.isNaN(temp) ? (fahr ? (temp - 32) * 5 / 9 : temp) : null;
     const now = opts.date ? new Date(opts.date) : new Date();
@@ -2225,7 +2268,7 @@
     const PLACE_PINS = ['#7e57c2', '#00897b', '#f4511e', '#6d4c41', '#c2185b', '#3949ab'];
     const bySide = {left: [], right: [], up: [], down: []};
     places.forEach((pl, i) => {
-      const I = island(pl.scene, {split, rot: opts.rot, zoom: opts.zoom, live, month: opts.month, date: opts.date, motion: opts.motion, occasions: opts.occasions, isHome: false, label: String(pl.name || 'PLACE').toUpperCase(),
+      const I = island(pl.scene, {split, look: opts.look ? {houses: opts.look.houses} : null, rot: opts.rot, zoom: opts.zoom, live, month: opts.month, date: opts.date, motion: opts.motion, occasions: opts.occasions, isHome: false, label: String(pl.name || 'PLACE').toUpperCase(),
         pinColour: PLACE_PINS[i % PLACE_PINS.length], atPin: who.places[i].at, onMap: who.places[i].map});
       I.key = String(pl.zone || pl.name || i);
       (bySide[pl.side] || bySide.left).push(I);

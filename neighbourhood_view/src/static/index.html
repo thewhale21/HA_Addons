@@ -397,6 +397,8 @@
         <div class="row"><div class="grow">Door colour<div class="note" style="margin:0">Your front door's colour on the map.</div></div>
           <select id="s-door" aria-label="Door colour"><option value="">The usual</option><option value="red">Red</option><option value="blue">Blue</option><option value="green">Green</option><option value="black">Black</option><option value="white">White</option><option value="yellow">Yellow</option><option value="grey">Grey</option><option value="wood">Wood</option><option value="purple">Purple</option></select></div>
         <div class="row"><span class="grow">Your number on a plate by the door</span><label class="switch"><input type="checkbox" id="s-plate" aria-label="Your number on a plate by the door"><span></span></label></div>
+        <div class="row"><div class="grow">Houses round here<div class="note" style="margin:0">What most of the houses on the map (and your other places') are built of; each still has its own colour and roof, and a few are different.</div></div>
+          <select id="s-houses" aria-label="Houses round here"><option value="brick">Mostly brick</option><option value="render">Mostly rendered</option><option value="stone">Mostly stone</option><option value="mixed">A mix</option></select></div>
       </div>
     </div>
     <div class="section-title">Other places</div>
@@ -785,6 +787,7 @@ async function refreshAddress() {
   const lk = st.look || {};
   if (document.activeElement !== $('s-door')) $('s-door').value = lk.door || '';
   $('s-plate').checked = lk.plate !== false;
+  if (document.activeElement !== $('s-houses')) $('s-houses').value = lk.houses || 'brick';
   if (!nvPlaces.dirty) { nvPlaces.list = JSON.parse(JSON.stringify(st.places || [])); drawPlaces(); }
   drawMapStatus();
 }
@@ -805,8 +808,9 @@ $('s-save').addEventListener('click', async () => {
 });
 ['s-postcode', 's-number'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('s-save').click(); }));
 const saveLook = async () => {
-  if (await post('settings', {look: {door: $('s-door').value, plate: $('s-plate').checked}})) { toast('Saved'); loadMap(); }
+  if (await post('settings', {look: {door: $('s-door').value, plate: $('s-plate').checked, houses: $('s-houses').value}})) { toast('Saved'); loadMap(); }
 };
+$('s-houses').addEventListener('change', saveLook);
 $('s-door').addEventListener('change', saveLook);
 $('s-plate').addEventListener('change', saveLook);
 $('s-card-token').addEventListener('click', async () => {

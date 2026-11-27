@@ -44,8 +44,10 @@ DEFAULTS = {"log_level": "info", "postcode": "", "house_number": "",
             # birthdays: [{"date": "MM-DD", "name"}] (the static/neighbourhood-view-card.js occasion())
             "occasions": {k: dict(v) for k, v in OCCASIONS.items()},
             # your house on the map: its front door's colour (one of DOORS, "" for the usual) and
-            # whether it has its number on a plate by the door
-            "look": {"door": "", "plate": True}}
+            # whether it has its number on a plate by the door; and the houses round here (one of
+            # HOUSE_STYLES: mostly brick, render or stone, or a mix)
+            "look": {"door": "", "plate": True, "houses": "brick"}}
+HOUSE_STYLES = ("brick", "render", "stone", "mixed")
 DOORS = ("", "red", "blue", "green", "black", "white", "yellow", "grey", "wood", "purple")
 SIDES = ("left", "right", "up", "down")
 MAX_PLACES = 6
@@ -208,7 +210,10 @@ class AppSettings:
             door = str(lk.get("door") or "").lower()
             if door not in DOORS:
                 raise ValueError("The door's colour must be one of: " + ", ".join(d for d in DOORS if d))
-            out["look"] = {"door": door, "plate": bool(lk.get("plate", True))}
+            houses = str(lk.get("houses") or "brick").lower()
+            if houses not in HOUSE_STYLES:
+                raise ValueError("The houses must be one of: " + ", ".join(HOUSE_STYLES))
+            out["look"] = {"door": door, "plate": bool(lk.get("plate", True)), "houses": houses}
         if "picked" in body:
             p = body["picked"]
             if p is not None:

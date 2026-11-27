@@ -210,8 +210,10 @@ def test_bins_from_a_calendar_or_sensor():
 def test_your_houses_look():
     from src.app_settings import AppSettings
     s = AppSettings()
-    assert s.data["look"] == {"door": "", "plate": True}
-    s.update({"look": {"door": "Red", "plate": False}})
-    assert s.data["look"] == {"door": "red", "plate": False}
+    assert s.data["look"] == {"door": "", "plate": True, "houses": "brick"}
+    s.update({"look": {"door": "Red", "plate": False, "houses": "Stone"}})
+    assert s.data["look"] == {"door": "red", "plate": False, "houses": "stone"}
+    with pytest.raises(ValueError):
+        s.update({"look": {"houses": "igloo"}})
     with pytest.raises(ValueError):
         s.update({"look": {"door": "tartan"}})
