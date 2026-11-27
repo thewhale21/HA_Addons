@@ -119,7 +119,7 @@ def test_the_saved_map(tmp_path):
     store = SceneStore(str(tmp_path))
     assert not store.fits("RG41 2AB", "12")
     now = datetime.datetime.now(datetime.timezone.utc)
-    sc = {"postcode": "RG41 2AB", "number": "12", "made": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "home": {"found": "address", "id": 3}, "half": 150}
+    sc = {"postcode": "RG41 2AB", "number": "12", "made": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "home": {"found": "address", "id": 3}, "half": 150, "v": S.SCENE_V}
     store.save(sc)
     assert SceneStore(str(tmp_path)).fits("RG41 2AB", "12")
     assert not store.fits("RG41 2AB", "14") and not store.fits("RG41 2AB", "12", {"id": 3})
@@ -205,8 +205,35 @@ def test_other_places_settings_and_store(tmp_path):
             s.update(bad)
     store = PlaceStore(str(tmp_path))
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    store.put("zone.work", {"lat": 51.5, "lon": -0.9, "half": 80, "made": now})
+    store.put("zone.work", {"lat": 51.5, "lon": -0.9, "half": 80, "made": now, "v": S.SCENE_V})
     again = PlaceStore(str(tmp_path))
     assert again.fits("zone.work", 51.5, -0.9, 80) and not again.fits("zone.work", 51.5, -0.9, 120)
     again.keep_only(["zone.gym"])
     assert PlaceStore(str(tmp_path)).get("zone.work") is None
+
+
+def test_gardens_landmarks_and_street_furniture():
+    sc = S.build_scene(sample(), LAT0, LON0)
+    assert sc["v"] == S.SCENE_V
+    # a house on a street: its garden's front faces the street, its back runs half way to the row behind
+    p = next(p for p in sc["plots"] if p["c"] == [20.0, -64.0])
+    assert p["n"] == [0.0, 1.0] or p["n"] == [-0.0, 1.0]  # (the street's at y -80: the back's north)
+    assert p["hl"] == 4.0 and 4 <= p["w"] <= 8 and 4 < p["f"] < 5 and p["b"] == S.GARDEN_NONE
+    # gardens stop short of a street behind them
+    for q in sc["plots"]:
+        cx, cy = q["c"]
+        ex, ey = cx + q["n"][0] * (q["hb"] + q["b"]), cy + q["n"][1] * (q["hb"] + q["b"])
+        for r in sc["roads"]:
+            if r["k"] == "path":
+                continue
+            for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
+                vx, vy = x2 - x1, y2 - y1
+                t = max(0, min(1, ((ex - x1) * vx + (ey - y1) * vy) / ((vx * vx + vy * vy) or 1)))
+                assert math.hypot(x1 + vx * t - ex, y1 + vy * t - ey) > r["w"] / 2 - 0.5
+    lms = {b.get("lm") for b in sc["buildings"]}
+    assert {"church", "school", "pub"} <= lms
+    pub = next(b for b in sc["buildings"] if b.get("lm") == "pub")
+    assert pub["k"] == "commercial" and pub["r"] == "flat"  # (mapped as a point in a plain building)
+    assert sorted(k for _, _, k in sc["poi"]) == ["bench", "bus_stop", "post_box"]
+    assert S.landmark({"amenity": "place_of_worship", "religion": "muslim"}) is None
+    assert S.landmark({"building": "chapel"}) == "church"

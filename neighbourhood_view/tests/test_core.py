@@ -129,7 +129,8 @@ def test_page_polling_is_kept_out_of_the_log():
 def test_whats_happening_now():
     from src.live import compute, entities
     settings = {"weather_entity": "weather.home", "person_1": "person.matt", "person_3": "person.jo_bloggs", "person_2": ""}
-    assert entities(settings) == {"weather": "weather.home", "people": ["person.matt", "person.jo_bloggs"], "sun": "sun.sun"}
+    assert entities(settings) == {"weather": "weather.home", "people": ["person.matt", "person.jo_bloggs"], "sun": "sun.sun",
+                                  "energy": {"solar": "", "car": "", "heat": ""}}
     states = {
         "sun.sun": {"state": "below_horizon"},
         "weather.home": {"state": "rainy", "attributes": {"temperature": 9.4, "temperature_unit": "°C"}},
@@ -140,3 +141,18 @@ def test_whats_happening_now():
     assert live["night"] is True and live["weather"] == {"entity": "weather.home", "state": "rainy", "temperature": 9.4, "unit": "°C"}
     assert [(p["name"], p["initials"], p["home"], p["state"]) for p in live["people"]] == [("Matt Lee", "ML", True, "home"), ("Jo Bloggs", "JB", False, "Work")]
     assert compute({}, {})["night"] is None and compute({}, {})["weather"] is None
+    assert live["sun"] is None and live["energy"] == {"solar": None, "car": False, "charging": False, "heat": None}
+
+
+def test_the_sun_and_your_energy():
+    from src.live import active, compute
+    settings = {"solar_entity": "sensor.pv", "car_entity": "binary_sensor.ev", "heat_pump_entity": "climate.hp"}
+    states = {"sun.sun": {"state": "above_horizon", "attributes": {"azimuth": 213.4, "elevation": 7.6}},
+              "sensor.pv": {"state": "1.4", "attributes": {"unit_of_measurement": "kW"}},
+              "binary_sensor.ev": {"state": "off"},
+              "climate.hp": {"state": "heat", "attributes": {"hvac_action": "idle"}}}
+    live = compute(settings, states)
+    assert live["sun"] == {"az": 215, "el": 8}
+    assert live["energy"] == {"solar": True, "car": True, "charging": False, "heat": False}  # (in heat mode, but idle)
+    assert not active({"state": "12", "attributes": {"unit_of_measurement": "W"}}) and active({"state": "350"})
+    assert active({"state": "idle", "attributes": {"hvac_action": "heating"}}) and not active({"state": "unavailable"})

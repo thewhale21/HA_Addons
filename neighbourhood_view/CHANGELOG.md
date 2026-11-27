@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.15.0 — A living neighbourhood
+
+- **Feature:** gardens: front paths, driveways (with cars, some to a garage),
+  hedges and low walls; at the back fences or hedges between gardens,
+  patios, conservatories, sheds, trampolines, washing lines, bushes and
+  flower beds.
+- **Feature:** parks and playing fields mown in stripes, reeds round ponds,
+  ducks on them, and a waterfall where a river runs off the edge.
+- **Feature:** street furniture: OpenStreetMap's bus stops, benches, post
+  boxes and bins, plus benches along footpaths and post boxes at corners.
+- **Feature:** traffic: cars and a bus driving the streets, the odd train;
+  people walking the pavements, some with a dog (fewer at night or in the
+  rain). Card option `motion: false` keeps it still.
+- **Feature:** Settings › On the map › **Your house**: solar panels on your
+  roof (glinting while producing), your car on the drive (glowing while
+  charging) and a heat pump (puffing while running), each from an entity.
+- **Feature:** skylights, dormers and satellite dishes on other houses.
+- **Feature:** the real sun: shadows from where it is (long in the evening),
+  and a golden light near sunrise and sunset.
+- **Feature:** landmarks: churches with a spire, schools with a flag and a
+  playground, pubs with a sign and picnic benches.
+- **Feature:** occasions: Christmas lights in December, pumpkins at
+  Halloween, fireworks on Bonfire Night and New Year.
+- **Change:** maps are made again once after updating, to add the gardens,
+  landmarks and street furniture.
 ## 0.14.1 — Which dashboard is which
 
 - **Fix:** Settings › Screensaver lists each view with its address (e.g.

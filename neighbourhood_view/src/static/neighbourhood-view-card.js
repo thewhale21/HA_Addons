@@ -269,18 +269,66 @@
       }
     }
     // (the chimney drawn before the roof if it's behind the ridge from here, after it if in front)
-    svg += r.svg + chim;
+    svg += r.svg + roofBits(V, b, rect, h, rh, r, isHome, cols, roof) + chim;
     return {svg, top: r.top};
+  }
+
+  /* On the roof face that faces you: your solar panels (glinting while they produce), others'
+   * skylights, dormers and satellite dishes; Christmas lights along the eaves in December */
+  function roofBits(V, b, rect, h, rh, r, isHome, cols, roof) {
+    const [A, B, Cc, D] = rect, id = b.id || 0;
+    const [, aw] = V.n(B[1] - A[1], -(B[0] - A[0]));
+    // (the face's eave P0→P1 and its ridge Q0→Q1)
+    const [P0, P1, Q0, Q1] = aw < 0 ? [A, B, r.Ra, r.Rb] : [Cc, D, r.Rb, r.Ra];
+    const FP = (tt, u, dz = 0) => {
+      const ex = P0[0] + (P1[0] - P0[0]) * tt, ey = P0[1] + (P1[1] - P0[1]) * tt, rx = Q0[0] + (Q1[0] - Q0[0]) * tt, ry = Q0[1] + (Q1[1] - Q0[1]) * tt;
+      return V.p(ex + (rx - ex) * u, ey + (ry - ey) * u, h + rh * u + dz);
+    };
+    const quad = (t0, t1, u0, u1, dz = 0.05) => [FP(t0, u0, dz), FP(t1, u0, dz), FP(t1, u1, dz), FP(t0, u1, dz)];
+    const len = Math.hypot(P1[0] - P0[0], P1[1] - P0[1]);
+    let s = '';
+    if (isHome && CTX.energy && CTX.energy.solar !== null && CTX.energy.solar !== undefined) {
+      s += poly(quad(0.1, 0.9, 0.12, 0.8), '#1f3558', ' stroke="#9bb6d8" stroke-width=".12"');
+      for (let k = 1; k < 5; k++) { const a = FP(0.1 + 0.16 * k, 0.12, 0.06), c = FP(0.1 + 0.16 * k, 0.8, 0.06); s += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(c[0])}" y2="${f(c[1])}" stroke="#5c7fa8" stroke-width=".06"/>`; }
+      { const a = FP(0.1, 0.46, 0.06), c = FP(0.9, 0.46, 0.06); s += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(c[0])}" y2="${f(c[1])}" stroke="#5c7fa8" stroke-width=".06"/>`; }
+      if (CTX.energy.solar && !CTX.night) s += poly(quad(0.1, 0.9, 0.12, 0.8, 0.07), '#ffffff', ' opacity="0"').replace('/>', '><animate attributeName="opacity" values="0;0;.55;0" keyTimes="0;.6;.75;1" dur="4s" repeatCount="indefinite"/></polygon>');
+    } else if (!isHome) {
+      if (rnd(id, 31) < 0.22) s += poly(quad(0.28, 0.4, 0.3, 0.62), '#3d5a78', ' stroke="#e0e0e0" stroke-width=".1"');
+      if (rnd(id, 32) < 0.14 && rh >= 2.2 && len > 6) {
+        // a dormer: a little wall with a window, and its roof back to the slope
+        const zt = h + rh * 0.78, base = (tt) => FP(tt, 0.18), up = (tt) => { const q = base(tt); return [q[0], q[1] - (zt - (h + rh * 0.18)) * CE]; };
+        s += poly([base(0.4), base(0.6), up(0.6), up(0.4)], cols[0], ` stroke="${mix(cols[0], '#000000', 0.15)}" stroke-width=".1"`);
+        const wi = (tt, k) => { const a = base(tt), c = up(tt); return [a[0] + (c[0] - a[0]) * k, a[1] + (c[1] - a[1]) * k]; };
+        s += poly([wi(0.44, 0.2), wi(0.56, 0.2), wi(0.56, 0.75), wi(0.44, 0.75)], CTX.night && rnd(id, 33) < 0.5 ? LIGHT : C.glass);
+        s += poly([up(0.38), up(0.62), FP(0.62, 0.78), FP(0.38, 0.78)], roof[1]);
+      }
+      if (rnd(id, 34) < 0.1) {
+        const a = FP(0.86, 0.5, 0.3), c = FP(0.86, 0.5);
+        s += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(c[0])}" y2="${f(c[1])}" stroke="#9aa0a6" stroke-width=".08"/><ellipse cx="${f(a[0])}" cy="${f(a[1])}" rx=".45" ry=".38" fill="#d3d7db" stroke="#9aa0a6" stroke-width=".06"/>`;
+      }
+    }
+    if (CTX.occ && CTX.occ.xmas && (isHome || rnd(id, 35) < 0.4)) {
+      // lights along the eaves (twinkling at night)
+      const n = Math.max(3, Math.floor(len / 0.6));
+      for (let k = 0; k <= n; k++) {
+        const q = FP(k / n, 0, -0.1), col = XMAS[(k + id) % 4];
+        s += `<circle cx="${f(q[0])}" cy="${f(q[1])}" r="${CTX.night ? '.2' : '.14'}" fill="${col}"${CTX.night && k % 3 === 0 ? `><animate attributeName="opacity" values="1;.25;1" dur="${(1 + rnd(id, k, 36)).toFixed(1)}s" repeatCount="indefinite"/></circle>` : '/>'}`;
+      }
+      if (CTX.night) { const m = FP(0.5, 0, -0.1); s += `<ellipse cx="${f(m[0])}" cy="${f(m[1])}" rx="${f(len * 0.6)}" ry="1.4" fill="rgb(255,200,120)" opacity=".12"/>`; }
+    }
+    return s;
   }
 
   function block(V, b, isHome) {
     const id = b.id || 0, h = b.h || 8, k = b.k;
     CTX.lit = isHome ? (CTX.homeLit ? 0.85 : 0) : k === 'industrial' ? 0.1 : k === 'flats' ? 0.5 : 0.3;
     CTX.seed = id % 997;
-    const set = isHome ? [HOME.walls[0], HOME.walls[1], HOME.flat] : pick(KIND[k] || KIND.large, rnd(id, 1));
+    const lm = isHome ? null : b.lm;
+    const set = isHome ? [HOME.walls[0], HOME.walls[1], HOME.flat] : lm === 'church' ? ['#e2d8c6', '#bfb29c', '#6b6f75']
+      : lm === 'school' ? ['#f0dcc4', '#d1b99f', '#8b9196'] : lm === 'pub' ? ['#f3ead6', '#d7c8a8', '#5f646b'] : pick(KIND[k] || KIND.large, rnd(id, 1));
     const cols = [set[0], set[1]];
     const storeys = Math.max(1, Math.round(h / 3.1)), sh = h / storeys;
-    const shop = k === 'commercial' ? pick(SHOPS, rnd(id, 6)) : null;
+    const shop = lm === 'pub' ? '#2e5d3a' : k === 'commercial' && !lm ? pick(SHOPS, rnd(id, 6)) : null;
     const deco = (p, q, len, lit) => {
       if (k === 'small') return '';
       if (k === 'industrial') return windows(V, p, q, len, h * 0.62, 1, h * 0.3, 2.4, 0.9, 6, lit);
@@ -297,11 +345,50 @@
     svg += poly(b.p.map(([x, y]) => V.p(x, y, h)), roofCol, ` stroke="${mix(roofCol, '#000000', 0.22)}" stroke-width=".9" stroke-linejoin="round"`);
     // things on the roof: an air conditioning unit or a stair tower on some bigger ones
     const [cx, cy] = centroid(b.p);
-    if (k !== 'small' && Math.abs(b.p.length) && rnd(id, 7) < 0.55) {
+    if (lm) svg += landmarkBits(V, b, h, lm, cx, cy);
+    else if (k !== 'small' && Math.abs(b.p.length) && rnd(id, 7) < 0.55) {
       const ang = Math.atan2(b.p[1][1] - b.p[0][1], b.p[1][0] - b.p[0][0]);
       svg += box(V, cx + (rnd(id, 8) - 0.5) * 3, cy + (rnd(id, 9) - 0.5) * 3, ang, 2.6, 1.8, h, h + 1.3, ['#e9ecef', '#c3c8ce'], '#d5d9de');
     }
     return {svg, top: V.p(cx, cy, h + 1.3)};
+  }
+
+  /* A church's tower and spire, a school's flag, a pub's hanging sign and picnic benches */
+  function landmarkBits(V, b, h, lm, cx, cy) {
+    const [vx, vy] = b.p[0], [wx, wy] = b.p[1];
+    let s = '';
+    if (lm === 'church') {
+      const tx = cx + (vx - cx) * 0.62, ty = cy + (vy - cy) * 0.62, ang = Math.atan2(wy - vy, wx - vx), T = 4.2, tz = h + 6, sz = tz + 11;
+      s += box(V, tx, ty, ang, T, T, 0, tz, ['#e2d8c6', '#bfb29c'], '#c9bda8');
+      const c = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, bb]) => [tx + (Math.cos(ang) * a - Math.sin(ang) * bb) * T / 2, ty + (Math.sin(ang) * a + Math.cos(ang) * bb) * T / 2]);
+      const apex = V.p(tx, ty, sz), faces = [];
+      for (let i = 0; i < 4; i++) {
+        const p = c[i], q = c[(i + 1) % 4], [, aw] = V.n(q[1] - p[1], -(q[0] - p[0]));
+        if (aw < 0) faces.push(poly([V.p(p[0], p[1], tz), V.p(q[0], q[1], tz), apex], mix('#6b6f75', '#3e4248', shadeOf(V, q[1] - p[1], -(q[0] - p[0])))));
+      }
+      s += faces.join('') + `<line x1="${f(apex[0])}" y1="${f(apex[1])}" x2="${f(apex[0])}" y2="${f(apex[1] - 2.2)}" stroke="#d4af37" stroke-width=".22"/><line x1="${f(apex[0] - 0.7)}" y1="${f(apex[1] - 1.5)}" x2="${f(apex[0] + 0.7)}" y2="${f(apex[1] - 1.5)}" stroke="#d4af37" stroke-width=".22"/>`;
+      const cl = V.p(tx, ty, tz - 1.6);
+      s += `<circle cx="${f(cl[0])}" cy="${f(cl[1])}" r=".75" fill="#f5f0e0" stroke="#3e4248" stroke-width=".1"/>`;
+    } else if (lm === 'school') {
+      const a = V.p(wx, wy, h), top = V.p(wx, wy, h + 6);
+      const flag = (k) => `M${f(top[0])} ${f(top[1])}q1.2 ${k} 2.6 0v1.6q-1.4 ${-k} -2.6 0z`;
+      s += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(top[0])}" y2="${f(top[1])}" stroke="#9aa0a6" stroke-width=".14"/>`
+        + `<path d="${flag(0.5)}" fill="#1e88e5"><animate attributeName="d" values="${flag(0.5)};${flag(-0.5)};${flag(0.5)}" dur="1.6s" repeatCount="indefinite"/></path>`;
+    } else if (lm === 'pub') {
+      // the sign, on a bracket off the corner
+      const L = Math.hypot(wx - vx, wy - vy) || 1, nx = (wy - vy) / L, ny = -(wx - vx) / L;
+      const bx = vx + (wx - vx) / L * 1.2 + nx * 1.1, by = vy + (wy - vy) / L * 1.2 + ny * 1.1;
+      const w0 = V.p(vx + (wx - vx) / L * 1.2, vy + (wy - vy) / L * 1.2, 4.2), arm = V.p(bx, by, 4.2), b0 = V.p(bx, by, 4.1), b1 = V.p(bx, by, 2.9);
+      s += `<line x1="${f(w0[0])}" y1="${f(w0[1])}" x2="${f(arm[0])}" y2="${f(arm[1])}" stroke="#2b2b2b" stroke-width=".14"/>`
+        + `<rect x="${f(b0[0] - 0.55)}" y="${f(b0[1])}" width="1.1" height="${f(b1[1] - b0[1])}" fill="#7a1f1f" stroke="#e2b547" stroke-width=".12"/>`
+        + `<circle cx="${f(b0[0])}" cy="${f((b0[1] + b1[1]) / 2)}" r=".25" fill="#e2b547"/>`;
+      for (let k = 0; k < 2; k++) {
+        const px = vx + (wx - vx) / L * (3 + k * 3.2) + nx * 3, py = vy + (wy - vy) / L * (3 + k * 3.2) + ny * 3, ang = Math.atan2(wy - vy, wx - vx);
+        s += box(V, px, py, ang, 1.8, 0.8, 0.65, 0.75, ['#a07a52', '#7b5c3e'], '#b08a5f') + box(V, px + nx * 0.75, py + ny * 0.75, ang, 1.8, 0.3, 0.38, 0.45, ['#a07a52', '#7b5c3e'], '#b08a5f')
+          + box(V, px - nx * 0.75, py - ny * 0.75, ang, 1.8, 0.3, 0.38, 0.45, ['#a07a52', '#7b5c3e'], '#b08a5f');
+      }
+    }
+    return s;
   }
 
   function building(V, b, isHome) {
@@ -425,6 +512,303 @@
     return {svg: `<g><animateTransform attributeName="transform" type="translate" values="0 0;0 -${amp};0 0" dur="${d}s" repeatCount="indefinite"/>${faces.map((x) => x[1]).join('')}${top}</g>`, low: tip[1]};
   }
 
+  // ---------- the details: gardens, street life, landmarks, your house's energy, occasions ----------
+  // (bright colours as rgb(): the night tint only darkens #rrggbb ones, so these stay lit)
+  const XMAS = ['rgb(255,70,70)', 'rgb(80,220,110)', 'rgb(90,150,255)', 'rgb(255,210,80)'];
+  const FLOWERS = ['#e84a6f', '#f6c945', '#ffffff', '#b46ee0', '#ff8c42', '#e8566c'];
+  const CLOTHES = ['#e53935', '#1e88e5', '#fdd835', '#ffffff', '#43a047', '#8e24aa'];
+  const SKIN = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
+  const TOPS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#6d4c41', '#37474f', '#eeeeee', '#8e24aa', '#ff7043'];
+
+  // What's on today: Christmas lights (December to Twelfth Night), pumpkins (the week to Halloween),
+  // fireworks (Bonfire Night, New Year's Eve and Day)
+  function occasion(d) {
+    const m = d.getMonth() + 1, day = d.getDate();
+    return {xmas: m === 12 || (m === 1 && day <= 6), halloween: m === 10 && day >= 24,
+      fireworks: (m === 11 && day >= 4 && day <= 6) || (m === 12 && day === 31) || (m === 1 && day === 1)};
+  }
+
+  // Where shadows fall from the real sun (Home Assistant's sun: azimuth, elevation), per metre of height
+  function shadowVec(sun) {
+    if (!sun || sun.el == null || sun.az == null || sun.el < 1) return null;
+    const az = sun.az * Math.PI / 180, k = Math.min(3.5, 1 / Math.tan(Math.max(sun.el, 4) * Math.PI / 180));
+    return [-Math.sin(az) * k, -Math.cos(az) * k];
+  }
+
+  const plen = (p) => p.reduce((s, q, i) => (i ? s + Math.hypot(q[0] - p[i - 1][0], q[1] - p[i - 1][1]) : 0), 0);
+  // A polyline moved sideways by d metres (+: to the left of its way)
+  function offsetLine(p, d) {
+    return p.map((q, i) => {
+      const a = p[Math.max(0, i - 1)], b = p[Math.min(p.length - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      return [q[0] - (b[1] - a[1]) / L * d, q[1] + (b[0] - a[0]) / L * d];
+    });
+  }
+  // The stretch of a polyline from s0 to s1 metres along it
+  function stretch(p, s0, s1) {
+    const out = [];
+    let acc = 0;
+    for (let i = 0; i < p.length - 1; i++) {
+      const [ax, ay] = p[i], [bx, by] = p[i + 1], L = Math.hypot(bx - ax, by - ay);
+      const at = (s) => [ax + (bx - ax) * (s - acc) / L, ay + (by - ay) * (s - acc) / L];
+      if (L && acc + L >= s0 && acc <= s1) {
+        if (!out.length) out.push(at(Math.max(s0, acc)));
+        out.push(at(Math.min(s1, acc + L)));
+      }
+      acc += L;
+    }
+    return out;
+  }
+  const spath = (V, p) => line(V, p);
+
+  // A point in a house's plot: s metres from its middle away from the street, l along the street
+  const PW = (P, s, l) => [P.c[0] + P.n[0] * s + P.u[0] * l, P.c[1] + P.n[1] * s + P.u[1] * l];
+  const plotQuad = (V, P, s0, s1, l0, l1) => [PW(P, s0, l0), PW(P, s0, l1), PW(P, s1, l1), PW(P, s1, l0)].map(([x, y]) => V.p(x, y, 0));
+
+  // A run of fence, low wall or hedge from a to b
+  function boundary(V, a, b, kind) {
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (L < 0.5) return '';
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2;
+    if (kind === 'hedge') return box(V, cx, cy, ang, L, 0.8, 0, 1.15, [snowy('#4f8f3a', 0.7), snowy('#3b6f2c', 0.7)], snowy('#5fa344', 0.85));
+    if (kind === 'wall') return box(V, cx, cy, ang, L, 0.3, 0, 0.7, ['#b5654a', '#8f4e3a'], snowy('#c9b9a5', 0.85));
+    return box(V, cx, cy, ang, L, 0.08, 0, 1.3, ['#b48d63', '#94704c'], snowy('#86653f', 0.85));
+  }
+
+  // A bed of flowers (bare soil in winter) on the quad q (world points)
+  function flowerBed(V, q, seed) {
+    let s = poly(q.map(([x, y]) => V.p(x, y, 0)), snowy('#8a6a4a', 0.85));
+    if (CTX.season === 'winter' || CTX.snow) return s;
+    const n = CTX.season === 'autumn' ? 4 : 10;
+    for (let i = 0; i < n; i++) {
+      const a = rnd(seed, i, 320), b = rnd(i, seed, 321);
+      const x = q[0][0] + (q[1][0] - q[0][0]) * a + (q[3][0] - q[0][0]) * b, y = q[0][1] + (q[1][1] - q[0][1]) * a + (q[3][1] - q[0][1]) * b;
+      const p = V.p(x, y, 0.25);
+      s += `<circle cx="${f(p[0])}" cy="${f(p[1])}" r=".28" fill="${pick(FLOWERS, rnd(seed, i, 322))}"/>`;
+    }
+    return s;
+  }
+
+  function bush(V, x, y, s, seed) {
+    const g = pick(GREENS, rnd(x, y, 330)).map((c) => snowy(c, 0.45)), r = 0.9 * s, c = V.p(x, y, r * 0.7);
+    return `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="${f(r)}" fill="${g[1]}"/><circle cx="${f(c[0] - r * 0.25)}" cy="${f(c[1] - r * 0.25)}" r="${f(r * 0.65)}" fill="${g[0]}"/>`;
+  }
+
+  function trampoline(V, x, y) {
+    const g = V.p(x, y, 0), t = V.p(x, y, 0.8);
+    return `<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="1.9" ry="${f(1.9 * SE)}" fill="#000000" opacity=".15"/>`
+      + `<line x1="${f(g[0] - 1.4)}" y1="${f(g[1])}" x2="${f(t[0] - 1.4)}" y2="${f(t[1])}" stroke="#5f6670" stroke-width=".15"/><line x1="${f(g[0] + 1.4)}" y1="${f(g[1])}" x2="${f(t[0] + 1.4)}" y2="${f(t[1])}" stroke="#5f6670" stroke-width=".15"/>`
+      + `<ellipse cx="${f(t[0])}" cy="${f(t[1])}" rx="1.8" ry="${f(1.8 * SE)}" fill="#2f7de1"/><ellipse cx="${f(t[0])}" cy="${f(t[1])}" rx="1.45" ry="${f(1.45 * SE)}" fill="#22252b"/>`;
+  }
+
+  function washingLine(V, a, b, seed) {
+    const a0 = V.p(a[0], a[1], 0), a1 = V.p(a[0], a[1], 1.9), b0 = V.p(b[0], b[1], 0), b1 = V.p(b[0], b[1], 1.9);
+    let s = `<line x1="${f(a0[0])}" y1="${f(a0[1])}" x2="${f(a1[0])}" y2="${f(a1[1])}" stroke="#8d939b" stroke-width=".14"/><line x1="${f(b0[0])}" y1="${f(b0[1])}" x2="${f(b1[0])}" y2="${f(b1[1])}" stroke="#8d939b" stroke-width=".14"/>`
+      + `<line x1="${f(a1[0])}" y1="${f(a1[1])}" x2="${f(b1[0])}" y2="${f(b1[1])}" stroke="#e0e0e0" stroke-width=".06"/>`;
+    if (CTX.wet || CTX.night) return s;  // (brought in)
+    for (let i = 1; i <= 4; i++) {
+      const t = i / 5, x = a1[0] + (b1[0] - a1[0]) * t, y = a1[1] + (b1[1] - a1[1]) * t;
+      s += `<rect x="${f(x - 0.28)}" y="${f(y)}" width=".56" height="${f(0.55 + rnd(seed, i, 340) * 0.35)}" fill="${pick(CLOTHES, rnd(seed, i, 341))}"/>`;
+    }
+    return s;
+  }
+
+  function pumpkin(V, x, y) {
+    const c = V.p(x, y, 0.35);
+    let s = `<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".5" ry=".4" fill="#f28c28"/><rect x="${f(c[0] - 0.06)}" y="${f(c[1] - 0.55)}" width=".12" height=".2" fill="#4e7a2a"/>`;
+    // (its face lit at night)
+    const lit = CTX.night ? 'rgb(255,220,90)' : '#5a3410';
+    s += `<path d="M${f(c[0] - 0.3)} ${f(c[1] - 0.08)}l.12 -.12l.1 .12zM${f(c[0] + 0.1)} ${f(c[1] - 0.08)}l.12 -.12l.1 .12zM${f(c[0] - 0.25)} ${f(c[1] + 0.1)}h.5l-.1 .12h-.3z" fill="${lit}"/>`;
+    if (CTX.night) s += `<circle cx="${f(c[0])}" cy="${f(c[1])}" r="1.3" fill="rgb(255,170,60)" opacity=".25"/>`;
+    return s;
+  }
+
+  // Your house's energy: the car charging (a glow and a bolt), the heat pump (puffs when running)
+  function chargeGlow(V, x, y) {
+    const g = V.p(x, y, 0), t = V.p(x, y, 3.2);
+    return `<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="3.6" ry="${f(3.6 * SE)}" fill="rgb(80,200,255)" opacity=".3"><animate attributeName="opacity" values=".15;.45;.15" dur="2s" repeatCount="indefinite"/></ellipse>`
+      + `<path d="M${f(t[0] + 0.2)} ${f(t[1] - 1)}l-.75 1.05h.55l-.3 .95l.95 -1.25h-.6z" fill="rgb(120,235,255)" stroke="rgb(20,90,140)" stroke-width=".08"><animate attributeName="opacity" values=".5;1;.5" dur="2s" repeatCount="indefinite"/></path>`;
+  }
+
+  function heatPump(V, x, y, ang, running) {
+    let s = box(V, x, y, ang, 1.1, 0.45, 0, 0.95, ['#eceef1', '#c4c9cf'], '#dde1e5');
+    const c = V.p(x, y, 0.5);
+    s += `<circle cx="${f(c[0])}" cy="${f(c[1])}" r=".32" fill="#5d636b"/>`;
+    if (running) {
+      s += `<g><animateTransform attributeName="transform" type="rotate" from="0 ${f(c[0])} ${f(c[1])}" to="360 ${f(c[0])} ${f(c[1])}" dur=".8s" repeatCount="indefinite"/>`
+        + `<line x1="${f(c[0] - 0.28)}" y1="${f(c[1])}" x2="${f(c[0] + 0.28)}" y2="${f(c[1])}" stroke="#c9ced4" stroke-width=".1"/><line x1="${f(c[0])}" y1="${f(c[1] - 0.28)}" x2="${f(c[0])}" y2="${f(c[1] + 0.28)}" stroke="#c9ced4" stroke-width=".1"/></g>`;
+      const t = V.p(x, y, 1.1);
+      for (let k = 0; k < 3; k++) {
+        s += `<circle cx="${f(t[0])}" cy="${f(t[1])}" r=".4" fill="#f4f7fa" opacity="0">`
+          + `<animate attributeName="cy" from="${f(t[1])}" to="${f(t[1] - 4)}" dur="3s" begin="${k}s" repeatCount="indefinite"/>`
+          + `<animate attributeName="r" from=".3" to="1.4" dur="3s" begin="${k}s" repeatCount="indefinite"/>`
+          + `<animate attributeName="opacity" values="0;.8;0" dur="3s" begin="${k}s" repeatCount="indefinite"/></circle>`;
+      }
+    }
+    return s;
+  }
+
+  /* A house's garden (scene.plots, from src/scene.py _plots): {ground: [svg] (drawn on the ground),
+   * things: [[depth, svg]] (with the buildings and trees)}. Front: a path to the door, a driveway
+   * (some with a car, or a garage), a hedge or low wall; back: fences or hedges, a patio or a
+   * conservatory, a shed, a trampoline, a washing line, bushes, flower beds. Your house: your car on
+   * the drive (glowing while charging) and the heat pump. */
+  function plotBits(V, P, on, isHome) {
+    const ground = [], things = [], id = P.id || 0, r = (k) => rnd(id, k, 300), energy = isHome ? (CTX.energy || {}) : {};
+    const thing = (x, y, svg) => { if (svg && on(x, y)) things.push([V.d(x, y), svg]); };
+    const angU = Math.atan2(P.u[1], P.u[0]), angN = Math.atan2(P.n[1], P.n[0]);
+    const {hl, hf, hb} = P, fr = P.f || 0, bk = P.b || 0, w = Math.max(P.w || hl + 1, hl);
+    const sd = r(2) < 0.5 ? 1 : -1;
+    // the front
+    const drive = fr >= 4.2 && (isHome || r(1) < 0.5), dl = sd * Math.max(0, Math.min(hl * 0.5, w - 1.8));
+    const pl = drive ? -sd * Math.min(hl * 0.4, 1.6) : 0;
+    if (fr >= 0.8) ground.push(poly(plotQuad(V, P, -hf - fr, -hf, pl - 0.55, pl + 0.55), snowy('#d8d0c0', 0.6)));
+    if (drive) {
+      ground.push(poly(plotQuad(V, P, -hf - fr, -hf - 0.2, dl - 1.5, dl + 1.5), snowy(r(5) < 0.5 ? '#bdb6aa' : '#d3c7ad', 0.5), ' stroke="#a59e92" stroke-width=".15"'));
+      const carHere = isHome ? !!energy.car : r(3) < 0.55;
+      if (carHere) {
+        const [x, y] = PW(P, -hf - Math.min(fr / 2, 3.2), dl);
+        thing(x, y, car(V, [x, y, angN * 180 / Math.PI, Math.floor(r(4) * 10)]) + (isHome && energy.charging ? chargeGlow(V, x, y) : ''));
+      }
+    } else if (isHome && energy.car) {
+      // (no room for a drive: your car at the kerb outside)
+      const [x, y] = PW(P, -hf - fr - PAVE - 1.6, 0);
+      thing(x, y, car(V, [x, y, angU * 180 / Math.PI, 3]) + (energy.charging ? chargeGlow(V, x, y) : ''));
+    }
+    // (a garage beside a detached house, at the end of the drive)
+    if (!isHome && drive && w - hl >= 3.2 && r(17) < 0.4) {
+      const [x, y] = PW(P, -hf + 3, sd * (hl + 1.6));
+      thing(x, y, box(V, x, y, angN, 5.6, 2.8, 0, 2.4, ['#ebe5da', '#c9c1b2'], snowy('#8a8f96', 0.8)));
+    }
+    if (fr >= 1.5 && r(6) < 0.45) {
+      // a hedge or low wall along the pavement, with gaps for the path and the drive
+      const kind = r(7) < 0.6 ? 'hedge' : 'wall', s = -hf - fr + 0.4, gaps = [[pl - 0.8, pl + 0.8]].concat(drive ? [[dl - 1.7, dl + 1.7]] : []);
+      let l0 = -w;
+      for (const [g0, g1] of gaps.sort((a, b) => a[0] - b[0]).concat([[w, w]])) {
+        if (g0 - l0 > 0.6) { const a = PW(P, s, l0), b = PW(P, s, g0), m = PW(P, s, (l0 + g0) / 2); thing(m[0], m[1], boundary(V, a, b, kind)); }
+        l0 = Math.max(l0, g1);
+      }
+    }
+    if (fr >= 1.6 && r(8) < 0.35) {
+      // flowers under the front window
+      const l0 = -sd * 0.9, l1 = -sd * Math.max(1.2, hl * 0.9);
+      ground.push(flowerBed(V, [PW(P, -hf - 1.1, l0), PW(P, -hf - 1.1, l1), PW(P, -hf - 0.2, l1), PW(P, -hf - 0.2, l0)], id + 1));
+    }
+    if (CTX.occ && CTX.occ.halloween && (isHome || r(16) < 0.35) && fr >= 0.8) {
+      const [x, y] = PW(P, -hf - 0.7, pl + 0.95);
+      thing(x, y, pumpkin(V, x, y));
+    }
+    // the back
+    if (bk >= 2) {
+      const kind = r(9) < 0.25 ? 'hedge' : 'fence', sd2 = r(11) < 0.5 ? 1 : -1;
+      for (const l of [w, -w]) {
+        const a = PW(P, hb, l), b = PW(P, hb + bk, l), m = PW(P, hb + bk / 2, l);
+        thing(m[0], m[1], boundary(V, a, b, kind));
+      }
+      { const a = PW(P, hb + bk, -w), b = PW(P, hb + bk, w), m = PW(P, hb + bk, 0); thing(m[0], m[1], boundary(V, a, b, kind)); }
+      const cons = !isHome && bk >= 6 && r(12) < 0.1, pd = Math.min(3, bk * 0.35);
+      if (cons) {
+        const [x, y] = PW(P, hb + 1.5, 0);
+        thing(x, y, box(V, x, y, angU, Math.max(2.5, hl * 1.1), 3, 0, 2.6, ['#d6ebf5', '#a9c9dc'], snowy('#eef6fa', 0.5)));
+      } else if (r(13) < 0.6) {
+        ground.push(poly(plotQuad(V, P, hb, hb + pd, -hl * 0.85, hl * 0.85), snowy('#d9d1c1', 0.6), ' stroke="#c4baa6" stroke-width=".12"'));
+      }
+      if (bk >= 5 && r(15) < 0.4) {
+        const s0 = hb + pd + 0.5, s1 = hb + bk - 1.2, l1 = -sd2 * (w - 0.25), l0 = -sd2 * (w - 1.0);
+        if (s1 - s0 > 1.5) ground.push(flowerBed(V, [PW(P, s0, l0), PW(P, s0, l1), PW(P, s1, l1), PW(P, s1, l0)], id + 2));
+      }
+      if (bk >= 7 && r(10) < 0.45) {
+        const [x, y] = PW(P, hb + bk - 1.5, sd2 * Math.max(0, w - 1.4));
+        thing(x, y, box(V, x, y, angU, 2.2, 1.8, 0, 2.1, ['#9b7a55', '#7d5f40'], snowy('#5d4a3a', 0.85)));
+      }
+      if (bk >= 8 && r(14) < 0.09) { const [x, y] = PW(P, hb + bk * 0.55, -sd2 * w * 0.35); thing(x, y, trampoline(V, x, y)); }
+      if (bk >= 6 && r(18) < 0.08) {
+        const a = PW(P, hb + pd + 0.8, -sd2 * Math.max(0, w - 1)), b = PW(P, hb + bk - 1.2, -sd2 * Math.max(0, w - 1)), m = PW(P, hb + bk / 2, -sd2 * (w - 1));
+        thing(m[0], m[1], washingLine(V, a, b, id));
+      }
+      if (r(19) < 0.35) {
+        for (let k = 0; k < 2 + Math.floor(r(20) * 2); k++) {
+          const [x, y] = PW(P, hb + bk - 1.1, -sd2 * (w - 1.1 - k * 1.3));
+          thing(x, y, bush(V, x, y, 0.8 + r(21 + k) * 0.5, id + k));
+        }
+      }
+    }
+    // your heat pump, beside the house at the back
+    if (isHome && energy.heat !== null && energy.heat !== undefined) {
+      const [x, y] = w - hl > 1.2 ? PW(P, hb - 1.2, hl + 0.55) : PW(P, hb + 0.6, hl * 0.55);
+      thing(x, y, heatPump(V, x, y, w - hl > 1.2 ? angN : angU, !!energy.heat));
+    }
+    return {ground, things};
+  }
+
+  // Street furniture: a bench, a post box, a bin, a bus stop (a shelter and its sign)
+  function furniture(V, x, y, kind, ang) {
+    if (kind === 'bench') {
+      const bx = x - Math.sin(ang) * 0.25, by = y + Math.cos(ang) * 0.25;
+      return box(V, x, y, ang, 1.7, 0.5, 0.35, 0.47, ['#9c7650', '#7b5c3e'], snowy('#b08a5f', 0.8)) + box(V, bx, by, ang, 1.7, 0.08, 0.47, 0.95, ['#9c7650', '#7b5c3e'], '#8a6a46');
+    }
+    if (kind === 'post_box') return box(V, x, y, 0, 0.55, 0.55, 0, 1.15, ['#d32f2f', '#a52323'], '#2b2b2b');
+    if (kind === 'bin') return box(V, x, y, 0, 0.45, 0.45, 0, 0.9, ['#2e7d32', '#1f5f24'], '#1b1b1b');
+    if (kind === 'bus_stop') {
+      const px = x + Math.cos(ang) * 2, py = y + Math.sin(ang) * 2, a = V.p(px, py, 0), b = V.p(px, py, 2.9);
+      return box(V, x, y, ang, 3, 1.2, 0, 2.4, ['#d7e8f2', '#a9c4d4'], snowy('#4a5560', 0.8))
+        + `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="#5f6670" stroke-width=".14"/><circle cx="${f(b[0])}" cy="${f(b[1])}" r=".42" fill="#d32f2f" stroke="#ffffff" stroke-width=".1"/>`;
+    }
+    return '';
+  }
+
+  // Moving things: a car or a bus along a path, people walking, ducks paddling, a train
+  function mover(path, dur, begin, sprite, opts2 = '') {
+    return `<g>${sprite}<animateMotion path="${path}" dur="${dur.toFixed(1)}s" begin="${begin.toFixed(1)}s" repeatCount="indefinite"${opts2}/></g>`;
+  }
+  function carSprite(col, len = 4.2, wid = 1.7, glass = '#7d9fc4') {
+    const night = CTX.night;
+    return `<rect x="${f(-len / 2)}" y="${f(-wid / 2 - 0.4)}" width="${f(len)}" height="${f(wid)}" rx=".45" fill="${col}"/>`
+      + `<rect x="${f(-len * 0.24)}" y="${f(-wid / 2 - 0.25)}" width="${f(len * 0.48)}" height="${f(wid - 0.3)}" rx=".3" fill="${glass}"/>`
+      + (night ? `<circle cx="${f(len / 2)}" cy="${f(-0.4 - wid * 0.25)}" r=".3" fill="${LIGHT2}"/><circle cx="${f(len / 2)}" cy="${f(-0.4 + wid * 0.25)}" r=".3" fill="${LIGHT2}"/><ellipse cx="${f(len / 2 + 2)}" cy="-.4" rx="2" ry="1" fill="${LIGHT}" opacity=".25"/>` : '');
+  }
+  function walker(seed) {
+    const top = pick(TOPS, rnd(seed, 1, 350)), skin = pick(SKIN, rnd(seed, 2, 351)), dog = rnd(seed, 3, 352) < 0.3;
+    return `<line x1="-.12" y1="0" x2="-.12" y2="-.8" stroke="#37474f" stroke-width=".2"/><line x1=".12" y1="0" x2=".12" y2="-.8" stroke="#37474f" stroke-width=".2"/>`
+      + `<rect x="-.32" y="-1.65" width=".64" height=".95" rx=".2" fill="${top}"/><circle cx="0" cy="-1.95" r=".3" fill="${skin}"/>`
+      + (dog ? `<ellipse cx=".95" cy="-.32" rx=".45" ry=".22" fill="${pick(['#8d6e4c', '#3e2723', '#d7ccc8', '#f5f5f5'], rnd(seed, 4, 353))}"/><circle cx="1.38" cy="-.48" r=".16" fill="#5d4037"/><line x1=".25" y1="-1.1" x2="1.2" y2="-.5" stroke="#555555" stroke-width=".04"/>` : '');
+  }
+  function duck(seed) {
+    const brown = rnd(seed, 1, 360) < 0.5;
+    return `<ellipse cx="0" cy="0" rx=".55" ry=".3" fill="${brown ? '#8d6e4c' : '#f5f5f0'}"/><circle cx=".42" cy="-.28" r=".2" fill="${brown ? '#2e7d32' : '#f5f5f0'}"/><path d="M.58 -.3l.22 .05l-.22 .07z" fill="#ff9800"/>`;
+  }
+
+  /* A school's playground: tarmac with a court and a hopscotch, beside its first wall */
+  function playground(V, b) {
+    const [p0, p1] = b.p, L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+    if (L < 6) return '';
+    const ux = (p1[0] - p0[0]) / L, uy = (p1[1] - p0[1]) / L, nx = uy, ny = -ux;  // (outwards: the right of an anticlockwise wall)
+    const at = (t, d) => V.p(p0[0] + ux * L * t + nx * d, p0[1] + uy * L * t + ny * d, 0);
+    let s = poly([at(0.08, 1), at(0.92, 1), at(0.92, 14), at(0.08, 14)], snowy('#7f8790', 0.6));
+    s += `<polygon points="${pts([at(0.2, 3), at(0.8, 3), at(0.8, 12), at(0.2, 12)])}" fill="none" stroke="#ffffff" stroke-width=".25" opacity=".85"/>`
+      + `<path d="M${pts([at(0.5, 3), at(0.5, 12)]).replace(' ', 'L')}" stroke="#ffffff" stroke-width=".2" opacity=".85"/>`;
+    const cols = ['#ffd54f', '#4fc3f7', '#e57373', '#81c784'];
+    for (let i = 0; i < 4; i++) s += poly([at(0.84, 2 + i * 1.5), at(0.89, 2 + i * 1.5), at(0.89, 3.2 + i * 1.5), at(0.84, 3.2 + i * 1.5)], cols[i]);
+    return s;
+  }
+
+  /* Fireworks over the map (Bonfire Night, New Year, at night): bursts of sparks, again and again */
+  function fireworks(x0, y0, w, h) {
+    let s = '';
+    for (let i = 0; i < 7; i++) {
+      const cx = x0 + w * (0.15 + 0.7 * rnd(i, 1, 370)), cy = y0 + h * (0.06 + 0.3 * rnd(i, 2, 371)), R = Math.min(w, h) * (0.06 + 0.05 * rnd(i, 3, 372));
+      const col = pick(['rgb(255,80,80)', 'rgb(255,215,90)', 'rgb(120,200,255)', 'rgb(160,255,140)', 'rgb(255,130,240)', 'rgb(255,255,255)'], rnd(i, 4, 373));
+      const dur = 4 + rnd(i, 5, 374) * 2, begin = rnd(i, 6, 375) * 5, kt = 'keyTimes="0;.35;.8;1"';
+      const an = (attr, vals) => `<animate attributeName="${attr}" values="${vals}" ${kt} dur="${dur.toFixed(1)}s" begin="${begin.toFixed(1)}s" repeatCount="indefinite"/>`;
+      // (the rocket going up, then the burst)
+      s += `<circle cx="${f(cx)}" cy="${f(cy + R * 3)}" r="${f(R * 0.04)}" fill="${col}" opacity="0">${an('cy', `${f(cy + R * 3)};${f(cy)};${f(cy)};${f(cy)}`)}${an('opacity', '1;1;0;0')}</circle>`;
+      for (let k = 0; k < 14; k++) {
+        const a = k / 14 * 6.283, ex = cx + Math.cos(a) * R, ey = cy + Math.sin(a) * R + R * 0.25;
+        s += `<circle cx="${f(cx)}" cy="${f(cy)}" r="${f(R * 0.075)}" fill="${col}" opacity="0">${an('cx', `${f(cx)};${f(cx)};${f(ex)};${f(ex)}`)}${an('cy', `${f(cy)};${f(cy)};${f(ey)};${f(ey)}`)}${an('opacity', '0;1;0;0')}</circle>`;
+      }
+    }
+    return `<g class="nvfireworks" pointer-events="none">${s}</g>`;
+  }
+
   const PIN_H = 250;  // (pins and faces sized as on a 250 m map, whatever the map's size)
 
   // A person's face (their picture, else their initials on their colour), at cx, cy
@@ -457,13 +841,16 @@
     CTX.night = !!live.night;
     CTX.homeLit = opts.isHome ? (people.length ? anyHome : true) : false;  // (no people set: your house lit at night as any)
     CTX.smoke = !!opts.isHome && !live.night && anyHome;
-    CTX.season = season(opts.month != null ? opts.month : new Date().getMonth());
+    CTX.season = season(opts.month != null ? opts.month : (opts.date ? new Date(opts.date) : new Date()).getMonth());
     const wx = (live.weather || {}).state || '';
     CTX.snow = ['snowy', 'snowy-rainy'].includes(wx);
     CTX.wet = ['rainy', 'pouring', 'lightning-rainy', 'hail', 'snowy-rainy'].includes(wx);
     CTX.hail = wx === 'hail';
     CTX.windy = ['windy', 'windy-variant', 'pouring', 'lightning-rainy'].includes(wx);
     CTX.leaves = 90;  // (falling leaves on this map, at most)
+    CTX.occ = occasion(opts.date ? new Date(opts.date) : new Date());
+    CTX.energy = opts.isHome ? (live.energy || null) : null;
+    const motion = opts.motion !== false;
     const out = [];
     // the chunk of ground, torn out: its earth sides (those facing the viewer, back ones first),
     // then its top, with a lip of turf
@@ -521,6 +908,49 @@
           + `<animate attributeName="rx" values=".5;4" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/><animate attributeName="ry" values="${f(0.5 * SE)};${f(4 * SE)}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
           + `<animate attributeName="opacity" values=".8;0" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/></ellipse>`);
         k++;
+      }
+    }
+    // parks and playing fields mown in stripes; reeds round ponds, and ducks on them
+    for (const a of scene.areas || []) {
+      if (!['grass', 'pitch', 'water'].includes(a.k)) continue;
+      const xs = a.p.map((q) => q[0]), ys = a.p.map((q) => q[1]);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      if (a.k !== 'water') {
+        if (CTX.snow || (x1 - x0) * (y1 - y0) < 900) continue;
+        const cid = 'nvm' + Math.random().toString(36).slice(2, 8), ang = rnd(x0, y0, 380) * Math.PI, ca = Math.cos(ang), sa = Math.sin(ang);
+        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, R = Math.hypot(x1 - x0, y1 - y0) / 2, st = [];
+        for (let k = -R; k < R; k += 8) {
+          const q = [[k, -R], [k + 4, -R], [k + 4, R], [k, R]].map(([u, v]) => V.p(cx + u * ca - v * sa, cy + u * sa + v * ca, 0));
+          st.push(poly(q, mix(C[a.k] || C.grass, '#ffffff', 0.12)));
+        }
+        out.push(`<clipPath id="${cid}"><polygon points="${pts(a.p.map(([x, y]) => V.p(x, y, 0)))}"/></clipPath><g clip-path="url(#${cid})" opacity=".55">${st.join('')}</g>`);
+        continue;
+      }
+      // reeds along the edge here and there
+      let rs = '';
+      for (let i = 0; i < a.p.length; i++) {
+        const p = a.p[i], q = a.p[(i + 1) % a.p.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        for (let s = 1; s < L; s += 2.2) {
+          const x = p[0] + (q[0] - p[0]) * s / L, y = p[1] + (q[1] - p[1]) * s / L;
+          if (rnd(x, y, 381) > 0.5 || !insideRing(x, y, edge)) continue;
+          for (let k = 0; k < 3; k++) {
+            const b0 = V.p(x + (k - 1) * 0.25, y, 0), tp = V.p(x + (k - 1) * 0.45, y + (rnd(x, k, 382) - 0.5) * 0.4, 1.1 + rnd(y, k, 383) * 0.6);
+            rs += `<line x1="${f(b0[0])}" y1="${f(b0[1])}" x2="${f(tp[0])}" y2="${f(tp[1])}" stroke="${snowy('#6f8f3c', 0.5)}" stroke-width=".14"/>`;
+            if (k === 1 && CTX.season !== 'spring') rs += `<ellipse cx="${f(tp[0])}" cy="${f(tp[1] + 0.25)}" rx=".1" ry=".3" fill="#7a5a3a"/>`;
+          }
+        }
+      }
+      out.push(rs);
+      if (motion && !CTX.snow && (x1 - x0) * (y1 - y0) > 150) {
+        for (let k = 0, tries = 0; k < 3 && tries < 20; tries++) {
+          const cx = x0 + (x1 - x0) * rnd(x0, tries, 384), cy = y0 + (y1 - y0) * rnd(y0, tries, 385), rr = 1.5 + rnd(cx, cy, 386) * 2;
+          if (!insideRing(cx, cy, a.p) || !insideRing(cx, cy, edge)) continue;
+          const loop = [];
+          for (let j = 0; j <= 16; j++) loop.push([cx + Math.cos(j / 16 * 6.283) * rr, cy + Math.sin(j / 16 * 6.283) * rr]);
+          if (!loop.every(([x, y]) => insideRing(x, y, a.p))) continue;
+          out.push(mover(spath(V, loop) + 'Z', 25 + rnd(cx, cy, 387) * 20, -rnd(cy, cx, 388) * 40, duck(cx + cy)));
+          k++;
+        }
       }
     }
     for (const w of scene.water || []) out.push(`<path d="${line(V, w.p)}" fill="none" stroke="${C.water}" stroke-width="${f(w.w)}" stroke-linecap="round" stroke-linejoin="round"/>`
@@ -632,10 +1062,53 @@
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railTie}" stroke-width="${f(r.w * 0.55)}" stroke-dasharray=".6 1.4"/>`);
       out.push(`<path d="${line(V, r.p)}" fill="none" stroke="${C.railLine}" stroke-width=".35"/>`);
     }
-    // shadows: each building's and tree's, cast on the ground (soft by day; none at night)
     const on = (x, y) => insideRing(x, y, edge);
+    // gardens: their paths, drives, patios and flower beds now; fences, sheds... with the buildings
+    const plotThings = [];
+    for (const P of scene.plots || []) {
+      if (!on(P.c[0], P.c[1])) continue;
+      const bits = plotBits(V, P, on, !!opts.isHome && P.id === home.id);
+      out.push(bits.ground.join(''));
+      plotThings.push(...bits.things);
+    }
+    // schools' playgrounds
+    for (const b of scene.buildings || []) if (b.lm === 'school' && b.p.every(([x, y]) => on(x, y))) out.push(playground(V, b));
+    if (motion) {
+      // traffic: a few cars (and a bus) driving on the left, a train now and then, people walking
+      const drives = streets.filter((r) => plen(r.p) >= 50);
+      const nCars = Math.min(drives.length * 2, CTX.night ? 3 : 7);
+      for (let i = 0; i < nCars && drives.length; i++) {
+        const r = drives[Math.floor(rnd(i, H, 310) * drives.length)], back = rnd(i, H, 311) < 0.5;
+        const p = offsetLine(back ? r.p.slice().reverse() : r.p, r.w / 4), L = plen(p);
+        out.push(mover(spath(V, p), L / 9, -rnd(i, H, 312) * L / 9, carSprite(CARS[Math.floor(rnd(i, H, 313) * 10) % 10]), ' rotate="auto"'));
+      }
+      if (drives.length && !CTX.night) {
+        const r = drives.slice().sort((a, b) => b.w - a.w || plen(b.p) - plen(a.p))[0], p = offsetLine(r.p, r.w / 4), L = plen(p);
+        out.push(mover(spath(V, p), L / 7 + 20, -rnd(H, 1, 314) * L / 7, carSprite('#c62828', 10, 2.5, '#cfe3ee'), ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(L / 7 / (L / 7 + 20)).toFixed(3)};1" calcMode="linear"`));
+      }
+      for (const r of scene.rails || []) {
+        const L = plen(r.p);
+        if (L < 80) continue;
+        const run = L / 16, dur = run * 2 + 30, back = rnd(L, 1, 315) < 0.5, p = back ? r.p.slice().reverse() : r.p;
+        for (let k = 0; k < 4; k++) {
+          out.push(mover(spath(V, p), dur, k * 13 / 16 - rnd(L, 2, 316) * dur, carSprite(k ? '#3f51b5' : '#283593', 12, 2.6, '#cfe3ee'),
+            ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(run / dur).toFixed(3)};1" calcMode="linear"`));
+        }
+      }
+      const walks = streets.filter((r) => plen(r.p) >= 30), nPeople = Math.min(walks.length * 3, CTX.night ? 4 : CTX.wet ? 6 : 14);
+      for (let i = 0; i < nPeople && walks.length; i++) {
+        const r = walks[Math.floor(rnd(i, H, 320) * walks.length)], side = rnd(i, H, 321) < 0.5 ? 1 : -1;
+        const p = offsetLine(r.p, side * (r.w / 2 + PAVE * 0.5)), L = plen(p), s0 = rnd(i, H, 322) * Math.max(0, L - 30);
+        const bit = stretch(p, s0, Math.min(L, s0 + 30));
+        if (bit.length < 2) continue;
+        const walk = plen(bit) / 1.3;
+        out.push(mover(spath(V, bit), walk * 2, -rnd(i, H, 323) * walk * 2, walker(i + H), ' keyPoints="0;1;0" keyTimes="0;.5;1" calcMode="linear"'));
+      }
+    }
+    // shadows: each building's and tree's, cast on the ground (soft by day; none at night)
     if (!CTX.night) {
-      const sh = [], [sx, sy] = V.s;
+      // (from the real sun when Home Assistant says where it is, else from behind on the left)
+      const sh = [], [sx, sy] = shadowVec(live.sun) || V.s;
       for (const b of scene.buildings || []) {
         const hh = (b.h || 6) + (b.r === 'gable' ? (b.rh || 2.5) * 0.6 : 0);
         sh.push(poly(hull(b.p.concat(b.p.map(([x, y]) => [x + sx * hh, y + sy * hh]))).map(([x, y]) => V.p(x, y, 0)), '#24401f'));
@@ -681,6 +1154,36 @@
       }
     }
     out.push('</g>');
+    // a waterfall where a river runs off the front edge
+    for (const wv of scene.water || []) {
+      for (let i = 0; i < wv.p.length - 1; i++) {
+        const [ax, ay] = wv.p[i], [bx, by] = wv.p[i + 1], L = Math.hypot(bx - ax, by - ay);
+        let prev = null;
+        for (let s = 0; s <= L; s += 1) {
+          const x = ax + (bx - ax) * s / (L || 1), y = ay + (by - ay) * s / (L || 1), inn = insideRing(x, y, edge);
+          if (prev && prev[2] !== inn) {
+            const E = inn ? [x, y] : [prev[0], prev[1]];
+            let ei = 0, bd = Infinity;
+            edge.forEach((q, j) => { const d = Math.hypot(q[0] - E[0], q[1] - E[1]); if (d < bd) { bd = d; ei = j; } });
+            const p0 = edge[ei], q0 = edge[(ei + 1) % edge.length], [, aw] = V.n(q0[1] - p0[1], -(q0[0] - p0[0]));
+            if (aw < 0) {
+              const top = V.p(E[0], E[1], -0.3), bot = V.p(E[0], E[1], -p0[2] - 16), ww = Math.max(1.2, wv.w * 0.45), wid = 'nvf' + Math.random().toString(36).slice(2, 8);
+              let s2 = `<defs><linearGradient id="${wid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.water}"/><stop offset=".75" stop-color="#d6ecfa" stop-opacity=".85"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient></defs>`
+                + poly([[top[0] - ww, top[1]], [top[0] + ww, top[1]], [bot[0] + ww * 1.4, bot[1]], [bot[0] - ww * 1.4, bot[1]]], `url(#${wid})`);
+              for (let k = -1; k <= 1; k++) {
+                s2 += `<line x1="${f(top[0] + k * ww * 0.5)}" y1="${f(top[1])}" x2="${f(bot[0] + k * ww * 0.7)}" y2="${f(bot[1])}" stroke="#ffffff" stroke-width=".25" stroke-dasharray="1.5 2.5" opacity=".7">`
+                  + `<animate attributeName="stroke-dashoffset" from="0" to="-8" dur="${(0.6 + k * 0.08 + 0.1).toFixed(2)}s" repeatCount="indefinite"/></line>`;
+              }
+              for (let k = 0; k < 3; k++) {
+                s2 += `<circle cx="${f(bot[0] + (k - 1) * ww)}" cy="${f(bot[1] - 1)}" r="${f(ww)}" fill="#ffffff" opacity=".3"><animate attributeName="r" values="${f(ww * 0.8)};${f(ww * 1.6)};${f(ww * 0.8)}" dur="${2 + k * 0.4}s" repeatCount="indefinite"/></circle>`;
+              }
+              out.push(s2);
+            }
+          }
+          prev = [x, y, inn];
+        }
+      }
+    }
     // (points along the streets, on the screen: where a bridge to another map can start)
     const ends = [];
     for (const r of streets) {
@@ -721,6 +1224,38 @@
     }
     for (const c of scene.cars || []) if (on(c[0], c[1])) things.push([V.d(c[0], c[1]), car(V, c)]);
     for (const L of lamps) things.push([V.d(L[0], L[1]), lamp(V, L)]);
+    things.push(...plotThings);
+    // street furniture: OpenStreetMap's bus stops, benches, post boxes and bins, and more besides:
+    // benches along footpaths (some with a bin), post boxes at some street corners
+    const nearAng = (x, y) => {
+      let best = [Infinity, 0];
+      for (const r of roads) for (let i = 0; i < r.p.length - 1; i++) {
+        const [ax, ay] = r.p[i], [bx, by] = r.p[i + 1], vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy || 1;
+        const tt = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / l2)), d = Math.hypot(ax + vx * tt - x, ay + vy * tt - y);
+        if (d < best[0]) best = [d, Math.atan2(vy, vx)];
+      }
+      return best[1];
+    };
+    const furn = (scene.poi || []).map(([x, y, k]) => [x, y, k]);
+    for (const r of paths) {
+      let acc = 20;
+      const L = plen(r.p);
+      while (acc < L) {
+        const [q] = stretch(r.p, acc, acc + 1), q2 = stretch(r.p, acc, acc + 1)[1] || q, ang = Math.atan2(q2[1] - q[1], q2[0] - q[0]);
+        if (q && rnd(q[0], q[1], 390) < 0.35) {
+          const x = q[0] - Math.sin(ang) * 1.6, y = q[1] + Math.cos(ang) * 1.6;
+          furn.push([x, y, 'bench', ang]);
+          if (rnd(x, y, 391) < 0.5) furn.push([x + Math.cos(ang) * 1.4, y + Math.sin(ang) * 1.4, 'bin']);
+        }
+        acc += 45;
+      }
+    }
+    for (const {P, legs, w: jw} of joins.values()) {
+      if (legs.length < 3 || rnd(P[0], P[1], 392) > 0.3) continue;
+      const a = legs[0], b = legs[1], bx = a.ux + b.ux, by = a.uy + b.uy, bl = Math.hypot(bx, by) || 1, d = (jw / 2 + PAVE * 0.75) * 1.45;
+      furn.push([P[0] + bx / bl * d, P[1] + by / bl * d, 'post_box']);
+    }
+    for (const [x, y, k, ang] of furn) if (on(x, y)) things.push([V.d(x, y), furniture(V, x, y, k, ang ?? nearAng(x, y))]);
     things.sort((a, b) => b[0] - a[0]);
     for (const t of things) out.push(t[1]);
     // rain splashing on the ground all over (or hailstones lying about)
@@ -900,7 +1435,7 @@
     const PLACE_PINS = ['#7e57c2', '#00897b', '#f4511e', '#6d4c41', '#c2185b', '#3949ab'];
     const bySide = {left: [], right: [], up: [], down: []};
     places.forEach((pl, i) => {
-      const I = island(pl.scene, {rot: opts.rot, zoom: opts.zoom, live, isHome: false, label: String(pl.name || 'PLACE').toUpperCase(),
+      const I = island(pl.scene, {rot: opts.rot, zoom: opts.zoom, live, month: opts.month, date: opts.date, motion: opts.motion, isHome: false, label: String(pl.name || 'PLACE').toUpperCase(),
         pinColour: PLACE_PINS[i % PLACE_PINS.length], atPin: who.places[i].at, onMap: who.places[i].map});
       I.key = String(pl.zone || pl.name || i);
       (bySide[pl.side] || bySide.left).push(I);
@@ -961,7 +1496,7 @@
       };
       birds = `<g class="nvbirds" pointer-events="none">${flock(5, 0.3, 40, 3, 1)}${flock(3, 0.62, 55, 24, -1)}</g>`;
     }
-    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;position:relative" role="img" aria-label="The streets around your home">${groups.join('')}${bridges.join('')}${birds}</svg>`, away: who.away};
+    return {svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-box="${f(x0)} ${f(y0)} ${f(w)} ${f(h)}" data-pin="${f(pin[0])} ${f(pin[1])}" data-zoom="${opts.zoom || 1}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;position:relative" role="img" aria-label="The streets around your home">${groups.join('')}${bridges.join('')}${birds}${live.night && occasion(opts.date ? new Date(opts.date) : new Date()).fireworks ? fireworks(x0, y0, w, h) : ''}</svg>`, away: who.away};
   }
 
   /* Fits the drawing to its box: all of it where the box is about its shape; in a much narrower
@@ -1030,6 +1565,8 @@
     .nvchip .st{color:rgba(255,255,255,.7)}
     .nvsky{position:absolute;inset:0;overflow:hidden;pointer-events:none;background:linear-gradient(180deg,#78c3ec 0%,#acdcf3 50%,#dcf1f0 100%)}
     .nvsky.grey{background:linear-gradient(180deg,#8f9eab 0%,#b8c2ca 55%,#d6dcdf 100%)}
+    .nvsky.golden{background:linear-gradient(180deg,#e9876a 0%,#f6b77e 40%,#fbe0b0 75%,#cfe0ea 100%)}
+    .nv-golden{background:linear-gradient(200deg,rgba(255,150,70,.42),rgba(255,190,120,.22) 55%,rgba(170,110,190,.22));mix-blend-mode:multiply}
     .nvsky.night{background:linear-gradient(180deg,#050c20 0%,#0c1a3b 55%,#17284d 100%)}
     .nvsky .cl{position:absolute;top:0;bottom:0;left:-100%;width:300%;animation:nvdrift 160s linear infinite;background-image:${CLOUDS}}
     .nvsky .cl.b{animation-duration:90s;opacity:.55;transform:scale(1.3);top:10%}
@@ -1077,8 +1614,11 @@
     // (behind it: the sky, by day or night, greyer when it's wet; over it: a soft vignette)
     const live = (opts || {}).live || {}, st = (live.weather || {}).state || '';
     const grey = /rain|pour|cloudy$|fog|snow|hail|lightning/.test(st) && st !== 'partlycloudy';
-    const sky = live.night ? 'night' : grey ? 'grey' : '';
-    el.innerHTML = `<div class="nvsky ${sky}"><div class="st"></div><div class="cl b"></div><div class="cl"></div></div>` + d.svg + '<div class="nvvig"></div>' + overlays(live)
+    // (near sunrise and sunset, by the real sun: a golden light)
+    const golden = !live.night && live.sun && live.sun.el != null && live.sun.el < 10 && live.sun.el > -4 && !grey;
+    const sky = live.night ? 'night' : grey ? 'grey' : golden ? 'golden' : '';
+    const glow = golden ? `<div class="nvfx nv-golden" style="opacity:${Math.max(0.25, Math.min(1, 1 - live.sun.el / 10)).toFixed(2)}"></div>` : '';
+    el.innerHTML = `<div class="nvsky ${sky}"><div class="st"></div><div class="cl b"></div><div class="cl"></div></div>` + d.svg + glow + '<div class="nvvig"></div>' + overlays(live)
       + `<div class="nvcredit${live.night ? ' dark' : ''}">\u00a9 OpenStreetMap contributors</div>`;
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
     fit(el);
@@ -1131,7 +1671,26 @@
       out.people.push({entity_id: e, name, initials, picture: a.entity_picture || null, state: st.state, home: st.state === 'home',
         lat: a.latitude ?? null, lon: a.longitude ?? null});
     }
+    // the sun's place (rounded, so the map's only drawn again every few minutes), and your house's energy
+    const sa = (sun && sun.attributes) || {};
+    out.sun = sa.azimuth != null && sa.elevation != null ? {az: Math.round(Number(sa.azimuth) / 5) * 5, el: Math.round(Number(sa.elevation))} : null;
+    const en = ents.energy || {};
+    out.energy = {solar: en.solar ? active(states[en.solar]) : null, car: !!en.car, charging: en.car ? active(states[en.car]) : false,
+      heat: en.heat ? active(states[en.heat]) : null};
     return out;
+  }
+
+  // Whether an energy entity says it's going (the same as src/live.py active())
+  const ON_WORDS = ['on', 'charging', 'heating', 'heat', 'cooling', 'cool', 'running', 'true', 'active', 'producing', 'heat_pump', 'eco', 'performance'];
+  function active(st) {
+    if (!st) return false;
+    const a = st.attributes || {};
+    if (a.hvac_action != null) return ['heating', 'cooling', 'defrosting', 'preheating'].includes(String(a.hvac_action).toLowerCase());
+    const s = String(st.state || '').toLowerCase();
+    if (ON_WORDS.includes(s)) return true;
+    const v = Number(s);
+    if (s === '' || Number.isNaN(v)) return false;
+    return v > (['kw', 'kwh'].includes(String(a.unit_of_measurement || '').toLowerCase()) ? 0.02 : 20);
   }
 
   window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, version: VERSION};
@@ -1347,7 +1906,8 @@
       const s = this._scene, label = this._config.label || (s.number ? `NO. ${s.number}` : 'HOME');
       const live = this._ents && this._hass ? liveFrom(this._hass.states || {}, this._ents) : null;
       this._liveKey = JSON.stringify(live);
-      render(this._root.querySelector('.map'), s, {rot: getRot(), zoom: zoomStep(0), label: String(label).toUpperCase(), live, places: this._places});
+      render(this._root.querySelector('.map'), s, {rot: getRot(), zoom: zoomStep(0), label: String(label).toUpperCase(), live, places: this._places,
+        motion: this._config.motion !== false, date: this._config.date || undefined});
       this._msg('');
     }
   }

@@ -47,6 +47,15 @@ Settings › **On the map**:
   house's lights are on, with a warm glow round it, when someone's home,
   and off when nobody is. **By day**, someone home: smoke from your
   chimney (and their faces over the house).
+- **Your house** (each from an entity of yours; leave any out):
+  - **Solar panels** on your roof, glinting while it says they're producing
+    (a power sensor over 20 W, or on).
+  - **Your car** on your drive (or at the kerb outside if there's no room
+    for one), glowing with a charging bolt while it says it's charging (on,
+    charging, or a power over 20 W).
+  - **A heat pump** beside the house: its fan turns and it puffs while it
+    says it's running (on, heating, a thermostat heating or cooling, or a
+    power over 20 W).
 
 ## Other places
 
@@ -101,11 +110,39 @@ trees it has, drawn like a video game's town:
   pavement, building, car park or yard).
 - **Cars** parked along the kerbs, in different colours (not near
   junctions).
+- **Gardens:** each house's plot from where its street is. At the front:
+  a path to the door, a driveway on about half (many with a car, some
+  leading to a garage), a hedge or low wall along the pavement, flowers
+  under the window. At the back: fences or hedges between the gardens,
+  patios, the odd conservatory, sheds, trampolines, washing lines (brought
+  in when it's wet or dark), bushes and flower beds.
+- **Roofs:** skylights, dormers and satellite dishes on some.
+- **Greenery:** parks and playing fields mown in stripes, reeds round
+  ponds.
+- **Street furniture:** OpenStreetMap's bus stops (a shelter and its
+  sign), benches, post boxes and bins, and more besides: benches (some
+  with a bin) along footpaths, post boxes at some street corners.
+- **Landmarks** from what OpenStreetMap says a building is: churches (a
+  tower and spire), schools (a flag and a playground) and pubs (a hanging
+  sign and picnic benches).
+- **Life:** cars and a bus driving the streets (on the left), a train now
+  and then on a railway, people walking the pavements (some with a dog;
+  fewer at night or in the rain), ducks paddling on ponds, and a waterfall
+  where a river runs off the front edge. The card's `motion: false`
+  option keeps all this still.
 
 - **The edge:** the square looks torn out of the ground, with a ragged
   edge, a lip of turf, and soil and rock (with the odd stone) down its
   sides, and a few chunks of rock floating underneath. Buildings the torn
   edge would cut through aren't drawn.
+- **The sun:** with Home Assistant's sun (`sun.sun`), shadows fall away
+  from where it really is, long in the evening, and near sunrise and
+  sunset the sky and the map turn golden.
+- **Occasions:** Christmas lights along the eaves of many houses (and
+  yours) from December to Twelfth Night, twinkling at night; pumpkins by
+  front doors the week before Halloween, lit at night; fireworks over the
+  map at night on Bonfire Night (4 to 6 November) and New Year's Eve and
+  Day.
 - **Light:** by day buildings and trees cast soft shadows, and the maps
   float in a blue sky with clouds drifting behind (grey when it's wet). At
   night the sky's dark with stars, and street lamps along the bigger
@@ -217,6 +254,7 @@ Options:
 | `url` | Read the map from this address instead of through Home Assistant (e.g. `http://homeassistant.local:8099/`) |
 | `weather` | A weather entity for this card, instead of the add-on's |
 | `people` | People for this card, instead of the add-on's, e.g. `[person.matt, person.jo]` |
+| `motion` | `false`: nothing moves (traffic, people, ducks, a train), e.g. on a slow tablet |
 | `tap_navigate` | Where tapping the map goes, instead of Settings › Screensaver, e.g. `/wall-display-2/home` (`''`: nowhere) |
 
 Any signed-in Home Assistant user can see the card, kiosk and other

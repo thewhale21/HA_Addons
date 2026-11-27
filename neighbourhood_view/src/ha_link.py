@@ -34,13 +34,18 @@ SUPERVISOR_WS = "ws://supervisor/core/websocket"
 SUPERVISOR_API = "http://supervisor/core/api"
 RECONNECT_DELAYS = (2, 5, 10, 20, 30, 60)
 ENTITY_LIST_TTL_S = 30
-PICKER_DOMAINS = ("weather", "person", "device_tracker")
+PICKER_DOMAINS = ("weather", "person", "device_tracker", "sensor", "binary_sensor", "switch", "input_boolean", "climate", "water_heater")
 
 # The entity pickers on the Settings tab: key -> domain(s) allowed
 # (the weather, and up to MAX_PEOPLE people: Settings › Weather, People)
 MAX_PEOPLE = 6
 ENTITY_KEYS = {"weather_entity": ("weather",),
-               **{f"person_{i}": ("person", "device_tracker") for i in range(1, MAX_PEOPLE + 1)}}
+               **{f"person_{i}": ("person", "device_tracker") for i in range(1, MAX_PEOPLE + 1)},
+               # your house's energy (Settings › Your house): solar panels glint while producing, the car
+               # glows while charging, the heat pump puffs while running (src/live.py energy)
+               "solar_entity": ("sensor", "binary_sensor"),
+               "car_entity": ("sensor", "binary_sensor", "switch", "input_boolean"),
+               "heat_pump_entity": ("sensor", "binary_sensor", "switch", "input_boolean", "climate", "water_heater")}
 ALWAYS_WATCHED = ("sun.sun",)  # (day or night, for the house lights)
 
 

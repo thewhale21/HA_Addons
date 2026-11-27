@@ -375,6 +375,16 @@
         <div class="row nv-person" data-n="5" hidden style="margin-top:6px"><span class="picker" data-key="person_5" data-domain="person,device_tracker" data-none="None"></span></div>
         <div class="row nv-person" data-n="6" hidden style="margin-top:6px"><span class="picker" data-key="person_6" data-domain="person,device_tracker" data-none="None"></span></div>
       </div>
+      <div class="card">
+        <h2>Your house</h2>
+        <div class="note" style="margin:0 0 6px">Your energy on the map, each from an entity of yours (leave any out).</div>
+        <div class="row" style="margin-top:0"><div class="grow">Solar panels<div class="note" style="margin:0">On your roof; they glint while this says they're producing (a power sensor over 20 W, or on).</div></div></div>
+        <div class="row" style="margin-top:6px"><span class="picker" data-key="solar_entity" data-domain="sensor,binary_sensor" data-none="None"></span></div>
+        <div class="row"><div class="grow">Car<div class="note" style="margin:0">Your car on the drive (or outside), glowing while this says it's charging (on, charging, or a charging power over 20 W).</div></div></div>
+        <div class="row" style="margin-top:6px"><span class="picker" data-key="car_entity" data-domain="sensor,binary_sensor,switch,input_boolean" data-none="None"></span></div>
+        <div class="row"><div class="grow">Heat pump<div class="note" style="margin:0">Beside the house; its fan turns and it puffs while this says it's running (on, heating, a thermostat heating or cooling, or a power over 20 W).</div></div></div>
+        <div class="row" style="margin-top:6px"><span class="picker" data-key="heat_pump_entity" data-domain="sensor,binary_sensor,switch,input_boolean,climate,water_heater" data-none="None"></span></div>
+      </div>
     </div>
     <div class="section-title">Other places</div>
     <div class="masonry">
@@ -1286,6 +1296,10 @@ function setupRows() {
       const ents = (sim.data || {}).entities || {};
       const ps = Object.keys(ents).filter((k) => k.startsWith('person_') && ents[k]).map((k) => ents[k]);
       return ps.length ? esc(ps.map((p) => `${p.name}: ${p.state === 'home' ? 'home' : p.state === 'not_home' ? 'away' : p.state ?? '—'}`).join(' · ')) : '<span class="chip">Not set</span>Nobody yet';
+    }},
+    {t: 'Your house', id: 'energy', icon: 'bolt', sum: () => {
+      const ents = (sim.data || {}).entities || {}, bits = [['solar_entity', 'Solar'], ['car_entity', 'Car'], ['heat_pump_entity', 'Heat pump']].filter(([k]) => ents[k]);
+      return bits.length ? esc(bits.map(([k, n]) => `${n}: ${ents[k].state ?? '—'}`).join(' · ')) : '<span class="chip">Not set</span>Solar panels, your car, a heat pump';
     }},
   ]);
   rowList('tab-settings', 'Other places', [

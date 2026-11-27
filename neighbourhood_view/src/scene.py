@@ -11,7 +11,12 @@ The scene, in metres from your home (x east, y north), clipped to a square HALF 
      "buildings": [{"id", "k" (kind), "p" [[x, y], ...] (anticlockwise), "h" (wall height),
                     "r": "flat" | "gable", "rect" (gable: [[x, y]] x4, the long side first), "rh" (roof height)}],
      "roads": [{"k", "w" (width), "p"}], "rails": [{"k", "w", "p"}], "areas": [{"k", "p"}],
-     "water": [{"w", "p"}], "trees": [[x, y, size]]}
+     "water": [{"w", "p"}], "trees": [[x, y, size]], "cars": [[x, y, angle, colour]],
+     "plots": [{"id", "c", "u", "n", "hl", "w", "hf", "hb", "f", "b"}] (houses' gardens: see _plots),
+     "poi": [[x, y, kind]] (bus_stop, bench, post_box, bin: OpenStreetMap's)}
+
+A building may also have "lm": "church" | "school" | "pub" (a landmark, drawn as one).
+SCENE_V goes up when the scene gains something: saved maps older than it are made again.
 """
 from __future__ import annotations
 
@@ -19,6 +24,7 @@ import math
 import re
 from typing import Optional
 
+SCENE_V = 2  # 2: gardens (plots), landmarks (lm), street furniture (poi)
 HALF = 150.0  # metres each way from your home (Settings › Address › Map size): a 300 m square by default
 EARTH_R = 6371008.8
 
@@ -232,6 +238,7 @@ def overpass_query(lat: float, lon: float, half: float = HALF) -> str:
             f'relation["landuse"]["type"="multipolygon"]{a};relation["leisure"]["type"="multipolygon"]{a};'
             f'relation["natural"]["type"="multipolygon"]{a};'
             f'way["waterway"]{a};node["natural"="tree"]{a};'
+            f'node["highway"="bus_stop"]{a};node["amenity"~"^(bench|post_box|waste_basket|pub|bar|place_of_worship|school)$"]{a};'
             f');out geom;')
 
 
@@ -303,6 +310,25 @@ def building_kind(tags: dict, a: float) -> str:
     if a < 25:
         return "small"
     return "house" if a <= HOUSE_MAX_AREA else "large"
+
+
+CHURCH = {"church", "chapel", "cathedral"}
+
+
+def landmark(tags: dict) -> Optional[str]:
+    """What a building's known for, drawn as one: a church (a spire), a school (a flag and a
+    playground) or a pub (its sign)."""
+    b, am = str(tags.get("building") or "").lower(), str(tags.get("amenity") or "").lower()
+    if b in CHURCH or am == "place_of_worship" and tags.get("religion") in (None, "christian"):
+        return "church"
+    if b == "school" or am in ("school", "college"):
+        return "school"
+    if b == "pub" or am in ("pub", "bar"):
+        return "pub"
+    return None
+
+
+POI_KINDS = {"bus_stop": "bus_stop", "bench": "bench", "post_box": "post_box", "waste_basket": "bin"}
 
 
 HOUSE_STOREYS = ((0.14, 3.2), (0.86, 5.8), (1.0, 8.4))  # houses with no height: bungalows, 2 and 3 storeys
@@ -527,21 +553,157 @@ def _cars(roads: list, buildings: list, half: float) -> list:
     return out[:800]
 
 
+GARDEN_MAX = 30.0  # m: a back garden's longest
+GARDEN_NONE = 18.0  # m: ...with nothing behind it
+
+
+def _plots(buildings: list, roads: list, half: float) -> list:
+    """Each house's front and back garden, from where its street is: {"id", "c": its middle,
+    "u": along the street, "n": away from the street (to the back), "hl": half its width along the
+    street, "hf"/"hb": from its middle to its front / back, "f": the front garden's depth (to the
+    pavement), "w": half the plot's width (to half way to the next house), "b": the back garden's (to the next building or road behind: half way to a house
+    backing onto it)}. The page draws fences, patios, sheds, driveways, paths... on them."""
+    cell = 40.0
+    rgrid: dict = {}
+    for r in roads:
+        if r["k"] == "path":
+            continue
+        for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
+            for gx in range(int(math.floor(min(x1, x2) / cell)) - 1, int(math.floor(max(x1, x2) / cell)) + 2):
+                for gy in range(int(math.floor(min(y1, y2) / cell)) - 1, int(math.floor(max(y1, y2) / cell)) + 2):
+                    rgrid.setdefault((gx, gy), []).append((x1, y1, x2, y2, r["w"]))
+    bgrid: dict = {}
+    for i, b in enumerate(buildings):
+        cx, cy = centroid(b["p"])
+        bgrid.setdefault((int(math.floor(cx / cell)), int(math.floor(cy / cell))), []).append(i)
+    out = []
+    for i, b in enumerate(buildings):
+        if b.get("r") != "gable" or b.get("k") != "house":
+            continue
+        cx, cy = centroid(b["p"])
+        g = (int(math.floor(cx / cell)), int(math.floor(cy / cell)))
+        # the street it faces: in a row of houses (terraces, semis), the row runs along it, and
+        # its front's the side with a street nearer; else the nearest street
+        pts = []
+        for x1, y1, x2, y2, w in rgrid.get(g, ()):
+            n = max(1, int(math.hypot(x2 - x1, y2 - y1) / 3))
+            pts += [(x1 + (x2 - x1) * k / n, y1 + (y2 - y1) * k / n, w) for k in range(n + 1)]
+        if not pts:
+            continue
+        near = None
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for j in bgrid.get((g[0] + dx, g[1] + dy), ()):
+                    o = buildings[j]
+                    if j == i or o.get("k") != "house":
+                        continue
+                    ox, oy = centroid(o["p"])
+                    dd = math.hypot(ox - cx, oy - cy)
+                    if dd < 16 and (near is None or dd < near[0]):
+                        near = (dd, ox - cx, oy - cy)
+        choice = None
+        if near:
+            ux, uy = near[1] / near[0], near[2] / near[0]
+            for sgn in (1, -1):
+                nx, ny = -uy * sgn, ux * sgn
+                for px, py, w in pts:
+                    s = (px - cx) * nx + (py - cy) * ny
+                    if 0 < s < FACE_STREET_M and abs((px - cx) * ux + (py - cy) * uy) <= 12 and (choice is None or s < choice[0]):
+                        choice = (s, -nx, -ny, w)  # (n: away from it)
+        if choice is None:
+            px, py, w = min(pts, key=lambda q: math.hypot(q[0] - cx, q[1] - cy))
+            d = math.hypot(px - cx, py - cy)
+            if d > FACE_STREET_M or d < 1:
+                continue
+            choice = (d, (cx - px) / d, (cy - py) / d, w)
+        d, nx, ny, w = choice
+        ux, uy = -ny, nx
+        corners = b.get("rect") or b["p"]
+        ls = [(px - cx) * ux + (py - cy) * uy for px, py in corners]
+        ss = [(px - cx) * nx + (py - cy) * ny for px, py in corners]
+        hl, hf, hb = max(abs(v) for v in ls), -min(ss), max(ss)
+        front = d - hf - (w / 2 + 2.8)
+        # what's behind: the nearest building or street across the garden's width
+        def first_behind(p, q, width):
+            """How far behind the house (s past hb) the segment p→q first comes, within |l| <= width; None if not."""
+            s1, l1 = (p[0] - cx) * nx + (p[1] - cy) * ny, (p[0] - cx) * ux + (p[1] - cy) * uy
+            s2, l2 = (q[0] - cx) * nx + (q[1] - cy) * ny, (q[0] - cx) * ux + (q[1] - cy) * uy
+            t0, t1 = 0.0, 1.0
+            dl = l2 - l1
+            if abs(dl) < 1e-9:
+                if abs(l1) > width:
+                    return None
+            else:
+                ta, tb = (-width - l1) / dl, (width - l1) / dl
+                t0, t1 = max(t0, min(ta, tb)), min(t1, max(ta, tb))
+                if t0 > t1:
+                    return None
+            sa, sb = s1 + (s2 - s1) * t0, s1 + (s2 - s1) * t1
+            best_s = None
+            for sv, other in ((sa, sb), (sb, sa)):
+                if sv > hb:
+                    best_s = sv if best_s is None else min(best_s, sv)
+                elif other > hb:
+                    best_s = hb + 0.01 if best_s is None else min(best_s, hb + 0.01)
+            return None if best_s is None else best_s - hb
+        back = GARDEN_NONE
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for j in bgrid.get((g[0] + dx, g[1] + dy), ()):
+                    if j == i:
+                        continue
+                    o = buildings[j]
+                    gaps = [first_behind(o["p"][k], o["p"][(k + 1) % len(o["p"])], hl + 0.5) for k in range(len(o["p"]))]
+                    gaps = [v for v in gaps if v is not None]
+                    if gaps:
+                        gap = min(gaps)
+                        back = min(back, gap / 2 if o.get("k") == "house" else gap - 0.5)
+        for x1, y1, x2, y2, rw in rgrid.get(g, ()):
+            v = first_behind((x1, y1), (x2, y2), hl + 4)
+            if v is not None:
+                back = min(back, v - rw / 2 - 2.8)
+        back = min(back, GARDEN_MAX)
+        # the plot's half width: to half way to the house next door (along the street), else a little past the house
+        pw = hl + 1.5
+        if near:
+            along = abs(near[1] * ux + near[2] * uy)
+            if along > near[0] * 0.8:
+                pw = max(hl, min(along / 2, hl + 4))
+        # (kept to the map)
+        for k in (back, ):
+            ex, ey = cx + nx * (hb + k), cy + ny * (hb + k)
+            if abs(ex) > half - 2 or abs(ey) > half - 2:
+                back = max(0.0, back - max(abs(ex) - half + 2, abs(ey) - half + 2))
+        out.append({"id": b["id"], "c": [round(cx, 1), round(cy, 1)], "u": [round(ux, 3), round(uy, 3)], "n": [round(nx, 3), round(ny, 3)],
+                    "hl": round(hl, 1), "w": round(pw, 1), "hf": round(hf, 1), "hb": round(hb, 1), "f": round(max(0.0, min(front, 15.0)), 1),
+                    "b": round(max(0.0, back), 1)})
+    return out
+
+
 def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = None,
                 home_id: Optional[int] = None, half: float = HALF) -> dict:
     """The scene (see the top of this file) from Overpass's answer (out geom), centred on (lat0, lon0).
     Your home: the building with OpenStreetMap id home_id, else the one at home_pt (lat, lon) or
     nearest it (within 30 m)."""
-    buildings, roads, rails, areas, water, trees = [], [], [], [], [], []
+    buildings, roads, rails, areas, water, trees, poi, lm_nodes = [], [], [], [], [], [], [], []
     tree_areas = []
     for el in (osm or {}).get("elements") or []:
         tags = el.get("tags") or {}
         t = el.get("type")
         if t == "node":
-            if tags.get("natural") == "tree" and "lat" in el:
-                x, y = project(el["lat"], el["lon"], lat0, lon0)
-                if abs(x) <= half and abs(y) <= half:
-                    trees.append([round(x, 1), round(y, 1), round(0.8 + 0.8 * _hash01(x, y, 8), 2)])
+            if "lat" not in el:
+                continue
+            x, y = project(el["lat"], el["lon"], lat0, lon0)
+            if abs(x) > half or abs(y) > half:
+                continue
+            if tags.get("natural") == "tree":
+                trees.append([round(x, 1), round(y, 1), round(0.8 + 0.8 * _hash01(x, y, 8), 2)])
+            kind = POI_KINDS.get(tags.get("highway")) or POI_KINDS.get(tags.get("amenity"))
+            if kind:
+                poi.append([round(x, 1), round(y, 1), kind])
+            lm = landmark(tags) if tags.get("amenity") else None
+            if lm:
+                lm_nodes.append((x, y, lm))
             continue
         if tags.get("building") and tags.get("building") != "no" and tags.get("location") != "underground":
             for ring in _rings(el, lat0, lon0):
@@ -554,6 +716,11 @@ def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = 
                     continue
                 kind = building_kind(tags, a)
                 b = {"id": el.get("id"), "k": kind, "p": _r(anticlockwise(clipped)), "h": round(building_height(tags, kind, el.get("id") or 0), 1)}
+                lm = landmark(tags)
+                if lm:
+                    b["lm"] = lm
+                    if kind == "house":  # (a pub or chapel tagged as a house: drawn as a building)
+                        b["k"] = "civic" if lm != "pub" else "commercial"
                 shape = str(tags.get("roof:shape") or "").lower()
                 if kind == "house" and shape not in ("flat",) and len(clipped) == len(ring):
                     rect = min_rect(ring)
@@ -607,9 +774,20 @@ def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = 
     trees += _garden_trees(roads, foot, areas, half)
     cars = _cars(roads, foot, half)
     _face_streets(buildings, roads)
+    # (a pub, church or school mapped as a point: the building it's in)
+    for x, y, lm in lm_nodes:
+        for b in buildings:
+            if "lm" not in b and inside((x, y), b["p"]):
+                b["lm"] = lm
+                if b["k"] == "house":
+                    b.pop("rect", None)
+                    b["r"], b["k"] = "flat", ("commercial" if lm == "pub" else "civic")
+                break
     home = pick_home(buildings, lat0, lon0, home_pt, home_id)
-    return {"v": 1, "half": half, "home": home, "buildings": buildings, "roads": roads, "rails": rails,
-            "areas": areas, "water": water, "trees": trees[:4000], "cars": cars}
+    plots = _plots(buildings, roads, half)
+    # (gardens' trees: off the patios and out of the sheds' corner; kept to the lawn)
+    return {"v": SCENE_V, "half": half, "home": home, "buildings": buildings, "roads": roads, "rails": rails,
+            "areas": areas, "water": water, "trees": trees[:4000], "cars": cars, "plots": plots, "poi": poi[:400]}
 
 
 def pick_home(buildings: list, lat0: float, lon0: float, home_pt: Optional[tuple], home_id: Optional[int]) -> dict:

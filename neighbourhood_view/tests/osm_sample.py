@@ -66,6 +66,20 @@ def sample() -> dict:
     way(_rect(-60, 70, 50, 16), {"building": "retail"})
     way(_rect(260, 120, 70, 40, 0.08), {"building": "warehouse"})
     way(_rect(0, 180, 60, 14, 0.08), {"building": "train_station"})
+    # a church, a school, a pub (a point in its building), a river off the edge, and street furniture
+    way(_rect(137, -96, 20, 10), {"building": "church", "amenity": "place_of_worship"})
+    way(_rect(137, -56, 20, 12), {"building": "school"})
+    way(_rect(-150, 98, 14, 10), {"building": "yes"})
+    way([(-380, -20), (-200, -30), (-130, -100)], {"waterway": "river"})
+
+    def node(x, y, tags):
+        nid[0] += 1
+        la, lo = unproject(x, y, LAT0, LON0)
+        els.append({"type": "node", "id": nid[0], "lat": la, "lon": lo, "tags": tags})
+    node(-150, 98, {"amenity": "pub", "name": "The Crown"})
+    node(30, -86, {"highway": "bus_stop"})
+    node(-150, -118, {"amenity": "bench"})
+    node(70, -84, {"amenity": "post_box"})
     els.append({"type": "node", "id": 9, "lat": unproject(30, -60, LAT0, LON0)[0],
                 "lon": unproject(30, -60, LAT0, LON0)[1], "tags": {"natural": "tree"}})
     return {"elements": els}

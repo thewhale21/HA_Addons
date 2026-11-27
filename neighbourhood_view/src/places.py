@@ -159,6 +159,8 @@ class SceneStore:
             return False
         if float(sc.get("half") or 0) != float(half):
             return False
+        if int(sc.get("v") or 1) < S.SCENE_V:
+            return False  # (made before the scene had everything now drawn: made again)
         if (picked or {}).get("id") != ((sc.get("home") or {}).get("id") if (sc.get("home") or {}).get("found") == "picked" else None):
             return False
         try:
@@ -189,7 +191,7 @@ class PlaceStore:
     def fits(self, zone: str, lat: float, lon: float, half: float) -> bool:
         sc = self.scenes.get(zone) or {}
         return (sc.get("lat") == round(lat, 6) and sc.get("lon") == round(lon, 6)
-                and float(sc.get("half") or 0) == float(half) and _fresh(sc))
+                and float(sc.get("half") or 0) == float(half) and int(sc.get("v") or 1) >= S.SCENE_V and _fresh(sc))
 
     def put(self, zone: str, sc: dict) -> None:
         self.scenes[zone] = sc
