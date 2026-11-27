@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.16.1 — Lighter rain and snow, pickers not cut off
+
+- **Improvement:** fewer raindrops and snowflakes, and the rain's layer is
+  smaller, so it's lighter on older devices. On a slower device (4 cores or
+  fewer, or 2 GB or less) there's one layer of rain or snow, no drifting
+  cloud, no splashes or puddle ripples and fewer falling leaves. The card's
+  `effects: lite` (or `full`) option says which.
+- **Fix:** Settings: a picker's list (e.g. the weather entity) is no longer
+  cut off by the bottom of its section (e.g. On the map).
 ## 0.16.0 — Smooth rain, tidier streets and gardens
 
 - **Improvement:** rain, snow and drifting cloud are moved by the browser's
@@ -17,6 +26,7 @@
 
 - **Fix:** removed the empty `options` and `schema` from `config.yaml` (they're
   Home Assistant's defaults; the add-on linter failed on them).
+
 ## 0.15.0 — A living neighbourhood
 
 - **Feature:** gardens: front paths, driveways (with cars, some to a garage),

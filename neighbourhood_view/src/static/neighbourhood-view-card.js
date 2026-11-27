@@ -848,7 +848,7 @@
     CTX.wet = ['rainy', 'pouring', 'lightning-rainy', 'hail', 'snowy-rainy'].includes(wx);
     CTX.hail = wx === 'hail';
     CTX.windy = ['windy', 'windy-variant', 'pouring', 'lightning-rainy'].includes(wx);
-    CTX.leaves = 90;  // (falling leaves on this map, at most)
+    CTX.leaves = LITE ? 20 : 90;  // (falling leaves on this map, at most)
     CTX.occ = occasion(opts.date ? new Date(opts.date) : new Date());
     CTX.energy = opts.isHome ? (live.energy || null) : null;
     const motion = opts.motion !== false;
@@ -1043,7 +1043,7 @@
                 return `<polygon points="${pts(P)}" fill="${col}" opacity="${op}" stroke-linejoin="round"/>`;
               };
               let s = blob(x, y, L2, W2, '#7f97ab', '.75') + blob(x - ux * L2 * 0.2, y - uy * L2 * 0.2, L2 * 0.45, W2 * 0.35, '#dbe8f2', '.7');
-              if (rnd(x, y, 226) < 0.55) {
+              if (!LITE && rnd(x, y, 226) < 0.3) {
                 const c = V.p(x, y, 0), dur = (1.2 + rnd(x, y, 227)).toFixed(2), begin = (rnd(x, y, 228) * 2).toFixed(2);
                 s += `<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".2" ry="${f(0.2 * SE)}" fill="none" stroke="#ffffff" stroke-width=".15" opacity="0">`
                   + `<animate attributeName="rx" values=".2;${f(W2 * 0.8)}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/><animate attributeName="ry" values="${f(0.2 * SE)};${f(W2 * 0.8 * SE)}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`
@@ -1261,9 +1261,9 @@
     things.sort((a, b) => b[0] - a[0]);
     for (const t of things) out.push(t[1]);
     // rain splashing on the ground all over (or hailstones lying about)
-    if (CTX.wet || CTX.hail) {
+    if ((CTX.wet && !LITE) || CTX.hail) {
       const sp = [];
-      for (let i = 0; i < (CTX.hail ? 70 : 36); i++) {
+      for (let i = 0; i < (CTX.hail ? 50 : 18); i++) {
         const x = (rnd(i, H, 230) - 0.5) * 2 * H, y = (rnd(H, i, 231) - 0.5) * 2 * H;
         if (!on(x, y)) continue;
         const c = V.p(x, y, 0);
@@ -1557,12 +1557,16 @@
   }
   const streak = (len, w, a) => (x, y, k) => `<line x1="${f(x)}" y1="${f(y)}" x2="${f(x)}" y2="${f(y + len * (0.7 + 0.6 * k))}" stroke="rgba(205,225,255,${a})" stroke-width="${w}" stroke-linecap="round"/>`;
   const flake = (r, a) => (x, y, k) => `<circle cx="${f(x)}" cy="${f(y)}" r="${f(r * (0.6 + 0.8 * k))}" fill="rgba(255,255,255,${a})"/>`;
-  const RAIN_FAR = fxTile(256, 34, 1, streak(12, 1, 0.38)), RAIN_NEAR = fxTile(256, 16, 2, streak(22, 1.6, 0.5));
-  const RAIN_HEAVY = fxTile(256, 40, 3, streak(26, 1.8, 0.55));
-  const SNOW_FAR = fxTile(300, 40, 4, flake(1.3, 0.75)), SNOW_NEAR = fxTile(300, 18, 5, flake(2.4, 0.95));
+  const RAIN_FAR = fxTile(256, 14, 1, streak(12, 1, 0.38)), RAIN_NEAR = fxTile(256, 9, 2, streak(22, 1.6, 0.5));
+  const RAIN_HEAVY = fxTile(256, 16, 3, streak(26, 1.8, 0.55));
+  const SNOW_FAR = fxTile(300, 16, 4, flake(1.3, 0.75)), SNOW_NEAR = fxTile(300, 9, 5, flake(2.4, 0.95));
+  // A slower device (4 cores or fewer, or 2 GB or less): one layer of rain or snow, no splashes or
+  // ripples, fewer falling leaves (the card's option effects: lite / full says which)
+  const SLOW = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 2;
+  let LITE = SLOW;
   const FX_CSS = `
     .nvfx{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-    .nv-tilt{position:absolute;inset:-30%;transform:rotate(12deg)}
+    .nv-tilt{position:absolute;inset:-18%;transform:rotate(12deg)}
     .nv-fall{position:absolute;left:0;right:0;top:-300px;bottom:0;background-repeat:repeat;will-change:transform;animation:nvfall256 linear infinite}
     .nv-fall.rf{background-image:${RAIN_FAR};animation-duration:.85s;opacity:.75}
     .nv-fall.rn{background-image:${RAIN_NEAR};animation-duration:.5s}
@@ -1616,9 +1620,9 @@
     const cloud = (light) => `<div class="nvfx"><div class="nv-cloud${light ? ' light' : ''}"></div></div>`;
     if (['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy', 'hail'].includes(st)) {
       const heavy = st === 'pouring' || st === 'lightning-rainy';
-      fx += `<div class="nvfx nv-grey"></div>${cloud()}<div class="nvfx"><div class="nv-tilt"><div class="nv-fall rf"></div><div class="nv-fall rn"></div>${heavy ? '<div class="nv-fall rh"></div>' : ''}</div></div>`;
+      fx += `<div class="nvfx nv-grey"></div>${LITE ? '' : cloud()}<div class="nvfx"><div class="nv-tilt">${LITE ? '' : '<div class="nv-fall rf"></div>'}<div class="nv-fall rn"></div>${heavy ? '<div class="nv-fall rh"></div>' : ''}</div></div>`;
     }
-    if (['snowy', 'snowy-rainy'].includes(st)) fx += '<div class="nvfx"><div class="nv-tilt" style="transform:rotate(4deg)"><div class="nv-sway"><div class="nv-fall sf"></div><div class="nv-fall sn"></div></div></div></div>';
+    if (['snowy', 'snowy-rainy'].includes(st)) fx += `<div class="nvfx"><div class="nv-tilt" style="transform:rotate(4deg)"><div class="nv-sway">${LITE ? '' : '<div class="nv-fall sf"></div>'}<div class="nv-fall sn"></div></div></div></div>`;
     if (st === 'fog') fx += '<div class="nvfx nv-fog"></div>';
     if (st === 'cloudy') fx += '<div class="nvfx nv-grey"></div>' + cloud();
     if (st === 'partlycloudy') fx += cloud(true);
@@ -1936,6 +1940,7 @@
       const s = this._scene, label = this._config.label || (s.number ? `NO. ${s.number}` : 'HOME');
       const live = this._ents && this._hass ? liveFrom(this._hass.states || {}, this._ents) : null;
       this._liveKey = JSON.stringify(live);
+      LITE = this._config.effects === 'lite' ? true : this._config.effects === 'full' ? false : SLOW;
       render(this._root.querySelector('.map'), s, {rot: getRot(), zoom: zoomStep(0), label: String(label).toUpperCase(), live, places: this._places,
         motion: this._config.motion !== false, date: this._config.date || undefined});
       this._msg('');

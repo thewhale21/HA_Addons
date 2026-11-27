@@ -256,7 +256,9 @@
   .basic .bnr .range .mark { background: var(--text); box-shadow: none; }
   /* A list of things (the automations, settings, diagnostics): a row each with a one-line
      summary, opened in place for the rest (its card's contents) */
-  .rows { padding: 0; overflow: hidden; }
+  /* (not overflow: hidden, so a picker's list can open past the list's edge) */
+  .rows { padding: 0; overflow: visible; }
+  .rows > .row-item:last-child:not([open]) > summary { border-radius: 0 0 var(--radius) var(--radius); }
   .rows > h2 { padding: 16px 16px 8px; margin: 0; }
   .rows > .rows-intro { margin: 0 16px 12px; }
   .row-item { border-top: 1px solid var(--divider); }

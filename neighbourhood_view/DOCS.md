@@ -255,6 +255,7 @@ Options:
 | `weather` | A weather entity for this card, instead of the add-on's |
 | `people` | People for this card, instead of the add-on's, e.g. `[person.matt, person.jo]` |
 | `motion` | `false`: nothing moves (traffic, people, ducks, a train), e.g. on a slow tablet |
+| `effects` | `lite`: one layer of rain or snow, no drifting cloud, no splashes or puddle ripples, fewer falling leaves; `full`: all of it. Left out: lite on slower devices (4 cores or fewer, or 2 GB or less), full on the rest |
 | `tap_navigate` | Where tapping the map goes, instead of Settings › Screensaver, e.g. `/wall-display-2/home` (`''`: nowhere) |
 
 Any signed-in Home Assistant user can see the card, kiosk and other
