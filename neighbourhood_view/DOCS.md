@@ -21,7 +21,7 @@ as the add-on's page and as a dashboard card.
    showing its number.
    - **+ −** zoom in around your house and back out (it starts close in,
      on your street and the ones round it; − four times shows the whole
-     square), **⟲ ⟳** turn it a quarter at a time (both remembered on
+     square), **⟲ ⟳** turn it an eighth (45°) at a time (both remembered on
      each device).
    - **⌂** picks your house: click it, then click your house. The map's
      made again centred on it, and it's kept until you change your address.
@@ -315,7 +315,7 @@ In a panel view it fills the screen below the header; elsewhere it's 4:3,
 or as tall as `height` says. On a screen much narrower (or flatter) than
 the drawing, e.g. a phone held upright, it shows closer in around your
 house instead of the whole square small in the middle. **+ −** zoom in
-and out, **⟲ ⟳** turn it.
+and out, **⟲ ⟳** turn it, 45° at a time.
 
 Options:
 

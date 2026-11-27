@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.22.1 — Turn by 45°
+
+- **Change:** ⟲ and ⟳ turn the map 45° at a time instead of 90° (on the
+  card and the add-on's page), so it can be seen from the corners too. A
+  turn you'd kept is carried over.
 ## 0.22.0 — Smoother, and more to see
 
 - **Improvement:** the map is drawn in layers: the still ground, what

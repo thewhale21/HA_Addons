@@ -49,7 +49,7 @@
   const pv = (r) => r.pv || PAVE;
 
   function view(rot) {
-    const a = (30 + 90 * ((rot || 0) % 4)) * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+    const a = (30 + 45 * ((rot || 0) % 8)) * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);  // (rot: eighth turns)
     return {
       // screen x, y (y down) of a point x, y metres at height z
       p: (x, y, z = 0) => [x * ca - y * sa, -(x * sa + y * ca) * SE - z * CE],
@@ -2166,7 +2166,7 @@
 
   /**
    * The drawing as SVG text: your home's map, with the other places' maps beside it (left, right,
-   * above, below; several on one side share it). opts: {rot: 0-3 (quarter turns), zoom, label: the
+   * above, below; several on one side share it). opts: {rot: 0-7 (eighth turns, 45° each), zoom, label: the
    * pin's text, pick: true (your map's buildings can be clicked: data-id), hideLabel, live,
    * places: [{name, side, scene}]}
    */
@@ -2569,13 +2569,20 @@
     return v > (['kw', 'kwh'].includes(String(a.unit_of_measurement || '').toLowerCase()) ? 0.02 : 20);
   }
 
-  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, occasion, autoRange, steady, binDay, moonPhase, version: VERSION};
+  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, occasion, autoRange, steady, binDay, moonPhase, getRot: () => getRot(), setRot: (r) => setRot(r), version: VERSION};
 
   // ---------- the dashboard card ----------
   if (!window.customElements || customElements.get('neighbourhood-view-card')) return;
 
-  const ROT_KEY = 'neighbourhood-view-rot';
-  const getRot = () => { try { return Number(localStorage.getItem(ROT_KEY)) || 0; } catch (e) { return 0; } };
+  // (turned in eighths, 45° each; kept as before 0.23.0 in quarters, under the old name: turned to eighths)
+  const ROT_KEY = 'neighbourhood-view-rot8', OLD_ROT_KEY = 'neighbourhood-view-rot';
+  const getRot = () => {
+    try {
+      const v = localStorage.getItem(ROT_KEY);
+      if (v != null) return (Number(v) || 0) % 8;
+      return ((Number(localStorage.getItem(OLD_ROT_KEY)) || 0) * 2) % 8;
+    } catch (e) { return 0; }
+  };
   const setRot = (r) => { try { localStorage.setItem(ROT_KEY, String(r)); } catch (e) { /* (not kept) */ } };
 
   /* The map as a screensaver (the add-on's Settings › Screensaver, for every screen): tapping it
@@ -2666,7 +2673,7 @@
       this._root.querySelector('.tools').addEventListener('click', (e) => {
         const btn = e.target && e.target.closest ? e.target.closest('button') : null;
         const d = (btn && btn.dataset) || {}, r = Number(d.r), z = Number(d.z);
-        if (r) setRot((getRot() + r + 4) % 4);
+        if (r) setRot((getRot() + r + 8) % 8);
         else if (z) zoomStep(z);
         else return;
         this._draw();

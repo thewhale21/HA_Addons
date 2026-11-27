@@ -714,8 +714,8 @@ function renderState(s) {
 
 // ---------- Overview: the map ----------
 const nv = {scene: null, key: null, picking: false};
-const ROT_KEY = 'neighbourhood-view-rot';
-const getRot = () => { try { return Number(localStorage.getItem(ROT_KEY)) || 0; } catch (e) { return 0; } };
+// (the card's turn, in eighths: 45° each; the same as the card's, which keeps it)
+const getRot = () => (window.NeighbourhoodView && NeighbourhoodView.getRot ? NeighbourhoodView.getRot() : 0);
 async function loadMap() {
   let d;
   try { d = await api('scene'); } catch (e) { return; }
@@ -759,7 +759,7 @@ function setPicking(on) {
 }
 document.querySelector('.nv-tools').addEventListener('click', (e) => {
   const d = e.target.dataset || {}, r = Number(d.r), z = Number(d.z);
-  if (r) { try { localStorage.setItem(ROT_KEY, String((getRot() + r + 4) % 4)); } catch (err) {} drawMap(); }
+  if (r) { NeighbourhoodView.setRot((getRot() + r + 8) % 8); drawMap(); }
   if (z) { NeighbourhoodView.zoom(z); drawMap(); }
 });
 $('o-pick').addEventListener('click', () => {
