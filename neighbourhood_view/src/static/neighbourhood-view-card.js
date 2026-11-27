@@ -1928,6 +1928,21 @@
     return out;
   }
 
+  /* live, steadied against what was last drawn (prev): a phone's location wanders by a few metres
+   * every few seconds, and each change would draw the whole map again (clouds and traffic starting
+   * over), so someone who's moved less than STEADY_M keeps the place they were drawn at. */
+  const STEADY_M = 40;
+  function steady(live, prev) {
+    if (!live || !prev || !live.people) return live;
+    const was = new Map((prev.people || []).map((p) => [p.entity_id, p]));
+    return {...live, people: live.people.map((p) => {
+      const o = was.get(p.entity_id);
+      if (!o || p.lat == null || o.lat == null || p.state !== o.state) return p;
+      const dy = (p.lat - o.lat) * 111320, dx = (p.lon - o.lon) * 111320 * Math.cos(p.lat * Math.PI / 180);
+      return Math.hypot(dx, dy) < STEADY_M ? {...p, lat: o.lat, lon: o.lon} : p;
+    })};
+  }
+
   // Whether an energy entity says it's going (the same as src/live.py active())
   const ON_WORDS = ['on', 'charging', 'heating', 'heat', 'cooling', 'cool', 'running', 'true', 'active', 'producing', 'heat_pump', 'eco', 'performance'];
   function active(st) {
@@ -1941,7 +1956,7 @@
     return v > (['kw', 'kwh'].includes(String(a.unit_of_measurement || '').toLowerCase()) ? 0.02 : 20);
   }
 
-  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, occasion, autoRange, version: VERSION};
+  window.NeighbourhoodView = {draw, render, fit, zoom: zoomStep, liveFrom, occasion, autoRange, steady, version: VERSION};
 
   // ---------- the dashboard card ----------
   if (!window.customElements || customElements.get('neighbourhood-view-card')) return;
@@ -2001,8 +2016,8 @@
       if (!this._root) this._build();
       // (drawn again when the weather, someone's home/away or day/night changes)
       if (this._scene && this._ents) {
-        const live = liveFrom(hass.states || {}, this._ents), key = JSON.stringify(live);
-        if (key !== this._liveKey) { this._liveKey = key; this._draw(); }
+        const live = steady(liveFrom(hass.states || {}, this._ents), this._live), key = JSON.stringify(live);
+        if (key !== this._liveKey) this._draw(live);
       }
       if (this._root) this._root.querySelector('.map').classList.toggle('tap', !!this._tap());
       // (the add-on's map file renamed or first written: read it again)
@@ -2150,10 +2165,11 @@
       }
     }
 
-    _draw() {
+    _draw(now) {
       if (!this._scene) return;
       const s = this._scene, label = this._config.label || (s.number ? `NO. ${s.number}` : 'HOME');
-      const live = this._ents && this._hass ? liveFrom(this._hass.states || {}, this._ents) : null;
+      const live = now || (this._ents && this._hass ? steady(liveFrom(this._hass.states || {}, this._ents), this._live) : null);
+      this._live = live;
       this._liveKey = JSON.stringify(live);
       LITE = this._config.effects === 'lite' ? true : this._config.effects === 'full' ? false : SLOW;
       render(this._root.querySelector('.map'), s, {rot: getRot(), zoom: zoomStep(0), label: String(label).toUpperCase(), live, places: this._places,

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.19.1 — The map no longer starts over every few seconds
+
+- **Fix:** the map (on the dashboard card and the add-on's page) was drawn
+  again every time someone's phone reported its location, which can be
+  every few seconds, so the clouds jumped back and the traffic started
+  over (some cars vanishing). Someone who has moved less than 40 m now
+  stays where they were drawn, so the map is only drawn again when
+  something you'd see changes.
 ## 0.19.0 — OpenStreetMap's data kept
 
 - **Feature:** what OpenStreetMap (and postcodes.io) sent is kept. After an

@@ -44,7 +44,9 @@ Settings › **On the map**:
   they're in. Whoever's home has their picture (or initials) over your
   house. Someone out whose tracker gives a location (e.g. the companion
   app's GPS) that's on one of the maps, yours or another place's, has
-  their face on a stalk where they are; someone in a zone that's one of
+  their face on a stalk where they are (moved once they've gone 40 m or
+  more, so the map isn't drawn again for every small wobble in a phone's
+  location); someone in a zone that's one of
   your other places, without a location, over that place's pin.
 - **Night** (Home Assistant's sun below the horizon): the map goes dark
   blue, about a third of the other houses' windows are lit, and your

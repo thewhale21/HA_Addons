@@ -696,7 +696,7 @@ function renderState(s) {
   // (the map's read again when it's been made again, or the address changed)
   const key = `${s.made}|${s.address}|${s.error}|${s.status}|${JSON.stringify((s.extra || {}).places || [])}`;
   if (key !== nv.key) { nv.key = key; loadMap(); }
-  else if (JSON.stringify(s.live || {}) !== nv.liveKey) drawMap();
+  else if (JSON.stringify(liveNow() || {}) !== nv.liveKey) drawMap();
   drawMapStatus();
   drawCard();
 }
@@ -715,11 +715,14 @@ async function loadMap() {
   drawMap();
 }
 function showMsg(text) { $('o-msg').textContent = text || ''; $('o-msg').style.display = text ? 'flex' : 'none'; }
+// (what's happening now, steadied against what was drawn: see steady() in the card's script)
+const liveNow = () => window.NeighbourhoodView && NeighbourhoodView.steady ? NeighbourhoodView.steady((state || {}).live, nv.live) : (state || {}).live;
 function drawMap() {
   const sc = nv.scene;
   if (!sc || !window.NeighbourhoodView) return;
-  nv.liveKey = JSON.stringify((state || {}).live || {});
-  NeighbourhoodView.render($('o-map'), sc, {rot: getRot(), zoom: NeighbourhoodView.zoom(0), live: (state || {}).live, places: nv.places, occasions: nv.occasions, label: sc.number ? `NO. ${sc.number}`.toUpperCase() : 'HOME', pick: true, hideLabel: nv.picking});
+  nv.live = liveNow();
+  nv.liveKey = JSON.stringify(nv.live || {});
+  NeighbourhoodView.render($('o-map'), sc, {rot: getRot(), zoom: NeighbourhoodView.zoom(0), live: nv.live, places: nv.places, occasions: nv.occasions, label: sc.number ? `NO. ${sc.number}`.toUpperCase() : 'HOME', pick: true, hideLabel: nv.picking});
   showMsg('');
   $('o-top').hidden = false;
   $('o-addr').textContent = [sc.number, sc.postcode].filter(Boolean).join(', ');
