@@ -323,10 +323,13 @@
     }
     if (CTX.occ && CTX.occ.xmas && (isHome || rnd(id, 35) < 0.4)) {
       // lights along the eaves (twinkling at night)
-      const n = Math.max(3, Math.floor(len / 0.6));
+      const n = Math.max(3, Math.floor(len / 0.55));
+      // (the wire, swagged between the bulbs)
+      const w0 = FP(0, 0, -0.1), w1 = FP(1, 0, -0.1);
+      s += `<line x1="${f(w0[0])}" y1="${f(w0[1])}" x2="${f(w1[0])}" y2="${f(w1[1])}" stroke="#2e3b2f" stroke-width=".05" opacity=".7"/>`;
       for (let k = 0; k <= n; k++) {
         const q = FP(k / n, 0, -0.1), col = XMAS[(k + id) % 4];
-        s += `<circle cx="${f(q[0])}" cy="${f(q[1])}" r="${CTX.night ? '.2' : '.14'}" fill="${col}"${CTX.night && k % 3 === 0 ? `><animate attributeName="opacity" values="1;.25;1" dur="${(1 + rnd(id, k, 36)).toFixed(1)}s" repeatCount="indefinite"/></circle>` : '/>'}`;
+        s += `<circle cx="${f(q[0])}" cy="${f(q[1])}" r="${CTX.night ? '.26' : '.22'}" fill="${col}"${CTX.night && k % 3 === 0 ? `><animate attributeName="opacity" values="1;.25;1" dur="${(1 + rnd(id, k, 36)).toFixed(1)}s" repeatCount="indefinite"/></circle>` : '/>'}`;
       }
       if (CTX.night) { const m = FP(0.5, 0, -0.1); s += `<ellipse cx="${f(m[0])}" cy="${f(m[1])}" rx="${f(len * 0.6)}" ry="1.4" fill="rgb(255,200,120)" opacity=".12"/>`; }
     }
@@ -733,6 +736,29 @@
     return s;
   }
 
+  // A Christmas tree in a front garden: tiers of green, baubles, a star on top (lit at night)
+  function xmasTree(V, x, y, seed, s = 1) {
+    const g = V.p(x, y, 0), top = V.p(x, y, 2.6 * s), night = CTX.night;
+    let out = `<ellipse cx="${f(g[0])}" cy="${f(g[1])}" rx="${f(0.9 * s)}" ry="${f(0.9 * s * SE)}" fill="#000000" opacity=".18"/>`
+      + `<rect x="${f(g[0] - 0.12 * s)}" y="${f(g[1] - 0.45 * s)}" width="${f(0.24 * s)}" height="${f(0.45 * s)}" fill="#6d4c41"/>`;
+    const tiers = [[0.35, 1.25, 0.95], [0.95, 1.85, 0.75], [1.5, 2.6, 0.5]];
+    for (const [z0, z1, r] of tiers) {
+      const b = V.p(x, y, z0 * s), a = V.p(x, y, z1 * s), R = r * s;
+      out += `<path d="M${f(b[0] - R)} ${f(b[1])}L${f(a[0])} ${f(a[1])}L${f(b[0] + R)} ${f(b[1])}Q${f(b[0])} ${f(b[1] + 0.25 * s)} ${f(b[0] - R)} ${f(b[1])}z" fill="${snowy('#2e7d32', 0.7)}"/>`
+        + `<path d="M${f(a[0])} ${f(a[1])}L${f(b[0] + R)} ${f(b[1])}Q${f(b[0] + R * 0.4)} ${f(b[1] + 0.15 * s)} ${f(b[0])} ${f(b[1] + 0.12 * s)}z" fill="${snowy('#1b5e20', 0.7)}"/>`;
+    }
+    for (let k = 0; k < 9; k++) {
+      const z = (0.5 + rnd(seed, k, 420) * 1.75) * s, wid = (1.25 - (z / s) * 0.42) * s * 0.75, c = V.p(x, y, z);
+      const bx = c[0] + (rnd(seed, k, 421) * 2 - 1) * wid, col = XMAS[(k + seed) % 4];
+      out += night ? `<circle cx="${f(bx)}" cy="${f(c[1])}" r="${f(0.32 * s)}" fill="${col}" opacity=".3"/>` : '';
+      out += `<circle cx="${f(bx)}" cy="${f(c[1])}" r="${f(0.13 * s)}" fill="${col}"${night && k % 2 ? `><animate attributeName="opacity" values="1;.3;1" dur="${(1.2 + rnd(seed, k, 422)).toFixed(1)}s" repeatCount="indefinite"/></circle>` : '/>'}`;
+    }
+    const st = 0.28 * s, pts = [];
+    for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? st * 0.45 : st; pts.push(`${f(top[0] + Math.cos(a) * rr)},${f(top[1] + Math.sin(a) * rr)}`); }
+    if (night) out += `<circle cx="${f(top[0])}" cy="${f(top[1])}" r="${f(0.9 * s)}" fill="rgb(255,220,120)" opacity=".25"/>`;
+    return out + `<polygon points="${pts.join(' ')}" fill="rgb(255,213,79)"/>`;
+  }
+
   function pumpkin(V, x, y) {
     const c = V.p(x, y, 0.35);
     let s = `<ellipse cx="${f(c[0])}" cy="${f(c[1])}" rx=".5" ry=".4" fill="#f28c28"/><rect x="${f(c[0] - 0.06)}" y="${f(c[1] - 0.55)}" width=".12" height=".2" fill="#4e7a2a"/>`;
@@ -827,6 +853,11 @@
       const l0 = -sd * 0.9, l1 = -sd * Math.max(1.2, hl * 0.9);
       ground.push(flowerBed(V, [PW(P, -hf - 1.1, l0), PW(P, -hf - 1.1, l1), PW(P, -hf - 0.2, l1), PW(P, -hf - 0.2, l0)], id + 1));
     }
+    // Christmas: a tree in the front garden of the houses with lights up (and yours)
+    if (CTX.occ && CTX.occ.xmas && (isHome || rnd(id, 35) < 0.4) && fr >= 1.6) {
+      const [x, y] = PW(P, -hf - Math.min(fr * 0.5, 1.6), -sd * Math.max(1.2, Math.min(hl * 0.6, w - 1)));
+      thing(x, y, xmasTree(V, x, y, id, isHome ? 1.4 : 1.1 + r(37) * 0.3));
+    }
     if (CTX.occ && CTX.occ.halloween && (isHome || r(16) < 0.35) && fr >= 0.8) {
       const [x, y] = PW(P, -hf - 0.7, pl + 0.95);
       thing(x, y, pumpkin(V, x, y));
@@ -915,6 +946,7 @@
       const bx = x - Math.sin(ang) * 0.25, by = y + Math.cos(ang) * 0.25;
       return box(V, x, y, ang, 1.7, 0.5, 0.35, 0.47, ['#9c7650', '#7b5c3e'], snowy('#b08a5f', 0.8)) + box(V, bx, by, ang, 1.7, 0.08, 0.47, 0.95, ['#9c7650', '#7b5c3e'], '#8a6a46');
     }
+    if (kind === 'xmas_tree') return xmasTree(V, x, y, Math.round(x * 7 + y), 2.4);
     if (kind === 'post_box') return box(V, x, y, 0, 0.55, 0.55, 0, 1.15, ['#d32f2f', '#a52323'], '#2b2b2b');
     if (kind === 'bin') return box(V, x, y, 0, 0.45, 0.45, 0, 0.9, ['#2e7d32', '#1f5f24'], '#1b1b1b');
     if (kind === 'bus_stop') {
@@ -1466,6 +1498,19 @@
       if (legs.length < 3 || rnd(P[0], P[1], 392) > 0.3) continue;
       const a = legs[0], b = legs[1], bx = a.ux + b.ux, by = a.uy + b.uy, bl = Math.hypot(bx, by) || 1, d = (jw / 2 + PAVE * 0.75) * 1.45;
       furn.push([P[0] + bx / bl * d, P[1] + by / bl * d, 'post_box']);
+    }
+    // Christmas: a big tree on a corner of the junction nearest the middle of the map
+    if (CTX.occ && CTX.occ.xmas) {
+      const js = [...joins.values()].filter((j) => j.legs.length >= 3).sort((a, b) => Math.hypot(...a.P) - Math.hypot(...b.P));
+      found: for (const {P, legs, w: jw} of js.slice(0, 4)) {
+        for (let i = 0; i < legs.length; i++) {
+          const a = legs[i], b = legs[(i + 1) % legs.length], bx = a.ux + b.ux, by = a.uy + b.uy, bl = Math.hypot(bx, by);
+          if (bl < 0.3) continue;
+          const d = (jw / 2 + PAVE) * 1.45 + 1.5, x = P[0] + bx / bl * d, y = P[1] + by / bl * d;
+          if (on(x, y) && !inBuilding(x, y) && !inBuilding(x + 1.5, y) && !inBuilding(x - 1.5, y) && !inBuilding(x, y + 1.5) && !inBuilding(x, y - 1.5)
+              && !furn.some(([u, v]) => Math.hypot(u - x, v - y) < 3)) { furn.push([x, y, 'xmas_tree', 0]); break found; }
+        }
+      }
     }
     for (const [x, y, k, ang] of furn) if (on(x, y)) things.push([V.d(x, y), furniture(V, x, y, k, ang ?? nearAng(x, y))]);
     things.sort((a, b) => b[0] - a[0]);

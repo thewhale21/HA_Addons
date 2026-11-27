@@ -157,7 +157,9 @@ trees it has, drawn like a video game's town:
 - **Occasions** (Settings › **Occasions**: each on or off, and the days
   it's on, as a day and a month, either way round the new year):
   - **Christmas** (1 December to 6 January): lights along the eaves of many
-    houses and yours, twinkling at night.
+    houses and yours, twinkling at night; a decorated tree in their front
+    gardens (where there's room) and a big one on a corner of the junction
+    nearest the middle of the map, lit up at night.
   - **New Year** (31 December to 1 January) and **Bonfire Night** (4 to 6
     November): fireworks over the map at night.
   - **Valentine's Day** (14 February): hearts floating up from some houses

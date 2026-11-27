@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.0 — Christmas you can see
+
+- **Feature:** at Christmas, a decorated tree (baubles and a star) in the
+  front gardens of the houses with lights up and yours, and a big tree on a
+  corner of the junction nearest the middle of the map; lit up at night.
+- **Improvement:** the Christmas lights on the eaves are bigger, on a wire,
+  so they show by day and when the map is zoomed out (they were tiny dots
+  that were easy to miss in daylight).
 ## 0.19.1 — The map no longer starts over every few seconds
 
 - **Fix:** the map (on the dashboard card and the add-on's page) was drawn
