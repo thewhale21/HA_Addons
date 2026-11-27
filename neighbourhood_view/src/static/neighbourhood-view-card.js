@@ -671,7 +671,7 @@
       }
     } else if (isHome && energy.car) {
       // (no room for a drive: your car at the kerb outside)
-      const [x, y] = PW(P, -hf - fr - PAVE - 1.6, 0);
+      const [x, y] = PW(P, -hf - fr - PAVE - 0.95, 0);
       thing(x, y, car(V, [x, y, angU * 180 / Math.PI, 3]) + (energy.charging ? chargeGlow(V, x, y) : ''));
     }
     // (a garage beside a detached house, at the end of the drive)
@@ -760,7 +760,8 @@
   function mover(path, dur, begin, sprite, opts2 = '') {
     return `<g>${sprite}<animateMotion path="${path}" dur="${dur.toFixed(1)}s" begin="${begin.toFixed(1)}s" repeatCount="indefinite"${opts2}/></g>`;
   }
-  function carSprite(col, len = 4.2, wid = 1.7, glass = '#7d9fc4') {
+  // (as seen from above at an angle: a little flatter than it's long)
+  function carSprite(col, len = 4.2, wid = 1.35, glass = '#7d9fc4') {
     const night = CTX.night;
     return `<rect x="${f(-len / 2)}" y="${f(-wid / 2 - 0.4)}" width="${f(len)}" height="${f(wid)}" rx=".45" fill="${col}"/>`
       + `<rect x="${f(-len * 0.24)}" y="${f(-wid / 2 - 0.25)}" width="${f(len * 0.48)}" height="${f(wid - 0.3)}" rx=".3" fill="${glass}"/>`
@@ -1079,12 +1080,13 @@
       const nCars = Math.min(drives.length * 2, CTX.night ? 3 : 7);
       for (let i = 0; i < nCars && drives.length; i++) {
         const r = drives[Math.floor(rnd(i, H, 310) * drives.length)], back = rnd(i, H, 311) < 0.5;
-        const p = offsetLine(back ? r.p.slice().reverse() : r.p, r.w / 4), L = plen(p);
+        // (on the left, between the middle and the cars parked at the kerb)
+        const p = offsetLine(back ? r.p.slice().reverse() : r.p, Math.max(0.8, r.w / 4 - 0.25)), L = plen(p);
         out.push(mover(spath(V, p), L / 9, -rnd(i, H, 312) * L / 9, carSprite(CARS[Math.floor(rnd(i, H, 313) * 10) % 10]), ' rotate="auto"'));
       }
       if (drives.length && !CTX.night) {
-        const r = drives.slice().sort((a, b) => b.w - a.w || plen(b.p) - plen(a.p))[0], p = offsetLine(r.p, r.w / 4), L = plen(p);
-        out.push(mover(spath(V, p), L / 7 + 20, -rnd(H, 1, 314) * L / 7, carSprite('#c62828', 10, 2.5, '#cfe3ee'), ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(L / 7 / (L / 7 + 20)).toFixed(3)};1" calcMode="linear"`));
+        const r = drives.slice().sort((a, b) => b.w - a.w || plen(b.p) - plen(a.p))[0], p = offsetLine(r.p, Math.max(1, r.w / 4 - 0.1)), L = plen(p);
+        out.push(mover(spath(V, p), L / 7 + 20, -rnd(H, 1, 314) * L / 7, carSprite('#c62828', 10, 2.1, '#cfe3ee'), ` rotate="auto" keyPoints="0;1;1" keyTimes="0;${(L / 7 / (L / 7 + 20)).toFixed(3)};1" calcMode="linear"`));
       }
       for (const r of scene.rails || []) {
         const L = plen(r.p);
@@ -1261,7 +1263,7 @@
     // rain splashing on the ground all over (or hailstones lying about)
     if (CTX.wet || CTX.hail) {
       const sp = [];
-      for (let i = 0; i < 70; i++) {
+      for (let i = 0; i < (CTX.hail ? 70 : 36); i++) {
         const x = (rnd(i, H, 230) - 0.5) * 2 * H, y = (rnd(H, i, 231) - 0.5) * 2 * H;
         if (!on(x, y)) continue;
         const c = V.p(x, y, 0);
@@ -1541,18 +1543,42 @@
       const k = 0.75 + (i % 3) * 0.2;
       return `radial-gradient(circle ${Math.round(r * k)}px at calc(${x}% + ${Math.round(dx * k)}px) calc(${y}% + ${Math.round(dy * k)}px),rgba(255,255,255,.88) 0 70%,rgba(255,255,255,0) 100%)`;
     }).join(',')).join(',');
+  /* Rain and snow as tiles of streaks or flakes (the same every time), slid down by the browser's
+   * compositor (transform, not background-position), so they stay smooth however busy the map is.
+   * Each tile repeats seamlessly: a streak or flake crossing an edge is drawn on the other side too. */
+  function fxTile(size, n, seed, one) {
+    let s = '';
+    for (let i = 0; i < n; i++) {
+      const x = rnd(seed, i, 400) * size, y = rnd(i, seed, 401) * size, k = rnd(seed + 1, i, 402);
+      for (const dx of [-size, 0, size]) for (const dy of [-size, 0, size]) s += one(x + dx, y + dy, k);
+    }
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">${s}</svg>`;
+    return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+  }
+  const streak = (len, w, a) => (x, y, k) => `<line x1="${f(x)}" y1="${f(y)}" x2="${f(x)}" y2="${f(y + len * (0.7 + 0.6 * k))}" stroke="rgba(205,225,255,${a})" stroke-width="${w}" stroke-linecap="round"/>`;
+  const flake = (r, a) => (x, y, k) => `<circle cx="${f(x)}" cy="${f(y)}" r="${f(r * (0.6 + 0.8 * k))}" fill="rgba(255,255,255,${a})"/>`;
+  const RAIN_FAR = fxTile(256, 34, 1, streak(12, 1, 0.38)), RAIN_NEAR = fxTile(256, 16, 2, streak(22, 1.6, 0.5));
+  const RAIN_HEAVY = fxTile(256, 40, 3, streak(26, 1.8, 0.55));
+  const SNOW_FAR = fxTile(300, 40, 4, flake(1.3, 0.75)), SNOW_NEAR = fxTile(300, 18, 5, flake(2.4, 0.95));
   const FX_CSS = `
     .nvfx{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-    .nv-rain{background-image:repeating-linear-gradient(105deg,rgba(190,215,255,.0) 0 7px,rgba(190,215,255,.32) 7px 8px,rgba(190,215,255,0) 8px 19px);background-size:120px 120px;animation:nvrain .45s linear infinite}
-    .nv-rain.heavy{background-image:repeating-linear-gradient(105deg,rgba(190,215,255,0) 0 4px,rgba(190,215,255,.42) 4px 5px,rgba(190,215,255,0) 5px 11px);animation-duration:.3s}
-    @keyframes nvrain{to{background-position:-32px 120px}}
-    .nv-snow{background-image:radial-gradient(circle,#fff 0 1.4px,transparent 2px),radial-gradient(circle,rgba(255,255,255,.8) 0 1px,transparent 1.6px);background-size:46px 46px,29px 29px;background-position:0 0,13px 7px;animation:nvsnow 6s linear infinite}
-    @keyframes nvsnow{to{background-position:-46px 460px,-29px 290px}}
+    .nv-tilt{position:absolute;inset:-30%;transform:rotate(12deg)}
+    .nv-fall{position:absolute;left:0;right:0;top:-300px;bottom:0;background-repeat:repeat;will-change:transform;animation:nvfall256 linear infinite}
+    .nv-fall.rf{background-image:${RAIN_FAR};animation-duration:.85s;opacity:.75}
+    .nv-fall.rn{background-image:${RAIN_NEAR};animation-duration:.5s}
+    .nv-fall.rh{background-image:${RAIN_HEAVY};animation-duration:.38s}
+    .nv-fall.sf{background-image:${SNOW_FAR};animation-duration:14s;animation-name:nvfall300}
+    .nv-fall.sn{background-image:${SNOW_NEAR};animation-duration:8s;animation-name:nvfall300}
+    @keyframes nvfall256{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,256px,0)}}
+    @keyframes nvfall300{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,300px,0)}}
+    .nv-sway{position:absolute;inset:0;animation:nvsway2 4s ease-in-out infinite alternate;will-change:transform}
+    @keyframes nvsway2{from{transform:translate3d(-14px,0,0)}to{transform:translate3d(14px,0,0)}}
     .nv-fog{background:linear-gradient(180deg,rgba(235,240,245,.55),rgba(235,240,245,.25) 60%,rgba(235,240,245,.45));animation:nvfog 12s ease-in-out infinite alternate}
     @keyframes nvfog{to{opacity:.6}}
-    .nv-cloud{background-image:radial-gradient(ellipse 22% 14% at 20% 30%,rgba(20,30,50,.20),transparent 70%),radial-gradient(ellipse 26% 16% at 70% 60%,rgba(20,30,50,.18),transparent 70%),radial-gradient(ellipse 18% 12% at 45% 85%,rgba(20,30,50,.16),transparent 70%);background-size:200% 200%;animation:nvcloud 40s linear infinite}
+    .nv-cloud{position:absolute;top:0;bottom:0;left:0;width:200%;will-change:transform;animation:nvcloud 70s linear infinite;background-repeat:repeat-x;background-size:50% 100%;
+      background-image:radial-gradient(ellipse 22% 14% at 20% 30%,rgba(20,30,50,.20),transparent 70%),radial-gradient(ellipse 26% 16% at 70% 60%,rgba(20,30,50,.18),transparent 70%),radial-gradient(ellipse 18% 12% at 45% 85%,rgba(20,30,50,.16),transparent 70%)}
     .nv-cloud.light{opacity:.55}
-    @keyframes nvcloud{to{background-position:100% 30%}}
+    @keyframes nvcloud{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
     .nv-grey{background:rgba(70,80,95,.16)}
     .nv-sun{background:radial-gradient(ellipse at 15% 0%,rgba(255,220,130,.22),transparent 60%)}
     .nv-flash{background:#fff;opacity:0;animation:nvflash 7s infinite}
@@ -1582,16 +1608,20 @@
     .nvcredit.dark{color:rgba(255,255,255,.55)}
     .nvsway{transform-box:fill-box;transform-origin:50% 100%;animation:nvsway 2.6s ease-in-out infinite alternate}
     @keyframes nvsway{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
-    @media (prefers-reduced-motion: reduce){.nvfx,.nvsky .cl,.nvsky .st,.nvsway{animation:none!important}}`;
+    @media (prefers-reduced-motion: reduce){.nvfx,.nvfx *,.nvsky .cl,.nvsky .st,.nvsway{animation:none!important}}`;
 
   function overlays(live) {
     const w = (live && live.weather) || null, st = w && w.state;
     let fx = '';
-    if (['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy', 'hail'].includes(st)) fx += `<div class="nvfx nv-grey"></div><div class="nvfx nv-cloud"></div><div class="nvfx nv-rain${st === 'pouring' || st === 'lightning-rainy' ? ' heavy' : ''}"></div>`;
-    if (['snowy', 'snowy-rainy'].includes(st)) fx += '<div class="nvfx nv-snow"></div>';
+    const cloud = (light) => `<div class="nvfx"><div class="nv-cloud${light ? ' light' : ''}"></div></div>`;
+    if (['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy', 'hail'].includes(st)) {
+      const heavy = st === 'pouring' || st === 'lightning-rainy';
+      fx += `<div class="nvfx nv-grey"></div>${cloud()}<div class="nvfx"><div class="nv-tilt"><div class="nv-fall rf"></div><div class="nv-fall rn"></div>${heavy ? '<div class="nv-fall rh"></div>' : ''}</div></div>`;
+    }
+    if (['snowy', 'snowy-rainy'].includes(st)) fx += '<div class="nvfx"><div class="nv-tilt" style="transform:rotate(4deg)"><div class="nv-sway"><div class="nv-fall sf"></div><div class="nv-fall sn"></div></div></div></div>';
     if (st === 'fog') fx += '<div class="nvfx nv-fog"></div>';
-    if (st === 'cloudy') fx += '<div class="nvfx nv-grey"></div><div class="nvfx nv-cloud"></div>';
-    if (st === 'partlycloudy') fx += '<div class="nvfx nv-cloud light"></div>';
+    if (st === 'cloudy') fx += '<div class="nvfx nv-grey"></div>' + cloud();
+    if (st === 'partlycloudy') fx += cloud(true);
     if (st === 'sunny' && !(live && live.night)) fx += '<div class="nvfx nv-sun"></div>';
     if (['lightning', 'lightning-rainy'].includes(st)) fx += '<div class="nvfx nv-flash"></div>';
     let chips = '';

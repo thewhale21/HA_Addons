@@ -237,3 +237,9 @@ def test_gardens_landmarks_and_street_furniture():
     assert sorted(k for _, _, k in sc["poi"]) == ["bench", "bus_stop", "post_box"]
     assert S.landmark({"amenity": "place_of_worship", "religion": "muslim"}) is None
     assert S.landmark({"building": "chapel"}) == "church"
+
+
+def test_back_gardens_dont_overlap():
+    sc = S.build_scene(sample(), LAT0, LON0)
+    ps = [p for p in sc["plots"] if p["b"] >= 2]
+    assert not [(a["id"], b["id"]) for i, a in enumerate(ps) for b in ps[i + 1:] if S._overlap(S._back_rect(a, 0.4), S._back_rect(b, 0.4))]

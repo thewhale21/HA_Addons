@@ -24,7 +24,7 @@ import math
 import re
 from typing import Optional
 
-SCENE_V = 2  # 2: gardens (plots), landmarks (lm), street furniture (poi)
+SCENE_V = 3  # 2: gardens (plots), landmarks (lm), street furniture (poi); 3: gardens not overlapping, cars at the kerb
 HALF = 150.0  # metres each way from your home (Settings › Address › Map size): a 300 m square by default
 EARTH_R = 6371008.8
 
@@ -532,7 +532,7 @@ def _cars(roads: list, buildings: list, half: float) -> list:
     for r in roads:
         if r["k"] not in ("minor", "major"):
             continue
-        off = r["w"] / 2 - 1.3
+        off = r["w"] / 2 - 0.95  # (tucked against the kerb: the traffic passes between them and the middle)
         for (x1, y1), (x2, y2) in zip(r["p"], r["p"][1:]):
             ln = math.hypot(x2 - x1, y2 - y1)
             if ln < 6:
@@ -646,6 +646,12 @@ def _plots(buildings: list, roads: list, half: float) -> list:
                 elif other > hb:
                     best_s = hb + 0.01 if best_s is None else min(best_s, hb + 0.01)
             return None if best_s is None else best_s - hb
+        # the plot's half width: to half way to the house next door (along the street), else a little past the house
+        pw = hl + 1.5
+        if near:
+            along = abs(near[1] * ux + near[2] * uy)
+            if along > near[0] * 0.8:
+                pw = max(hl, min(along / 2, hl + 4))
         back = GARDEN_NONE
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
@@ -653,22 +659,16 @@ def _plots(buildings: list, roads: list, half: float) -> list:
                     if j == i:
                         continue
                     o = buildings[j]
-                    gaps = [first_behind(o["p"][k], o["p"][(k + 1) % len(o["p"])], hl + 0.5) for k in range(len(o["p"]))]
+                    gaps = [first_behind(o["p"][k], o["p"][(k + 1) % len(o["p"])], pw - 0.3) for k in range(len(o["p"]))]
                     gaps = [v for v in gaps if v is not None]
                     if gaps:
                         gap = min(gaps)
                         back = min(back, gap / 2 if o.get("k") == "house" else gap - 0.5)
         for x1, y1, x2, y2, rw in rgrid.get(g, ()):
-            v = first_behind((x1, y1), (x2, y2), hl + 4)
+            v = first_behind((x1, y1), (x2, y2), pw + 2)
             if v is not None:
                 back = min(back, v - rw / 2 - 2.8)
         back = min(back, GARDEN_MAX)
-        # the plot's half width: to half way to the house next door (along the street), else a little past the house
-        pw = hl + 1.5
-        if near:
-            along = abs(near[1] * ux + near[2] * uy)
-            if along > near[0] * 0.8:
-                pw = max(hl, min(along / 2, hl + 4))
         # (kept to the map)
         for k in (back, ):
             ex, ey = cx + nx * (hb + k), cy + ny * (hb + k)
@@ -677,7 +677,55 @@ def _plots(buildings: list, roads: list, half: float) -> list:
         out.append({"id": b["id"], "c": [round(cx, 1), round(cy, 1)], "u": [round(ux, 3), round(uy, 3)], "n": [round(nx, 3), round(ny, 3)],
                     "hl": round(hl, 1), "w": round(pw, 1), "hf": round(hf, 1), "hb": round(hb, 1), "f": round(max(0.0, min(front, 15.0)), 1),
                     "b": round(max(0.0, back), 1)})
+    _no_overlaps(out)
     return out
+
+
+def _back_rect(p: dict, shrink: float = 0.0) -> list:
+    """A plot's back garden as 4 corners (shrunk a little each side, so neighbours touching don't count)."""
+    (cx, cy), (ux, uy), (nx, ny) = p["c"], p["u"], p["n"]
+    s0, s1, w = p["hb"] + shrink, p["hb"] + p["b"] - shrink, p["w"] - shrink
+    return [(cx + nx * s + ux * l, cy + ny * s + uy * l) for s, l in ((s0, -w), (s0, w), (s1, w), (s1, -w))]
+
+
+def _overlap(a: list, b: list) -> bool:
+    """Whether two convex quads overlap (separating axes)."""
+    for poly in (a, b):
+        for i in range(len(poly)):
+            (x1, y1), (x2, y2) = poly[i], poly[(i + 1) % len(poly)]
+            ax, ay = y1 - y2, x2 - x1
+            pa = [ax * x + ay * y for x, y in a]
+            pb = [ax * x + ay * y for x, y in b]
+            if max(pa) <= min(pb) or max(pb) <= min(pa):
+                return False
+    return True
+
+
+def _no_overlaps(plots: list) -> None:
+    """Back gardens that overlap (houses at odd angles, round corners) are cut back, the deeper one
+    first, until they don't; one cut right back has no garden drawn."""
+    cell = 40.0
+    grid: dict = {}
+    for i, p in enumerate(plots):
+        grid.setdefault((int(math.floor(p["c"][0] / cell)), int(math.floor(p["c"][1] / cell))), []).append(i)
+    for _ in range(20):
+        changed = False
+        for i, p in enumerate(plots):
+            if p["b"] < 2:
+                continue
+            gx, gy = int(math.floor(p["c"][0] / cell)), int(math.floor(p["c"][1] / cell))
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    for j in grid.get((gx + dx, gy + dy), ()):
+                        q = plots[j]
+                        if j <= i or q["b"] < 2 or p["b"] < 2:
+                            continue
+                        if _overlap(_back_rect(p, 0.4), _back_rect(q, 0.4)):
+                            big = p if p["b"] >= q["b"] else q
+                            big["b"] = round(big["b"] * 0.75, 1) if big["b"] * 0.75 >= 2 else 0.0
+                            changed = True
+        if not changed:
+            break
 
 
 def build_scene(osm: dict, lat0: float, lon0: float, home_pt: Optional[tuple] = None,

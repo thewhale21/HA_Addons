@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.16.0 — Smooth rain, tidier streets and gardens
+
+- **Improvement:** rain, snow and drifting cloud are moved by the browser's
+  compositor instead of being redrawn every frame, so they're smooth however
+  busy the map is: rain falls in two layers (near and far, three when
+  pouring), snow drifts side to side as it falls.
+- **Fix:** parked cars are tucked against the kerb, and the traffic drives
+  between them and the middle of the road, so they don't drive through each
+  other.
+- **Fix:** back gardens no longer overlap (houses at odd angles, round
+  corners): where two would, the deeper one is cut back. Gardens also stop
+  at any building across their whole width, not just the house's.
+- **Change:** maps are made again once after updating, for the above.
 ## 0.15.1 — Lint
 
 - **Fix:** removed the empty `options` and `schema` from `config.yaml` (they're
